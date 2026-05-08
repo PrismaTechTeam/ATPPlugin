@@ -34,6 +34,99 @@ namespace ATPShadowMain
         private DevExpress.XtraEditors.LabelControl LblSubtitle;
         private DevExpress.XtraEditors.LabelControl LblQuickAccess;
 
+        // Nav groups (11)
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_ServiceContract;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_ServiceItem;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_ServiceNote;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_ServiceAppointment;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_QuickView;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_SetupPeople;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_SetupLookups;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_SetupMeter;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_StockRequest;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_ServiceOption;
+        private DevExpress.XtraNavBar.NavBarGroup NavGroup_Reports;
+
+        // Service Contract items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MaintainServiceContract;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_NewServiceContract;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceContractInquiry;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_OutstandingContractItem;
+
+        // Service Item items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MaintainServiceItem;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_NewServiceItem;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceItemInquiry;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceItemTagSearch;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_GenerateItemFromSerial;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ResetItemDebtorOwnership;
+
+        // Service Note items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteList;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_NewServiceNote;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteQuickEntry;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteClosing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteAssignment;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteInquiry;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_OutstandingNoteAssignment;
+
+        // Service Appointment items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentList;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_NewAppointment;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentCalendar;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentInquiry;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_PreventiveMaintenance;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MeterTypeTransEntry;
+
+        // Quick View items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceQuickView;
+
+        // Setup - People items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServicePerson;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceAdvisor;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_Mechanic;
+
+        // Setup - Lookups items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceStatus;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceSeverity;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceSolution;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceProblem;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceType;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceContractType;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceItemGrade;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentType;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentPriority;
+
+        // Setup - Meter items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MeterType;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MeterMultiPricing;
+
+        // Stock Request items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_StockRequestIntegration;
+
+        // Service Option items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceOption;
+
+        // Reports items
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceStatusListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceSeverityListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceSolutionListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceProblemListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceTypeListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceContractTypeListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceItemGradeListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentTypeListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_AppointmentPriorityListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServicePersonListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceAdvisorListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MechanicListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_MeterTypeListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceNoteListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceContractListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_ServiceItemListing;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_TopServiceStockCode;
+        private DevExpress.XtraNavBar.NavBarItem NavItem_TopServiceStockCodeByDept;
+
         #region Windows Form Designer generated code
 
         /// <summary>
@@ -53,6 +146,99 @@ namespace ATPShadowMain
             this.LblSubtitle = new DevExpress.XtraEditors.LabelControl();
             this.LblQuickAccess = new DevExpress.XtraEditors.LabelControl();
             this.LblStatus = new DevExpress.XtraEditors.LabelControl();
+
+            // Nav groups
+            this.NavGroup_ServiceContract = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_ServiceItem = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_ServiceNote = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_ServiceAppointment = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_QuickView = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_SetupPeople = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_SetupLookups = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_SetupMeter = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_StockRequest = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_ServiceOption = new DevExpress.XtraNavBar.NavBarGroup();
+            this.NavGroup_Reports = new DevExpress.XtraNavBar.NavBarGroup();
+
+            // Service Contract items
+            this.NavItem_MaintainServiceContract = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_NewServiceContract = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceContractInquiry = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_OutstandingContractItem = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Service Item items
+            this.NavItem_MaintainServiceItem = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_NewServiceItem = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceItemInquiry = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceItemTagSearch = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_GenerateItemFromSerial = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ResetItemDebtorOwnership = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Service Note items
+            this.NavItem_ServiceNoteList = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_NewServiceNote = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceNoteQuickEntry = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceNoteClosing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceNoteAssignment = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceNoteInquiry = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_OutstandingNoteAssignment = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Service Appointment items
+            this.NavItem_AppointmentList = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_NewAppointment = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentCalendar = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentInquiry = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_PreventiveMaintenance = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_MeterTypeTransEntry = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Quick View items
+            this.NavItem_ServiceQuickView = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Setup - People items
+            this.NavItem_ServicePerson = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceAdvisor = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_Mechanic = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Setup - Lookups items
+            this.NavItem_ServiceStatus = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceSeverity = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceSolution = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceProblem = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceType = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceContractType = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceItemGrade = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentType = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentPriority = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Setup - Meter items
+            this.NavItem_MeterType = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_MeterMultiPricing = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Stock Request items
+            this.NavItem_StockRequestIntegration = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Service Option items
+            this.NavItem_ServiceOption = new DevExpress.XtraNavBar.NavBarItem();
+
+            // Reports items
+            this.NavItem_ServiceStatusListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceSeverityListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceSolutionListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceProblemListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceTypeListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceContractTypeListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceItemGradeListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentTypeListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_AppointmentPriorityListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServicePersonListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceAdvisorListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_MechanicListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_MeterTypeListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceNoteListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceContractListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_ServiceItemListing = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_TopServiceStockCode = new DevExpress.XtraNavBar.NavBarItem();
+            this.NavItem_TopServiceStockCodeByDept = new DevExpress.XtraNavBar.NavBarItem();
 
             ((System.ComponentModel.ISupportInitialize)(this.PanelTop)).BeginInit();
             this.PanelTop.SuspendLayout();
@@ -98,8 +284,414 @@ namespace ATPShadowMain
             this.BtnRefresh.TabIndex = 1;
             this.BtnRefresh.Text = "Refresh";
 
+            // ============================================================
+            // Nav items — Service Contract
+            // ============================================================
+            this.NavItem_MaintainServiceContract.Caption = "Maintain Service Contract";
+            this.NavItem_MaintainServiceContract.Name = "NavItem_MaintainServiceContract";
+
+            this.NavItem_NewServiceContract.Caption = "New Service Contract";
+            this.NavItem_NewServiceContract.Name = "NavItem_NewServiceContract";
+
+            this.NavItem_ServiceContractInquiry.Caption = "Service Contract Inquiry";
+            this.NavItem_ServiceContractInquiry.Name = "NavItem_ServiceContractInquiry";
+
+            this.NavItem_OutstandingContractItem.Caption = "Outstanding Contract Item";
+            this.NavItem_OutstandingContractItem.Name = "NavItem_OutstandingContractItem";
+
+            // ============================================================
+            // Nav items — Service Item
+            // ============================================================
+            this.NavItem_MaintainServiceItem.Caption = "Maintain Service Item";
+            this.NavItem_MaintainServiceItem.Name = "NavItem_MaintainServiceItem";
+
+            this.NavItem_NewServiceItem.Caption = "New Service Item";
+            this.NavItem_NewServiceItem.Name = "NavItem_NewServiceItem";
+
+            this.NavItem_ServiceItemInquiry.Caption = "Service Item Inquiry";
+            this.NavItem_ServiceItemInquiry.Name = "NavItem_ServiceItemInquiry";
+
+            this.NavItem_ServiceItemTagSearch.Caption = "Service Item Tag Search";
+            this.NavItem_ServiceItemTagSearch.Name = "NavItem_ServiceItemTagSearch";
+
+            this.NavItem_GenerateItemFromSerial.Caption = "Generate Item From Serial";
+            this.NavItem_GenerateItemFromSerial.Name = "NavItem_GenerateItemFromSerial";
+
+            this.NavItem_ResetItemDebtorOwnership.Caption = "Reset Item Debtor Ownership";
+            this.NavItem_ResetItemDebtorOwnership.Name = "NavItem_ResetItemDebtorOwnership";
+
+            // ============================================================
+            // Nav items — Service Note
+            // ============================================================
+            this.NavItem_ServiceNoteList.Caption = "Service Note List";
+            this.NavItem_ServiceNoteList.Name = "NavItem_ServiceNoteList";
+
+            this.NavItem_NewServiceNote.Caption = "New Service Note";
+            this.NavItem_NewServiceNote.Name = "NavItem_NewServiceNote";
+
+            this.NavItem_ServiceNoteQuickEntry.Caption = "Service Note Quick Entry";
+            this.NavItem_ServiceNoteQuickEntry.Name = "NavItem_ServiceNoteQuickEntry";
+
+            this.NavItem_ServiceNoteClosing.Caption = "Service Note Closing";
+            this.NavItem_ServiceNoteClosing.Name = "NavItem_ServiceNoteClosing";
+
+            this.NavItem_ServiceNoteAssignment.Caption = "Service Note Assignment";
+            this.NavItem_ServiceNoteAssignment.Name = "NavItem_ServiceNoteAssignment";
+
+            this.NavItem_ServiceNoteInquiry.Caption = "Service Note Inquiry";
+            this.NavItem_ServiceNoteInquiry.Name = "NavItem_ServiceNoteInquiry";
+
+            this.NavItem_OutstandingNoteAssignment.Caption = "Outstanding Note Assignment";
+            this.NavItem_OutstandingNoteAssignment.Name = "NavItem_OutstandingNoteAssignment";
+
+            // ============================================================
+            // Nav items — Service Appointment
+            // ============================================================
+            this.NavItem_AppointmentList.Caption = "Appointment List";
+            this.NavItem_AppointmentList.Name = "NavItem_AppointmentList";
+
+            this.NavItem_NewAppointment.Caption = "New Appointment";
+            this.NavItem_NewAppointment.Name = "NavItem_NewAppointment";
+
+            this.NavItem_AppointmentCalendar.Caption = "Appointment Calendar";
+            this.NavItem_AppointmentCalendar.Name = "NavItem_AppointmentCalendar";
+
+            this.NavItem_AppointmentInquiry.Caption = "Appointment Inquiry";
+            this.NavItem_AppointmentInquiry.Name = "NavItem_AppointmentInquiry";
+
+            this.NavItem_PreventiveMaintenance.Caption = "Preventive Maintenance";
+            this.NavItem_PreventiveMaintenance.Name = "NavItem_PreventiveMaintenance";
+
+            this.NavItem_MeterTypeTransEntry.Caption = "Meter Type Trans Entry";
+            this.NavItem_MeterTypeTransEntry.Name = "NavItem_MeterTypeTransEntry";
+
+            // ============================================================
+            // Nav items — Quick View
+            // ============================================================
+            this.NavItem_ServiceQuickView.Caption = "Service Quick View";
+            this.NavItem_ServiceQuickView.Name = "NavItem_ServiceQuickView";
+
+            // ============================================================
+            // Nav items — Setup - People
+            // ============================================================
+            this.NavItem_ServicePerson.Caption = "Service Person";
+            this.NavItem_ServicePerson.Name = "NavItem_ServicePerson";
+
+            this.NavItem_ServiceAdvisor.Caption = "Service Advisor";
+            this.NavItem_ServiceAdvisor.Name = "NavItem_ServiceAdvisor";
+
+            this.NavItem_Mechanic.Caption = "Mechanic";
+            this.NavItem_Mechanic.Name = "NavItem_Mechanic";
+
+            // ============================================================
+            // Nav items — Setup - Lookups
+            // ============================================================
+            this.NavItem_ServiceStatus.Caption = "Service Status";
+            this.NavItem_ServiceStatus.Name = "NavItem_ServiceStatus";
+
+            this.NavItem_ServiceSeverity.Caption = "Service Severity";
+            this.NavItem_ServiceSeverity.Name = "NavItem_ServiceSeverity";
+
+            this.NavItem_ServiceSolution.Caption = "Service Solution";
+            this.NavItem_ServiceSolution.Name = "NavItem_ServiceSolution";
+
+            this.NavItem_ServiceProblem.Caption = "Service Problem";
+            this.NavItem_ServiceProblem.Name = "NavItem_ServiceProblem";
+
+            this.NavItem_ServiceType.Caption = "Service Type";
+            this.NavItem_ServiceType.Name = "NavItem_ServiceType";
+
+            this.NavItem_ServiceContractType.Caption = "Service Contract Type";
+            this.NavItem_ServiceContractType.Name = "NavItem_ServiceContractType";
+
+            this.NavItem_ServiceItemGrade.Caption = "Service Item Grade";
+            this.NavItem_ServiceItemGrade.Name = "NavItem_ServiceItemGrade";
+
+            this.NavItem_AppointmentType.Caption = "Appointment Type";
+            this.NavItem_AppointmentType.Name = "NavItem_AppointmentType";
+
+            this.NavItem_AppointmentPriority.Caption = "Appointment Priority";
+            this.NavItem_AppointmentPriority.Name = "NavItem_AppointmentPriority";
+
+            // ============================================================
+            // Nav items — Setup - Meter
+            // ============================================================
+            this.NavItem_MeterType.Caption = "Meter Type";
+            this.NavItem_MeterType.Name = "NavItem_MeterType";
+
+            this.NavItem_MeterMultiPricing.Caption = "Meter Multi Pricing";
+            this.NavItem_MeterMultiPricing.Name = "NavItem_MeterMultiPricing";
+
+            // ============================================================
+            // Nav items — Stock Request
+            // ============================================================
+            this.NavItem_StockRequestIntegration.Caption = "Stock Request Integration";
+            this.NavItem_StockRequestIntegration.Name = "NavItem_StockRequestIntegration";
+
+            // ============================================================
+            // Nav items — Service Option
+            // ============================================================
+            this.NavItem_ServiceOption.Caption = "Service Option";
+            this.NavItem_ServiceOption.Name = "NavItem_ServiceOption";
+
+            // ============================================================
+            // Nav items — Reports
+            // ============================================================
+            this.NavItem_ServiceStatusListing.Caption = "Service Status Listing";
+            this.NavItem_ServiceStatusListing.Name = "NavItem_ServiceStatusListing";
+
+            this.NavItem_ServiceSeverityListing.Caption = "Service Severity Listing";
+            this.NavItem_ServiceSeverityListing.Name = "NavItem_ServiceSeverityListing";
+
+            this.NavItem_ServiceSolutionListing.Caption = "Service Solution Listing";
+            this.NavItem_ServiceSolutionListing.Name = "NavItem_ServiceSolutionListing";
+
+            this.NavItem_ServiceProblemListing.Caption = "Service Problem Listing";
+            this.NavItem_ServiceProblemListing.Name = "NavItem_ServiceProblemListing";
+
+            this.NavItem_ServiceTypeListing.Caption = "Service Type Listing";
+            this.NavItem_ServiceTypeListing.Name = "NavItem_ServiceTypeListing";
+
+            this.NavItem_ServiceContractTypeListing.Caption = "Service Contract Type Listing";
+            this.NavItem_ServiceContractTypeListing.Name = "NavItem_ServiceContractTypeListing";
+
+            this.NavItem_ServiceItemGradeListing.Caption = "Service Item Grade Listing";
+            this.NavItem_ServiceItemGradeListing.Name = "NavItem_ServiceItemGradeListing";
+
+            this.NavItem_AppointmentTypeListing.Caption = "Appointment Type Listing";
+            this.NavItem_AppointmentTypeListing.Name = "NavItem_AppointmentTypeListing";
+
+            this.NavItem_AppointmentPriorityListing.Caption = "Appointment Priority Listing";
+            this.NavItem_AppointmentPriorityListing.Name = "NavItem_AppointmentPriorityListing";
+
+            this.NavItem_ServicePersonListing.Caption = "Service Person Listing";
+            this.NavItem_ServicePersonListing.Name = "NavItem_ServicePersonListing";
+
+            this.NavItem_ServiceAdvisorListing.Caption = "Service Advisor Listing";
+            this.NavItem_ServiceAdvisorListing.Name = "NavItem_ServiceAdvisorListing";
+
+            this.NavItem_MechanicListing.Caption = "Mechanic Listing";
+            this.NavItem_MechanicListing.Name = "NavItem_MechanicListing";
+
+            this.NavItem_MeterTypeListing.Caption = "Meter Type Listing";
+            this.NavItem_MeterTypeListing.Name = "NavItem_MeterTypeListing";
+
+            this.NavItem_ServiceNoteListing.Caption = "Service Note Listing";
+            this.NavItem_ServiceNoteListing.Name = "NavItem_ServiceNoteListing";
+
+            this.NavItem_ServiceContractListing.Caption = "Service Contract Listing";
+            this.NavItem_ServiceContractListing.Name = "NavItem_ServiceContractListing";
+
+            this.NavItem_ServiceItemListing.Caption = "Service Item Listing";
+            this.NavItem_ServiceItemListing.Name = "NavItem_ServiceItemListing";
+
+            this.NavItem_TopServiceStockCode.Caption = "Top Service Stock Code";
+            this.NavItem_TopServiceStockCode.Name = "NavItem_TopServiceStockCode";
+
+            this.NavItem_TopServiceStockCodeByDept.Caption = "Top Service Stock Code By Dept";
+            this.NavItem_TopServiceStockCodeByDept.Name = "NavItem_TopServiceStockCodeByDept";
+
+            // ============================================================
+            // Nav groups
+            // ============================================================
+            this.NavGroup_ServiceContract.Caption = "Service Contract";
+            this.NavGroup_ServiceContract.Expanded = true;
+            this.NavGroup_ServiceContract.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_ServiceContract.Name = "NavGroup_ServiceContract";
+            this.NavGroup_ServiceContract.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MaintainServiceContract),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_NewServiceContract),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceContractInquiry),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_OutstandingContractItem)});
+
+            this.NavGroup_ServiceItem.Caption = "Service Item";
+            this.NavGroup_ServiceItem.Expanded = true;
+            this.NavGroup_ServiceItem.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_ServiceItem.Name = "NavGroup_ServiceItem";
+            this.NavGroup_ServiceItem.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MaintainServiceItem),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_NewServiceItem),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceItemInquiry),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceItemTagSearch),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_GenerateItemFromSerial),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ResetItemDebtorOwnership)});
+
+            this.NavGroup_ServiceNote.Caption = "Service Note";
+            this.NavGroup_ServiceNote.Expanded = true;
+            this.NavGroup_ServiceNote.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_ServiceNote.Name = "NavGroup_ServiceNote";
+            this.NavGroup_ServiceNote.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteList),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_NewServiceNote),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteQuickEntry),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteClosing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteAssignment),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteInquiry),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_OutstandingNoteAssignment)});
+
+            this.NavGroup_ServiceAppointment.Caption = "Service Appointment";
+            this.NavGroup_ServiceAppointment.Expanded = true;
+            this.NavGroup_ServiceAppointment.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_ServiceAppointment.Name = "NavGroup_ServiceAppointment";
+            this.NavGroup_ServiceAppointment.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentList),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_NewAppointment),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentCalendar),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentInquiry),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_PreventiveMaintenance),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MeterTypeTransEntry)});
+
+            this.NavGroup_QuickView.Caption = "Quick View";
+            this.NavGroup_QuickView.Expanded = true;
+            this.NavGroup_QuickView.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_QuickView.Name = "NavGroup_QuickView";
+            this.NavGroup_QuickView.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceQuickView)});
+
+            this.NavGroup_SetupPeople.Caption = "Setup - People";
+            this.NavGroup_SetupPeople.Expanded = true;
+            this.NavGroup_SetupPeople.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_SetupPeople.Name = "NavGroup_SetupPeople";
+            this.NavGroup_SetupPeople.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServicePerson),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceAdvisor),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_Mechanic)});
+
+            this.NavGroup_SetupLookups.Caption = "Setup - Lookups";
+            this.NavGroup_SetupLookups.Expanded = true;
+            this.NavGroup_SetupLookups.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_SetupLookups.Name = "NavGroup_SetupLookups";
+            this.NavGroup_SetupLookups.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceStatus),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceSeverity),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceSolution),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceProblem),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceType),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceContractType),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceItemGrade),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentType),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentPriority)});
+
+            this.NavGroup_SetupMeter.Caption = "Setup - Meter";
+            this.NavGroup_SetupMeter.Expanded = true;
+            this.NavGroup_SetupMeter.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_SetupMeter.Name = "NavGroup_SetupMeter";
+            this.NavGroup_SetupMeter.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MeterType),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MeterMultiPricing)});
+
+            this.NavGroup_StockRequest.Caption = "Stock Request";
+            this.NavGroup_StockRequest.Expanded = true;
+            this.NavGroup_StockRequest.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_StockRequest.Name = "NavGroup_StockRequest";
+            this.NavGroup_StockRequest.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_StockRequestIntegration)});
+
+            this.NavGroup_ServiceOption.Caption = "Service Option";
+            this.NavGroup_ServiceOption.Expanded = true;
+            this.NavGroup_ServiceOption.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_ServiceOption.Name = "NavGroup_ServiceOption";
+            this.NavGroup_ServiceOption.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceOption)});
+
+            this.NavGroup_Reports.Caption = "Reports";
+            this.NavGroup_Reports.Expanded = true;
+            this.NavGroup_Reports.GroupStyle = DevExpress.XtraNavBar.NavBarGroupStyle.SmallIconsText;
+            this.NavGroup_Reports.Name = "NavGroup_Reports";
+            this.NavGroup_Reports.ItemLinks.AddRange(new DevExpress.XtraNavBar.NavBarItemLink[] {
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceStatusListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceSeverityListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceSolutionListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceProblemListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceTypeListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceContractTypeListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceItemGradeListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentTypeListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_AppointmentPriorityListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServicePersonListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceAdvisorListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MechanicListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_MeterTypeListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceNoteListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceContractListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_ServiceItemListing),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_TopServiceStockCode),
+                new DevExpress.XtraNavBar.NavBarItemLink(this.NavItem_TopServiceStockCodeByDept)});
+
             // NavLeft
+            this.NavLeft.ActiveGroup = this.NavGroup_ServiceContract;
             this.NavLeft.Dock = System.Windows.Forms.DockStyle.Left;
+            this.NavLeft.Groups.AddRange(new DevExpress.XtraNavBar.NavBarGroup[] {
+                this.NavGroup_ServiceContract,
+                this.NavGroup_ServiceItem,
+                this.NavGroup_ServiceNote,
+                this.NavGroup_ServiceAppointment,
+                this.NavGroup_QuickView,
+                this.NavGroup_SetupPeople,
+                this.NavGroup_SetupLookups,
+                this.NavGroup_SetupMeter,
+                this.NavGroup_StockRequest,
+                this.NavGroup_ServiceOption,
+                this.NavGroup_Reports});
+            this.NavLeft.Items.AddRange(new DevExpress.XtraNavBar.NavBarItem[] {
+                this.NavItem_MaintainServiceContract,
+                this.NavItem_NewServiceContract,
+                this.NavItem_ServiceContractInquiry,
+                this.NavItem_OutstandingContractItem,
+                this.NavItem_MaintainServiceItem,
+                this.NavItem_NewServiceItem,
+                this.NavItem_ServiceItemInquiry,
+                this.NavItem_ServiceItemTagSearch,
+                this.NavItem_GenerateItemFromSerial,
+                this.NavItem_ResetItemDebtorOwnership,
+                this.NavItem_ServiceNoteList,
+                this.NavItem_NewServiceNote,
+                this.NavItem_ServiceNoteQuickEntry,
+                this.NavItem_ServiceNoteClosing,
+                this.NavItem_ServiceNoteAssignment,
+                this.NavItem_ServiceNoteInquiry,
+                this.NavItem_OutstandingNoteAssignment,
+                this.NavItem_AppointmentList,
+                this.NavItem_NewAppointment,
+                this.NavItem_AppointmentCalendar,
+                this.NavItem_AppointmentInquiry,
+                this.NavItem_PreventiveMaintenance,
+                this.NavItem_MeterTypeTransEntry,
+                this.NavItem_ServiceQuickView,
+                this.NavItem_ServicePerson,
+                this.NavItem_ServiceAdvisor,
+                this.NavItem_Mechanic,
+                this.NavItem_ServiceStatus,
+                this.NavItem_ServiceSeverity,
+                this.NavItem_ServiceSolution,
+                this.NavItem_ServiceProblem,
+                this.NavItem_ServiceType,
+                this.NavItem_ServiceContractType,
+                this.NavItem_ServiceItemGrade,
+                this.NavItem_AppointmentType,
+                this.NavItem_AppointmentPriority,
+                this.NavItem_MeterType,
+                this.NavItem_MeterMultiPricing,
+                this.NavItem_StockRequestIntegration,
+                this.NavItem_ServiceOption,
+                this.NavItem_ServiceStatusListing,
+                this.NavItem_ServiceSeverityListing,
+                this.NavItem_ServiceSolutionListing,
+                this.NavItem_ServiceProblemListing,
+                this.NavItem_ServiceTypeListing,
+                this.NavItem_ServiceContractTypeListing,
+                this.NavItem_ServiceItemGradeListing,
+                this.NavItem_AppointmentTypeListing,
+                this.NavItem_AppointmentPriorityListing,
+                this.NavItem_ServicePersonListing,
+                this.NavItem_ServiceAdvisorListing,
+                this.NavItem_MechanicListing,
+                this.NavItem_MeterTypeListing,
+                this.NavItem_ServiceNoteListing,
+                this.NavItem_ServiceContractListing,
+                this.NavItem_ServiceItemListing,
+                this.NavItem_TopServiceStockCode,
+                this.NavItem_TopServiceStockCodeByDept});
             this.NavLeft.Location = new System.Drawing.Point(0, 50);
             this.NavLeft.Name = "NavLeft";
             this.NavLeft.OptionsNavPane.ExpandedWidth = 240;

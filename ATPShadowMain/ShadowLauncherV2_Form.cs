@@ -53,7 +53,6 @@ namespace ATPShadowMain
         public ShadowLauncherV2_Form(DBSetting db) : this()
         {
             _db = db;
-            BuildNav();
             BuildKpiCards();
             BuildQuickTiles();
             this.LblStatus.Text = BuildStatusText();
@@ -76,35 +75,10 @@ namespace ATPShadowMain
         }
 
         // ============================================================
-        // Nav (dynamic — built from FormCatalog at runtime)
+        // Nav — groups + items are statically declared in the Designer
+        // (see ShadowLauncherV2_Form.Designer.cs). OnNavLinkClicked
+        // dispatches by Caption via the FormCatalog.
         // ============================================================
-        private void BuildNav()
-        {
-            List<CatalogEntry> entries = FormCatalog.All();
-            Dictionary<string, NavBarGroup> groups = new Dictionary<string, NavBarGroup>();
-
-            foreach (CatalogEntry entry in entries)
-            {
-                NavBarGroup grp;
-                if (!groups.TryGetValue(entry.Group, out grp))
-                {
-                    grp = new NavBarGroup(entry.Group);
-                    grp.GroupStyle = NavBarGroupStyle.SmallIconsText;
-                    grp.Expanded = true;
-                    this.NavLeft.Groups.Add(grp);
-                    groups[entry.Group] = grp;
-                }
-
-                NavBarItem item = new NavBarItem(entry.Title);
-                item.Tag = entry;
-                this.NavLeft.Items.Add(item);
-
-                NavBarItemLink link = new NavBarItemLink(item);
-                grp.ItemLinks.Add(link);
-            }
-
-            if (this.NavLeft.Groups.Count > 0) this.NavLeft.ActiveGroup = this.NavLeft.Groups[0];
-        }
 
         // ============================================================
         // Dashboard — KPI cards (dynamic, parented to PanelDashboard)
@@ -305,30 +279,8 @@ namespace ATPShadowMain
         // ============================================================
         private void OnNavLinkClicked(object sender, NavBarLinkEventArgs e)
         {
-            CatalogEntry entry = e.Link.Item.Tag as CatalogEntry;
-            if (entry == null) return;
-
-            // Already open? just activate.
-            XtraTabPage existing;
-            if (this._openTabs.TryGetValue(entry.Title, out existing))
-            {
-                this.TabsMain.SelectedTabPage = existing;
-                return;
-            }
-
-            try
-            {
-                Form frm = entry.Create(_db);
-                if (frm == null) return;
-                EmbedFormInTab(entry, frm);
-            }
-            catch (Exception ex)
-            {
-                XtraMessageBox.Show(
-                    "Failed to open '" + entry.Title + "':\r\n\r\n" + ex.Message,
-                    "Open Form",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            string title = e.Link.Item.Caption;
+            OpenByTitle(title);
         }
 
         private void EmbedFormInTab(CatalogEntry entry, Form frm)
