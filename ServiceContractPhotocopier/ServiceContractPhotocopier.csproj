@@ -104,6 +104,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Classes\AccessRightsConsts.cs" />
+    <Compile Include="Classes\IFormShellHost.cs" />
     <Compile Include="Classes\BaseForms\ScpLookupEdt_Form.cs">
       <SubType>Form</SubType>
     </Compile>

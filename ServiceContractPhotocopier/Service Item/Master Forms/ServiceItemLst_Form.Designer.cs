@@ -46,6 +46,7 @@ namespace ServiceContractPhotocopier.ServiceItem.MasterForms
             this.Grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             this.GridView.GridControl = this.Grid;
             this.GridView.OptionsView.ShowGroupPanel = false;
+            this.GridView.OptionsView.ShowAutoFilterRow = true;
             this.GridView.OptionsBehavior.Editable = false;
             this.GridView.OptionsSelection.EnableAppearanceFocusedRow = true;
             this.Grid.MainView = this.GridView;

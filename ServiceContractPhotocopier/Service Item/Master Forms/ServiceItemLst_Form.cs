@@ -50,15 +50,37 @@ namespace ServiceContractPhotocopier.ServiceItem.MasterForms
 
         private void OnNew(object sender, EventArgs e)
         {
-            using (var f = new ServiceItem_Form(_dbSetting))
+            // If hosted inside the dev launcher's tabbed shell, route the
+            // "+ New" action to a new tab via IFormShellHost. Otherwise fall
+            // back to a modal ShowDialog (production AutoCount behavior).
+            Form host = this.FindForm();
+            IFormShellHost shell = host as IFormShellHost;
+            if (shell != null)
+            {
+                shell.OpenFormByTitle("New Service Item");
+                return;
+            }
+            using (ServiceItem_Form f = new ServiceItem_Form(_dbSetting))
             { f.ShowDialog(this); LoadGrid(); }
         }
 
         private void OnEdit(object sender, EventArgs e)
         {
-            var row = GetSelectedRow();
+            DataRow row = GetSelectedRow();
             if (row == null) return;
-            using (var f = new ServiceItem_Form(_dbSetting, row))
+
+            // Edit needs the row, so the catalog factory can't construct the
+            // form for us — we build it here and ask the shell to embed it.
+            Form host = this.FindForm();
+            IFormShellHost shell = host as IFormShellHost;
+            if (shell != null)
+            {
+                string code = row["ServiceItemCode"] != null ? row["ServiceItemCode"].ToString() : "Service Item";
+                ServiceItem_Form f = new ServiceItem_Form(_dbSetting, row);
+                shell.OpenFormInTab("Edit Service Item: " + code, f);
+                return;
+            }
+            using (ServiceItem_Form f = new ServiceItem_Form(_dbSetting, row))
             { f.ShowDialog(this); LoadGrid(); }
         }
 

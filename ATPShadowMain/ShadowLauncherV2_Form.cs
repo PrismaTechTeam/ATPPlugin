@@ -19,7 +19,7 @@ namespace ATPShadowMain
     /// (KPI cards, quick-access tiles, NavBar items from the catalog) is added
     /// at runtime since it's data-driven and can't be expressed in the designer.
     /// </summary>
-    public partial class ShadowLauncherV2_Form : XtraForm
+    public partial class ShadowLauncherV2_Form : XtraForm, ServiceContractPhotocopier.Classes.IFormShellHost
     {
         private readonly DBSetting _db;
 
@@ -132,6 +132,11 @@ namespace ATPShadowMain
 
                 this.PanelDashboard.Controls.Add(card);
             }
+
+            // Anchor the section header to the actual rendered KPI row so DPI/font
+            // auto-scaling can't push the Designer-positioned label on top of the cards.
+            this.LblQuickAccess.Location = new Point(24, kpiY + kpiH + 28);
+            this.LblQuickAccess.BringToFront();
         }
 
         // ============================================================
@@ -259,7 +264,7 @@ namespace ATPShadowMain
                     try
                     {
                         Form frm = entry.Create(_db);
-                        if (frm != null) EmbedFormInTab(entry, frm);
+                        if (frm != null) EmbedFormInTab(entry.Title, frm);
                     }
                     catch (Exception ex)
                     {
@@ -275,6 +280,39 @@ namespace ATPShadowMain
         }
 
         // ============================================================
+        // IFormShellHost — list forms call these to route their +New / Edit
+        // buttons into new tabs instead of popping ShowDialog.
+        // ============================================================
+        void ServiceContractPhotocopier.Classes.IFormShellHost.OpenFormByTitle(string title)
+        {
+            OpenByTitle(title);
+        }
+
+        void ServiceContractPhotocopier.Classes.IFormShellHost.OpenFormInTab(string tabTitle, Form form)
+        {
+            if (form == null) return;
+            // If a tab with this title already exists, focus it and dispose the
+            // newly-constructed form (caller already paid its construction cost).
+            XtraTabPage existing;
+            if (this._openTabs.TryGetValue(tabTitle, out existing))
+            {
+                this.TabsMain.SelectedTabPage = existing;
+                try { form.Dispose(); } catch { }
+                return;
+            }
+            try
+            {
+                EmbedFormInTab(tabTitle, form);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(
+                    "Failed to embed '" + tabTitle + "':\r\n\r\n" + ex.Message,
+                    "Open Form", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ============================================================
         // Open / close tabs
         // ============================================================
         private void OnNavLinkClicked(object sender, NavBarLinkEventArgs e)
@@ -283,7 +321,7 @@ namespace ATPShadowMain
             OpenByTitle(title);
         }
 
-        private void EmbedFormInTab(CatalogEntry entry, Form frm)
+        private void EmbedFormInTab(string tabTitle, Form frm)
         {
             // The 3 magic flags that turn a Form into a Control hostable in a panel.
             frm.TopLevel = false;
@@ -299,14 +337,14 @@ namespace ATPShadowMain
             frm.FormClosed += new FormClosedEventHandler(OnEmbeddedFormClosed);
 
             XtraTabPage page = new XtraTabPage();
-            page.Text = entry.Title;
+            page.Text = tabTitle;
             page.ShowCloseButton = DefaultBoolean.True;
             page.Tag = frm;
             page.Controls.Add(frm);
             frm.Show();   // makes it visible inside the panel
 
             this.TabsMain.TabPages.Add(page);
-            this._openTabs[entry.Title] = page;
+            this._openTabs[tabTitle] = page;
             this.TabsMain.SelectedTabPage = page;
 
             this.LblStatus.Text = BuildStatusText();

@@ -185,3 +185,11 @@ bash tests/crud-suite.sh T40 T41   # specific cases by ID
 Two fixes applied during testing:
 1. Exit-code cleanup: `FormatException` / `ArgumentException` now exit **2** (bad args) instead of the generic 1, so AI can distinguish user-input from infrastructure errors.
 2. JSON date output switched to ISO-8601 (`2026-04-16T08:26:49.000`) so `atp audit --json | jq -r .LastModified` pipes straight into `--if-modified`.
+
+## Session 2026-05-08 — ServiceItemLst tab routing
+
+- Added `ServiceContractPhotocopier\Classes\IFormShellHost.cs` so list forms can detect a tabbed-shell host (`this.FindForm() as IFormShellHost`) and route +New / Edit into a new tab via `OpenFormByTitle(string)` / `OpenFormInTab(string, Form)`. Falls back to `ShowDialog` in production AutoCount.
+- ShadowLauncherV2_Form now implements `IFormShellHost`. `EmbedFormInTab` was refactored from `(CatalogEntry, Form)` to `(string title, Form)` so the new method can reuse it without inventing a fake CatalogEntry.
+- ServiceItemLst_Form: added `GridView.OptionsView.ShowAutoFilterRow = true` to the Designer; rewrote `OnNew` and `OnEdit` to detect the shell.
+- BUILD: ServiceContractPhotocopier.dll compiled clean. ATPShadowMain.exe copy-to-bin failed (`MSB3027`) because the user is still running ATPShadowMain.exe (PID 52556) and Visual Studio Remote Debugger has the dll locked. NOT a code error. User must close ATPShadowMain.exe and rebuild to pick up changes; not killed automatically per CLAUDE.md harness rule (no GUI-popping).
+- Followups (other list forms with the same modal-ShowDialog +New/Edit pattern that should be migrated next): see grep audit below — every `*Lst_Form.cs` under Service Contract / Service Note / Appointment / General Setup / Stock Request likely follows this pattern. Pick them off as a follow-up sweep.
