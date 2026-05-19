@@ -51,3 +51,10 @@ Desktop.ini
 # Local-only credentials / state
 **/autocount-login.xml
 *.local.config
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Local build logs
+build_err.txt
+build_out.txt

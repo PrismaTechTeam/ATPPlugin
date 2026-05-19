@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>ATPMasterDataSeeder</RootNamespace>
+    <AssemblyName>ATPMasterDataSeeder</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Data" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="AutoCount">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AutoCount.Accounting">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AutoCount.Stock">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AutoCount.StockMaint">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AutoCount.GeneralMaint">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="App.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

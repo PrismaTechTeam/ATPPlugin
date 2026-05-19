@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -33,50 +33,58 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.MainEntry">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Tools">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Sales">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.GeneralMaint">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AutoCount.Stock">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AutoCount.StockMaint">
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Data.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Data.Desktop.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Data.Desktop.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Data.Desktop.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Drawing.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Printing.v22.2.Core, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Printing.v22.2.Core.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Printing.v22.2.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Utils.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
@@ -92,7 +100,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.XtraLayout.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
@@ -119,6 +127,10 @@
     </Compile>
     <Compile Include="Classes\PluginMain.cs" />
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
+    <Compile Include="Data\StockRequestRepository.cs" />
+    <Compile Include="Data\PumsTaskLock.cs" />
+    <Compile Include="Data\PumsConfig.cs" />
+    <Compile Include="Data\PumsLog.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="General Setup\Master Forms\AppointmentPriorityLst_Form.cs">
       <SubType>Form</SubType>
@@ -564,6 +576,43 @@
     <Compile Include="Stock Request\Operation Forms\StockRequestIntegration_Form.Designer.cs">
       <DependentUpon>StockRequestIntegration_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestTask_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestTask_Form.Designer.cs">
+      <DependentUpon>StockRequestTask_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.Designer.cs">
+      <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestSettings_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestSettings_Form.Designer.cs">
+      <DependentUpon>StockRequestSettings_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestGenerateProgress_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestGenerateProgress_Form.Designer.cs">
+      <DependentUpon>StockRequestGenerateProgress_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\DeleteTestData_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\DeleteTestData_Form.Designer.cs">
+      <DependentUpon>DeleteTestData_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestLog_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Stock Request\Operation Forms\StockRequestLog_Form.Designer.cs">
+      <DependentUpon>StockRequestLog_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Stock Request\SiStGenerator.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Properties\licenses.licx" />
@@ -821,6 +870,24 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Reports\MeterTypeListingReport_Form.resx">
       <DependentUpon>MeterTypeListingReport_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestTask_Form.resx">
+      <DependentUpon>StockRequestTask_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.resx">
+      <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestSettings_Form.resx">
+      <DependentUpon>StockRequestSettings_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestGenerateProgress_Form.resx">
+      <DependentUpon>StockRequestGenerateProgress_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Stock Request\Operation Forms\DeleteTestData_Form.resx">
+      <DependentUpon>DeleteTestData_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestLog_Form.resx">
+      <DependentUpon>StockRequestLog_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestIntegration_Form.resx">
       <DependentUpon>StockRequestIntegration_Form.cs</DependentUpon>

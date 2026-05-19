@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -40,100 +40,100 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Accounting.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.ARAP">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.ARAP.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.ARAP.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.BusinessFlow">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.BusinessFlow.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.BusinessFlow.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.FinancialReport">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.FinancialReport.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.FinancialReport.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.GeneralMaint">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.GL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GL.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GL.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.GST">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GST.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GST.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image100p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image100p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image100p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image125p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image125p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image125p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image150p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image150p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image150p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image175p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image175p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image175p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image200p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image200p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image200p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Image500p">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Image500p.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Image500p.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Images">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Images.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Images.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.ImportExport">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.ImportExport.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.ImportExport.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Inquiry">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Inquiry.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Inquiry.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Invoicing">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Invoicing.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Invoicing.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.MainEntry">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.MainEntry.XmlSerializers">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.MainEntry.XmlSerializers.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.MainEntry.XmlSerializers.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.ManageAccountBook">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.ManageAccountBook.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.ManageAccountBook.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.ManagementStudio">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.ManagementStudio.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.ManagementStudio.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Manufacturing">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Manufacturing.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Manufacturing.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Purchase">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Purchase.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Purchase.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Sales">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.StartScreen">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.StartScreen.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StartScreen.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Stock">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.StockMaint">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.Tools">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
     </Reference>
     <Reference Include="AutoCount.UI.XmlSerializers">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.XmlSerializers.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.XmlSerializers.dll</HintPath>
     </Reference>
     <Reference Include="DevExpress.BonusSkins.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL" />
     <Reference Include="DevExpress.Drawing.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL" />

@@ -23,16 +23,18 @@
 4. New ATPShadowMain dev launcher — a NavBar-driven home form replaces the hard-coded single-form launch in Program.cs; lists every plugin form grouped by module so dev iteration no longer requires editing Program.cs.
 
 v1.2.0.0 (2026-04-17):
-1. ServiceItem_Form.Designer.cs rewritten to canonical VS-compatible format — form now opens in Visual Studio Design view.
+1. ServiceItem_Form.Designer.cs rewritten to canonical VS-compatible format (one field per control, ISupportInitialize pairs, SuspendLayout/ResumeLayout, no helpers, no var) — form now opens in Visual Studio Design view.
 2. Tab 7 Meter Type grid column widths re-balanced with ColumnAutoWidth; all 10 columns visible in one view without horizontal scroll.
 3. Grade Code dropdown now populates — new seed migration 04_Seed_zSCP_LK_ServiceItemGrade (A, B, C, REFURB). Job lookup switched from [Job] (absent in AutoCount 2.x) to [Project].
-4. Fill Test Data button now populates every field including Tab 2 More Header and auto-adds one row to each child grid. Guarded against duplicates.
-5. Service Contract: new "Auto (F12)" button next to Contract No — one-click running number.
-6. Bilingual demo guide at Docs/demo-service-module.md with full field-by-field explanation, 18-minute demo script, FAQ.
+4. Fill Test Data orange button on both forms now populates every field including Tab 2 More Header and auto-adds one row to each child grid (Meter Type / Spare Parts / Service Items). Guarded against duplicate-row on repeat clicks.
+5. Service Contract: new "Auto (F12)" button next to Contract No (mirrors Service Item's Auto Tag) — one-click next running number.
+6. Bilingual (EN + 中文) demo guide at Docs/demo-service-module.md with full field-by-field explanation, 18-minute demo script, FAQ, and analysis of how V8 master DB actually uses Item Code vs Service Item Code.
 
 v1.1.0.0 (2026-04-16):
-1. V8 layout parity for both forms. Full CRUD lifecycle with transactional save/delete, optimistic concurrency, dirty tracking.
-2. Audit columns via migrations v1.2.0 and v1.3.0. ATPCli (atp.exe) CRUD CLI; 52-case regression suite.</WhatsNew>
+1. Maintain Service Item &amp; Maintain Service Contract brought to V8 layout parity — full header, More Header tab, Tab 1 (Department / Job / Location + Next Service Date), and 10-column Meter Type grid.
+2. Full CRUD lifecycle with transactional save/delete, optimistic concurrency via LastModified, dirty tracking, OnClosing save prompt.
+3. Audit columns (Created/Modified/CreatedBy/ModifiedBy) via migrations v1.2.0 and v1.3.0.
+4. ATPCli (atp.exe) CRUD CLI for headless testing; 52-case regression suite under tests/.</WhatsNew>
     <AssemblyFile>ServiceContractPhotocopier.dll</AssemblyFile>
     <MinimumAccountingVersion>2.0.2</MinimumAccountingVersion>
     <ScriptLanguage>C#</ScriptLanguage>

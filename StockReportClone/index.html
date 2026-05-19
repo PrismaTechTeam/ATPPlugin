@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALL STOCK REPORT - AT GROUP (Clone)</title>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>AT GROUP – Stock Report Clone</h1>
+  <div class="user">PRISMA TECH</div>
+</div>
+
+<div class="nav">
+  <a href="index.html" class="active">DASHBOARD</a>
+  <a href="standby.html">STANDBY STOCK</a>
+  <a href="tasks.html">TASKS</a>
+  <a href="reports.html">REPORTS</a>
+  <a href="index.html">SUPPORT</a>
+</div>
+
+<div class="container">
+  <div class="title-bar">
+    <h2>ALL REQUESTED STOCKS</h2>
+    <div class="export-buttons">
+      <button class="btn btn-primary">CSV</button>
+      <button class="btn btn-primary">Excel</button>
+      <button class="btn btn-primary">PDF</button>
+      <button class="btn btn-primary">Print</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="group">
+      <label>Year:</label>
+      <input type="text" value="2026" style="width:80px;">
+      <button class="btn btn-success">Submit</button>
+    </div>
+    <div class="group">
+      <label>Technician:</label>
+      <select id="techFilter">
+        <option value="">All</option>
+      </select>
+    </div>
+    <div class="group">
+      <label>Item Code:</label>
+      <input type="text" id="itemCodeFilter" style="width:140px;">
+    </div>
+    <div class="group">
+      <label>Serial No:</label>
+      <input type="text" id="serialFilter" style="width:140px;">
+    </div>
+    <div class="group">
+      <label>From:</label>
+      <input type="date" id="dateFrom">
+      <label>To:</label>
+      <input type="date" id="dateTo">
+      <button class="btn btn-primary" onclick="applyDateFilter()">Filter</button>
+    </div>
+    <button class="btn btn-warn" onclick="resetAllFilters()">Reset All</button>
+    <button class="btn btn-success" id="btnBulkPush" onclick="bulkPushCurrentPage()">Push 10 from current page</button>
+    <button class="btn btn-danger" id="btnPushError" onclick="pushInvalidPayload()">Push Error</button>
+  </div>
+
+  <div id="loading" class="loading">Loading data...</div>
+
+  <table id="stockTable" class="display" style="width:100%; display:none;">
+    <thead><tr id="headerRow"></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="footer">
+  © 2019 – 2026 ATP SALES &amp; SERVICES SDN BHD (Clone) · Powered by IOFIZ SOLUTION
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

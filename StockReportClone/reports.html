@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALL TASKS - AT GROUP (Reports Clone)</title>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>AT GROUP – Reports (Clone)</h1>
+  <div class="user">PRISMA TECH</div>
+</div>
+
+<div class="nav">
+  <a href="index.html">DASHBOARD</a>
+  <a href="standby.html">STANDBY STOCK</a>
+  <a href="tasks.html">TASKS</a>
+  <a href="reports.html" class="active">REPORTS</a>
+  <a href="index.html">SUPPORT</a>
+</div>
+
+<div class="container">
+  <div class="title-bar">
+    <h2>ALL TASKS – METER REPORT</h2>
+    <div class="export-buttons">
+      <button class="btn btn-primary">CSV</button>
+      <button class="btn btn-primary">Excel</button>
+      <button class="btn btn-primary">PDF</button>
+      <button class="btn btn-primary">Print</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="group">
+      <label>Technician:</label>
+      <select id="techFilter"><option value="">All</option></select>
+    </div>
+    <div class="group">
+      <label>Status:</label>
+      <select id="statusFilter"><option value="">All</option></select>
+    </div>
+    <div class="group">
+      <label>Zone:</label>
+      <select id="zoneFilter"><option value="">All</option></select>
+    </div>
+    <div class="group">
+      <label>Location:</label>
+      <input type="text" id="locationFilter" style="width:140px;">
+    </div>
+    <div class="group">
+      <label>Tracking ID:</label>
+      <input type="text" id="trackingFilter" style="width:160px;">
+    </div>
+    <button class="btn btn-warn" onclick="resetAllFilters()">Reset All</button>
+  </div>
+
+  <div id="loading" class="loading">Loading data...</div>
+
+  <table id="stockTable" class="display" style="width:100%; display:none;">
+    <thead><tr id="headerRow"></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="footer">
+  © 2019 – 2026 ATP SALES &amp; SERVICES SDN BHD (Clone) · Powered by IOFIZ SOLUTION
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="config.js"></script>
+<script src="reports.js"></script>
+
+</body>
+</html>

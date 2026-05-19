@@ -24,7 +24,7 @@ set "CONFIG=Debug"
 set "PLATFORM=AnyCPU"
 
 REM ---- TOOLS --------------------------------------------------
-set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+set "MSBUILD=C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
 set "APPBUILDERCMD=C:\Program Files (x86)\AutoCount\Development\AppBuilder 2.1\AppBuilderCmd.exe"
 
 if not exist "%MSBUILD%"        echo [ERROR] MSBuild not found        && exit /b 1

@@ -15,7 +15,7 @@ namespace ATPShadowMain
     /// </summary>
     internal static class Program
     {
-        private const string AUTOCOUNT_DIR = @"C:\Program Files\AutoCount\Accounting 2.2";
+        private const string AUTOCOUNT_DIR = @"C:\Program Files (x86)\AutoCount\Accounting 2.2";
         private static readonly string LOG_PATH = Path.Combine(
             Path.GetDirectoryName(typeof(Program).Assembly.Location) ?? ".",
             "shadowmain.log");
@@ -98,7 +98,7 @@ namespace ATPShadowMain
                 //   Application.Run(new ServiceContractPhotocopier.StockRequest.OperationForms.StockRequestIntegration_Form(userSession.DBSetting));
                 //   Application.Run(new ATPShadowMain.ShadowLauncherV2_Form(userSession.DBSetting));   // tabbed shell (has DX-eval popup quirk)
                 Log("Run: opening form");
-                Application.Run(new ServiceContractPhotocopier.ServiceItem.MasterForms.ServiceItemLst_Form(userSession.DBSetting));
+                Application.Run(new ServiceContractPhotocopier.MeterReading.OperationForms.MeterReadingIntegration_Form(userSession.DBSetting));
                 Log("Run: form closed");
             }
             else

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -35,34 +35,34 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.MainEntry">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Tools">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.UI">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Data.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Drawing.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Utils.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
