@@ -20,23 +20,23 @@
 
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Stock">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.StockMaint">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.GeneralMaint">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

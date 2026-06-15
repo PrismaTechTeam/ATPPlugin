@@ -19,6 +19,41 @@ namespace ServiceContractPhotocopier.Data
         /// </summary>
         public const string KEY_FLAG_CONTROL = "FLAG_CONTROL";
 
+        // === Meter Reading API integration (combined Service Contract module v2) ===
+
+        /// <summary>Base URL of the PUMS meter-reading API (no trailing path). Default points to a local mock.</summary>
+        public const string KEY_METER_API_BASE_URL = "METER_API_BASE_URL";
+        public const string DEFAULT_METER_API_BASE_URL = "http://localhost:8090";
+
+        /// <summary>Value sent in the X-API-Key header on every meter-reading API call.</summary>
+        public const string KEY_METER_API_KEY = "METER_API_KEY";
+
+        /// <summary>"MOCK" (default) = deterministic local data; "LIVE" = call the real HTTP endpoints.</summary>
+        public const string KEY_METER_API_MODE = "METER_API_MODE";
+        public const string METER_API_MODE_MOCK = "MOCK";
+        public const string METER_API_MODE_LIVE = "LIVE";
+
+        /// <summary>HTTP timeout (milliseconds) for meter-reading API calls.</summary>
+        public const string KEY_METER_API_TIMEOUT_MS = "METER_API_TIMEOUT_MS";
+        public const int DEFAULT_METER_API_TIMEOUT_MS = 15000;
+
+        /// <summary>Default day-of-month (1..31) used when creating a new contract.</summary>
+        public const string KEY_DEFAULT_BILLING_DAY = "DEFAULT_BILLING_DAY";
+        public const int DEFAULT_BILLING_DAY_VALUE = 1;
+
+        /// <summary>Default billing mode for a new contract: 'G' grouped one invoice, 'S' separate per item.</summary>
+        public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
+        public const string DEFAULT_BILLING_MODE_VALUE = "G";
+
+        /// <summary>Reads an int config value, falling back to <paramref name="defaultValue"/> on missing/invalid.</summary>
+        public static int GetInt(DBSetting db, string key, int defaultValue)
+        {
+            string v = Get(db, key, null);
+            int n;
+            if (v != null && int.TryParse(v.Trim(), out n)) return n;
+            return defaultValue;
+        }
+
         public static bool GetBool(DBSetting db, string key, bool defaultValue)
         {
             string v = Get(db, key, defaultValue ? "1" : "0");

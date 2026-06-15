@@ -20,6 +20,16 @@ namespace ServiceContractPhotocopier.Classes
 
             // === Tier 0: shared infrastructure ===
             RunIfTableMissing(dbsetting, "z_SysConfig",                 "01_CreateTable_z_SysConfig.sql", asm);
+            // (z_SysRef registered just below)
+
+            // === Tier 0b: PUMS stock integration tables ===
+            // These were previously created only by the ATPApi webhook service or lazily in code,
+            // so a fresh plugin install (no ATPApi run) was missing them. Provision on load here.
+            RunIfTableMissing(dbsetting, "Z_PumsConfig",               "02_CreateTable_Z_PumsConfig.sql", asm);
+            RunIfTableMissing(dbsetting, "Z_PumsLog",                  "02_CreateTable_Z_PumsLog.sql", asm);
+            RunIfTableMissing(dbsetting, "Z_PumsStockIssue",           "02_CreateTable_Z_PumsStockIssue.sql", asm);
+            RunIfTableMissing(dbsetting, "Z_PumsStockTransfer",        "02_CreateTable_Z_PumsStockTransfer.sql", asm);
+            RunIfTableMissing(dbsetting, "Z_PumsTaskLock",             "02_CreateTable_Z_PumsTaskLock.sql", asm);
             RunIfTableMissing(dbsetting, "z_SysRef",                    "01_CreateTable_z_SysRef.sql", asm);
 
             // === Tier 1: lookups ===
@@ -65,6 +75,16 @@ namespace ServiceContractPhotocopier.Classes
             // === Tier 8: appointment ===
             RunIfTableMissing(dbsetting, "zSCP_Appointment",            "02_CreateTable_zSCP_Appointment.sql", asm);
 
+            // === Tier 8b: combined Service Contract module v2 (zSCP2_*) ===
+            RunIfTableMissing(dbsetting, "zSCP2_Contract",              "02_CreateTable_zSCP2_Contract.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_Item",                  "02_CreateTable_zSCP2_Item.sql", asm);
+            // Evolve an older zSCP2_Item (ItemNo->ServiceItemNo, drop MachineName/StockCode). Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v3.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
+            // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
+            RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
+
             // === Tier 9: views (always drop-and-recreate) ===
             RecreateViews(dbsetting, asm);
 
@@ -82,6 +102,15 @@ namespace ServiceContractPhotocopier.Classes
             }
 
             return true;
+        }
+
+        private static void RunDDL(DBSetting dbsetting, string sqlFile, Assembly asm)
+        {
+            // Runs an embedded DDL script unconditionally. The script itself must be idempotent
+            // (guarded with IF EXISTS / IF NOT EXISTS) so it is safe on every plugin load.
+            string ddl = ReadEmbeddedSql(sqlFile, asm);
+            var dbu = DBUtils.Create(dbsetting);
+            dbu.ExecuteDDLText(ddl);
         }
 
         private static void RunIfTableMissing(DBSetting dbsetting, string tableName, string sqlFile, Assembly asm)
@@ -108,6 +137,7 @@ namespace ServiceContractPhotocopier.Classes
                 "zvSCP_AppointmentCalendar",
                 "zvSCP_OutstandingServiceContractItem",
                 "zvSCP_OutstandingServiceNoteAssignment",
+                "zvSCP2_ContractList",
             };
 
             var dbu = DBUtils.Create(dbsetting);
@@ -122,6 +152,10 @@ namespace ServiceContractPhotocopier.Classes
 
             string viewDDL = ReadEmbeddedSql("03_CreateView_zvSCP_Views.sql", asm);
             dbu.ExecuteDDLText(viewDDL);
+
+            // v2 combined-module list view (separate file).
+            string viewDDL2 = ReadEmbeddedSql("03_CreateView_zvSCP2_ContractList.sql", asm);
+            dbu.ExecuteDDLText(viewDDL2);
         }
 
         private static string ReadEmbeddedSql(string fileName, Assembly asm)

@@ -8,10 +8,11 @@ using ServiceContractPhotocopier.Classes;
 
 namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Maintain Service Contract",
-        MenuOrder = 200,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_CONTRACT,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_CONTRACT)]
+    // RETIRED (module v2): replaced by zSCP2_ContractLst_Form. Menu entry removed; form kept for reference.
+    // [AutoCount.PlugIn.MenuItem("Maintain Service Contract",
+    //     MenuOrder = 200,
+    //     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_CONTRACT,
+    //     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_CONTRACT)]
     [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, false)]
     public partial class ServiceContractLst_Form : XtraForm
     {

@@ -33,58 +33,58 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting.UI">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.MainEntry">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.MainEntry.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Tools">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Tools.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.UI">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Sales">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.GeneralMaint">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.GeneralMaint.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.Stock">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AutoCount.StockMaint">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.StockMaint.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Data.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Data.Desktop.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Data.Desktop.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Data.Desktop.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Drawing.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Drawing.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Printing.v22.2.Core, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.Printing.v22.2.Core.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.Printing.v22.2.Core.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.Utils.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
@@ -100,7 +100,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="DevExpress.XtraLayout.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
@@ -109,6 +109,11 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\Newtonsoft.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Classes\AccessRightsConsts.cs" />
@@ -127,10 +132,34 @@
     </Compile>
     <Compile Include="Classes\PluginMain.cs" />
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
+    <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Data\StockRequestRepository.cs" />
     <Compile Include="Data\PumsTaskLock.cs" />
     <Compile Include="Data\PumsConfig.cs" />
     <Compile Include="Data\PumsLog.cs" />
+    <Compile Include="Meter Reading\Services\MeterReadingDto.cs" />
+    <Compile Include="Meter Reading\Services\IMeterReadingApiClient.cs" />
+    <Compile Include="Meter Reading\Services\LiveMeterReadingApiClient.cs" />
+    <Compile Include="Meter Reading\Services\MockMeterReadingApiClient.cs" />
+    <Compile Include="Meter Reading\Services\MeterReadingApiClientFactory.cs" />
+    <Compile Include="Service Contract\Operation Forms\zSCP2_ContractLst_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_ContractLst_Form.Designer.cs">
+      <DependentUpon>zSCP2_ContractLst_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_Contract_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_Contract_Form.Designer.cs">
+      <DependentUpon>zSCP2_Contract_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_Item_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_Item_Form.Designer.cs">
+      <DependentUpon>zSCP2_Item_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="General Setup\Master Forms\AppointmentPriorityLst_Form.cs">
       <SubType>Form</SubType>
@@ -618,6 +647,18 @@
     <EmbeddedResource Include="Properties\licenses.licx" />
     <EmbeddedResource Include="SQL\01_CreateTable_z_SysConfig.sql" />
     <EmbeddedResource Include="SQL\01_CreateTable_z_SysRef.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_Z_PumsConfig.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_Z_PumsLog.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_Z_PumsStockIssue.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_Z_PumsStockTransfer.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_Z_PumsTaskLock.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_Contract.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_Item.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v3.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v2.sql" />
+    <EmbeddedResource Include="SQL\03_CreateView_zvSCP2_ContractList.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_Appointment.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_LK_AppointmentPriority.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_LK_AppointmentType.sql" />
@@ -771,6 +812,15 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\ServiceContractLst_Form.resx">
       <DependentUpon>ServiceContractLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_ContractLst_Form.resx">
+      <DependentUpon>zSCP2_ContractLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_Contract_Form.resx">
+      <DependentUpon>zSCP2_Contract_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_Item_Form.resx">
+      <DependentUpon>zSCP2_Item_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\ServiceContract_Form.resx">
       <DependentUpon>ServiceContract_Form.cs</DependentUpon>

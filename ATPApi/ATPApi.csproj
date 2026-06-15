@@ -38,31 +38,31 @@
 
   <ItemGroup>
     <Reference Include="AutoCount">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Accounting">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Invoicing">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Invoicing.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Invoicing.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Sales">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Sales.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Purchase">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Purchase.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Purchase.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.Stock">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Stock.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="AutoCount.UI">
-      <HintPath>C:\Program Files (x86)\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

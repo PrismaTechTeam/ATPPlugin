@@ -8,10 +8,11 @@ using ServiceContractPhotocopier.Classes;
 
 namespace ServiceContractPhotocopier.ServiceItem.MasterForms
 {
-    [AutoCount.PlugIn.MenuItem("Maintain Service Item",
-        MenuOrder = 210,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_ITEM,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_ITEM)]
+    // RETIRED (module v2): service items are now managed inside zSCP2_Contract_Form. Menu entry removed.
+    // [AutoCount.PlugIn.MenuItem("Maintain Service Item",
+    //     MenuOrder = 210,
+    //     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_ITEM,
+    //     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_ITEM)]
     [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, false)]
     public partial class ServiceItemLst_Form : XtraForm
     {

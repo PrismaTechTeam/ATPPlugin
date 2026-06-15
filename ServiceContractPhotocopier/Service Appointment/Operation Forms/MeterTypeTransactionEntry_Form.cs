@@ -17,10 +17,11 @@ namespace ServiceContractPhotocopier.ServiceAppointment.OperationForms
     /// Matches V8 UI: header (Service Tag, Reading Date, Stock Code, Debtor Code, Department,
     /// Job, Location), Sales Invoice Settings group, and a 13-column grid.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Meter Type Transaction Entry",
-        MenuOrder = 430,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_METER_TYPE_TRANS,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_METER_TYPE_TRANS)]
+    // RETIRED (module v2): meter billing now runs from Meter Reading Integration. Menu entry removed.
+    // [AutoCount.PlugIn.MenuItem("Meter Type Transaction Entry",
+    //     MenuOrder = 430,
+    //     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_METER_TYPE_TRANS,
+    //     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_METER_TYPE_TRANS)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class MeterTypeTransactionEntry_Form : XtraForm
     {
