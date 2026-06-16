@@ -24,14 +24,24 @@ namespace ServiceContractPhotocopier.MeterReading.Services
             _timeoutMs = timeoutMs > 0 ? timeoutMs : 15000;
         }
 
+        public List<MeterReadingDto> GetReadings(MachineStatus status, int month)
+        {
+            string path = status == MachineStatus.Offline
+                ? "/api/meter-reading/offline?month=" + month
+                : "/api/meter-reading/online";
+            List<MeterReadingDto> list = GetArray(path);
+            foreach (MeterReadingDto d in list) d.Status = status;   // tag with the producing endpoint
+            return list;
+        }
+
         public List<MeterReadingDto> GetOnline()
         {
-            return GetArray("/api/meter-reading/online");
+            return GetReadings(MachineStatus.Online, System.DateTime.Today.Month);
         }
 
         public List<MeterReadingDto> GetOffline(int month)
         {
-            return GetArray("/api/meter-reading/offline?month=" + month);
+            return GetReadings(MachineStatus.Offline, month);
         }
 
         private List<MeterReadingDto> GetArray(string relativePath)

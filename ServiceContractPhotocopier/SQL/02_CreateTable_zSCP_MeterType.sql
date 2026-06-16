@@ -13,6 +13,7 @@ CREATE TABLE [dbo].[zSCP_MeterType](
 	[MeterMultiPriceCode]  [nvarchar](20) NOT NULL DEFAULT(''),
 	[RebateQtyInPercent]   [decimal](20,2) NOT NULL DEFAULT(0),
 	[FOCQty]               [decimal](20,2) NOT NULL DEFAULT(0),
+	[ACItemCode]           [nvarchar](30) NOT NULL DEFAULT(''),
 	[Inactive]             [char](1) NOT NULL DEFAULT('N'),
 	[LastModified]         [datetime2](0) NOT NULL DEFAULT(GETDATE()),
  CONSTRAINT [PK_zSCP_MeterType] PRIMARY KEY CLUSTERED ([MeterTypeKey] ASC),

@@ -321,7 +321,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnSelfManualKeyIn.Name = "BtnSelfManualKeyIn";
             this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(160, 52);
             this.BtnSelfManualKeyIn.TabIndex = 12;
-            this.BtnSelfManualKeyIn.Text = "Self Manual Key In";
+            this.BtnSelfManualKeyIn.Text = "Select Matched";
             this.BtnSelfManualKeyIn.Click += new System.EventHandler(this.BtnSelfManualKeyIn_Click);
             //
             // BtnGenerateInvoice  (red bold, same style as Generate SI/ST)

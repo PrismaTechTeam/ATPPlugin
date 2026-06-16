@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
+using System.Drawing;
 using System.Windows.Forms;
 using AutoCount.Authentication;
 using AutoCount.Data;
 using DevExpress.XtraEditors;
+using DevExpress.XtraGrid.Columns;
+using DevExpress.XtraTab;
 using ServiceContractPhotocopier.Classes;
 using ServiceContractPhotocopier.MeterReading.Services;
 
@@ -18,7 +21,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
     {
         private DBSetting _dbSetting;
         private UserSession _userSession;
-        private DataTable _dtGrid;
+        private DataTable _dtGrid;   // one row PER METER; item columns repeat (merged via AllowCellMerge)
+        private XtraTabControl _tabView;
+        private XtraTabPage _pageWith;
+        private XtraTabPage _pageNo;
+        private XtraTabPage _pageAll;
+        private LabelControl _lblSummary;
 
         public MeterReadingIntegration_Form()
         {
@@ -54,7 +62,135 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbDay.SelectedIndex = DateTime.Today.Day - 1;
 
             this.GridViewMeter.CellValueChanged +=
-                new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(this.GridViewMeter_CellValueChanged);
+                new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewMeter_CellValueChanged);
+            this.GridViewMeter.CellMerge +=
+                new DevExpress.XtraGrid.Views.Grid.CellMergeEventHandler(GridViewMeter_CellMerge);
+
+            SetupTabs();
+        }
+
+        // Two views over the SAME in-memory data: switching tabs only re-filters by Status
+        // (data is never reloaded/erased until Refresh or Fetch). One grid, re-parented per tab.
+        private void SetupTabs()
+        {
+            _tabView = new XtraTabControl();
+            _tabView.Dock = DockStyle.Fill;
+            _pageWith = new XtraTabPage(); _pageWith.Text = "With Meter Data";
+            _pageNo = new XtraTabPage(); _pageNo.Text = "No API Data";
+            _pageAll = new XtraTabPage(); _pageAll.Text = "All";
+            _tabView.TabPages.AddRange(new XtraTabPage[] { _pageWith, _pageNo, _pageAll });
+
+            this.Controls.Remove(this.GridMeter);
+            this.GridMeter.Dock = DockStyle.Fill;
+            _pageAll.Controls.Add(this.GridMeter);
+            _tabView.Dock = DockStyle.Fill;
+            this.Controls.Add(_tabView);
+            // A Dock=Fill control must sit at child-index 0 (same slot the designer used for
+            // GridMeter) so it is laid out AFTER the docked-Top panels and only fills the area
+            // left below them. Otherwise it covers the whole form and hides its own tab strip +
+            // the grid's column headers behind the title/filter panels.
+            this.Controls.SetChildIndex(_tabView, 0);
+            _tabView.SelectedTabPage = _pageAll;
+            _tabView.SelectedPageChanged += new TabPageChangedEventHandler(TabView_SelectedPageChanged);
+
+            // Per-item alternating row colour (super-light-blue / white), so each service item's
+            // BK+CL pair is easy to tell apart at a glance.
+            this.GridViewMeter.RowStyle +=
+                new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewMeter_RowStyle);
+
+            // Summary label sitting in the empty area to the right of the action buttons.
+            _lblSummary = new LabelControl();
+            _lblSummary.Name = "LblSummary";
+            _lblSummary.AutoSizeMode = LabelAutoSizeMode.None;
+            _lblSummary.Appearance.Font = new Font("Segoe UI", 9F);
+            _lblSummary.Appearance.Options.UseFont = true;
+            _lblSummary.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            _lblSummary.Location = new Point(1100, 14);
+            _lblSummary.Size = new Size(440, 118);
+            _lblSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            this.PanelFilter.Controls.Add(_lblSummary);
+            _lblSummary.BringToFront();
+        }
+
+        // Each service item gets one of two background shades (white / super-light-blue), alternating
+        // per item (NOT per physical row), so a meter pair stays the same colour.
+        private void GridViewMeter_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
+        {
+            if (e.RowHandle < 0) return;   // group rows
+            object v = GridViewMeter.GetRowCellValue(e.RowHandle, "Shade");
+            if (v != null && v != DBNull.Value && Convert.ToInt32(v) == 1)
+            {
+                e.Appearance.BackColor = Color.FromArgb(228, 241, 252);   // super light blue
+                e.Appearance.Options.UseBackColor = true;
+            }
+        }
+
+        private void TabView_SelectedPageChanged(object sender, TabPageChangedEventArgs e)
+        {
+            if (e.Page == null) return;
+            this.GridMeter.Parent = e.Page;
+            this.GridMeter.Dock = DockStyle.Fill;
+            ApplyTabFilter();
+        }
+
+        private void ApplyTabFilter()
+        {
+            if (_tabView == null) return;
+            string f = "";
+            if (_tabView.SelectedTabPage == _pageWith) f = "[Status] Like 'Matched%'";
+            else if (_tabView.SelectedTabPage == _pageNo) f = "[Status] = 'No API data'";
+            GridViewMeter.ActiveFilterString = f;
+        }
+
+        private void UpdateTabCounts()
+        {
+            if (_dtGrid == null || _tabView == null) return;
+            int with = 0, no = 0, sel = 0, untouched = 0;
+            decimal selCharge = 0m;
+            System.Collections.Generic.HashSet<string> items = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> contracts = new System.Collections.Generic.HashSet<string>();
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                items.Add(S(r["ItemKey"]));
+                contracts.Add(S(r["ContractKey"]));
+                string st = S(r["Status"]);
+                if (st.StartsWith("Matched")) with++;
+                else if (st == "No API data") no++;
+                else untouched++;
+                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))
+                { sel++; selCharge += Dec(r["TotalCharges"]); }
+            }
+            _pageWith.Text = "With Meter Data (" + with + ")";
+            _pageNo.Text = "No API Data (" + no + ")";
+            _pageAll.Text = "All (" + _dtGrid.Rows.Count + ")";
+
+            if (_lblSummary != null)
+            {
+                string fetched = (with == 0 && no == 0) ? "  (not fetched yet)" : "";
+                _lblSummary.Text =
+                    "Contracts: " + contracts.Count + "    Service Items: " + items.Count +
+                    "    Meters: " + _dtGrid.Rows.Count + "\r\n" +
+                    "✔ With meter data: " + with + fetched + "\r\n" +
+                    "✖ No API data (need manual key-in): " + no + "\r\n" +
+                    "Selected to bill: " + sel + "    Billing total: RM " + selCharge.ToString("n2");
+            }
+        }
+
+        // Visual grouping WITHOUT real DataView grouping (which is incompatible with AllowCellMerge):
+        //   • Contract / Customer / Mode  → merge across the whole CONTRACT (one cell per contract).
+        //   • Service Item No / Serial     → merge across each SERVICE ITEM (one cell per item).
+        //   • Every meter column keeps its own value (no merge).
+        private void GridViewMeter_CellMerge(object sender, DevExpress.XtraGrid.Views.Grid.CellMergeEventArgs e)
+        {
+            string f = e.Column.FieldName;
+            bool perContract = (f == "ContractNo" || f == "Customer" || f == "Mode");
+            bool perItem = (f == "ServiceItemNo" || f == "SerialNo" || f == "MachineStatus");
+            if (!perContract && !perItem) { e.Merge = false; e.Handled = true; return; }
+            string keyField = perContract ? "ContractKey" : "ItemKey";
+            object k1 = GridViewMeter.GetRowCellValue(e.RowHandle1, keyField);
+            object k2 = GridViewMeter.GetRowCellValue(e.RowHandle2, keyField);
+            e.Merge = (k1 != null && k2 != null && k1.ToString() == k2.ToString());
+            e.Handled = true;
         }
 
         private int SelectedMonth()
@@ -62,19 +198,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             int idx = this.CmbMonth.SelectedIndex;
             return (idx >= 0 && idx <= 11) ? idx + 1 : DateTime.Today.Month;
         }
-
         private int SelectedDay()
         {
             int idx = this.CmbDay.SelectedIndex;
             return (idx >= 0 && idx <= 30) ? idx + 1 : DateTime.Today.Day;
         }
 
-        // ───────────────────── Load listing ─────────────────────
+        // ───────────────────── Load (one row per meter) ─────────────────────
 
         private void LoadData()
         {
-            if (_dbSetting == null) { _dtGrid = NewGridTable(); GridMeter.DataSource = _dtGrid; return; }
-
+            if (_dbSetting == null) return;
             try
             {
                 int month = SelectedMonth();
@@ -83,94 +217,88 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 int monthEnd = DateTime.DaysInMonth(year, month);
                 if (target > monthEnd) target = monthEnd;
 
-                string dayFilter = this.ChkShowAll.Checked
-                    ? ""
-                    : " AND (CASE WHEN COALESCE(i.BillingDayOverride,c.BillingDay) > " + monthEnd +
-                      " THEN " + monthEnd + " ELSE COALESCE(i.BillingDayOverride,c.BillingDay) END) = " + target + " ";
+                string dayFilter = this.ChkShowAll.Checked ? "" :
+                    " AND (CASE WHEN COALESCE(i.BillingDayOverride,c.BillingDay) > " + monthEnd +
+                    " THEN " + monthEnd + " ELSE COALESCE(i.BillingDayOverride,c.BillingDay) END) = " + target + " ";
+
+                string search = (this.TxtSearch.EditValue ?? "").ToString().Trim();
+                string searchFilter = "";
+                if (search.Length > 0)
+                {
+                    string s = search.Replace("'", "''");
+                    searchFilter = " AND (i.ServiceItemNo LIKE '%" + s + "%' OR i.SerialNumber LIKE '%" + s +
+                        "%' OR c.ContractNo LIKE '%" + s + "%' OR ISNULL(d.CompanyName,'') LIKE '%" + s + "%') ";
+                }
 
                 string sql =
-                    "SELECT i.ItemKey, i.ServiceItemNo AS ItemNo, i.SerialNumber, i.Description AS MachineName, " +
-                    "c.ContractKey, c.ContractNo, c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
-                    "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffDay, " +
-                    "bk.ItemMeterKey AS BKKey, ISNULL(bk.MeterTypeCode,'') AS BKType, ISNULL(bkmt.ACItemCode,'') AS BKAC, " +
-                    "ISNULL(bk.ChargesRate,0) AS BKRate, ISNULL(bk.MinimumCharges,0) AS BKMin, ISNULL(bk.FOCQty,0) AS BKFoc, " +
-                    "ISNULL(bk.RebateQtyInPercent,0) AS BKRebate, ISNULL(bk.InitialReading,0) AS BKInit, " +
-                    "bkl.LastReading AS BKLast, bkl.LastDate AS BKLastDate, " +
-                    "cl.ItemMeterKey AS CLKey, ISNULL(cl.MeterTypeCode,'') AS CLType, ISNULL(clmt.ACItemCode,'') AS CLAC, " +
-                    "ISNULL(cl.ChargesRate,0) AS CLRate, ISNULL(cl.MinimumCharges,0) AS CLMin, ISNULL(cl.FOCQty,0) AS CLFoc, " +
-                    "ISNULL(cl.RebateQtyInPercent,0) AS CLRebate, ISNULL(cl.InitialReading,0) AS CLInit, " +
-                    "cll.LastReading AS CLLast, cll.LastDate AS CLLastDate " +
-                    "FROM dbo.zSCP2_Item i " +
+                    "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, i.SerialNumber, " +
+                    "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
+                    "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
+                    "ISNULL(mt.ACItemCode,'') AS ACItemCode, ISNULL(m.MinimumCharges,0) AS MinCharges, " +
+                    "ISNULL(m.ChargesRate,0) AS UnitPrice, ISNULL(m.FOCQty,0) AS FOCQty, " +
+                    "ISNULL(m.RebateQtyInPercent,0) AS RebatePct, ISNULL(m.InitialReading,0) AS InitReading, " +
+                    "lr.LastReading, lr.LastDate " +
+                    "FROM dbo.zSCP2_ItemMeter m " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                     "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
                     "LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
-                    "LEFT JOIN dbo.zSCP2_ItemMeter bk ON bk.ItemKey = i.ItemKey AND bk.MeterRole = 'BK' " +
-                    "LEFT JOIN dbo.zSCP_MeterType bkmt ON bkmt.MeterTypeCode = bk.MeterTypeCode " +
-                    "OUTER APPLY (SELECT TOP 1 t.MeterTransReading AS LastReading, t.MeterTransDate AS LastDate " +
-                    "  FROM dbo.zSCP_MeterTrans t WHERE t.ServiceItemMeterTypeKey = bk.ItemMeterKey " +
-                    "  ORDER BY t.MeterTransDate DESC, t.MeterTransKey DESC) bkl " +
-                    "LEFT JOIN dbo.zSCP2_ItemMeter cl ON cl.ItemKey = i.ItemKey AND cl.MeterRole = 'CL' " +
-                    "LEFT JOIN dbo.zSCP_MeterType clmt ON clmt.MeterTypeCode = cl.MeterTypeCode " +
-                    "OUTER APPLY (SELECT TOP 1 t.MeterTransReading AS LastReading, t.MeterTransDate AS LastDate " +
-                    "  FROM dbo.zSCP_MeterTrans t WHERE t.ServiceItemMeterTypeKey = cl.ItemMeterKey " +
-                    "  ORDER BY t.MeterTransDate DESC, t.MeterTransKey DESC) cll " +
-                    "WHERE i.Inactive='N' AND c.Inactive='N' " + dayFilter +
-                    "ORDER BY c.ContractNo, i.Pos, i.ItemNo";
-
-                DataTable src = _dbSetting.GetDataTable(sql, false);
-
-                string search = (this.TxtSearch.EditValue ?? "").ToString().Trim().ToLowerInvariant();
+                    "LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = m.MeterTypeCode " +
+                    // Latest reading per meter in ONE pass over zSCP_MeterTrans (window function),
+                    // instead of a correlated TOP-1 OUTER APPLY per row (which timed out on 145k rows).
+                    "LEFT JOIN (SELECT z.ServiceItemMeterTypeKey, z.MeterTransReading AS LastReading, z.MeterTransDate AS LastDate " +
+                    "  FROM (SELECT t.ServiceItemMeterTypeKey, t.MeterTransReading, t.MeterTransDate, " +
+                    "        ROW_NUMBER() OVER (PARTITION BY t.ServiceItemMeterTypeKey ORDER BY t.MeterTransDate DESC, t.MeterTransKey DESC) AS rn " +
+                    "        FROM dbo.zSCP_MeterTrans t) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
+                    "WHERE m.MeterRole IN ('BK','CL') AND i.Inactive='N' AND c.Inactive='N' " + dayFilter + searchFilter +
+                    "ORDER BY c.ContractNo, i.ServiceItemNo, m.MeterRole";
+                DataTable src = QueryWithTimeout(sql, 180);
 
                 _dtGrid = NewGridTable();
+                Dictionary<long, int> shadeByContract = new Dictionary<long, int>();
                 foreach (DataRow r in src.Rows)
                 {
-                    if (search.Length > 0)
-                    {
-                        string hay = (S(r["ItemNo"]) + " " + S(r["SerialNumber"]) + " " + S(r["MachineName"]) +
-                                      " " + S(r["ContractNo"]) + " " + S(r["DebtorName"])).ToLowerInvariant();
-                        if (!hay.Contains(search)) continue;
-                    }
-
                     DataRow g = _dtGrid.NewRow();
-                    g["Sel"] = false;
-                    g["ItemKey"] = Convert.ToInt64(r["ItemKey"]);
-                    g["ContractKey"] = Convert.ToInt64(r["ContractKey"]);
+                    long ck = D64(r["ContractKey"]);
+                    int shade;
+                    if (!shadeByContract.TryGetValue(ck, out shade))
+                    {
+                        shade = shadeByContract.Count % 2;   // alternate per contract → clean colour bands
+                        shadeByContract[ck] = shade;
+                    }
+                    g["Shade"] = shade;
                     g["ContractNo"] = S(r["ContractNo"]);
-                    g["ItemNo"] = S(r["ItemNo"]);
+                    g["ServiceItemNo"] = S(r["ServiceItemNo"]);
                     g["SerialNo"] = S(r["SerialNumber"]);
-                    g["MachineName"] = S(r["MachineName"]);
-                    g["DebtorCode"] = S(r["DebtorCode"]);
                     g["Customer"] = S(r["DebtorCode"]) + " - " + S(r["DebtorName"]);
-                    g["BillingMode"] = S(r["BillingMode"]);
                     g["Mode"] = S(r["BillingMode"]) == "S" ? "Separate" : "Group";
-
-                    g["BKKey"] = D64(r["BKKey"]);
-                    g["BKType"] = S(r["BKType"]);
-                    g["BKAC"] = S(r["BKAC"]);
-                    g["BKRate"] = Dec(r["BKRate"]);
-                    g["BKMin"] = Dec(r["BKMin"]);
-                    g["BKFoc"] = Dec(r["BKFoc"]);
-                    g["BKRebate"] = Dec(r["BKRebate"]);
-                    g["BKLast"] = (r["BKLast"] == DBNull.Value) ? Dec(r["BKInit"]) : Dec(r["BKLast"]);
-                    g["BKLastDate"] = r["BKLastDate"];
-                    g["BKCurrent"] = 0m; g["BKUsage"] = 0m; g["BKCharge"] = 0m;
-
-                    g["CLKey"] = D64(r["CLKey"]);
-                    g["CLType"] = S(r["CLType"]);
-                    g["CLAC"] = S(r["CLAC"]);
-                    g["CLRate"] = Dec(r["CLRate"]);
-                    g["CLMin"] = Dec(r["CLMin"]);
-                    g["CLFoc"] = Dec(r["CLFoc"]);
-                    g["CLRebate"] = Dec(r["CLRebate"]);
-                    g["CLLast"] = (r["CLLast"] == DBNull.Value) ? Dec(r["CLInit"]) : Dec(r["CLLast"]);
-                    g["CLLastDate"] = r["CLLastDate"];
-                    g["CLCurrent"] = 0m; g["CLUsage"] = 0m; g["CLCharge"] = 0m;
-
+                    g["MeterType"] = S(r["MeterTypeCode"]);
+                    g["MeterTypeName"] = S(r["MeterTypeName"]);
+                    g["MinCharges"] = Dec(r["MinCharges"]);
+                    g["UnitPrice"] = Dec(r["UnitPrice"]);
+                    g["FOCQty"] = Dec(r["FOCQty"]);
+                    g["RebatePct"] = Dec(r["RebatePct"]);
+                    if (r["LastDate"] != DBNull.Value) g["LastReadDate"] = Convert.ToDateTime(r["LastDate"]);
+                    g["LastReading"] = (r["LastReading"] == DBNull.Value) ? Dec(r["InitReading"]) : Dec(r["LastReading"]);
+                    g["CurrentReading"] = 0m;
+                    g["MeterUsage"] = 0m;
+                    g["TotalCharges"] = 0m;
+                    g["UseMin"] = (Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m);
+                    g["Sel"] = false;
                     g["Status"] = "";
+                    g["ItemKey"] = D64(r["ItemKey"]);
+                    g["ContractKey"] = D64(r["ContractKey"]);
+                    g["DebtorCode"] = S(r["DebtorCode"]);
+                    g["BillingMode"] = S(r["BillingMode"]);
+                    g["ItemMeterKey"] = D64(r["ItemMeterKey"]);
+                    g["ACItemCode"] = S(r["ACItemCode"]);
+                    g["Role"] = S(r["MeterRole"]);
                     _dtGrid.Rows.Add(g);
                 }
 
                 GridMeter.DataSource = _dtGrid;
                 ConfigureGrid();
+                UpdateTabCounts();
+                ApplyTabFilter();
             }
             catch (Exception ex)
             {
@@ -181,97 +309,111 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private static DataTable NewGridTable()
         {
             DataTable dt = new DataTable();
+            // ---- visible: item columns (these merge), then meter columns ----
+            dt.Columns.Add("ContractNo", typeof(string));
+            dt.Columns.Add("ServiceItemNo", typeof(string));
+            dt.Columns.Add("SerialNo", typeof(string));
+            dt.Columns.Add("MachineStatus", typeof(string));   // ONLINE / OFFLINE (set on fetch, per item)
+            dt.Columns.Add("Customer", typeof(string));
+            dt.Columns.Add("Mode", typeof(string));
+            dt.Columns.Add("MeterType", typeof(string));
+            dt.Columns.Add("MeterTypeName", typeof(string));
+            dt.Columns.Add("MinCharges", typeof(decimal));
+            dt.Columns.Add("UnitPrice", typeof(decimal));
+            dt.Columns.Add("FOCQty", typeof(decimal));
+            dt.Columns.Add("RebatePct", typeof(decimal));
+            dt.Columns.Add("LastReadDate", typeof(DateTime));
+            dt.Columns.Add("LastReading", typeof(decimal));
+            dt.Columns.Add("CurrentReading", typeof(decimal));
+            dt.Columns.Add("MeterUsage", typeof(decimal));
+            dt.Columns.Add("TotalCharges", typeof(decimal));
+            dt.Columns.Add("UseMin", typeof(bool));
             dt.Columns.Add("Sel", typeof(bool));
+            dt.Columns.Add("Status", typeof(string));
+            // ---- hidden keys ----
             dt.Columns.Add("ItemKey", typeof(long));
             dt.Columns.Add("ContractKey", typeof(long));
-            dt.Columns.Add("ContractNo", typeof(string));
-            dt.Columns.Add("ItemNo", typeof(string));
-            dt.Columns.Add("SerialNo", typeof(string));
-            dt.Columns.Add("MachineName", typeof(string));
             dt.Columns.Add("DebtorCode", typeof(string));
-            dt.Columns.Add("Customer", typeof(string));
             dt.Columns.Add("BillingMode", typeof(string));
-            dt.Columns.Add("Mode", typeof(string));
-            dt.Columns.Add("BKKey", typeof(long));
-            dt.Columns.Add("BKType", typeof(string));
-            dt.Columns.Add("BKAC", typeof(string));
-            dt.Columns.Add("BKRate", typeof(decimal));
-            dt.Columns.Add("BKMin", typeof(decimal));
-            dt.Columns.Add("BKFoc", typeof(decimal));
-            dt.Columns.Add("BKRebate", typeof(decimal));
-            dt.Columns.Add("BKLast", typeof(decimal));
-            dt.Columns.Add("BKLastDate", typeof(DateTime));
-            dt.Columns.Add("BKCurrent", typeof(decimal));
-            dt.Columns.Add("BKUsage", typeof(decimal));
-            dt.Columns.Add("BKCharge", typeof(decimal));
-            dt.Columns.Add("CLKey", typeof(long));
-            dt.Columns.Add("CLType", typeof(string));
-            dt.Columns.Add("CLAC", typeof(string));
-            dt.Columns.Add("CLRate", typeof(decimal));
-            dt.Columns.Add("CLMin", typeof(decimal));
-            dt.Columns.Add("CLFoc", typeof(decimal));
-            dt.Columns.Add("CLRebate", typeof(decimal));
-            dt.Columns.Add("CLLast", typeof(decimal));
-            dt.Columns.Add("CLLastDate", typeof(DateTime));
-            dt.Columns.Add("CLCurrent", typeof(decimal));
-            dt.Columns.Add("CLUsage", typeof(decimal));
-            dt.Columns.Add("CLCharge", typeof(decimal));
-            dt.Columns.Add("Status", typeof(string));
+            dt.Columns.Add("ItemMeterKey", typeof(long));
+            dt.Columns.Add("ACItemCode", typeof(string));
+            dt.Columns.Add("Role", typeof(string));
+            dt.Columns.Add("Shade", typeof(int));   // 0/1 per-item zebra shade (hidden)
             return dt;
         }
 
         private void ConfigureGrid()
         {
             GridViewMeter.OptionsBehavior.Editable = true;
-            string[] hidden = new string[] {
-                "ItemKey","ContractKey","DebtorCode","BillingMode","BKKey","BKAC","BKRate","BKMin","BKFoc","BKRebate",
-                "BKLastDate","CLKey","CLAC","CLRate","CLMin","CLFoc","CLRebate","CLLastDate" };
-            foreach (string h in hidden)
+            GridViewMeter.OptionsView.AllowCellMerge = true;   // merge contract/item columns (no expand). NOTE: incompatible with real grouping.
+            GridViewMeter.OptionsView.ShowGroupPanel = false;  // grouping is simulated via cell-merge; drag-panel would be non-functional
+            GridViewMeter.OptionsView.ShowFooter = true;       // footer band for totals
+            GridViewMeter.OptionsView.ColumnAutoWidth = false;
+
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
 
-            SetCol("Sel", "Bill?", 50, true);
             SetCol("ContractNo", "Contract", 110, false);
-            SetCol("ItemNo", "Service Item No", 110, false);
-            SetCol("SerialNo", "Serial", 120, false);
-            SetCol("MachineName", "Service Item", 200, false);
+            SetCol("ServiceItemNo", "Service Item No", 120, false);
+            SetCol("SerialNo", "Serial", 110, false);
+            SetCol("MachineStatus", "Machine Status", 95, false);
             SetCol("Customer", "Customer", 220, false);
             SetCol("Mode", "Mode", 70, false);
-            SetCol("BKType", "BK Meter", 110, false);
-            SetNum("BKLast", "BK Last", 90, false);
-            SetNum("BKCurrent", "BK Current", 95, true);
-            SetNum("BKUsage", "BK Usage", 90, false);
-            SetNum("BKCharge", "BK Charge", 95, false);
-            SetCol("CLType", "CL Meter", 110, false);
-            SetNum("CLLast", "CL Last", 90, false);
-            SetNum("CLCurrent", "CL Current", 95, true);
-            SetNum("CLUsage", "CL Usage", 90, false);
-            SetNum("CLCharge", "CL Charge", 95, false);
+            SetCol("MeterType", "Meter Type", 130, false);
+            SetCol("MeterTypeName", "Meter Type Name", 170, false);
+            SetNum("MinCharges", "Min. Charges", 85, false, "n2");
+            SetNum("UnitPrice", "Unit Price", 85, false, "n4");
+            SetNum("FOCQty", "FOC Qty", 70, false, "n0");
+            SetNum("RebatePct", "Rebate (%)", 80, false, "n2");
+            SetCol("LastReadDate", "Last Read Date", 100, false);
+            SetNum("LastReading", "Last Reading", 95, false, "n0");
+            SetNum("CurrentReading", "Current Reading", 100, true, "n0");
+            SetNum("MeterUsage", "Meter Usage", 95, false, "n0");
+            SetNum("TotalCharges", "Total Charges", 95, false, "n2");
+            SetCol("UseMin", "Use Min.", 70, true);
+            SetCol("Sel", "Selected", 65, true);
             SetCol("Status", "Status", 130, false);
+
+            // Footer totals.
+            GridColumn cChg = GridViewMeter.Columns["TotalCharges"];
+            if (cChg != null)
+            {
+                cChg.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
+                cChg.SummaryItem.DisplayFormat = "Σ {0:n2}";
+            }
+            GridColumn cUse = GridViewMeter.Columns["MeterUsage"];
+            if (cUse != null)
+            {
+                cUse.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
+                cUse.SummaryItem.DisplayFormat = "Σ {0:n0}";
+            }
+            GridColumn cSt = GridViewMeter.Columns["Status"];
+            if (cSt != null)
+            {
+                cSt.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Count;
+                cSt.SummaryItem.DisplayFormat = "{0} meters";
+            }
         }
 
         private void SetCol(string field, string caption, int width, bool editable)
         {
-            DevExpress.XtraGrid.Columns.GridColumn c = GridViewMeter.Columns[field];
+            GridColumn c = GridViewMeter.Columns[field];
             if (c == null) return;
-            c.Caption = caption;
-            c.Width = width;
-            c.OptionsColumn.AllowEdit = editable;
-            c.OptionsColumn.ReadOnly = !editable;
+            c.Caption = caption; c.Width = width;
+            c.OptionsColumn.AllowEdit = editable; c.OptionsColumn.ReadOnly = !editable;
         }
-
-        private void SetNum(string field, string caption, int width, bool editable)
+        private void SetNum(string field, string caption, int width, bool editable, string fmt)
         {
             SetCol(field, caption, width, editable);
-            DevExpress.XtraGrid.Columns.GridColumn c = GridViewMeter.Columns[field];
+            GridColumn c = GridViewMeter.Columns[field];
             if (c == null) return;
             c.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            c.DisplayFormat.FormatString = "n0";
+            c.DisplayFormat.FormatString = fmt;
         }
 
         // ───────────────────── Buttons ─────────────────────
 
         private void RefreshTimer_Tick(object sender, EventArgs e) { }
-
         private void BtnRefresh_Click(object sender, EventArgs e) { LoadData(); }
         private void BtnFilter_Click(object sender, EventArgs e) { LoadData(); }
 
@@ -288,49 +430,56 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (_dtGrid == null || _dtGrid.Rows.Count == 0)
             { XtraMessageBox.Show("Nothing to fetch — the list is empty.", "Fetch"); return; }
-
             GridViewMeter.CloseEditor();
             GridViewMeter.UpdateCurrentRow();
 
             Cursor.Current = Cursors.WaitCursor;
             try
             {
+                int month = SelectedMonth();
+                int day = SelectedDay();
                 IMeterReadingApiClient client = MeterReadingApiClientFactory.Create(_dbSetting);
-                Dictionary<string, MeterReadingDto> bySerial = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
-                foreach (MeterReadingDto d in client.GetOnline())
-                    if (!string.IsNullOrWhiteSpace(d.SerialNumber)) bySerial[d.SerialNumber.Trim()] = d;
-                foreach (MeterReadingDto d in client.GetOffline(SelectedMonth()))
-                    if (!string.IsNullOrWhiteSpace(d.SerialNumber) && !bySerial.ContainsKey(d.SerialNumber.Trim()))
-                        bySerial[d.SerialNumber.Trim()] = d;
+                // One interface, two machine types: call once per status. Each DTO is tagged with the
+                // endpoint that produced it (Online / Offline), so we know each item's machine type.
+                Dictionary<string, MeterReadingDto> byCode = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
+                foreach (MeterReadingDto d in client.GetReadings(MachineStatus.Online, month))
+                    if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day)) byCode[d.Code.Trim()] = d;
+                foreach (MeterReadingDto d in client.GetReadings(MachineStatus.Offline, month))
+                    if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day) && !byCode.ContainsKey(d.Code.Trim()))
+                        byCode[d.Code.Trim()] = d;
 
-                int matched = 0;
+                int matchedMeters = 0;
+                int onlineMeters = 0, offlineMeters = 0;
+                System.Collections.Generic.HashSet<string> matchedItems = new System.Collections.Generic.HashSet<string>();
                 foreach (DataRow r in _dtGrid.Rows)
                 {
-                    string serial = S(r["SerialNo"]).Trim();
+                    string code = S(r["ServiceItemNo"]).Trim();
                     MeterReadingDto dto;
-                    if (serial.Length > 0 && bySerial.TryGetValue(serial, out dto))
+                    if (code.Length > 0 && byCode.TryGetValue(code, out dto))
                     {
-                        if (D64(r["BKKey"]) > 0)
-                        {
-                            r["BKCurrent"] = dto.TotalBK;
-                            RecalcCell(r, "BK");
-                        }
-                        if (D64(r["CLKey"]) > 0)
-                        {
-                            r["CLCurrent"] = dto.TotalCL;
-                            RecalcCell(r, "CL");
-                        }
+                        bool isOnline = dto.Status == MachineStatus.Online;
+                        if (!string.IsNullOrWhiteSpace(dto.SerialNumber)) r["SerialNo"] = dto.SerialNumber.Trim();
+                        r["MachineStatus"] = isOnline ? "ONLINE" : "OFFLINE";
+                        r["CurrentReading"] = S(r["Role"]) == "CL" ? dto.TotalCL : dto.TotalBK;
+                        Recalc(r);
                         r["Sel"] = true;
-                        r["Status"] = "Matched" + (dto.TrackingId != null ? " (offline)" : " (online)");
-                        matched++;
+                        r["Status"] = "Matched (" + (isOnline ? "Online" : "Offline") + ")  " +
+                            (dto.LastAuditDate.HasValue ? dto.LastAuditDate.Value.ToString("dd/MM/yyyy") : "");
+                        matchedMeters++; matchedItems.Add(code);
+                        if (isOnline) onlineMeters++; else offlineMeters++;
                     }
-                    else
-                    {
-                        r["Status"] = "No API data";
-                    }
+                    else { r["MachineStatus"] = ""; r["Status"] = "No API data"; }
                 }
                 GridMeter.RefreshDataSource();
-                XtraMessageBox.Show(matched + " of " + _dtGrid.Rows.Count + " machine(s) matched by serial number.",
+                UpdateTabCounts();
+                if (_tabView != null) _tabView.SelectedTabPage = _pageWith;  // jump to the matched view
+                ApplyTabFilter();
+                XtraMessageBox.Show(matchedItems.Count + " service item(s) / " + matchedMeters +
+                    " meter(s) matched with last audit date on/before " + day + " " +
+                    new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".\r\n" +
+                    "   • Online machines: " + onlineMeters + " meter(s)\r\n" +
+                    "   • Offline machines: " + offlineMeters + " meter(s)\r\n" +
+                    "Use 'Select Matched' then 'Generate Invoice'.",
                     "Fetch complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -340,39 +489,56 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             finally { Cursor.Current = Cursors.Default; }
         }
 
-        private void RecalcCell(DataRow r, string role)
+        // A reading qualifies when its Last Audit Date is in the selected month AND on/before the
+        // selected day (e.g. April + 16 → readings dated 01–16 April; 17/04, 20/04 are excluded).
+        private static bool QualifiesByDate(MeterReadingDto d, int month, int day)
         {
-            MeterBillLine ln = new MeterBillLine();
-            ln.Last = Dec(r[role + "Last"]);
-            ln.Current = Dec(r[role + "Current"]);
-            ln.Rate = Dec(r[role + "Rate"]);
-            ln.MinCharges = Dec(r[role + "Min"]);
-            ln.Foc = Dec(r[role + "Foc"]);
-            ln.RebatePct = Dec(r[role + "Rebate"]);
-            ScpInvoiceBuilder.ComputeCharge(ln);
-            r[role + "Usage"] = ln.Usage;
-            r[role + "Charge"] = ln.Charge;
+            if (!d.LastAuditDate.HasValue) return false;
+            DateTime la = d.LastAuditDate.Value;
+            return la.Month == month && la.Day <= day;
         }
 
+        // "Select Matched" — tick every meter that got a current reading.
         private void BtnSelfManualKeyIn_Click(object sender, EventArgs e)
         {
-            XtraMessageBox.Show("BK Current and CL Current columns are editable — type the readings, then click Generate Invoice.\r\n" +
-                "(Usage / charge recalculates when you leave the cell.)", "Manual Key In",
+            if (_dtGrid == null) return;
+            GridViewMeter.CloseEditor();
+            int n = 0;
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                bool ok = Dec(r["CurrentReading"]) > 0m;
+                r["Sel"] = ok; if (ok) n++;
+            }
+            GridMeter.RefreshDataSource();
+            UpdateTabCounts();
+            XtraMessageBox.Show(n + " meter(s) selected. Click Generate Invoice.", "Select Matched",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void GridViewMeter_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (e.Column == null) return;
-            if (e.Column.FieldName == "BKCurrent") RecalcRowHandle(e.RowHandle, "BK");
-            else if (e.Column.FieldName == "CLCurrent") RecalcRowHandle(e.RowHandle, "CL");
+            if (e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
+            {
+                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                if (r != null) Recalc(r);
+            }
+            if (e.Column.FieldName == "Sel" || e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
+                UpdateTabCounts();   // keep the billing-total summary live
         }
 
-        private void RecalcRowHandle(int rowHandle, string role)
+        private void Recalc(DataRow r)
         {
-            DataRow r = GridViewMeter.GetDataRow(rowHandle);
-            if (r == null) return;
-            RecalcCell(r, role);
+            decimal cur = Dec(r["CurrentReading"]);
+            decimal last = Dec(r["LastReading"]);
+            decimal usage = cur - last; if (usage < 0m) usage = 0m;
+            decimal billable = usage - Dec(r["FOCQty"]); if (billable < 0m) billable = 0m;
+            decimal rebate = Dec(r["RebatePct"]); if (rebate > 0m) billable = billable * (1m - rebate / 100m);
+            decimal rate = Dec(r["UnitPrice"]); decimal min = Dec(r["MinCharges"]);
+            bool useMin = r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]);
+            decimal charge = useMin ? min : (billable * rate < min ? min : billable * rate);
+            r["MeterUsage"] = usage;
+            r["TotalCharges"] = charge;
         }
 
         private void BtnGenerateInvoice_Click(object sender, EventArgs e)
@@ -381,103 +547,79 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridViewMeter.CloseEditor();
             GridViewMeter.UpdateCurrentRow();
 
-            // Build billable lines from selected rows; group key respects each contract's mode.
             Dictionary<string, List<MeterBillLine>> groups = new Dictionary<string, List<MeterBillLine>>();
-            Dictionary<string, string> groupRef = new Dictionary<string, string>();
-            Dictionary<string, string> groupDebtor = new Dictionary<string, string>();
+            Dictionary<string, string> grpRef = new Dictionary<string, string>();
+            Dictionary<string, string> grpDebtor = new Dictionary<string, string>();
 
             foreach (DataRow r in _dtGrid.Rows)
             {
-                if (!Convert.ToBoolean(r["Sel"])) continue;
+                if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
+                if (Dec(r["CurrentReading"]) <= 0m) continue;
                 string mode = S(r["BillingMode"]);
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
                 string groupKey = mode == "S" ? ("C" + contractKey + "_I" + itemKey) : ("C" + contractKey);
-                string refNo = mode == "S" ? S(r["ItemNo"]) : S(r["ContractNo"]);
+                string refNo = mode == "S" ? S(r["ServiceItemNo"]) : S(r["ContractNo"]);
 
-                AddRoleLine(groups, groupRef, groupDebtor, groupKey, refNo, r, "BK", "Black");
-                AddRoleLine(groups, groupRef, groupDebtor, groupKey, refNo, r, "CL", "Colour");
+                MeterBillLine ln = new MeterBillLine();
+                ln.ItemKey = itemKey;
+                ln.ContractKey = contractKey;
+                ln.ItemMeterKey = D64(r["ItemMeterKey"]);
+                ln.ContractNo = S(r["ContractNo"]);
+                ln.ItemNo = S(r["ServiceItemNo"]);
+                ln.DebtorCode = S(r["DebtorCode"]);
+                ln.SerialNumber = S(r["SerialNo"]);
+                ln.ItemName = S(r["ServiceItemNo"]);
+                ln.MeterTypeCode = S(r["MeterType"]);
+                ln.MeterTypeName = S(r["MeterTypeName"]);
+                ln.ACItemCode = S(r["ACItemCode"]);
+                ln.ColorLabel = S(r["Role"]) == "CL" ? "Colour" : "Black";
+                ln.Last = Dec(r["LastReading"]);
+                ln.Current = Dec(r["CurrentReading"]);
+                ln.Usage = Dec(r["MeterUsage"]);
+                ln.Rate = Dec(r["UnitPrice"]);
+                ln.MinCharges = Dec(r["MinCharges"]);
+                ln.Foc = Dec(r["FOCQty"]);
+                ln.RebatePct = Dec(r["RebatePct"]);
+                ln.Charge = Dec(r["TotalCharges"]);
+                ln.UseMin = r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]);
+                if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
+
+                if (!groups.ContainsKey(groupKey))
+                { groups[groupKey] = new List<MeterBillLine>(); grpRef[groupKey] = refNo; grpDebtor[groupKey] = ln.DebtorCode; }
+                groups[groupKey].Add(ln);
             }
 
             if (groups.Count == 0)
-            { XtraMessageBox.Show("No selected rows with a billable reading.", "Generate Invoice"); return; }
+            { XtraMessageBox.Show("No selected meter with a current reading.", "Generate Invoice"); return; }
 
             string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(SelectedMonth());
-            int invoicesCreated = 0;
-            List<string> docNos = new List<string>();
-
+            int created = 0; List<string> docNos = new List<string>();
             foreach (KeyValuePair<string, List<MeterBillLine>> grp in groups)
             {
-                string debtor = groupDebtor[grp.Key];
-                string refNo = groupRef[grp.Key];
-                string desc = "Meter Billing " + monthName + " - " + refNo;
+                string desc = "Meter Billing " + monthName + " - " + grpRef[grp.Key];
                 try
                 {
                     AutoCount.Invoicing.Sales.Invoice.Invoice doc = ScpInvoiceBuilder.BuildInvoice(
-                        _dbSetting, debtor, refNo, desc, DateTime.Today, DateTime.Now, grp.Value);
-
+                        _dbSetting, grpDebtor[grp.Key], grpRef[grp.Key], desc, DateTime.Today, DateTime.Now, grp.Value);
                     AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry invForm =
                         new AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry(doc);
                     invForm.ShowDialog(this);
-
                     bool saved = doc.DocumentState == AutoCount.Invoicing.InvoicingDocumentState.View
                                  && doc.DocNo != AutoCount.Const.AppConst.NewDocumentNo;
                     if (!saved) continue;
-
                     WriteMeterTrans(doc.DocKey, doc.DocNo, grp.Value);
-                    invoicesCreated++;
-                    docNos.Add(doc.DocNo);
+                    created++; docNos.Add(doc.DocNo);
                 }
                 catch (Exception ex)
                 {
-                    XtraMessageBox.Show("Invoice for " + refNo + " failed:\r\n" + ex.Message, "Error",
+                    XtraMessageBox.Show("Invoice for " + grpRef[grp.Key] + " failed:\r\n" + ex.Message, "Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
-
-            XtraMessageBox.Show(invoicesCreated + " invoice(s) created:\r\n" + string.Join(", ", docNos.ToArray()),
+            XtraMessageBox.Show(created + " invoice(s) created:\r\n" + string.Join(", ", docNos.ToArray()),
                 "Generate Invoice", MessageBoxButtons.OK, MessageBoxIcon.Information);
             LoadData();
-        }
-
-        private void AddRoleLine(Dictionary<string, List<MeterBillLine>> groups,
-            Dictionary<string, string> groupRef, Dictionary<string, string> groupDebtor,
-            string groupKey, string refNo, DataRow r, string role, string colorLabel)
-        {
-            long meterKey = D64(r[role + "Key"]);
-            if (meterKey <= 0) return;
-            decimal current = Dec(r[role + "Current"]);
-            if (current <= 0m) return; // nothing keyed/fetched for this colour
-
-            MeterBillLine ln = new MeterBillLine();
-            ln.ItemKey = D64(r["ItemKey"]);
-            ln.ContractKey = D64(r["ContractKey"]);
-            ln.ItemMeterKey = meterKey;
-            ln.ContractNo = S(r["ContractNo"]);
-            ln.ItemNo = S(r["ItemNo"]);
-            ln.DebtorCode = S(r["DebtorCode"]);
-            ln.SerialNumber = S(r["SerialNo"]);
-            ln.ItemName = S(r["MachineName"]);
-            ln.MeterTypeCode = S(r[role + "Type"]);
-            ln.MeterTypeName = S(r[role + "Type"]);
-            ln.ACItemCode = S(r[role + "AC"]);
-            ln.ColorLabel = colorLabel;
-            ln.Last = Dec(r[role + "Last"]);
-            ln.Current = current;
-            ln.Rate = Dec(r[role + "Rate"]);
-            ln.MinCharges = Dec(r[role + "Min"]);
-            ln.Foc = Dec(r[role + "Foc"]);
-            ln.RebatePct = Dec(r[role + "Rebate"]);
-            if (r[role + "LastDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r[role + "LastDate"]);
-            ScpInvoiceBuilder.ComputeCharge(ln);
-
-            if (!groups.ContainsKey(groupKey))
-            {
-                groups[groupKey] = new List<MeterBillLine>();
-                groupRef[groupKey] = refNo;
-                groupDebtor[groupKey] = ln.DebtorCode;
-            }
-            groups[groupKey].Add(ln);
         }
 
         private void WriteMeterTrans(long invoiceDocKey, string docNo, List<MeterBillLine> lines)
@@ -492,17 +634,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         foreach (MeterBillLine ln in lines)
                         {
                             SqlCommand cmd = new SqlCommand(
-                                "INSERT INTO [dbo].[zSCP_MeterTrans] " +
-                                "(ServiceItemMeterTypeKey, ServiceItemKey, MeterTypeCode, MeterTransDate, " +
-                                "MeterTransReading, SalesInvoiceDocKey, Remark) " +
-                                "VALUES (@simtKey, @siKey, @mtCode, @transDate, @reading, @docKey, @remark)", cn, tx);
-                            cmd.Parameters.AddWithValue("@simtKey", ln.ItemMeterKey);
-                            cmd.Parameters.AddWithValue("@siKey", ln.ItemKey);
-                            cmd.Parameters.AddWithValue("@mtCode", ln.MeterTypeCode);
-                            cmd.Parameters.AddWithValue("@transDate", DateTime.Now);
-                            cmd.Parameters.AddWithValue("@reading", ln.Current);
-                            cmd.Parameters.AddWithValue("@docKey", invoiceDocKey);
-                            cmd.Parameters.AddWithValue("@remark", ln.ColorLabel + " meter - Invoice " + docNo);
+                                "INSERT INTO [dbo].[zSCP_MeterTrans] (ServiceItemMeterTypeKey, ServiceItemKey, MeterTypeCode, " +
+                                "MeterTransDate, MeterTransReading, SalesInvoiceDocKey, Remark) " +
+                                "VALUES (@simt,@si,@code,@dt,@rd,@dk,@rmk)", cn, tx);
+                            cmd.Parameters.AddWithValue("@simt", ln.ItemMeterKey);
+                            cmd.Parameters.AddWithValue("@si", ln.ItemKey);
+                            cmd.Parameters.AddWithValue("@code", ln.MeterTypeCode);
+                            cmd.Parameters.AddWithValue("@dt", DateTime.Now);
+                            cmd.Parameters.AddWithValue("@rd", ln.Current);
+                            cmd.Parameters.AddWithValue("@dk", invoiceDocKey);
+                            cmd.Parameters.AddWithValue("@rmk", ln.ColorLabel + " meter - Invoice " + docNo);
                             cmd.ExecuteNonQuery();
                         }
                         tx.Commit();
@@ -512,7 +653,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
-        // ---- helpers ----
+        // Runs a query on a direct connection with an explicit command timeout (AutoCount's
+        // GetDataTable uses a short default that the 145k-row meter join can exceed).
+        private DataTable QueryWithTimeout(string sql, int seconds)
+        {
+            DataTable dt = new DataTable();
+            using (SqlConnection conn = new SqlConnection(_dbSetting.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            {
+                cmd.CommandTimeout = seconds;
+                conn.Open();
+                using (SqlDataAdapter da = new SqlDataAdapter(cmd)) da.Fill(dt);
+            }
+            return dt;
+        }
+
         private static string S(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
         private static decimal Dec(object o) { decimal d; return (o != null && o != DBNull.Value && decimal.TryParse(o.ToString(), out d)) ? d : 0m; }
         private static long D64(object o) { long l; return (o != null && o != DBNull.Value && long.TryParse(o.ToString(), out l)) ? l : 0L; }

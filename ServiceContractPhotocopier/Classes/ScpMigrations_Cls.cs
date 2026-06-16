@@ -52,6 +52,7 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP_MeterMultiPrice",        "02_CreateTable_zSCP_MeterMultiPrice.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP_MeterMultiPriceItem",    "02_CreateTable_zSCP_MeterMultiPriceItem.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP_MeterType",              "02_CreateTable_zSCP_MeterType.sql", asm);
+            RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.3.0.sql", asm);  // adds ACItemCode if missing (idempotent)
 
             // === Tier 4: service item ===
             RunIfTableMissing(dbsetting, "zSCP_ServiceItem",            "02_CreateTable_zSCP_ServiceItem.sql", asm);

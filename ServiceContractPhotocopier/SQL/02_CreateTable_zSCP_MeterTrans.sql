@@ -21,3 +21,5 @@ CREATE INDEX [IX_zSCP_MeterTrans_Date] ON [dbo].[zSCP_MeterTrans]([MeterTransDat
 GO
 CREATE INDEX [IX_zSCP_MeterTrans_ServiceItem] ON [dbo].[zSCP_MeterTrans]([ServiceItemKey])
 GO
+CREATE INDEX [IX_zSCP_MeterTrans_SIMT] ON [dbo].[zSCP_MeterTrans]([ServiceItemMeterTypeKey], [MeterTransDate] DESC, [MeterTransKey] DESC) INCLUDE ([MeterTransReading])
+GO

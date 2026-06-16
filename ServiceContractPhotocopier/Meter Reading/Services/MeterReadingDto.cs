@@ -27,5 +27,12 @@ namespace ServiceContractPhotocopier.MeterReading.Services
 
         [JsonProperty("TrackingId")]
         public string TrackingId { get; set; }
+
+        /// <summary>
+        /// Which endpoint produced this reading (Online = API 1, Offline = API 2). Set by the client,
+        /// not part of the wire JSON — it tells the UI the machine's type. Defaults to Online.
+        /// </summary>
+        [JsonIgnore]
+        public MachineStatus Status { get; set; }
     }
 }

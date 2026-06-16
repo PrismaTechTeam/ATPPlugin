@@ -94,7 +94,7 @@ namespace ATPShadowMain
                     }
                     catch (Exception mex) { Log("PREVIEW migrations FAILED: " + mex); }
 
-                    Application.Run(new ServiceContractPhotocopier.ServiceContract.OperationForms.zSCP2_ContractLst_Form(vses.DBSetting));
+                    Application.Run(new ServiceContractPhotocopier.MeterReading.OperationForms.MeterReadingIntegration_Form(vses.DBSetting));
                 }
                 return;
             }

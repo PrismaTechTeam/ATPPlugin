@@ -9,10 +9,19 @@ namespace ServiceContractPhotocopier.MeterReading.Services
     /// </summary>
     public interface IMeterReadingApiClient
     {
-        /// <summary>API 1 — GET /api/meter-reading/online. Latest reading for every ONLINE machine.</summary>
+        /// <summary>
+        /// Unified entry point: ONE call, the <paramref name="status"/> discriminator picks the endpoint.
+        ///   • Online  → API 1, GET /api/meter-reading/online (latest reading for every online machine).
+        ///   • Offline → API 2, GET /api/meter-reading/offline?month=N (offline machines audited that month).
+        /// Every returned DTO has its <see cref="MeterReadingDto.Status"/> set to <paramref name="status"/>.
+        /// This is how a single interface serves both machine types — call it once per status.
+        /// </summary>
+        List<MeterReadingDto> GetReadings(MachineStatus status, int month);
+
+        /// <summary>Convenience: GetReadings(Online, currentMonth).</summary>
         List<MeterReadingDto> GetOnline();
 
-        /// <summary>API 2 — GET /api/meter-reading/offline?month=N. OFFLINE machines with a qualifying task that month.</summary>
+        /// <summary>Convenience: GetReadings(Offline, month).</summary>
         List<MeterReadingDto> GetOffline(int month);
     }
 }

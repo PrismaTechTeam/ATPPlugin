@@ -137,6 +137,7 @@
     <Compile Include="Data\PumsTaskLock.cs" />
     <Compile Include="Data\PumsConfig.cs" />
     <Compile Include="Data\PumsLog.cs" />
+    <Compile Include="Meter Reading\Services\MachineStatus.cs" />
     <Compile Include="Meter Reading\Services\MeterReadingDto.cs" />
     <Compile Include="Meter Reading\Services\IMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\LiveMeterReadingApiClient.cs" />
