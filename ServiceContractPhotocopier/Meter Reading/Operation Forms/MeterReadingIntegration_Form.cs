@@ -24,9 +24,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DataTable _dtGrid;   // one row PER METER; item columns repeat (merged via AllowCellMerge)
         private XtraTabControl _tabView;
         private XtraTabPage _pageWith;
+        private XtraTabPage _pageOnline;
+        private XtraTabPage _pageOffline;
         private XtraTabPage _pageNo;
+        private XtraTabPage _pageConflict;
         private XtraTabPage _pageAll;
         private LabelControl _lblSummary;
+        private SimpleButton _btnManual;
+        private SimpleButton _btnSaveManual;
+        private bool _manualMode;
 
         public MeterReadingIntegration_Form()
         {
@@ -76,9 +82,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _tabView = new XtraTabControl();
             _tabView.Dock = DockStyle.Fill;
             _pageWith = new XtraTabPage(); _pageWith.Text = "With Meter Data";
+            _pageOnline = new XtraTabPage(); _pageOnline.Text = "Online";
+            _pageOffline = new XtraTabPage(); _pageOffline.Text = "Offline";
             _pageNo = new XtraTabPage(); _pageNo.Text = "No API Data";
+            _pageConflict = new XtraTabPage(); _pageConflict.Text = "Conflicts";
             _pageAll = new XtraTabPage(); _pageAll.Text = "All";
-            _tabView.TabPages.AddRange(new XtraTabPage[] { _pageWith, _pageNo, _pageAll });
+            _tabView.TabPages.AddRange(new XtraTabPage[] { _pageWith, _pageOnline, _pageOffline, _pageNo, _pageConflict, _pageAll });
 
             this.Controls.Remove(this.GridMeter);
             this.GridMeter.Dock = DockStyle.Fill;
@@ -94,22 +103,52 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _tabView.SelectedPageChanged += new TabPageChangedEventHandler(TabView_SelectedPageChanged);
 
             // Per-item alternating row colour (super-light-blue / white), so each service item's
-            // BK+CL pair is easy to tell apart at a glance.
+            // BK+CL pair is easy to tell apart at a glance. Conflicts override to light red.
             this.GridViewMeter.RowStyle +=
                 new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewMeter_RowStyle);
+            // Manual key-in is gated by _manualMode; API-sourced rows are never directly editable.
+            this.GridViewMeter.ShowingEditor +=
+                new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditor);
+            // Double-click a contract → open its detail / override form.
+            this.GridViewMeter.DoubleClick += new EventHandler(GridViewMeter_DoubleClick);
 
-            // Summary label sitting in the empty area to the right of the action buttons.
+            // Manual Key-In + Save Manual buttons (created in code to avoid touching the strict designer).
+            _btnManual = new SimpleButton();
+            _btnManual.Text = "Manual Key-In";
+            _btnManual.Location = new Point(1085, 46);
+            _btnManual.Size = new Size(135, 52);
+            _btnManual.Click += new EventHandler(BtnManual_Click);
+            this.PanelFilter.Controls.Add(_btnManual);
+            _btnManual.BringToFront();
+
+            _btnSaveManual = new SimpleButton();
+            _btnSaveManual.Text = "Save Manual";
+            _btnSaveManual.Location = new Point(1226, 46);
+            _btnSaveManual.Size = new Size(120, 52);
+            _btnSaveManual.Click += new EventHandler(BtnSaveManual_Click);
+            this.PanelFilter.Controls.Add(_btnSaveManual);
+            _btnSaveManual.BringToFront();
+
+            // Summary label sitting to the right of the action buttons.
             _lblSummary = new LabelControl();
             _lblSummary.Name = "LblSummary";
             _lblSummary.AutoSizeMode = LabelAutoSizeMode.None;
             _lblSummary.Appearance.Font = new Font("Segoe UI", 9F);
             _lblSummary.Appearance.Options.UseFont = true;
             _lblSummary.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
-            _lblSummary.Location = new Point(1100, 14);
-            _lblSummary.Size = new Size(440, 118);
+            _lblSummary.Location = new Point(1360, 14);
+            _lblSummary.Size = new Size(470, 118);
             _lblSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             this.PanelFilter.Controls.Add(_lblSummary);
             _lblSummary.BringToFront();
+        }
+
+        // Double-click any row → open the detail / override form for that whole contract.
+        private void GridViewMeter_DoubleClick(object sender, EventArgs e)
+        {
+            DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+            if (r == null) return;
+            OpenContractDetail(D64(r["ContractKey"]), S(r["ContractNo"]), S(r["Customer"]));
         }
 
         // Each service item gets one of two background shades (white / super-light-blue), alternating
@@ -117,6 +156,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void GridViewMeter_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;   // group rows
+            object cf = GridViewMeter.GetRowCellValue(e.RowHandle, "HasConflict");
+            if (cf != null && cf != DBNull.Value && Convert.ToBoolean(cf))
+            {
+                e.Appearance.BackColor = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
+                e.Appearance.Options.UseBackColor = true;
+                return;
+            }
             object v = GridViewMeter.GetRowCellValue(e.RowHandle, "Shade");
             if (v != null && v != DBNull.Value && Convert.ToInt32(v) == 1)
             {
@@ -137,15 +183,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (_tabView == null) return;
             string f = "";
-            if (_tabView.SelectedTabPage == _pageWith) f = "[Status] Like 'Matched%'";
+            if (_tabView.SelectedTabPage == _pageWith) f = "[CurrentReading] > 0 OR [FetchedReading] > 0";
+            else if (_tabView.SelectedTabPage == _pageOnline) f = "[MachineStatus] = 'ONLINE'";
+            else if (_tabView.SelectedTabPage == _pageOffline) f = "[MachineStatus] = 'OFFLINE'";
             else if (_tabView.SelectedTabPage == _pageNo) f = "[Status] = 'No API data'";
+            else if (_tabView.SelectedTabPage == _pageConflict) f = "[HasConflict] = True";
             GridViewMeter.ActiveFilterString = f;
         }
 
         private void UpdateTabCounts()
         {
             if (_dtGrid == null || _tabView == null) return;
-            int with = 0, no = 0, sel = 0, untouched = 0;
+            int with = 0, no = 0, sel = 0, online = 0, offline = 0, conflict = 0;
             decimal selCharge = 0m;
             System.Collections.Generic.HashSet<string> items = new System.Collections.Generic.HashSet<string>();
             System.Collections.Generic.HashSet<string> contracts = new System.Collections.Generic.HashSet<string>();
@@ -153,15 +202,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 items.Add(S(r["ItemKey"]));
                 contracts.Add(S(r["ContractKey"]));
-                string st = S(r["Status"]);
-                if (st.StartsWith("Matched")) with++;
-                else if (st == "No API data") no++;
-                else untouched++;
+                bool hasData = Dec(r["CurrentReading"]) > 0m || Dec(r["FetchedReading"]) > 0m;
+                if (hasData) with++;
+                else if (S(r["Status"]) == "No API data") no++;
+                string ms = S(r["MachineStatus"]);
+                if (ms == "ONLINE") online++;
+                else if (ms == "OFFLINE") offline++;
+                if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflict++;
                 if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))
                 { sel++; selCharge += Dec(r["TotalCharges"]); }
             }
             _pageWith.Text = "With Meter Data (" + with + ")";
+            _pageOnline.Text = "Online (" + online + ")";
+            _pageOffline.Text = "Offline (" + offline + ")";
             _pageNo.Text = "No API Data (" + no + ")";
+            _pageConflict.Text = "Conflicts (" + conflict + ")";
             _pageAll.Text = "All (" + _dtGrid.Rows.Count + ")";
 
             if (_lblSummary != null)
@@ -170,8 +225,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 _lblSummary.Text =
                     "Contracts: " + contracts.Count + "    Service Items: " + items.Count +
                     "    Meters: " + _dtGrid.Rows.Count + "\r\n" +
-                    "✔ With meter data: " + with + fetched + "\r\n" +
-                    "✖ No API data (need manual key-in): " + no + "\r\n" +
+                    "✔ With meter data: " + with + fetched + "   (Online: " + online + " / Offline: " + offline + ")\r\n" +
+                    "✖ No API data (need manual key-in): " + no + (conflict > 0 ? "      ⚠ Conflicts: " + conflict : "") + "\r\n" +
                     "Selected to bill: " + sel + "    Billing total: RM " + selCharge.ToString("n2");
             }
         }
@@ -292,8 +347,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["ItemMeterKey"] = D64(r["ItemMeterKey"]);
                     g["ACItemCode"] = S(r["ACItemCode"]);
                     g["Role"] = S(r["MeterRole"]);
+                    g["EntrySource"] = "";
+                    g["FetchedReading"] = 0m;
+                    g["HasConflict"] = false;
                     _dtGrid.Rows.Add(g);
                 }
+
+                PrefillFromStaging(SelectedMonth(), DateTime.Today.Year);
 
                 GridMeter.DataSource = _dtGrid;
                 ConfigureGrid();
@@ -339,6 +399,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("ACItemCode", typeof(string));
             dt.Columns.Add("Role", typeof(string));
             dt.Columns.Add("Shade", typeof(int));   // 0/1 per-item zebra shade (hidden)
+            dt.Columns.Add("EntrySource", typeof(string));    // where CurrentReading came from: MANUAL/ONLINE/OFFLINE/'' (hidden)
+            dt.Columns.Add("FetchedReading", typeof(decimal)); // last value the API returned for this meter (hidden)
+            dt.Columns.Add("HasConflict", typeof(bool));       // saved-manual value differs from a fresh API value (hidden)
             return dt;
         }
 
@@ -449,7 +512,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         byCode[d.Code.Trim()] = d;
 
                 int matchedMeters = 0;
-                int onlineMeters = 0, offlineMeters = 0;
+                int onlineMeters = 0, offlineMeters = 0, conflicts = 0;
                 System.Collections.Generic.HashSet<string> matchedItems = new System.Collections.Generic.HashSet<string>();
                 foreach (DataRow r in _dtGrid.Rows)
                 {
@@ -458,27 +521,52 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     if (code.Length > 0 && byCode.TryGetValue(code, out dto))
                     {
                         bool isOnline = dto.Status == MachineStatus.Online;
+                        decimal apiVal = S(r["Role"]) == "CL" ? dto.TotalCL : dto.TotalBK;
                         if (!string.IsNullOrWhiteSpace(dto.SerialNumber)) r["SerialNo"] = dto.SerialNumber.Trim();
                         r["MachineStatus"] = isOnline ? "ONLINE" : "OFFLINE";
-                        r["CurrentReading"] = S(r["Role"]) == "CL" ? dto.TotalCL : dto.TotalBK;
-                        Recalc(r);
-                        r["Sel"] = true;
-                        r["Status"] = "Matched (" + (isOnline ? "Online" : "Offline") + ")  " +
-                            (dto.LastAuditDate.HasValue ? dto.LastAuditDate.Value.ToString("dd/MM/yyyy") : "");
+                        r["FetchedReading"] = apiVal;
+
+                        string src = S(r["EntrySource"]).ToUpperInvariant();
+                        if (src == "MANUAL" && Dec(r["CurrentReading"]) != apiVal)
+                        {
+                            // Keep the saved manual value; surface the conflict for the user to accept
+                            // (or reject) in the contract detail form. Do NOT auto-override.
+                            r["HasConflict"] = true;
+                            r["Status"] = "CONFLICT  API: " + apiVal.ToString("n0") +
+                                          "  vs  Manual: " + Dec(r["CurrentReading"]).ToString("n0") +
+                                          "  (double-click to resolve)";
+                            conflicts++;
+                        }
+                        else
+                        {
+                            r["CurrentReading"] = apiVal;
+                            r["EntrySource"] = isOnline ? "ONLINE" : "OFFLINE";
+                            r["HasConflict"] = false;
+                            Recalc(r);
+                            r["Sel"] = true;
+                            r["Status"] = "Matched (" + (isOnline ? "Online" : "Offline") + ")  " +
+                                (dto.LastAuditDate.HasValue ? dto.LastAuditDate.Value.ToString("dd/MM/yyyy") : "");
+                        }
                         matchedMeters++; matchedItems.Add(code);
                         if (isOnline) onlineMeters++; else offlineMeters++;
                     }
-                    else { r["MachineStatus"] = ""; r["Status"] = "No API data"; }
+                    else
+                    {
+                        // No API data for this code — keep any saved manual reading as-is.
+                        string src = S(r["EntrySource"]).ToUpperInvariant();
+                        if (src != "MANUAL") { r["MachineStatus"] = ""; r["Status"] = "No API data"; }
+                    }
                 }
                 GridMeter.RefreshDataSource();
                 UpdateTabCounts();
-                if (_tabView != null) _tabView.SelectedTabPage = _pageWith;  // jump to the matched view
+                if (_tabView != null) _tabView.SelectedTabPage = conflicts > 0 ? _pageConflict : _pageWith;
                 ApplyTabFilter();
                 XtraMessageBox.Show(matchedItems.Count + " service item(s) / " + matchedMeters +
                     " meter(s) matched with last audit date on/before " + day + " " +
                     new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".\r\n" +
                     "   • Online machines: " + onlineMeters + " meter(s)\r\n" +
                     "   • Offline machines: " + offlineMeters + " meter(s)\r\n" +
+                    (conflicts > 0 ? "   ⚠ " + conflicts + " conflict(s) with saved manual readings — see the Conflicts tab, double-click a contract to resolve.\r\n" : "") +
                     "Use 'Select Matched' then 'Generate Invoice'.",
                     "Fetch complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -513,6 +601,274 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             UpdateTabCounts();
             XtraMessageBox.Show(n + " meter(s) selected. Click Generate Invoice.", "Select Matched",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // ───────────────────── Manual key-in + staging (zSCP2_MeterEntry) ─────────────────────
+
+        // Reload any saved current readings for this period back into the grid, so manual key-ins
+        // (and previously accepted API overrides) survive a restart and reappear as "saved".
+        private void PrefillFromStaging(int month, int year)
+        {
+            if (_dtGrid == null) return;
+            Dictionary<long, DataRow> byMeter = new Dictionary<long, DataRow>();
+            string sql = "SELECT ItemMeterKey, CurrentReading, ReadingDate, Source FROM dbo.zSCP2_MeterEntry " +
+                         "WHERE PeriodYear=" + year + " AND PeriodMonth=" + month;
+            DataTable saved = QueryWithTimeout(sql, 60);
+            foreach (DataRow s in saved.Rows) byMeter[D64(s["ItemMeterKey"])] = s;
+            if (byMeter.Count == 0) return;
+
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                DataRow s;
+                if (!byMeter.TryGetValue(D64(r["ItemMeterKey"]), out s)) continue;
+                string src = S(s["Source"]).Trim().ToUpperInvariant();
+                r["CurrentReading"] = Dec(s["CurrentReading"]);
+                r["EntrySource"] = src;
+                r["Sel"] = true;
+                Recalc(r);
+                string dt = (s["ReadingDate"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["ReadingDate"]).ToString("dd/MM/yyyy") : "";
+                if (src == "ONLINE") { r["MachineStatus"] = "ONLINE"; r["Status"] = "Online (saved)" + dt; }
+                else if (src == "OFFLINE") { r["MachineStatus"] = "OFFLINE"; r["Status"] = "Offline (saved)" + dt; }
+                else { r["Status"] = "Manual (saved)" + dt; }
+            }
+        }
+
+        // Toggle manual key-in mode: makes the Current Reading column editable so the user can type
+        // readings for machines the API has no data for (or any row), then Save them.
+        private void BtnManual_Click(object sender, EventArgs e)
+        {
+            _manualMode = !_manualMode;
+            GridColumn cr = GridViewMeter.Columns["CurrentReading"];
+            if (cr != null) { cr.OptionsColumn.AllowEdit = _manualMode; cr.OptionsColumn.ReadOnly = !_manualMode; }
+            _btnManual.Text = _manualMode ? "Manual Key-In: ON" : "Manual Key-In";
+            _btnManual.Appearance.BackColor = _manualMode ? Color.FromArgb(255, 244, 200) : Color.Empty;
+            _btnManual.Appearance.Options.UseBackColor = _manualMode;
+            if (_manualMode && _tabView != null) { _tabView.SelectedTabPage = _pageNo; ApplyTabFilter(); }
+            if (_manualMode)
+                XtraMessageBox.Show("Manual mode ON. Type the Current Reading for the rows that have no API data, " +
+                    "fill as many as you like, then click 'Save Manual'.", "Manual Key-In",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Persist every manually-typed current reading (not API-sourced) for this period to staging.
+        private void BtnSaveManual_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null || _dtGrid == null) return;
+            GridViewMeter.CloseEditor();
+            GridViewMeter.UpdateCurrentRow();
+
+            int month = SelectedMonth(), year = DateTime.Today.Year, saved = 0;
+            using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
+            {
+                cn.Open();
+                using (SqlTransaction tx = cn.BeginTransaction("SaveManual"))
+                {
+                    try
+                    {
+                        foreach (DataRow r in _dtGrid.Rows)
+                        {
+                            string src = S(r["EntrySource"]).ToUpperInvariant();
+                            if (src == "ONLINE" || src == "OFFLINE") continue;   // API-sourced — not a manual key-in
+                            if (Dec(r["CurrentReading"]) <= 0m)
+                            {
+                                // Cleared to 0 → remove any previously-saved manual reading.
+                                if (src == "MANUAL")
+                                {
+                                    DeleteStaging(cn, tx, D64(r["ItemMeterKey"]), year, month);
+                                    r["EntrySource"] = ""; r["Sel"] = false; r["Status"] = ""; Recalc(r);
+                                    saved++;
+                                }
+                                continue;
+                            }
+                            UpsertStaging(cn, tx, D64(r["ItemMeterKey"]), year, month,
+                                Dec(r["CurrentReading"]), DateTime.Now, "MANUAL");
+                            r["EntrySource"] = "MANUAL";
+                            r["Sel"] = true;
+                            r["Status"] = "Manual (saved)  " + DateTime.Now.ToString("dd/MM/yyyy");
+                            Recalc(r);
+                            saved++;
+                        }
+                        tx.Commit();
+                    }
+                    catch (Exception ex) { tx.Rollback();
+                        XtraMessageBox.Show("Save failed:\r\n" + ex.Message, "Save Manual", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return; }
+                }
+            }
+            GridMeter.RefreshDataSource();
+            UpdateTabCounts();
+            XtraMessageBox.Show(saved + " manual reading(s) saved for " +
+                new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".", "Save Manual",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Insert-or-update one staged reading (unique per ItemMeterKey + period).
+        private void UpsertStaging(SqlConnection cn, SqlTransaction tx, long itemMeterKey, int year, int month,
+            decimal reading, DateTime? readingDate, string source)
+        {
+            SqlCommand cmd = new SqlCommand(
+                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, ReadingDate=@dt, Source=@src, LastModified=GETDATE() " +
+                "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo; " +
+                "IF @@ROWCOUNT=0 INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source) " +
+                "VALUES (@imk,@yr,@mo,@rd,@dt,@src);", cn, tx);
+            cmd.Parameters.AddWithValue("@imk", itemMeterKey);
+            cmd.Parameters.AddWithValue("@yr", year);
+            cmd.Parameters.AddWithValue("@mo", month);
+            cmd.Parameters.AddWithValue("@rd", reading);
+            cmd.Parameters.AddWithValue("@dt", (object)readingDate ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@src", source);
+            cmd.ExecuteNonQuery();
+        }
+
+        // Remove a staged reading (used when the user clears a reading back to 0).
+        private void DeleteStaging(SqlConnection cn, SqlTransaction tx, long itemMeterKey, int year, int month)
+        {
+            SqlCommand cmd = new SqlCommand(
+                "DELETE FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo", cn, tx);
+            cmd.Parameters.AddWithValue("@imk", itemMeterKey);
+            cmd.Parameters.AddWithValue("@yr", year);
+            cmd.Parameters.AddWithValue("@mo", month);
+            cmd.ExecuteNonQuery();
+        }
+
+        // Block editing the Current Reading unless manual mode is on (and never on an API-sourced row —
+        // those are changed only through the contract detail / override form).
+        private void GridViewMeter_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (GridViewMeter.FocusedColumn != null && GridViewMeter.FocusedColumn.FieldName == "CurrentReading")
+            {
+                DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+                string src = r != null ? S(r["EntrySource"]).ToUpperInvariant() : "";
+                if (!_manualMode || src == "ONLINE" || src == "OFFLINE") e.Cancel = true;
+            }
+        }
+
+        // Open the per-contract detail / override dialog. The dialog shows every meter of the contract
+        // with its saved/manual Current vs the freshly-Fetched value; the user ticks "Accept fetched"
+        // to override (typically to resolve a conflict). On OK we persist the accepted values to
+        // staging (source ONLINE/OFFLINE) and update the grid in place.
+        private void OpenContractDetail(long contractKey, string contractNo, string customer)
+        {
+            if (_dtGrid == null) return;
+            List<DataRow> rows = new List<DataRow>();
+            foreach (DataRow r in _dtGrid.Rows)
+                if (D64(r["ContractKey"]) == contractKey) rows.Add(r);
+            if (rows.Count == 0) return;
+
+            DataTable dt = new DataTable();
+            dt.Columns.Add("ServiceItemNo", typeof(string));
+            dt.Columns.Add("SerialNo", typeof(string));
+            dt.Columns.Add("MeterType", typeof(string));
+            dt.Columns.Add("Role", typeof(string));
+            dt.Columns.Add("LastReading", typeof(decimal));
+            dt.Columns.Add("CurrentReading", typeof(decimal));
+            dt.Columns.Add("FetchedReading", typeof(decimal));
+            dt.Columns.Add("Source", typeof(string));
+            dt.Columns.Add("HasConflict", typeof(bool));
+            dt.Columns.Add("AcceptFetched", typeof(bool));
+            dt.Columns.Add("ItemMeterKey", typeof(long));
+            foreach (DataRow r in rows)
+            {
+                DataRow d = dt.NewRow();
+                d["ServiceItemNo"] = S(r["ServiceItemNo"]);
+                d["SerialNo"] = S(r["SerialNo"]);
+                d["MeterType"] = S(r["MeterType"]);
+                d["Role"] = S(r["Role"]) == "CL" ? "Colour (CL)" : "Black (BK)";
+                d["LastReading"] = Dec(r["LastReading"]);
+                d["CurrentReading"] = Dec(r["CurrentReading"]);
+                d["FetchedReading"] = Dec(r["FetchedReading"]);
+                d["Source"] = S(r["EntrySource"]);
+                bool conf = r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"]);
+                d["HasConflict"] = conf;
+                d["AcceptFetched"] = conf;   // pre-tick conflicts
+                d["ItemMeterKey"] = D64(r["ItemMeterKey"]);
+                dt.Rows.Add(d);
+            }
+
+            using (MeterReadingDetail_Form f = new MeterReadingDetail_Form(contractNo, customer, dt))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+            }
+
+            int year = DateTime.Today.Year, month = SelectedMonth(), applied = 0;
+            using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
+            {
+                cn.Open();
+                using (SqlTransaction tx = cn.BeginTransaction("Override"))
+                {
+                    try
+                    {
+                        foreach (DataRow d in dt.Rows)
+                        {
+                            long imk = D64(d["ItemMeterKey"]);
+                            DataRow gr = null;
+                            foreach (DataRow r in rows) if (D64(r["ItemMeterKey"]) == imk) { gr = r; break; }
+                            if (gr == null) continue;
+
+                            bool accept = d["AcceptFetched"] != DBNull.Value && Convert.ToBoolean(d["AcceptFetched"]);
+                            decimal fv = Dec(d["FetchedReading"]);
+                            decimal cv = Dec(d["CurrentReading"]);   // possibly typed by the user
+
+                            if (accept && fv > 0m)
+                            {
+                                // Accept the fetched API value (resolves a conflict).
+                                string src = S(gr["MachineStatus"]) == "OFFLINE" ? "OFFLINE" : "ONLINE";
+                                UpsertStaging(cn, tx, imk, year, month, fv, DateTime.Now, src);
+                                gr["CurrentReading"] = fv;
+                                gr["EntrySource"] = src;
+                                gr["HasConflict"] = false;
+                                gr["Sel"] = true;
+                                gr["Status"] = "Matched (" + (src == "OFFLINE" ? "Offline" : "Online") + ", overridden)  " +
+                                               DateTime.Now.ToString("dd/MM/yyyy");
+                                Recalc(gr);
+                                applied++;
+                            }
+                            else if (cv > 0m)
+                            {
+                                // Manual key-in from the detail form. Skip API rows the user left unchanged.
+                                string grSrc = S(gr["EntrySource"]).ToUpperInvariant();
+                                bool isApi = grSrc == "ONLINE" || grSrc == "OFFLINE";
+                                if (isApi && cv == Dec(gr["CurrentReading"])) continue;
+                                UpsertStaging(cn, tx, imk, year, month, cv, DateTime.Now, "MANUAL");
+                                gr["CurrentReading"] = cv;
+                                gr["EntrySource"] = "MANUAL";
+                                gr["HasConflict"] = false;
+                                gr["Sel"] = true;
+                                gr["Status"] = "Manual (saved)  " + DateTime.Now.ToString("dd/MM/yyyy");
+                                Recalc(gr);
+                                applied++;
+                            }
+                            else
+                            {
+                                // Cleared back to 0 → delete any staged reading and reset the row.
+                                if (Dec(gr["CurrentReading"]) > 0m || S(gr["EntrySource"]).Length > 0)
+                                {
+                                    DeleteStaging(cn, tx, imk, year, month);
+                                    gr["CurrentReading"] = 0m;
+                                    gr["EntrySource"] = "";
+                                    gr["HasConflict"] = false;
+                                    gr["FetchedReading"] = 0m;
+                                    gr["MachineStatus"] = "";
+                                    gr["Sel"] = false;
+                                    gr["Status"] = "";
+                                    Recalc(gr);
+                                    applied++;
+                                }
+                            }
+                        }
+                        tx.Commit();
+                    }
+                    catch (Exception ex) { tx.Rollback();
+                        XtraMessageBox.Show("Override failed:\r\n" + ex.Message, "Override", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return; }
+                }
+            }
+            GridMeter.RefreshDataSource();
+            UpdateTabCounts();
+            ApplyTabFilter();
+            if (applied > 0)
+                XtraMessageBox.Show(applied + " reading(s) overridden with the fetched value.", "Override",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void GridViewMeter_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)

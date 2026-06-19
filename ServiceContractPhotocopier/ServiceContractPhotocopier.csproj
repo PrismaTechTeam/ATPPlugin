@@ -618,6 +618,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.Designer.cs">
       <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.Designer.cs">
+      <DependentUpon>MeterReadingDetail_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Stock Request\Operation Forms\StockRequestSettings_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -658,6 +664,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v3.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterEntry.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v2.sql" />
     <EmbeddedResource Include="SQL\03_CreateView_zvSCP2_ContractList.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_Appointment.sql" />
@@ -927,6 +934,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.resx">
       <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.resx">
+      <DependentUpon>MeterReadingDetail_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Stock Request\Operation Forms\StockRequestSettings_Form.resx">
       <DependentUpon>StockRequestSettings_Form.cs</DependentUpon>
