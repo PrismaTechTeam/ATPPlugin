@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 
 namespace ATPApi.Models
 {
@@ -13,6 +14,12 @@ namespace ATPApi.Models
         public string StockIssueNo   { get; set; }
         public string ReferenceNo    { get; set; }
         public string Description    { get; set; }
+
+        // PUMS sends the machine serial under the JSON key "Serial Number" (with a space),
+        // which is not a valid C# identifier — map it explicitly.
+        [JsonProperty("Serial Number")]
+        public string SerialNumber   { get; set; }
+
         public string Department     { get; set; }
         public string Job            { get; set; }
         public string Technician     { get; set; }

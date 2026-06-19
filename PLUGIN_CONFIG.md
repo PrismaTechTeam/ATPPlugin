@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.3.0.0
+- **Version:** 1.4.0.0
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,14 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.4.0.0 (2026-06-19):
+    1. Combined Service Contract module v2 (zSCP2_*) — one contract per customer with service items inline; native AutoCount list + ribbon editor with debtor auto-fill.
+    2. Meter Reading Integration — fetch meter readings from the PUMS API with one swappable client; ONLINE and OFFLINE machine types via a single interface; grouped grid (by contract) with per-contract colour bands, footer totals, and With Meter Data / Online / Offline / No API Data / Conflicts / All tabs.
+    3. Manual key-in + staging (zSCP2_MeterEntry): type readings for machines with no API data and Save; values persist per billing period and survive restart.
+    4. Re-fetch conflict handling: saved manual readings are kept and flagged when the API later returns a value; double-click a contract to review Manual vs Fetched and accept the override.
+    5. Billing-day-driven invoice generation (group per contract or separate per item) reusing the AutoCount invoice pipeline.
+    6. Stock Request — webhooks now capture the PUMS "Serial Number" on Stock Issue; unknown items are clearly flagged (Item OK? column + clear error, no silent master-data changes); technician names missing from Stock Location can be auto-created from a one-click banner; View Log timestamps fixed to local time.
+
     v1.3.0.0 (2026-05-04):
     1. Meter Type Transaction Entry — Invoice No Format combo now reads from AutoCount's standard DocNoFormat table (DocType "IV") using the [Name] column and auto-selects the IsDefault='T' format on load.
     2. New ellipsis (…) button next to Invoice No Format opens AutoCount's standard FormDocumentNoMaintenance for in-place format management; combo refreshes on close.

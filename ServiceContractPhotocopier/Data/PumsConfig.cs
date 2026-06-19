@@ -19,6 +19,13 @@ namespace ServiceContractPhotocopier.Data
         /// </summary>
         public const string KEY_FLAG_CONTROL = "FLAG_CONTROL";
 
+        // === ATPApi webhook/update service (used by the About dialog) ===
+
+        /// <summary>Base URL of the local ATPApi service (used by the About dialog to read /api/ping
+        /// for the API version and to point the updater's health-check). No trailing path.</summary>
+        public const string KEY_ATP_API_BASE_URL = "ATP_API_BASE_URL";
+        public const string DEFAULT_ATP_API_BASE_URL = "http://localhost:5007";
+
         // === Meter Reading API integration (combined Service Contract module v2) ===
 
         /// <summary>Base URL of the PUMS meter-reading API (no trailing path). Default points to a local mock.</summary>

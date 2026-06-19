@@ -23,8 +23,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.CmbLogType.Properties.Items.AddRange(new object[] { "All", "Information", "Warning", "Error" });
             this.CmbLogType.SelectedItem = "All";
             this.DtFrom.DateTime = DateTime.Today.AddDays(-7);
-            this.DtTo.DateTime   = DateTime.Today.AddDays(1);
+            this.DtTo.DateTime   = DateTime.Today;
             this.GridViewLog.DoubleClick += GridViewLog_DoubleClick;
+            // LoggedAt is stored in UTC — display it in local time so the grid matches the
+            // detail popup (which converts to local). Without this the grid showed UTC.
+            this.GridViewLog.CustomColumnDisplayText += GridViewLog_CustomColumnDisplayText;
             Reload();
         }
 
@@ -65,6 +68,15 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (c == null) return;
             c.DisplayFormat.FormatType   = DevExpress.Utils.FormatType.DateTime;
             c.DisplayFormat.FormatString = "yyyy-MM-dd HH:mm:ss";
+        }
+
+        // Z_PumsLog.LoggedAt is UTC (sysutcdatetime). SQL returns it as Kind=Unspecified, so
+        // ToLocalTime() treats it as UTC and converts to the operator's local time for display.
+        private void GridViewLog_CustomColumnDisplayText(object sender,
+            DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column != null && e.Column.FieldName == "LoggedAt" && e.Value is DateTime utc)
+                e.DisplayText = utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
         }
 
         private void GridViewLog_DoubleClick(object sender, EventArgs e)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Drawing;
 using System.Windows.Forms;
@@ -33,11 +34,17 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         // Shared Location dropdown editor — loaded once, applied to all Location columns.
         private DataTable _locationsDt;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _locationLookup;
+        // Warning banner for technician-derived locations that don't exist in AutoCount yet.
+        private DevExpress.XtraEditors.PanelControl _locBanner;
+        private DevExpress.XtraEditors.LabelControl _lblLocWarn;
+        private DevExpress.XtraEditors.SimpleButton _btnCreateLoc;
+        private List<string> _missingLocations;
 
         public StockRequestTask_Form()
         {
             InitializeComponent();
             InitDefaults();
+            SetupLocationBanner();
             this.Load    += new EventHandler(StockRequestTask_Form_Load);
             this.Resize  += new EventHandler(StockRequestTask_Form_Resize);
             this.KeyPreview = true;
@@ -363,6 +370,151 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.ChkShowTransfer.Checked   = true;
         }
 
+        // ---------- Missing-location warning banner + auto-create ----------
+
+        // Builds the (initially hidden) amber banner that sits between the filter panel and the
+        // grids. Created in code to avoid touching the strict designer file.
+        private void SetupLocationBanner()
+        {
+            _locBanner = new DevExpress.XtraEditors.PanelControl();
+            _locBanner.Dock = DockStyle.Top;
+            _locBanner.Height = 38;
+            _locBanner.Appearance.BackColor = Color.FromArgb(255, 243, 205); // soft amber
+            _locBanner.Appearance.Options.UseBackColor = true;
+            _locBanner.Visible = false;
+
+            _lblLocWarn = new DevExpress.XtraEditors.LabelControl();
+            _lblLocWarn.Dock = DockStyle.Fill;
+            _lblLocWarn.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            _lblLocWarn.Appearance.Font = new Font("Segoe UI", 9.5F);
+            _lblLocWarn.Appearance.Options.UseFont = true;
+            _lblLocWarn.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            _lblLocWarn.Padding = new Padding(12, 0, 0, 0);
+
+            _btnCreateLoc = new DevExpress.XtraEditors.SimpleButton();
+            _btnCreateLoc.Text = "Auto-create Locations";
+            _btnCreateLoc.Dock = DockStyle.Right;
+            _btnCreateLoc.Width = 210;
+            _btnCreateLoc.Click += new EventHandler(BtnCreateLoc_Click);
+
+            _locBanner.Controls.Add(_lblLocWarn);   // fill (added first → back → fills remainder)
+            _locBanner.Controls.Add(_btnCreateLoc); // right (front → docks first)
+            this.Controls.Add(_locBanner);
+            // Place between the Fill SplitContainer (index 0) and the Top filter panel, so the
+            // banner shows directly above the grids.
+            this.Controls.SetChildIndex(_locBanner, 1);
+        }
+
+        // Scans the loaded grids for the (normalized) locations they will use and shows the banner
+        // when any aren't in the AutoCount Location master.
+        private void RefreshLocationBanner()
+        {
+            if (_locBanner == null || _dbSetting == null) return;
+            HashSet<string> wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectLocs(this.GridIssue.DataSource as DataTable, wanted, "Location");
+            CollectLocs(this.GridTransfer.DataSource as DataTable, wanted, "FromLocation", "ToLocation");
+
+            List<string> missing;
+            try { missing = StockRequestRepository.FilterMissingLocations(_dbSetting, wanted); }
+            catch { missing = new List<string>(); }
+            _missingLocations = missing;
+
+            if (missing.Count == 0) { _locBanner.Visible = false; return; }
+            int show = Math.Min(missing.Count, 8);
+            string list = string.Join(", ", missing.GetRange(0, show).ToArray()) + (missing.Count > show ? " …" : "");
+            _lblLocWarn.Text = "⚠  Found " + missing.Count +
+                " technician name(s) not in AutoCount Stock Location: " + list +
+                "   —  auto-create?";
+            _btnCreateLoc.Text = "Auto-create " + missing.Count + " Location(s)";
+            _locBanner.Visible = true;
+        }
+
+        private void CollectLocs(DataTable dt, HashSet<string> set, params string[] fields)
+        {
+            if (dt == null) return;
+            foreach (string f in fields)
+            {
+                if (!dt.Columns.Contains(f)) continue;
+                foreach (DataRow r in dt.Rows)
+                {
+                    string code = SiStGenerator.NormalizeLocation(Convert.ToString(r[f]));
+                    if (!string.IsNullOrWhiteSpace(code)) set.Add(code);
+                }
+            }
+        }
+
+        private void BtnCreateLoc_Click(object sender, EventArgs e)
+        {
+            if (_missingLocations == null || _missingLocations.Count == 0) return;
+            UserSession session = _userSession ?? UserSession.CurrentUserSession;
+            if (session == null)
+            {
+                XtraMessageBox.Show(this, "No active AutoCount session — cannot create locations.",
+                    "Auto-create Locations", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (XtraMessageBox.Show(this,
+                    "Create the following " + _missingLocations.Count + " Stock Location(s) in AutoCount?\r\n\r\n" +
+                    string.Join(", ", _missingLocations.ToArray()),
+                    "Auto-create Locations", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            int created = 0;
+            List<string> errs = new List<string>();
+            try
+            {
+                AutoCount.Stock.Location.LocationMaintenance lm =
+                    AutoCount.Stock.Location.LocationMaintenance.CreateLocationMaint(session, _dbSetting);
+                foreach (string code in _missingLocations)
+                {
+                    try
+                    {
+                        AutoCount.Stock.Location.LocationEntity ent = lm.NewLocation();
+                        ent.Location = code;
+                        ent.Description = code;   // technician name as description
+                        ent.IsActive = "Y";
+                        ent.Save();
+                        created++;
+                        PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "AutoCreateLocation", code,
+                            "Stock Location auto-created from technician name.", null, null,
+                            session.LoginUserID);
+                    }
+                    catch (Exception ex) { errs.Add(code + ": " + SiStGenerator_ShortError(ex)); }
+                }
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(this, "Failed to create locations:\r\n" + ex.Message,
+                    "Auto-create Locations", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Refresh the shared Location dropdown source so the new codes are pickable.
+            try
+            {
+                if (_locationsDt != null)
+                {
+                    DataTable fresh = StockRequestRepository.LoadLocations(_dbSetting);
+                    _locationsDt = fresh;
+                    if (_locationLookup != null) _locationLookup.DataSource = fresh;
+                }
+            }
+            catch { /* non-fatal */ }
+
+            LoadGrids();   // re-evaluates the banner (hides it when nothing is missing)
+
+            string msg = created + " location(s) created.";
+            if (errs.Count > 0) msg += "\r\n\r\nFailed:\r\n" + string.Join("\r\n", errs.ToArray());
+            XtraMessageBox.Show(this, msg, "Auto-create Locations", MessageBoxButtons.OK,
+                errs.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        private static string SiStGenerator_ShortError(Exception ex)
+        {
+            string m = ex.Message ?? ex.ToString();
+            return m.Length > 200 ? m.Substring(0, 200) : m;
+        }
+
         // ---------- Data loading ----------
 
         private void EnsureLocationLookup()
@@ -495,6 +647,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             bool anyNewTicked = AnyNewRowTicked(this.GridIssue.DataSource as DataTable)
                              || AnyNewRowTicked(this.GridTransfer.DataSource as DataTable);
             this.BtnGenerateSISTAll.Text = anyNewTicked ? "Unselect All New" : "Select All New...";
+
+            RefreshLocationBanner();
         }
 
         // ---------- Auto-refresh countdown ----------

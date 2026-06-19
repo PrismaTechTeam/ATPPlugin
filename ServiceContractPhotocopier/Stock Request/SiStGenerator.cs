@@ -108,12 +108,16 @@ namespace ServiceContractPhotocopier.StockRequest
             string uom         = AsString(j.Row, "UOM");
             decimal qty        = AsDecimal(j.Row, "Quantity");
             string department  = AsString(j.Row, "Department");
+            string serialNo    = AsString(j.Row, "SerialNumber");
             DateTime docDate   = AsDateTime(j.Row, "IssueDateTime");
 
             if (string.IsNullOrWhiteSpace(itemCode))
                 throw new InvalidOperationException("ItemCode missing on source row.");
             if (string.IsNullOrWhiteSpace(technician))
                 throw new InvalidOperationException("Technician missing — line Location can't be resolved.");
+            if (!ItemExists(itemCode))
+                throw new InvalidOperationException("ItemCode '" + itemCode +
+                    "' does not exist in the AutoCount Item master. Create or map the item, then re-generate.");
 
             StockIssueCommand cmd = StockIssueCommand.Create(_userSession, _db);
             StockIssue doc;
@@ -141,6 +145,9 @@ namespace ServiceContractPhotocopier.StockRequest
             StockIssueDetail line = doc.AddDetail();
             line.ItemCode    = itemCode;
             line.Description = LookupItemDescription(itemCode); // pull from AutoCount Item master
+            // Surface the PUMS machine serial on the line so it appears on the printed document.
+            if (!string.IsNullOrWhiteSpace(serialNo))
+                line.Description = ((line.Description ?? string.Empty).TrimEnd() + "  [S/N: " + serialNo + "]").Trim();
             line.UOM         = string.IsNullOrWhiteSpace(uom) ? "UNIT" : uom;
             line.Qty         = qty;
             line.Location    = NormalizeLocation(lineLocation);
@@ -167,6 +174,9 @@ namespace ServiceContractPhotocopier.StockRequest
             string itemCode = StripBracketSuffix(part);
             if (string.IsNullOrWhiteSpace(itemCode))
                 throw new InvalidOperationException("ItemCode missing after stripping bracket suffix from Part.");
+            if (!ItemExists(itemCode))
+                throw new InvalidOperationException("ItemCode '" + itemCode +
+                    "' (from Part) does not exist in the AutoCount Item master. Create or map the item, then re-generate.");
 
             // From/To rule (matches the grid display) with operator overrides:
             //   IN  → From = default, To = technician
@@ -227,6 +237,29 @@ namespace ServiceContractPhotocopier.StockRequest
 
             doc.Save();
             return doc.DocNo;
+        }
+
+        // ---------- Item-master checks ----------
+
+        // True when the code exists in the AutoCount Item master. Used to fail unknown items
+        // with a clear message BEFORE handing them to AutoCount (which throws a cryptic error).
+        private readonly Dictionary<string, bool> _existsCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        private bool ItemExists(string itemCode)
+        {
+            if (string.IsNullOrWhiteSpace(itemCode)) return false;
+            if (_existsCache.TryGetValue(itemCode, out bool cached)) return cached;
+            bool exists;
+            using (SqlConnection conn = new SqlConnection(_db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("SELECT TOP 1 1 FROM Item WHERE ItemCode = @c", conn))
+            {
+                cmd.Parameters.AddWithValue("@c", itemCode);
+                conn.Open();
+                object o = cmd.ExecuteScalar();
+                exists = (o != null && o != DBNull.Value);
+            }
+            _existsCache[itemCode] = exists;
+            return exists;
         }
 
         // ---------- Item-master description lookup ----------

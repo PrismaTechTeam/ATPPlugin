@@ -63,6 +63,9 @@ namespace ATPApi.AutoCount
             AddColumnIfMissing(db, log, "Z_PumsStockTransfer","CompletedBy",    "NVARCHAR(50) NULL");
             AddColumnIfMissing(db, log, "Z_PumsStockTransfer","CompletedAt",    "DATETIME2 NULL");
 
+            // Machine serial sent by PUMS under the JSON key "Serial Number".
+            AddColumnIfMissing(db, log, "Z_PumsStockIssue",   "SerialNumber",         "NVARCHAR(50) NULL");
+
             // Operator-set Location overrides — let the user pick a Location from a
             // dropdown on the Stock Request Task grids before clicking Generate SI/ST.
             AddColumnIfMissing(db, log, "Z_PumsStockIssue",   "LocationOverride",     "NVARCHAR(50) NULL");
@@ -104,6 +107,7 @@ namespace ATPApi.AutoCount
                         StockIssueNo    NVARCHAR(50)   NULL,
                         ReferenceNo     NVARCHAR(50)   NULL,
                         Description     NVARCHAR(255)  NULL,
+                        SerialNumber    NVARCHAR(50)   NULL,
                         Department      NVARCHAR(50)   NULL,
                         Job             NVARCHAR(50)   NULL,
                         Technician      NVARCHAR(100)  NULL,

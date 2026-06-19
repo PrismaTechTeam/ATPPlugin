@@ -20,7 +20,7 @@ namespace ServiceContractPhotocopier.Data
             //   • otherwise → operator-picked LocationOverride if set, else Technician
             string sql = @"
                 SELECT p.AutoKey, p.StockIssueId, p.IssueDateTime, p.StockIssueNo, p.ReferenceNo, p.Description,
-                       p.Department, p.Job, p.Technician,
+                       p.SerialNumber, p.Department, p.Job, p.Technician,
                        CASE
                          WHEN p.Status = 'Complete' AND p.GeneratedDocNo IS NOT NULL THEN
                            ISNULL((
@@ -32,6 +32,8 @@ namespace ServiceContractPhotocopier.Data
                          ELSE COALESCE(p.LocationOverride, p.Technician)
                        END AS Location,
                        p.ItemCode, p.Quantity, p.UOM,
+                       CASE WHEN EXISTS (SELECT 1 FROM Item it WHERE it.ItemCode = p.ItemCode)
+                            THEN 'Yes' ELSE 'No' END AS ItemExists,
                        p.Status, p.ReceivedAt, p.GeneratedDocNo, p.CompletedBy, p.CompletedAt
                 FROM Z_PumsStockIssue p
                 WHERE p.IssueDateTime >= @from AND p.IssueDateTime < @to";
@@ -42,6 +44,7 @@ namespace ServiceContractPhotocopier.Data
                            OR p.StockIssueNo LIKE @q
                            OR p.ReferenceNo  LIKE @q
                            OR p.Description  LIKE @q
+                           OR p.SerialNumber LIKE @q
                            OR p.Department   LIKE @q
                            OR p.Job          LIKE @q
                            OR p.Technician   LIKE @q
@@ -88,7 +91,16 @@ namespace ServiceContractPhotocopier.Data
                          WHEN UPPER(LTRIM(RTRIM(p.TransferType))) = 'IN'  THEN COALESCE(p.ToLocationOverride, p.Technician)
                          WHEN UPPER(LTRIM(RTRIM(p.TransferType))) = 'OUT' THEN COALESCE(p.ToLocationOverride, @defLoc)
                          ELSE p.ToLocationOverride
-                       END AS ToLocation
+                       END AS ToLocation,
+                       -- Mirror SiStGenerator.StripBracketSuffix: take Part up to the first '[' and
+                       -- check it exists in the AutoCount Item master.
+                       CASE WHEN EXISTS (
+                              SELECT 1 FROM Item it
+                              WHERE it.ItemCode = LTRIM(RTRIM(
+                                  CASE WHEN CHARINDEX('[', p.Part) > 0
+                                       THEN LEFT(p.Part, CHARINDEX('[', p.Part) - 1)
+                                       ELSE p.Part END))
+                            ) THEN 'Yes' ELSE 'No' END AS ItemExists
                 FROM Z_PumsStockTransfer p
                 WHERE p.DocumentDateTime >= @from AND p.DocumentDateTime < @to";
 
@@ -158,6 +170,36 @@ namespace ServiceContractPhotocopier.Data
                     da.Fill(dt);
             }
             return dt;
+        }
+
+        /// <summary>
+        /// Returns the subset of <paramref name="codes"/> that do NOT exist in the AutoCount
+        /// Location master (case-insensitive). Used to warn/auto-create technician-derived
+        /// Stock Locations before generating documents.
+        /// </summary>
+        public static System.Collections.Generic.List<string> FilterMissingLocations(
+            DBSetting db, System.Collections.Generic.IEnumerable<string> codes)
+        {
+            System.Collections.Generic.List<string> missing = new System.Collections.Generic.List<string>();
+            System.Collections.Generic.HashSet<string> wanted =
+                new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string c in codes)
+                if (!string.IsNullOrWhiteSpace(c)) wanted.Add(c.Trim());
+            if (wanted.Count == 0) return missing;
+
+            System.Collections.Generic.HashSet<string> existing =
+                new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (SqlConnection conn = new SqlConnection(db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand("SELECT Location FROM Location", conn))
+            {
+                conn.Open();
+                using (SqlDataReader r = cmd.ExecuteReader())
+                    while (r.Read())
+                        if (!r.IsDBNull(0)) existing.Add(r.GetString(0).Trim());
+            }
+            foreach (string w in wanted)
+                if (!existing.Contains(w)) missing.Add(w);
+            return missing;
         }
 
         /// <summary>Persists the operator-chosen Location for a Stock Issue row.</summary>

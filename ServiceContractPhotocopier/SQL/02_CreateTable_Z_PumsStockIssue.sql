@@ -14,6 +14,7 @@ CREATE TABLE [dbo].[Z_PumsStockIssue](
 	[StockIssueNo]     [nvarchar](50)  NULL,
 	[ReferenceNo]      [nvarchar](50)  NULL,
 	[Description]      [nvarchar](255) NULL,
+	[SerialNumber]     [nvarchar](50)  NULL,
 	[Department]       [nvarchar](50)  NULL,
 	[Job]              [nvarchar](50)  NULL,
 	[Technician]       [nvarchar](100) NULL,

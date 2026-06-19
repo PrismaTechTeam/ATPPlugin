@@ -28,6 +28,7 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "Z_PumsConfig",               "02_CreateTable_Z_PumsConfig.sql", asm);
             RunIfTableMissing(dbsetting, "Z_PumsLog",                  "02_CreateTable_Z_PumsLog.sql", asm);
             RunIfTableMissing(dbsetting, "Z_PumsStockIssue",           "02_CreateTable_Z_PumsStockIssue.sql", asm);
+            RunDDL(dbsetting, "02_UpdateTable_Z_PumsStockIssue_v1.2.0.sql", asm);  // adds SerialNumber if missing (idempotent)
             RunIfTableMissing(dbsetting, "Z_PumsStockTransfer",        "02_CreateTable_Z_PumsStockTransfer.sql", asm);
             RunIfTableMissing(dbsetting, "Z_PumsTaskLock",             "02_CreateTable_Z_PumsTaskLock.sql", asm);
             RunIfTableMissing(dbsetting, "z_SysRef",                    "01_CreateTable_z_SysRef.sql", asm);

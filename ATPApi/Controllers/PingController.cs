@@ -17,13 +17,15 @@ namespace ATPApi.Controllers
             try
             {
                 var s = SessionManager.UserSession;
+                var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 return Ok(new
                 {
-                    ok       = true,
-                    profile  = SessionManager.CurrentProfile,
-                    database = SessionManager.DatabaseName,
-                    loggedIn = s != null,
-                    user     = s?.LoginUserID
+                    ok         = true,
+                    apiVersion = ver != null ? ver.ToString(3) : "0.0.0",
+                    profile    = SessionManager.CurrentProfile,
+                    database   = SessionManager.DatabaseName,
+                    loggedIn   = s != null,
+                    user       = s?.LoginUserID
                 });
             }
             catch (Exception ex)

@@ -37,10 +37,10 @@ namespace ATPApi.Repositories
 
                     using (SqlCommand cmd = new SqlCommand(@"
                         INSERT INTO Z_PumsStockIssue
-                            (StockIssueId, IssueDateTime, StockIssueNo, ReferenceNo, Description, Department, Job,
+                            (StockIssueId, IssueDateTime, StockIssueNo, ReferenceNo, Description, SerialNumber, Department, Job,
                              Technician, Location, ItemCode, Quantity, UOM, Status, RawJson)
                         VALUES
-                            (@StockIssueId, @IssueDateTime, @StockIssueNo, @ReferenceNo, @Description, @Department, @Job,
+                            (@StockIssueId, @IssueDateTime, @StockIssueNo, @ReferenceNo, @Description, @SerialNumber, @Department, @Job,
                              @Technician, @Location, @ItemCode, @Quantity, @UOM, @Status, @RawJson)",
                         conn, tx))
                     {
@@ -49,6 +49,7 @@ namespace ATPApi.Repositories
                         cmd.Parameters.AddWithValue("@StockIssueNo", (object)req.StockIssueNo ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@ReferenceNo",  (object)req.ReferenceNo  ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@Description",  (object)req.Description  ?? DBNull.Value);
+                        cmd.Parameters.AddWithValue("@SerialNumber", (object)req.SerialNumber ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@Department",   (object)req.Department   ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@Job",          (object)req.Job          ?? DBNull.Value);
                         cmd.Parameters.AddWithValue("@Technician",   (object)req.Technician   ?? DBNull.Value);
