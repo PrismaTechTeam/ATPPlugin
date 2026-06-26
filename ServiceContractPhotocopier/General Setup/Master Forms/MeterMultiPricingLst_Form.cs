@@ -12,10 +12,11 @@ using static VTACPluginBase.Classes.Helpers.GeneralHelper;
 
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
-    [AutoCount.PlugIn.MenuItem("Meter Multi Pricing",
-        ParentMenuCaption = "General Setup", MenuOrder = 140, ParentMenuOrder = 600,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Meter Multi Pricing",
+    // ParentMenuCaption = "General Setup", MenuOrder = 140, ParentMenuOrder = 600,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class MeterMultiPricingLst_Form : XtraForm
     {

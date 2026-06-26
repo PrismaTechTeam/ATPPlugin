@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "computer-use": {
+      "command": "C:\\Users\\ndscd\\.local\\bin\\uv.exe",
+      "args": [
+        "run",
+        "--with", "mcp",
+        "--with", "pyautogui",
+        "--python", "3.11",
+        "C:\\Dev\\Plugin\\ATP\\tools\\computer-use-mcp\\server.py"
+      ]
+    }
+  }
+}

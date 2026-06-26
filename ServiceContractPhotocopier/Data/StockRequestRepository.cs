@@ -13,7 +13,7 @@ namespace ServiceContractPhotocopier.Data
     public static class StockRequestRepository
     {
         public static DataTable LoadStockIssue(DBSetting db, DateTime fromDate, DateTime toDate,
-            string search, bool pendingOnly)
+            string search, bool pendingOnly, bool hideIgnore = false)
         {
             // Location column rule (#19, with operator override):
             //   • Complete  → look up the line's Location from the AutoCount StockIssueDTL
@@ -34,6 +34,25 @@ namespace ServiceContractPhotocopier.Data
                        p.ItemCode, p.Quantity, p.UOM,
                        CASE WHEN EXISTS (SELECT 1 FROM Item it WHERE it.ItemCode = p.ItemCode)
                             THEN 'Yes' ELSE 'No' END AS ItemExists,
+                       -- The existing generated doc for this id (if any, not cancelled).
+                       (SELECT TOP 1 o.GeneratedDocNo FROM Z_PumsStockIssue o
+                          WHERE o.StockIssueId = p.StockIssueId AND o.GeneratedDocNo IS NOT NULL
+                            AND LTRIM(RTRIM(o.GeneratedDocNo)) <> '' AND o.Status <> 'Cancelled'
+                          ORDER BY o.AutoKey DESC) AS OriginalDocNo,
+                       -- Change request: this (not-yet-processed) row re-sends an id that already has a
+                       -- generated doc. Qty 0 => Cancel; different qty => Update; else nothing.
+                       CASE WHEN p.GeneratedDocNo IS NULL AND EXISTS (
+                              SELECT 1 FROM Z_PumsStockIssue o
+                              WHERE o.StockIssueId = p.StockIssueId AND o.AutoKey <> p.AutoKey
+                                AND o.GeneratedDocNo IS NOT NULL AND LTRIM(RTRIM(o.GeneratedDocNo)) <> ''
+                                AND o.Status <> 'Cancelled')
+                            THEN CASE
+                                   WHEN ISNULL(p.Quantity,0) = 0 THEN 'Cancel'
+                                   WHEN ISNULL(p.Quantity,0) <> ISNULL((SELECT TOP 1 o.Quantity FROM Z_PumsStockIssue o
+                                          WHERE o.StockIssueId = p.StockIssueId AND o.GeneratedDocNo IS NOT NULL
+                                            AND o.Status <> 'Cancelled' ORDER BY o.AutoKey DESC), -1) THEN 'Update'
+                                   ELSE 'No' END
+                            ELSE 'No' END AS IssueChange,
                        p.Status, p.ReceivedAt, p.GeneratedDocNo, p.CompletedBy, p.CompletedAt
                 FROM Z_PumsStockIssue p
                 WHERE p.IssueDateTime >= @from AND p.IssueDateTime < @to";
@@ -53,9 +72,11 @@ namespace ServiceContractPhotocopier.Data
                            OR p.Status       LIKE @q
                           )";
 
-            // "Show Only New Task" → hide Complete and Ignore
+            // "Show Only New Task" → hide Complete, Ignore and Cancelled
             if (pendingOnly)
-                sql += " AND p.Status NOT IN ('Complete','Ignore')";
+                sql += " AND p.Status NOT IN ('Complete','Ignore','Cancelled')";
+            else if (hideIgnore)
+                sql += " AND p.Status <> 'Ignore'";
 
             sql += " ORDER BY p.ReceivedAt DESC";
 
@@ -65,7 +86,7 @@ namespace ServiceContractPhotocopier.Data
         }
 
         public static DataTable LoadStockTransfer(DBSetting db, DateTime fromDate, DateTime toDate,
-            string search, bool pendingOnly, string defaultFromLocation)
+            string search, bool pendingOnly, string defaultFromLocation, bool hideIgnore = false)
         {
             // From/To Location rule (#21, corrected):
             //   • Complete            → look up Auto Count StockTransfer header FromLocation / ToLocation
@@ -100,7 +121,26 @@ namespace ServiceContractPhotocopier.Data
                                   CASE WHEN CHARINDEX('[', p.Part) > 0
                                        THEN LEFT(p.Part, CHARINDEX('[', p.Part) - 1)
                                        ELSE p.Part END))
-                            ) THEN 'Yes' ELSE 'No' END AS ItemExists
+                            ) THEN 'Yes' ELSE 'No' END AS ItemExists,
+                       -- Change request on a re-sent id that already has a generated (not-cancelled) doc:
+                       --   approval=No        -> 'Cancel'
+                       --   approval=Yes, qty differs from the generated doc -> 'Update'
+                       CASE WHEN p.GeneratedDocNo IS NULL AND EXISTS (
+                              SELECT 1 FROM Z_PumsStockTransfer o
+                              WHERE o.RequestId = p.RequestId AND o.AutoKey <> p.AutoKey
+                                AND o.GeneratedDocNo IS NOT NULL AND LTRIM(RTRIM(o.GeneratedDocNo)) <> ''
+                                AND o.Status <> 'Cancelled')
+                            THEN CASE
+                                   WHEN UPPER(LTRIM(RTRIM(ISNULL(p.Approval,'')))) IN ('NO','N','FALSE','0') THEN 'Cancel'
+                                   WHEN ISNULL(p.Qty,0) <> ISNULL((SELECT TOP 1 o.Qty FROM Z_PumsStockTransfer o
+                                          WHERE o.RequestId = p.RequestId AND o.GeneratedDocNo IS NOT NULL
+                                            AND o.Status <> 'Cancelled' ORDER BY o.AutoKey DESC), -1) THEN 'Update'
+                                   ELSE 'No' END
+                            ELSE 'No' END AS TransferChange,
+                       (SELECT TOP 1 o.GeneratedDocNo FROM Z_PumsStockTransfer o
+                          WHERE o.RequestId = p.RequestId AND o.GeneratedDocNo IS NOT NULL
+                            AND LTRIM(RTRIM(o.GeneratedDocNo)) <> ''
+                          ORDER BY o.AutoKey DESC) AS OriginalDocNo
                 FROM Z_PumsStockTransfer p
                 WHERE p.DocumentDateTime >= @from AND p.DocumentDateTime < @to";
 
@@ -116,7 +156,9 @@ namespace ServiceContractPhotocopier.Data
                           )";
 
             if (pendingOnly)
-                sql += " AND p.Status NOT IN ('Complete','Ignore')";
+                sql += " AND p.Status NOT IN ('Complete','Ignore','Cancelled')";
+            else if (hideIgnore)
+                sql += " AND p.Status <> 'Ignore'";
 
             sql += " ORDER BY p.ReceivedAt DESC";
 
@@ -200,6 +242,74 @@ namespace ServiceContractPhotocopier.Data
             foreach (string w in wanted)
                 if (!existing.Contains(w)) missing.Add(w);
             return missing;
+        }
+
+        /// <summary>
+        /// After an AutoCount Stock Transfer document has been cancelled, mark the revoking
+        /// (approval=No) PUMS row AND every prior row that generated that DocNo as 'Cancelled'.
+        /// </summary>
+        public static void MarkTransferCancelled(DBSetting db, long revokeAutoKey, string requestId, string docNo)
+        {
+            using (SqlConnection conn = new SqlConnection(db.ConnectionString))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE Z_PumsStockTransfer SET Status='Cancelled' WHERE AutoKey=@k; " +
+                    "UPDATE Z_PumsStockTransfer SET Status='Cancelled' WHERE RequestId=@r AND GeneratedDocNo=@d;", conn))
+                {
+                    cmd.Parameters.AddWithValue("@k", revokeAutoKey);
+                    cmd.Parameters.AddWithValue("@r", (object)requestId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@d", (object)docNo ?? DBNull.Value);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>Mark a Stock Transfer update as applied: the re-sent row becomes Complete and
+        /// points at the (now updated) AutoCount document.</summary>
+        public static void MarkTransferChangeApplied(DBSetting db, long autoKey, string docNo)
+        {
+            using (SqlConnection conn = new SqlConnection(db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand(
+                "UPDATE Z_PumsStockTransfer SET Status='Complete', GeneratedDocNo=@d, CompletedAt=SYSUTCDATETIME() WHERE AutoKey=@k", conn))
+            {
+                cmd.Parameters.AddWithValue("@d", (object)docNo ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@k", autoKey);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        /// <summary>Mark a Stock Issue change as applied: the revoking row becomes Complete and
+        /// points at the (now updated) AutoCount document.</summary>
+        public static void MarkIssueChangeApplied(DBSetting db, long autoKey, string docNo)
+        {
+            using (SqlConnection conn = new SqlConnection(db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand(
+                "UPDATE Z_PumsStockIssue SET Status='Complete', GeneratedDocNo=@d, CompletedAt=SYSUTCDATETIME() WHERE AutoKey=@k", conn))
+            {
+                cmd.Parameters.AddWithValue("@d", (object)docNo ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@k", autoKey);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        /// <summary>After an AutoCount Stock Issue document is cancelled (qty 0 approved), mark the
+        /// revoking row AND every prior row that generated that DocNo as 'Cancelled'.</summary>
+        public static void MarkIssueCancelled(DBSetting db, long revokeAutoKey, string stockIssueId, string docNo)
+        {
+            using (SqlConnection conn = new SqlConnection(db.ConnectionString))
+            using (SqlCommand cmd = new SqlCommand(
+                "UPDATE Z_PumsStockIssue SET Status='Cancelled' WHERE AutoKey=@k; " +
+                "UPDATE Z_PumsStockIssue SET Status='Cancelled' WHERE StockIssueId=@id AND GeneratedDocNo=@d;", conn))
+            {
+                cmd.Parameters.AddWithValue("@k", revokeAutoKey);
+                cmd.Parameters.AddWithValue("@id", (object)stockIssueId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@d", (object)docNo ?? DBNull.Value);
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
         }
 
         /// <summary>Persists the operator-chosen Location for a Stock Issue row.</summary>

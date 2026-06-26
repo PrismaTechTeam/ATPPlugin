@@ -45,6 +45,14 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             InitializeComponent();
             InitDefaults();
             SetupLocationBanner();
+            SetupCancelTransferButton();
+            SetupHideIgnoreCheckbox();
+            ApplyButtonIcons();
+            SetupColorLegend();
+            // Highlight cancellation-request transfer rows (approval=No on an already-generated id)
+            this.GridViewTransfer.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewTransfer_RowStyle);
+            // Highlight change/cancel-request stock issue rows (re-sent id with different/zero qty)
+            this.GridViewIssue.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewIssue_RowStyle);
             this.Load    += new EventHandler(StockRequestTask_Form_Load);
             this.Resize  += new EventHandler(StockRequestTask_Form_Resize);
             this.KeyPreview = true;
@@ -555,6 +563,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             DateTime toDate   = this.DtTo.DateTime.Date;
             string search     = this.TxtSearch.Text ?? string.Empty;
             bool pendingOnly  = this.ChkPendingOnly.Checked;
+            bool hideIgnore   = _chkHideIgnore != null && _chkHideIgnore.Checked;
             // Always load both grids; visibility is driven by ChkShowIssue / ChkShowTransfer
             // via the SplitContainer's CollapsePanel — independent of data fetch.
             const bool showIssue    = true;
@@ -573,7 +582,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             {
                 if (showIssue)
                 {
-                    DataTable dt = StockRequestRepository.LoadStockIssue(_dbSetting, fromDate, toDate, searchForIssue, pendingOnly);
+                    DataTable dt = StockRequestRepository.LoadStockIssue(_dbSetting, fromDate, toDate, searchForIssue, pendingOnly, hideIgnore);
                     ReapplySelections(dt, _reselectIssue);
                     RebindPreservingLayout(this.GridIssue, this.GridViewIssue, dt, _issueColumnsReady,
                         () =>
@@ -604,7 +613,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                         PumsConfig.KEY_DEFAULT_FROM_LOCATION,
                         PumsConfig.DEFAULT_FROM_LOCATION_VALUE);
                     DataTable dt = StockRequestRepository.LoadStockTransfer(
-                        _dbSetting, fromDate, toDate, searchForTransfer, pendingOnly, defaultLoc);
+                        _dbSetting, fromDate, toDate, searchForTransfer, pendingOnly, defaultLoc, hideIgnore);
                     ReapplySelections(dt, _reselectTransfer);
                     RebindPreservingLayout(this.GridTransfer, this.GridViewTransfer, dt, _transferColumnsReady,
                         () =>
@@ -1108,6 +1117,359 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         {
             using (StockRequestLog_Form dlg = new StockRequestLog_Form(_dbSetting))
                 dlg.ShowDialog(this);
+        }
+
+        // ---------- Cancel a revoked (approval=No) Stock Transfer ----------
+
+        private DevExpress.XtraEditors.SimpleButton _btnCancelXfer;
+        private DevExpress.XtraEditors.SimpleButton _btnApproveChange;
+        private DevExpress.XtraEditors.CheckEdit _chkHideIgnore;
+
+        // Created in code (placed beside View Log) so the strict designer file is untouched.
+        private void SetupCancelTransferButton()
+        {
+            // Second row, to the right of the "Show Stock Issues/Transfer" checkboxes (the top
+            // button row is already full to the panel edge, so don't append there).
+            int rowY = this.ChkShowIssue.Top - 2;
+            int startX = System.Math.Max(this.ChkShowIssue.Right, this.ChkShowTransfer.Right) + 18;
+            System.Drawing.Size btnSize = new Size(150, 44);
+
+            _btnApproveChange = new DevExpress.XtraEditors.SimpleButton();
+            _btnApproveChange.Text = "Approve Change";
+            _btnApproveChange.Size = btnSize;
+            _btnApproveChange.Location = new Point(startX, rowY);
+            _btnApproveChange.Click += new EventHandler(BtnApproveChange_Click);
+            if (this.BtnViewLog.Parent != null) this.BtnViewLog.Parent.Controls.Add(_btnApproveChange);
+
+            _btnCancelXfer = new DevExpress.XtraEditors.SimpleButton();
+            _btnCancelXfer.Text = "Cancel Transfer";
+            _btnCancelXfer.Size = btnSize;
+            _btnCancelXfer.Location = new Point(_btnApproveChange.Right + 8, rowY);
+            _btnCancelXfer.Click += new EventHandler(BtnCancelTransfer_Click);
+            if (this.BtnViewLog.Parent != null) this.BtnViewLog.Parent.Controls.Add(_btnCancelXfer);
+        }
+
+        // Colourful DevExpress XAF SVG icons on the toolbar buttons (so the UI isn't plain text).
+        private void ApplyButtonIcons()
+        {
+            SetBtnIcon(this.BtnRefresh,          "svgimages/xaf/action_refresh.svg");
+            SetBtnIcon(this.BtnFilter,           "svgimages/xaf/action_filter.svg");
+            SetBtnIcon(this.BtnReset,            "svgimages/xaf/action_reload.svg");
+            SetBtnIcon(this.BtnGenerateSIST,     "svgimages/xaf/action_new.svg");
+            SetBtnIcon(this.BtnGenerateSISTAll,  "svgimages/xaf/action_validation_validate.svg");
+            SetBtnIcon(this.BtnMarkIgnore,       "svgimages/xaf/state_validation_warning.svg");
+            SetBtnIcon(this.BtnSettings,         "svgimages/xaf/action_edit.svg");
+            SetBtnIcon(this.BtnViewLog,          "svgimages/xaf/action_aboutinfo.svg");
+            SetBtnIcon(_btnCancelXfer,           "svgimages/xaf/action_cancel.svg");
+            SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
+        }
+
+        private static void SetBtnIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)
+        {
+            if (btn == null) return;
+            DevExpress.Utils.Svg.SvgImage img = DevExpress.Images.ImageResourceCache.Default.GetSvgImage(svgName);
+            if (img == null) return;
+            btn.ImageOptions.SvgImage = img;
+            btn.ImageOptions.SvgImageSize = new Size(20, 20);
+            btn.ImageOptions.ImageToTextIndent = 6;
+            btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            // Keep the icons' native colours (don't recolor to the skin's monochrome).
+            btn.ImageOptions.SvgImageColorizationMode = DevExpress.Utils.SvgImageColorizationMode.None;
+        }
+
+        // "Hide Ignore" filter checkbox — added in code (under "Show Only New Task") to keep the
+        // strict designer untouched. Reloads the grids immediately when toggled.
+        private void SetupHideIgnoreCheckbox()
+        {
+            _chkHideIgnore = new DevExpress.XtraEditors.CheckEdit();
+            _chkHideIgnore.Properties.Caption = "Hide Ignore";
+            _chkHideIgnore.Properties.Appearance.Font = this.ChkPendingOnly.Properties.Appearance.Font;
+            _chkHideIgnore.Properties.Appearance.Options.UseFont = true;
+            // Bottom row, to the right of "Filter by Stock Transfer" (avoids the From/To row).
+            _chkHideIgnore.Location = new Point(this.ChkFilterTransfer.Right + 6, this.ChkFilterTransfer.Top);
+            _chkHideIgnore.Size = new Size(108, 22);
+            _chkHideIgnore.Checked = false;
+            _chkHideIgnore.CheckedChanged += (s, e) => { LoadGrids(); ResetCountdown(); };
+            if (this.ChkFilterTransfer.Parent != null) this.ChkFilterTransfer.Parent.Controls.Add(_chkHideIgnore);
+            else if (this.ChkPendingOnly.Parent != null) this.ChkPendingOnly.Parent.Controls.Add(_chkHideIgnore);
+        }
+
+        // Stock Issue change/cancel-request rows: Update = light yellow, Cancel (qty 0) = light red.
+        private void GridViewIssue_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
+        {
+            if (e.RowHandle < 0) return;
+            string ch = Convert.ToString(this.GridViewIssue.GetRowCellValue(e.RowHandle, "IssueChange"));
+            if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
+            else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
+        }
+
+        private static readonly Color UpdateColor = Color.FromArgb(255, 245, 157); // flat yellow
+        private static readonly Color CancelColor = Color.FromArgb(255, 205, 210); // flat red
+
+        // Colour legend in the empty space to the right of the top button row.
+        private void SetupColorLegend()
+        {
+            Control parent = this.BtnViewLog.Parent;
+            if (parent == null) return;
+            int x = this.BtnViewLog.Right + 30;
+            DevExpress.XtraEditors.LabelControl header = new DevExpress.XtraEditors.LabelControl();
+            header.Text = "Row colour key:";
+            header.Location = new Point(x, 6);
+            header.Appearance.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+            header.Appearance.Options.UseFont = true;
+            parent.Controls.Add(header);
+
+            AddLegendItem(parent, x, 26, Color.White,  "Normal — regular request (no change)");
+            AddLegendItem(parent, x, 52, UpdateColor,  "Update — re-sent with a different quantity (updates the document)");
+            AddLegendItem(parent, x, 78, CancelColor,  "Cancel — revoked (approval No) or quantity 0 (cancels the document)");
+        }
+
+        private void AddLegendItem(Control parent, int x, int y, Color c, string text)
+        {
+            Panel sw = new Panel();
+            sw.Location = new Point(x, y);
+            sw.Size = new Size(18, 18);
+            sw.BackColor = c;                       // flat solid swatch
+            sw.BorderStyle = BorderStyle.FixedSingle;
+            parent.Controls.Add(sw);
+
+            DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
+            lbl.Location = new Point(x + 24, y + 2);
+            lbl.Text = text;
+            lbl.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.Default;
+            parent.Controls.Add(lbl);
+        }
+
+        // Solid (non-gradient) row fill: BackColor2 == BackColor so the skin can't gradient it.
+        private static void PaintRow(DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e, Color c)
+        {
+            e.Appearance.BackColor = c;
+            e.Appearance.BackColor2 = c;
+            e.Appearance.Options.UseBackColor = true;
+        }
+
+        // Approve re-sent change requests:
+        //   Stock Issue    : different qty → update existing doc; qty 0 → cancel it.
+        //   Stock Transfer : approval=Yes + different qty → update existing doc.
+        //   (Stock Transfer cancel, approval=No, is the separate "Cancel Transfer" button.)
+        private void BtnApproveChange_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            UserSession session = _userSession ?? UserSession.CurrentUserSession;
+            if (session == null)
+            {
+                XtraMessageBox.Show(this, "No active AutoCount session — cannot apply changes.",
+                    "Approve Change", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            DataTable dti = this.GridIssue.DataSource as DataTable;
+            DataTable dtt = this.GridTransfer.DataSource as DataTable;
+
+            List<DataRow> issueTargets = new List<DataRow>();
+            if (dti != null && dti.Columns.Contains("IssueChange"))
+                foreach (DataRow r in dti.Rows)
+                {
+                    if (!(r["Selected"] is bool b && b)) continue;
+                    string ch = Convert.ToString(r["IssueChange"]);
+                    if ((ch == "Update" || ch == "Cancel") && !string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"])))
+                        issueTargets.Add(r);
+                }
+
+            List<DataRow> xferTargets = new List<DataRow>();
+            if (dtt != null && dtt.Columns.Contains("TransferChange"))
+                foreach (DataRow r in dtt.Rows)
+                {
+                    if (!(r["Selected"] is bool b && b)) continue;
+                    // Transfer Update only here; Cancel goes through "Cancel Transfer".
+                    if (Convert.ToString(r["TransferChange"]) == "Update" && !string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"])))
+                        xferTargets.Add(r);
+                }
+
+            if (issueTargets.Count == 0 && xferTargets.Count == 0)
+            {
+                XtraMessageBox.Show(this,
+                    "Tick at least one row marked 'Update' (different qty) or 'Cancel' on the Stock Issue grid, " +
+                    "or 'Update' on the Stock Transfer grid.",
+                    "Approve Change", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            System.Text.StringBuilder list = new System.Text.StringBuilder();
+            foreach (DataRow r in issueTargets)
+                list.AppendLine("  • Issue " + Convert.ToString(r["StockIssueId"]) + " → doc " + Convert.ToString(r["OriginalDocNo"]) +
+                                " (" + Convert.ToString(r["IssueChange"]) + " qty " + Convert.ToString(r["Quantity"]) + ")");
+            foreach (DataRow r in xferTargets)
+                list.AppendLine("  • Transfer " + Convert.ToString(r["RequestId"]) + " → doc " + Convert.ToString(r["OriginalDocNo"]) +
+                                " (Update qty " + Convert.ToString(r["Qty"]) + ")");
+            if (XtraMessageBox.Show(this,
+                    "Apply the following change(s) to the existing AutoCount document(s)?\r\n\r\n" + list +
+                    "\r\nUpdate = change quantity; Cancel = mark the document Cancelled.",
+                    "Approve Change", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            SiStGenerator gen = new SiStGenerator(_dbSetting, session, PumsConfig.Get(
+                _dbSetting, PumsConfig.KEY_DEFAULT_FROM_LOCATION, PumsConfig.DEFAULT_FROM_LOCATION_VALUE));
+
+            int done = 0;
+            List<string> errs = new List<string>();
+
+            foreach (DataRow r in issueTargets)
+            {
+                string id = Convert.ToString(r["StockIssueId"]);
+                string docNo = Convert.ToString(r["OriginalDocNo"]);
+                string ch = Convert.ToString(r["IssueChange"]);
+                long autoKey = Convert.ToInt64(r["AutoKey"]);
+                try
+                {
+                    if (ch == "Cancel")
+                    {
+                        AutoCount.Stock.StockIssue.StockIssueCommand cmd =
+                            AutoCount.Stock.StockIssue.StockIssueCommand.Create(session, _dbSetting);
+                        if (!cmd.CancelDocument(docNo)) { errs.Add("Issue " + id + " (" + docNo + "): not cancelled (locked/already cancelled?)"); continue; }
+                        StockRequestRepository.MarkIssueCancelled(_dbSetting, autoKey, id, docNo);
+                        PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "CancelStockIssue", id,
+                            "Cancelled AutoCount Stock Issue " + docNo + " (qty 0 approved).", null, docNo, session.LoginUserID);
+                    }
+                    else
+                    {
+                        string nd = gen.ProcessSingleJob(BuildEditJob(r, dti, false, docNo, Convert.ToString(r["StockIssueNo"])));
+                        StockRequestRepository.MarkIssueChangeApplied(_dbSetting, autoKey, nd);
+                        PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "UpdateStockIssue", id,
+                            "Updated AutoCount Stock Issue " + nd + " to qty " + Convert.ToString(r["Quantity"]) + ".", null, nd, session.LoginUserID);
+                    }
+                    done++;
+                }
+                catch (Exception ex)
+                {
+                    errs.Add("Issue " + id + " (" + docNo + "): " + ex.Message);
+                    PumsLog.Write(_dbSetting, PumsLog.TYPE_ERROR, "ApproveStockIssueChange", id, ex.Message, null, ex.ToString(), session.LoginUserID);
+                }
+            }
+
+            foreach (DataRow r in xferTargets)
+            {
+                string id = Convert.ToString(r["RequestId"]);
+                string docNo = Convert.ToString(r["OriginalDocNo"]);
+                long autoKey = Convert.ToInt64(r["AutoKey"]);
+                try
+                {
+                    string nd = gen.ProcessSingleJob(BuildEditJob(r, dtt, true, docNo, id));
+                    StockRequestRepository.MarkTransferChangeApplied(_dbSetting, autoKey, nd);
+                    PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "UpdateStockTransfer", id,
+                        "Updated AutoCount Stock Transfer " + nd + " to qty " + Convert.ToString(r["Qty"]) + ".", null, nd, session.LoginUserID);
+                    done++;
+                }
+                catch (Exception ex)
+                {
+                    errs.Add("Transfer " + id + " (" + docNo + "): " + ex.Message);
+                    PumsLog.Write(_dbSetting, PumsLog.TYPE_ERROR, "ApproveStockTransferChange", id, ex.Message, null, ex.ToString(), session.LoginUserID);
+                }
+            }
+
+            LoadGrids();
+            ResetCountdown();
+            string msg = done + " change(s) applied.";
+            if (errs.Count > 0) msg += "\r\n\r\nFailed:\r\n" + string.Join("\r\n", errs.ToArray());
+            XtraMessageBox.Show(this, msg, "Approve Change", MessageBoxButtons.OK,
+                errs.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        // Build an "edit the existing document" job from a grid row (Status=Update + ExistingDocNo).
+        private static SiStGenerator.Job BuildEditJob(DataRow r, DataTable dt, bool isTransfer, string existingDocNo, string label)
+        {
+            Dictionary<string, object> dict = new Dictionary<string, object>();
+            foreach (DataColumn c in dt.Columns) dict[c.ColumnName] = r[c];
+            return new SiStGenerator.Job
+            {
+                IsTransfer = isTransfer,
+                AutoKey = Convert.ToInt64(r["AutoKey"]),
+                Label = label,
+                Status = "Update",
+                ExistingDocNo = existingDocNo,
+                Row = dict
+            };
+        }
+
+        // Transfer change-request rows: Update = light yellow, Cancel = light red.
+        private void GridViewTransfer_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
+        {
+            if (e.RowHandle < 0) return;
+            string ch = Convert.ToString(this.GridViewTransfer.GetRowCellValue(e.RowHandle, "TransferChange"));
+            if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
+            else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
+        }
+
+        // Cancel the AutoCount Stock Transfer document for each ticked "Cancel Requested" row.
+        private void BtnCancelTransfer_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            UserSession session = _userSession ?? UserSession.CurrentUserSession;
+            if (session == null)
+            {
+                XtraMessageBox.Show(this, "No active AutoCount session — cannot cancel documents.",
+                    "Cancel Transfer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            DataTable dt = this.GridTransfer.DataSource as DataTable;
+            if (dt == null || !dt.Columns.Contains("TransferChange")) return;
+
+            List<DataRow> targets = new List<DataRow>();
+            foreach (DataRow r in dt.Rows)
+            {
+                if (!(r["Selected"] is bool b && b)) continue;
+                if (!string.Equals(Convert.ToString(r["TransferChange"]), "Cancel", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"]))) continue;
+                targets.Add(r);
+            }
+            if (targets.Count == 0)
+            {
+                XtraMessageBox.Show(this,
+                    "Tick at least one transfer row marked 'Cancel Requested' (approval = No with an existing document).",
+                    "Cancel Transfer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            System.Text.StringBuilder list = new System.Text.StringBuilder();
+            foreach (DataRow r in targets)
+                list.AppendLine("  • " + Convert.ToString(r["RequestId"]) + "  →  doc " + Convert.ToString(r["OriginalDocNo"]));
+            if (XtraMessageBox.Show(this,
+                    "Cancel the following AutoCount Stock Transfer document(s)?\r\n\r\n" + list +
+                    "\r\nThe documents will be marked Cancelled (stock movement reversed).",
+                    "Cancel Transfer", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            int done = 0;
+            List<string> errs = new List<string>();
+            foreach (DataRow r in targets)
+            {
+                string reqId = Convert.ToString(r["RequestId"]);
+                string docNo = Convert.ToString(r["OriginalDocNo"]);
+                long autoKey = Convert.ToInt64(r["AutoKey"]);
+                try
+                {
+                    AutoCount.Stock.StockTransfer.StockTransferCommand cmd =
+                        AutoCount.Stock.StockTransfer.StockTransferCommand.Create(session, _dbSetting);
+                    bool ok = cmd.CancelDocument(docNo);
+                    if (!ok) { errs.Add(reqId + " (" + docNo + "): AutoCount returned not-cancelled (locked/already cancelled?)"); continue; }
+                    StockRequestRepository.MarkTransferCancelled(_dbSetting, autoKey, reqId, docNo);
+                    PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "CancelStockTransfer", reqId,
+                        "Cancelled AutoCount Stock Transfer " + docNo + " (approval=No).", null, docNo, session.LoginUserID);
+                    done++;
+                }
+                catch (Exception ex)
+                {
+                    errs.Add(reqId + " (" + docNo + "): " + ex.Message);
+                    PumsLog.Write(_dbSetting, PumsLog.TYPE_ERROR, "CancelStockTransfer", reqId,
+                        "Cancel failed for " + docNo + ": " + ex.Message, null, ex.ToString(), session.LoginUserID);
+                }
+            }
+
+            LoadGrids();
+            ResetCountdown();
+            string msg = done + " transfer document(s) cancelled.";
+            if (errs.Count > 0) msg += "\r\n\r\nFailed:\r\n" + string.Join("\r\n", errs.ToArray());
+            XtraMessageBox.Show(this, msg, "Cancel Transfer", MessageBoxButtons.OK,
+                errs.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }
     }
 }

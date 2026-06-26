@@ -15,7 +15,8 @@ using ServiceContractPhotocopier.MeterReading.Services;
 
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class MeterReadingIntegration_Form : XtraForm
     {
@@ -159,14 +160,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             object cf = GridViewMeter.GetRowCellValue(e.RowHandle, "HasConflict");
             if (cf != null && cf != DBNull.Value && Convert.ToBoolean(cf))
             {
-                e.Appearance.BackColor = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
+                Color rc = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
+                e.Appearance.BackColor = rc; e.Appearance.BackColor2 = rc;  // flat (no gradient)
                 e.Appearance.Options.UseBackColor = true;
                 return;
             }
             object v = GridViewMeter.GetRowCellValue(e.RowHandle, "Shade");
             if (v != null && v != DBNull.Value && Convert.ToInt32(v) == 1)
             {
-                e.Appearance.BackColor = Color.FromArgb(228, 241, 252);   // super light blue
+                Color bc = Color.FromArgb(228, 241, 252);   // super light blue
+                e.Appearance.BackColor = bc; e.Appearance.BackColor2 = bc;  // flat (no gradient)
                 e.Appearance.Options.UseBackColor = true;
             }
         }

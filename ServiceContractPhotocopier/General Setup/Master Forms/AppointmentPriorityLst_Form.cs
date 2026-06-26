@@ -5,12 +5,13 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
-    [AutoCount.PlugIn.MenuItem("Appointment Priority",
-        ParentMenuCaption = "General Setup",
-        MenuOrder = 90,
-        ParentMenuOrder = 600,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_APPOINTMENT_PRIORITY,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_APPOINTMENT_PRIORITY)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Appointment Priority",
+    // ParentMenuCaption = "General Setup",
+    // MenuOrder = 90,
+    // ParentMenuOrder = 600,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_APPOINTMENT_PRIORITY,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_APPOINTMENT_PRIORITY)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class AppointmentPriorityLst_Form : ScpLookupLst_Form
     {

@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.4.0.0
+- **Version:** 1.4.4.0
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,19 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.4.4.0 (2026-06-26):
+    1. Stock Transfer change/update: a re-sent RequestId still approved (Yes) but with a different qty is flagged "Update" and "Approve Change" updates the existing transfer document (approval=No remains "Cancel"). Mirrors the Stock Issue change/cancel flow.
+    2. UI: colourful toolbar icons; flat (non-gradient) row highlighting; a row-colour legend (Normal / Update / Cancel); a "Hide Ignore" filter option.
+
+    v1.4.3.0 (2026-06-19):
+    1. Stock Issue change/cancel: when the same StockIssueId is received again with a different quantity, the row is flagged "Update" (yellow); an "Approve Change" button applies the new quantity to the existing AutoCount Stock Issue document. If the re-sent quantity is 0, the row is flagged "Cancel" (red) and approving cancels the document. A re-sent id can no longer generate a duplicate document via Generate.
+
+    v1.4.2.0 (2026-06-19):
+    1. Stock Transfer revoke/cancel: when the same RequestId is received again with approval=No after a transfer was already generated, the row is flagged "Cancel Requested" (red). A new "Cancel Transfer" button cancels the AutoCount Stock Transfer document (marks it Cancelled, reverses stock) and sets the rows to Cancelled. An approval=No row can never generate a transfer.
+
+    v1.4.1.0 (2026-06-19):
+    1. Customer release: menu trimmed to Stock Request Task + About / Check for Updates. Other modules are hidden (menu only — all code remains; re-enable by uncommenting the [MenuItem] attribute).
+
     v1.4.0.0 (2026-06-19):
     1. Combined Service Contract module v2 (zSCP2_*) — one contract per customer with service items inline; native AutoCount list + ribbon editor with debtor auto-fill.
     2. Meter Reading Integration — fetch meter readings from the PUMS API with one swappable client; ONLINE and OFFLINE machine types via a single interface; grouped grid (by contract) with per-contract colour bands, footer totals, and With Meter Data / Online / Offline / No API Data / Conflicts / All tabs.

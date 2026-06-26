@@ -4,8 +4,9 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.Reports
 {
-    [AutoCount.PlugIn.MenuItem("Appointment Type Listing Report",
-        ParentMenuCaption = "Reports", MenuOrder = 80, ParentMenuOrder = 800)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Appointment Type Listing Report",
+    // ParentMenuCaption = "Reports", MenuOrder = 80, ParentMenuOrder = 800)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class AppointmentTypeListingReport_Form : ScpPlaceholder_Form
     {

@@ -115,14 +115,22 @@ namespace ServiceContractPhotocopier.StockRequest
                 throw new InvalidOperationException("ItemCode missing on source row.");
             if (string.IsNullOrWhiteSpace(technician))
                 throw new InvalidOperationException("Technician missing — line Location can't be resolved.");
+
+            // If this id already has a generated document, a fresh "Generate" would duplicate it.
+            // Such re-pushes are change/cancel requests and must go through "Approve Change".
+            bool isUpdate = string.Equals(j.Status, "Update", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrWhiteSpace(j.ExistingDocNo);
+            string issueChange = AsString(j.Row, "IssueChange");
+            if (!isUpdate && (issueChange == "Update" || issueChange == "Cancel"))
+                throw new InvalidOperationException("Stock Issue '" + docNo +
+                    "' already has a generated document for this id — use 'Approve Change' to update or cancel it, not Generate.");
+
             if (!ItemExists(itemCode))
                 throw new InvalidOperationException("ItemCode '" + itemCode +
                     "' does not exist in the AutoCount Item master. Create or map the item, then re-generate.");
 
             StockIssueCommand cmd = StockIssueCommand.Create(_userSession, _db);
             StockIssue doc;
-            bool isUpdate = string.Equals(j.Status, "Update", StringComparison.OrdinalIgnoreCase)
-                            && !string.IsNullOrWhiteSpace(j.ExistingDocNo);
             if (isUpdate)
             {
                 doc = cmd.Edit(j.ExistingDocNo);
@@ -166,8 +174,25 @@ namespace ServiceContractPhotocopier.StockRequest
             string part         = AsString(j.Row, "Part");
             string unit         = AsString(j.Row, "Unit");
             string transferType = AsString(j.Row, "TransferType");
+            string approval     = AsString(j.Row, "Approval");
             decimal qty         = AsDecimal(j.Row, "Qty");
             DateTime docDate    = AsDateTime(j.Row, "DocumentDateTime");
+
+            // approval=No is a revoke signal, not a transfer to generate.
+            string ap = (approval ?? "").Trim().ToUpperInvariant();
+            if (ap == "NO" || ap == "N" || ap == "FALSE" || ap == "0")
+                throw new InvalidOperationException(
+                    "Approval is '" + approval + "' — this is a cancellation request, not a transfer. " +
+                    "Use 'Cancel Transfer' to cancel the existing AutoCount document instead of generating one.");
+
+            // A re-sent id that already has a generated doc must go through Approve Change / Cancel,
+            // never a fresh Generate (which would create a duplicate transfer).
+            bool isUpdateXfer = string.Equals(j.Status, "Update", StringComparison.OrdinalIgnoreCase)
+                                && !string.IsNullOrWhiteSpace(j.ExistingDocNo);
+            string transferChange = AsString(j.Row, "TransferChange");
+            if (!isUpdateXfer && (transferChange == "Update" || transferChange == "Cancel"))
+                throw new InvalidOperationException("Stock Transfer '" + requestId +
+                    "' already has a generated document for this id — use 'Approve Change' / 'Cancel Transfer', not Generate.");
 
             if (string.IsNullOrWhiteSpace(technician))
                 throw new InvalidOperationException("Technician missing — Location can't be resolved.");
@@ -399,6 +424,16 @@ namespace ServiceContractPhotocopier.StockRequest
         }
 
         // ---------------- Build jobs from grid rows ----------------
+
+        /// <summary>
+        /// Process one job synchronously and return the AutoCount DocNo. Used by the "Approve Change"
+        /// flow to edit an existing Stock Issue document (Status="Update", ExistingDocNo set).
+        /// </summary>
+        public string ProcessSingleJob(Job j)
+        {
+            if (j == null) throw new ArgumentNullException(nameof(j));
+            return j.IsTransfer ? CreateOrEditStockTransfer(j) : CreateOrEditStockIssue(j);
+        }
 
         public static List<Job> BuildJobsFromGrids(DataTable issueTable, DataTable transferTable)
         {

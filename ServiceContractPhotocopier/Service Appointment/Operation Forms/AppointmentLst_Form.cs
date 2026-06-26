@@ -6,10 +6,11 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.ServiceAppointment.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Service Appointment",
-        MenuOrder = 400,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_APPOINTMENT,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_APPOINTMENT)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Service Appointment",
+    // MenuOrder = 400,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_APPOINTMENT,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_APPOINTMENT)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class AppointmentLst_Form : ScpLookupLst_Form
     {

@@ -4,8 +4,9 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.Reports
 {
-    [AutoCount.PlugIn.MenuItem("Service Item Grade Listing Report",
-        ParentMenuCaption = "Reports", MenuOrder = 10, ParentMenuOrder = 800)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Service Item Grade Listing Report",
+    // ParentMenuCaption = "Reports", MenuOrder = 10, ParentMenuOrder = 800)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class ServiceItemGradeListingReport_Form : ScpPlaceholder_Form
     {

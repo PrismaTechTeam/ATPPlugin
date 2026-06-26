@@ -6,10 +6,11 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Outstanding Service Contract Item Inquiry",
-        ParentMenuCaption = "Inquiry", MenuOrder = 60, ParentMenuOrder = 700,
-        OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OUTSTANDING_CONTRACT_ITEM,
-        VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OUTSTANDING_CONTRACT_ITEM)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Outstanding Service Contract Item Inquiry",
+    // ParentMenuCaption = "Inquiry", MenuOrder = 60, ParentMenuOrder = 700,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OUTSTANDING_CONTRACT_ITEM,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OUTSTANDING_CONTRACT_ITEM)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class OutstandingServiceContractItem_Form : ScpLookupLst_Form
     {

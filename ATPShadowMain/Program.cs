@@ -94,7 +94,7 @@ namespace ATPShadowMain
                     }
                     catch (Exception mex) { Log("PREVIEW migrations FAILED: " + mex); }
 
-                    Application.Run(new ServiceContractPhotocopier.About.FormAbout(vses.DBSetting));
+                    Application.Run(new ServiceContractPhotocopier.StockRequest.OperationForms.StockRequestTask_Form(vses.DBSetting));
                 }
                 return;
             }

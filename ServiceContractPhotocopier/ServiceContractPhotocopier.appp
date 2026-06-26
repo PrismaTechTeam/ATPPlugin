@@ -9,14 +9,27 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.4.0.0</Version>
+    <Version>1.4.4.0</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.4.0.0 (2026-06-19):
+    <WhatsNew>v1.4.4.0 (2026-06-26):
+1. Stock Transfer change/update: a re-sent RequestId still approved (Yes) with a different qty is flagged "Update" and "Approve Change" updates the existing transfer document (approval=No remains "Cancel").
+2. UI: colourful toolbar icons; flat (non-gradient) row highlighting; row-colour legend (Normal / Update / Cancel); "Hide Ignore" filter.
+
+v1.4.3.0 (2026-06-19):
+1. Stock Issue change/cancel: a re-sent StockIssueId with a different quantity is flagged "Update" and the new "Approve Change" button applies the new qty to the existing AutoCount document; quantity 0 flags "Cancel" and approving cancels the document. A re-sent id can no longer generate a duplicate via Generate.
+
+v1.4.2.0 (2026-06-19):
+1. Stock Transfer revoke/cancel: a re-sent RequestId with approval=No after a transfer was generated is flagged "Cancel Requested"; the new "Cancel Transfer" button cancels the AutoCount document (marks it Cancelled, reverses stock). An approval=No row can never generate a transfer.
+
+v1.4.1.0 (2026-06-19):
+1. Customer release: menu trimmed to Stock Request Task + About / Check for Updates. Other modules are hidden (menu only - all code remains).
+
+v1.4.0.0 (2026-06-19):
 1. Combined Service Contract module v2 (zSCP2_*) — one contract per customer with service items inline; native AutoCount list + ribbon editor with debtor auto-fill.
 2. Meter Reading Integration — fetch meter readings from the PUMS API with one swappable client; ONLINE and OFFLINE machine types via a single interface; grouped grid (by contract) with per-contract colour bands, footer totals, and With Meter Data / Online / Offline / No API Data / Conflicts / All tabs.
 3. Manual key-in + staging (zSCP2_MeterEntry): type readings for machines with no API data and Save; values persist per billing period and survive restart.
