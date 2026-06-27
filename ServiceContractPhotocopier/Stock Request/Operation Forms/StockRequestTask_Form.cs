@@ -46,6 +46,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             InitDefaults();
             SetupLocationBanner();
             SetupCancelTransferButton();
+            ApplyUniformButtonLayout();
             SetupHideIgnoreCheckbox();
             ApplyButtonIcons();
             SetupColorLegend();
@@ -76,19 +77,42 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
 
         private void AttachGridMenu(DevExpress.XtraGrid.GridControl grid, GridView view, string layoutKey)
         {
-            view.OptionsMenu.EnableColumnMenu = true;     // header right-click → DevExpress built-in menu
-            view.OptionsMenu.EnableFooterMenu = true;
-            // Custom Row-area popup menu with Export + Layout actions
-            ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Export to Excel...", null, (s, e) => ExportGrid(grid, "Excel files (*.xlsx)|*.xlsx", "xlsx"));
-            menu.Items.Add("Export to Text...",  null, (s, e) => ExportGrid(grid, "Text files (*.txt)|*.txt",   "txt"));
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Save Layout",  null, (s, e) => SaveGridLayout(view, layoutKey));
-            menu.Items.Add("Load Layout",  null, (s, e) => LoadGridLayout(view, layoutKey));
-            menu.Items.Add("Reset Layout", null, (s, e) => ResetGridLayout(view, layoutKey));
-            grid.ContextMenuStrip = menu;
-            // Try to load any saved layout on first attach
+            // Full native DevExpress grid menus (sort / group / column chooser / best fit /
+            // filter editor / find panel / auto-filter row …).
+            view.OptionsMenu.EnableColumnMenu = true;     // header right-click
+            view.OptionsMenu.EnableFooterMenu = true;     // footer right-click
+            view.OptionsMenu.EnableGroupPanelMenu = true; // group-by box right-click
+            view.OptionsMenu.ShowConditionalFormattingItem = true;
+            // (Group-By Box stays hidden by default; the column menu's "Show Group By Box" toggles it.)
+
+            // Append Export + Layout actions to the native menus (DevExpress has no built-in export item).
+            view.PopupMenuShowing -= GridView_PopupMenuShowing;
+            view.PopupMenuShowing += GridView_PopupMenuShowing;
+
             TryLoadSavedLayout(view, layoutKey);
+        }
+
+        private void GridView_PopupMenuShowing(object sender, DevExpress.XtraGrid.Views.Grid.PopupMenuShowingEventArgs e)
+        {
+            GridView view = sender as GridView;
+            if (view == null) return;
+            DevExpress.XtraGrid.GridControl grid = view.GridControl;
+            string layoutKey = (grid == this.GridIssue) ? "StockRequestTask.Issue" : "StockRequestTask.Transfer";
+
+            DevExpress.Utils.Menu.DXMenuItem xls = new DevExpress.Utils.Menu.DXMenuItem(
+                "Export to Excel...", (s, a) => ExportGrid(grid, "Excel files (*.xlsx)|*.xlsx", "xlsx"));
+            xls.BeginGroup = true;
+            e.Menu.Items.Add(xls);
+            e.Menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem("Export to PDF...", (s, a) => ExportGrid(grid, "PDF files (*.pdf)|*.pdf", "pdf")));
+            e.Menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem("Export to CSV...", (s, a) => ExportGrid(grid, "CSV files (*.csv)|*.csv", "csv")));
+            e.Menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem("Export to Text...", (s, a) => ExportGrid(grid, "Text files (*.txt)|*.txt", "txt")));
+
+            DevExpress.Utils.Menu.DXMenuItem save = new DevExpress.Utils.Menu.DXMenuItem(
+                "Save Layout", (s, a) => SaveGridLayout(view, layoutKey));
+            save.BeginGroup = true;
+            e.Menu.Items.Add(save);
+            e.Menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem("Load Layout", (s, a) => LoadGridLayout(view, layoutKey)));
+            e.Menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem("Reset Layout", (s, a) => ResetGridLayout(view, layoutKey)));
         }
 
         private void ExportGrid(DevExpress.XtraGrid.GridControl grid, string filter, string ext)
@@ -100,8 +124,13 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 try
                 {
-                    if (ext == "xlsx") grid.ExportToXlsx(dlg.FileName);
-                    else                grid.ExportToText(dlg.FileName);
+                    switch (ext)
+                    {
+                        case "xlsx": grid.ExportToXlsx(dlg.FileName); break;
+                        case "pdf":  grid.ExportToPdf(dlg.FileName);  break;
+                        case "csv":  grid.ExportToCsv(dlg.FileName);  break;
+                        default:     grid.ExportToText(dlg.FileName); break;
+                    }
                     try { System.Diagnostics.Process.Start(dlg.FileName); } catch { }
                 }
                 catch (Exception ex)
@@ -252,6 +281,106 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 LoadGrids();
                 ResetCountdown();
                 e.Handled = true;
+            }
+
+            // Ctrl+Shift+Delete → password-gated hard delete of the focused row (+ its AutoCount doc).
+            if (e.Control && e.Shift && e.KeyCode == Keys.Delete)
+            {
+                PurgeFocusedRow();
+                e.Handled = true;
+            }
+        }
+
+        // Permanently delete the focused row from the PUMS table; if it already generated an
+        // AutoCount document, delete that document too. Gated by the password 'atp09'.
+        private void PurgeFocusedRow()
+        {
+            if (_dbSetting == null) return;
+            GridView v; bool isTransfer; string table, idCol;
+            if (this.GridIssue.ContainsFocus) { v = this.GridViewIssue; isTransfer = false; table = "Z_PumsStockIssue"; idCol = "StockIssueId"; }
+            else if (this.GridTransfer.ContainsFocus) { v = this.GridViewTransfer; isTransfer = true; table = "Z_PumsStockTransfer"; idCol = "RequestId"; }
+            else
+            {
+                XtraMessageBox.Show(this, "Click a row in the Stock Issue or Stock Transfer grid first, then press Ctrl+Shift+Delete.",
+                    "Delete row", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (v.FocusedRowHandle < 0) return;
+
+            long autoKey = Convert.ToInt64(v.GetRowCellValue(v.FocusedRowHandle, "AutoKey"));
+            string id = Convert.ToString(v.GetRowCellValue(v.FocusedRowHandle, idCol));
+            object docObj = v.GetRowCellValue(v.FocusedRowHandle, "GeneratedDocNo");
+            string docNo = (docObj == null || docObj == DBNull.Value) ? "" : docObj.ToString();
+
+            string pwd = ShowPasswordPrompt();
+            if (pwd == null) return;                 // cancelled
+            if (pwd != "atp09")
+            {
+                XtraMessageBox.Show(this, "Incorrect password — nothing deleted.", "Delete row",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            UserSession session = _userSession ?? UserSession.CurrentUserSession;
+            try
+            {
+                // Delete the generated AutoCount document first (if any).
+                if (!string.IsNullOrWhiteSpace(docNo) && session != null)
+                {
+                    if (isTransfer)
+                        AutoCount.Stock.StockTransfer.StockTransferCommand.Create(session, _dbSetting).Delete(docNo);
+                    else
+                        AutoCount.Stock.StockIssue.StockIssueCommand.Create(session, _dbSetting).Delete(docNo);
+                }
+                // Delete the PUMS row.
+                using (System.Data.SqlClient.SqlConnection cn = new System.Data.SqlClient.SqlConnection(_dbSetting.ConnectionString))
+                using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                    "DELETE FROM " + table + " WHERE AutoKey=@k", cn))
+                {
+                    cmd.Parameters.AddWithValue("@k", autoKey);
+                    cn.Open();
+                    cmd.ExecuteNonQuery();
+                }
+                PumsLog.Write(_dbSetting, PumsLog.TYPE_WARN, isTransfer ? "DeleteStockTransferRow" : "DeleteStockIssueRow", id,
+                    "Row deleted via Ctrl+Shift+Delete" + (string.IsNullOrWhiteSpace(docNo) ? "." : " (document " + docNo + " also deleted)."),
+                    null, docNo, session != null ? session.LoginUserID : null);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(this, "Delete failed:\r\n" + ex.Message, "Delete row",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            LoadGrids();
+            ResetCountdown();
+            XtraMessageBox.Show(this, "Deleted " + id +
+                (string.IsNullOrWhiteSpace(docNo) ? "." : " and its AutoCount document " + docNo + "."),
+                "Delete row", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Small modal password prompt; returns the entered text, or null if cancelled.
+        private string ShowPasswordPrompt()
+        {
+            using (XtraForm f = new XtraForm())
+            {
+                f.Text = "Confirm delete";
+                f.FormBorderStyle = FormBorderStyle.FixedDialog;
+                f.StartPosition = FormStartPosition.CenterParent;
+                f.MaximizeBox = false; f.MinimizeBox = false; f.ShowInTaskbar = false;
+                f.ClientSize = new Size(330, 120);
+                LabelControl lbl = new LabelControl();
+                lbl.Text = "Enter password to permanently delete this row\r\n(and its AutoCount document, if any):";
+                lbl.Location = new Point(16, 14); lbl.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+                lbl.Size = new Size(300, 34);
+                TextEdit txt = new TextEdit();
+                txt.Location = new Point(16, 54); txt.Width = 298;
+                txt.Properties.UseSystemPasswordChar = true;
+                SimpleButton ok = new SimpleButton { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(158, 86), Width = 75 };
+                SimpleButton cancel = new SimpleButton { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(239, 86), Width = 75 };
+                f.AcceptButton = ok; f.CancelButton = cancel;
+                f.Controls.Add(lbl); f.Controls.Add(txt); f.Controls.Add(ok); f.Controls.Add(cancel);
+                return f.ShowDialog(this) == DialogResult.OK ? txt.Text : null;
             }
         }
 
@@ -1123,30 +1252,96 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
 
         private DevExpress.XtraEditors.SimpleButton _btnCancelXfer;
         private DevExpress.XtraEditors.SimpleButton _btnApproveChange;
+        private DevExpress.XtraEditors.SimpleButton _btnSelUpdate;
+        private DevExpress.XtraEditors.SimpleButton _btnSelCancel;
         private DevExpress.XtraEditors.CheckEdit _chkHideIgnore;
 
         // Created in code (placed beside View Log) so the strict designer file is untouched.
+        // Make every toolbar button the same size and lay them out on an even two-row grid.
+        private void ApplyUniformButtonLayout()
+        {
+            Size sz = new Size(150, 50);
+            int gap = 8;
+
+            DevExpress.XtraEditors.SimpleButton[] row1 =
+            {
+                this.BtnRefresh, this.BtnGenerateSIST, this.BtnGenerateSISTAll,
+                this.BtnMarkIgnore, this.BtnSettings, this.BtnViewLog
+            };
+            DevExpress.XtraEditors.SimpleButton[] row2 =
+            {
+                _btnSelUpdate, _btnSelCancel, _btnApproveChange, _btnCancelXfer
+            };
+
+            int y1 = this.BtnRefresh.Top;
+            int x = this.BtnRefresh.Left;
+            foreach (DevExpress.XtraEditors.SimpleButton b in row1)
+            {
+                if (b == null) continue;
+                b.Size = sz; b.Location = new Point(x, y1);
+                x += sz.Width + gap;
+            }
+
+            int y2 = y1 + sz.Height + 4;
+            x = this.BtnRefresh.Left;
+            foreach (DevExpress.XtraEditors.SimpleButton b in row2)
+            {
+                if (b == null) continue;
+                b.Size = sz; b.Location = new Point(x, y2);
+                x += sz.Width + gap;
+            }
+
+            // View-toggle checkboxes go to the right of row 2.
+            int chkX = (_btnCancelXfer != null ? _btnCancelXfer.Right : x) + 24;
+            this.ChkShowIssue.Location = new Point(chkX, y2 + 6);
+            this.ChkShowTransfer.Location = new Point(chkX, y2 + 28);
+        }
+
         private void SetupCancelTransferButton()
         {
-            // Second row, to the right of the "Show Stock Issues/Transfer" checkboxes (the top
-            // button row is already full to the panel edge, so don't append there).
-            int rowY = this.ChkShowIssue.Top - 2;
-            int startX = System.Math.Max(this.ChkShowIssue.Right, this.ChkShowTransfer.Right) + 18;
-            System.Drawing.Size btnSize = new Size(150, 44);
+            Control parent = this.BtnViewLog.Parent;
+            if (parent == null) return;
+
+            // Second row, left-aligned UNDER row 1, in workflow order:
+            //   Select All Update | Select All Cancel | Approve Change | Cancel Transfer
+            int rowY = this.BtnRefresh.Bottom + 4;
+            int startX = this.BtnRefresh.Left;
+            int gap = 8;
+            Size btnSize = new Size(150, 50);
+
+            _btnSelUpdate = new DevExpress.XtraEditors.SimpleButton();
+            _btnSelUpdate.Text = "Select All Update";
+            _btnSelUpdate.Size = btnSize;
+            _btnSelUpdate.Location = new Point(startX, rowY);
+            _btnSelUpdate.Click += new EventHandler(BtnSelectAllUpdate_Click);
+            parent.Controls.Add(_btnSelUpdate);
+
+            _btnSelCancel = new DevExpress.XtraEditors.SimpleButton();
+            _btnSelCancel.Text = "Select All Cancel";
+            _btnSelCancel.Size = btnSize;
+            _btnSelCancel.Location = new Point(_btnSelUpdate.Right + gap, rowY);
+            _btnSelCancel.Click += new EventHandler(BtnSelectAllCancel_Click);
+            parent.Controls.Add(_btnSelCancel);
 
             _btnApproveChange = new DevExpress.XtraEditors.SimpleButton();
             _btnApproveChange.Text = "Approve Change";
             _btnApproveChange.Size = btnSize;
-            _btnApproveChange.Location = new Point(startX, rowY);
+            _btnApproveChange.Location = new Point(_btnSelCancel.Right + gap, rowY);
             _btnApproveChange.Click += new EventHandler(BtnApproveChange_Click);
-            if (this.BtnViewLog.Parent != null) this.BtnViewLog.Parent.Controls.Add(_btnApproveChange);
+            parent.Controls.Add(_btnApproveChange);
 
             _btnCancelXfer = new DevExpress.XtraEditors.SimpleButton();
             _btnCancelXfer.Text = "Cancel Transfer";
             _btnCancelXfer.Size = btnSize;
-            _btnCancelXfer.Location = new Point(_btnApproveChange.Right + 8, rowY);
+            _btnCancelXfer.Location = new Point(_btnApproveChange.Right + gap, rowY);
             _btnCancelXfer.Click += new EventHandler(BtnCancelTransfer_Click);
-            if (this.BtnViewLog.Parent != null) this.BtnViewLog.Parent.Controls.Add(_btnCancelXfer);
+            parent.Controls.Add(_btnCancelXfer);
+
+            // Move the two "Show ... Request" view toggles to the right of the buttons so the
+            // button row aligns cleanly under row 1.
+            int chkX = _btnCancelXfer.Right + 24;
+            this.ChkShowIssue.Location = new Point(chkX, rowY + 6);
+            this.ChkShowTransfer.Location = new Point(chkX, rowY + 28);
         }
 
         // Colourful DevExpress XAF SVG icons on the toolbar buttons (so the UI isn't plain text).
@@ -1162,6 +1357,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             SetBtnIcon(this.BtnViewLog,          "svgimages/xaf/action_aboutinfo.svg");
             SetBtnIcon(_btnCancelXfer,           "svgimages/xaf/action_cancel.svg");
             SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
+            SetBtnIcon(_btnSelUpdate,            "svgimages/xaf/action_validation_validate.svg");
+            SetBtnIcon(_btnSelCancel,            "svgimages/xaf/action_cancel.svg");
         }
 
         private static void SetBtnIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)
@@ -1206,38 +1403,40 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private static readonly Color UpdateColor = Color.FromArgb(255, 245, 157); // flat yellow
         private static readonly Color CancelColor = Color.FromArgb(255, 205, 210); // flat red
 
-        // Colour legend in the empty space to the right of the top button row.
+        // Compact one-line colour legend at the top-right (clear of the button rows below).
         private void SetupColorLegend()
         {
             Control parent = this.BtnViewLog.Parent;
             if (parent == null) return;
-            int x = this.BtnViewLog.Right + 30;
+            int y = 8;
+            int x = this.BtnViewLog.Right + 24;
             DevExpress.XtraEditors.LabelControl header = new DevExpress.XtraEditors.LabelControl();
-            header.Text = "Row colour key:";
-            header.Location = new Point(x, 6);
+            header.Text = "Row colour:";
+            header.Location = new Point(x, y);
             header.Appearance.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
             header.Appearance.Options.UseFont = true;
             parent.Controls.Add(header);
 
-            AddLegendItem(parent, x, 26, Color.White,  "Normal — regular request (no change)");
-            AddLegendItem(parent, x, 52, UpdateColor,  "Update — re-sent with a different quantity (updates the document)");
-            AddLegendItem(parent, x, 78, CancelColor,  "Cancel — revoked (approval No) or quantity 0 (cancels the document)");
+            x += 78;
+            x = AddInlineLegend(parent, x, y, Color.White, "Normal");
+            x = AddInlineLegend(parent, x, y, UpdateColor, "Update");
+            x = AddInlineLegend(parent, x, y, CancelColor, "Cancel");
         }
 
-        private void AddLegendItem(Control parent, int x, int y, Color c, string text)
+        private int AddInlineLegend(Control parent, int x, int y, Color c, string text)
         {
             Panel sw = new Panel();
-            sw.Location = new Point(x, y);
-            sw.Size = new Size(18, 18);
+            sw.Location = new Point(x, y - 1);
+            sw.Size = new Size(26, 16);             // wide colour block (not checkbox-like)
             sw.BackColor = c;                       // flat solid swatch
             sw.BorderStyle = BorderStyle.FixedSingle;
             parent.Controls.Add(sw);
 
             DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
-            lbl.Location = new Point(x + 24, y + 2);
+            lbl.Location = new Point(x + 30, y);
             lbl.Text = text;
-            lbl.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.Default;
             parent.Controls.Add(lbl);
+            return x + 30 + 58;                     // advance to next item
         }
 
         // Solid (non-gradient) row fill: BackColor2 == BackColor so the skin can't gradient it.
@@ -1280,16 +1479,15 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 foreach (DataRow r in dtt.Rows)
                 {
                     if (!(r["Selected"] is bool b && b)) continue;
-                    // Transfer Update only here; Cancel goes through "Cancel Transfer".
-                    if (Convert.ToString(r["TransferChange"]) == "Update" && !string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"])))
+                    string tc = Convert.ToString(r["TransferChange"]);
+                    if ((tc == "Update" || tc == "Cancel") && !string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"])))
                         xferTargets.Add(r);
                 }
 
             if (issueTargets.Count == 0 && xferTargets.Count == 0)
             {
                 XtraMessageBox.Show(this,
-                    "Tick at least one row marked 'Update' (different qty) or 'Cancel' on the Stock Issue grid, " +
-                    "or 'Update' on the Stock Transfer grid.",
+                    "Tick at least one 'Update' or 'Cancel' row (use 'Select All Update' / 'Select All Cancel' for bulk).",
                     "Approve Change", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -1300,7 +1498,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                                 " (" + Convert.ToString(r["IssueChange"]) + " qty " + Convert.ToString(r["Quantity"]) + ")");
             foreach (DataRow r in xferTargets)
                 list.AppendLine("  • Transfer " + Convert.ToString(r["RequestId"]) + " → doc " + Convert.ToString(r["OriginalDocNo"]) +
-                                " (Update qty " + Convert.ToString(r["Qty"]) + ")");
+                                " (" + Convert.ToString(r["TransferChange"]) + " qty " + Convert.ToString(r["Qty"]) + ")");
             if (XtraMessageBox.Show(this,
                     "Apply the following change(s) to the existing AutoCount document(s)?\r\n\r\n" + list +
                     "\r\nUpdate = change quantity; Cancel = mark the document Cancelled.",
@@ -1350,13 +1548,26 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             {
                 string id = Convert.ToString(r["RequestId"]);
                 string docNo = Convert.ToString(r["OriginalDocNo"]);
+                string tc = Convert.ToString(r["TransferChange"]);
                 long autoKey = Convert.ToInt64(r["AutoKey"]);
                 try
                 {
-                    string nd = gen.ProcessSingleJob(BuildEditJob(r, dtt, true, docNo, id));
-                    StockRequestRepository.MarkTransferChangeApplied(_dbSetting, autoKey, nd);
-                    PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "UpdateStockTransfer", id,
-                        "Updated AutoCount Stock Transfer " + nd + " to qty " + Convert.ToString(r["Qty"]) + ".", null, nd, session.LoginUserID);
+                    if (tc == "Cancel")
+                    {
+                        AutoCount.Stock.StockTransfer.StockTransferCommand cmd =
+                            AutoCount.Stock.StockTransfer.StockTransferCommand.Create(session, _dbSetting);
+                        if (!cmd.CancelDocument(docNo)) { errs.Add("Transfer " + id + " (" + docNo + "): not cancelled (locked/already cancelled?)"); continue; }
+                        StockRequestRepository.MarkTransferCancelled(_dbSetting, autoKey, id, docNo);
+                        PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "CancelStockTransfer", id,
+                            "Cancelled AutoCount Stock Transfer " + docNo + " (approval=No).", null, docNo, session.LoginUserID);
+                    }
+                    else
+                    {
+                        string nd = gen.ProcessSingleJob(BuildEditJob(r, dtt, true, docNo, id));
+                        StockRequestRepository.MarkTransferChangeApplied(_dbSetting, autoKey, nd);
+                        PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "UpdateStockTransfer", id,
+                            "Updated AutoCount Stock Transfer " + nd + " to qty " + Convert.ToString(r["Qty"]) + ".", null, nd, session.LoginUserID);
+                    }
                     done++;
                 }
                 catch (Exception ex)
@@ -1372,6 +1583,41 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (errs.Count > 0) msg += "\r\n\r\nFailed:\r\n" + string.Join("\r\n", errs.ToArray());
             XtraMessageBox.Show(this, msg, "Approve Change", MessageBoxButtons.OK,
                 errs.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        // Tick every Update row (both grids) so they can be bulk-applied via Approve Change.
+        private void BtnSelectAllUpdate_Click(object sender, EventArgs e)
+        {
+            int n = TickByChange("Update");
+            XtraMessageBox.Show(this, n + " 'Update' row(s) selected. Click 'Approve Change' to apply.",
+                "Select All Update", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Tick every Cancel row (both grids) so they can be bulk-applied via Approve Change.
+        private void BtnSelectAllCancel_Click(object sender, EventArgs e)
+        {
+            int n = TickByChange("Cancel");
+            XtraMessageBox.Show(this, n + " 'Cancel' row(s) selected. Click 'Approve Change' to apply.",
+                "Select All Cancel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private int TickByChange(string change)
+        {
+            int n = TickGrid(this.GridIssue.DataSource as DataTable, "IssueChange", change)
+                  + TickGrid(this.GridTransfer.DataSource as DataTable, "TransferChange", change);
+            this.GridViewIssue.RefreshData();
+            this.GridViewTransfer.RefreshData();
+            return n;
+        }
+
+        private static int TickGrid(DataTable dt, string changeCol, string change)
+        {
+            if (dt == null || !dt.Columns.Contains(changeCol) || !dt.Columns.Contains("Selected")) return 0;
+            int n = 0;
+            foreach (DataRow r in dt.Rows)
+                if (string.Equals(Convert.ToString(r[changeCol]), change, StringComparison.OrdinalIgnoreCase))
+                { r["Selected"] = true; n++; }
+            return n;
         }
 
         // Build an "edit the existing document" job from a grid row (Status=Update + ExistingDocNo).

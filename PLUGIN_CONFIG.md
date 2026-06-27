@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.4.4.0
+- **Version:** 1.4.5.0
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,12 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.4.5.0 (2026-06-27):
+    1. Bulk actions: "Select All Update" / "Select All Cancel" tick every matching row across both grids; "Approve Change" then applies them in one go (update + cancel, both Stock Issue and Stock Transfer).
+    2. Ctrl+Shift+Delete on a focused row → password-gated (atp09) hard delete of the row, and its generated AutoCount document if any.
+    3. Full DevExpress grid right-click menu (sort / group / column chooser / best fit / filter editor / find panel) plus Export to Excel / PDF / CSV / Text and Save/Load/Reset Layout.
+    4. UI: uniform button size + aligned two-row toolbar; clearer one-line row-colour legend.
+
     v1.4.4.0 (2026-06-26):
     1. Stock Transfer change/update: a re-sent RequestId still approved (Yes) but with a different qty is flagged "Update" and "Approve Change" updates the existing transfer document (approval=No remains "Cancel"). Mirrors the Stock Issue change/cancel flow.
     2. UI: colourful toolbar icons; flat (non-gradient) row highlighting; a row-colour legend (Normal / Update / Cancel); a "Hide Ignore" filter option.
