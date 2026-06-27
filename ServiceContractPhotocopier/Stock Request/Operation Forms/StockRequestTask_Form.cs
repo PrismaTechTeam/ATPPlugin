@@ -45,11 +45,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             InitializeComponent();
             InitDefaults();
             SetupLocationBanner();
-            SetupCancelTransferButton();
-            ApplyUniformButtonLayout();
-            SetupHideIgnoreCheckbox();
-            ApplyButtonIcons();
-            SetupColorLegend();
+            ApplyButtonIcons();   // toolbar SVG icons (controls themselves now live in the designer)
             // Highlight cancellation-request transfer rows (approval=No on an already-generated id)
             this.GridViewTransfer.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewTransfer_RowStyle);
             // Highlight change/cancel-request stock issue rows (re-sent id with different/zero qty)
@@ -1248,101 +1244,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 dlg.ShowDialog(this);
         }
 
-        // ---------- Cancel a revoked (approval=No) Stock Transfer ----------
-
-        private DevExpress.XtraEditors.SimpleButton _btnCancelXfer;
-        private DevExpress.XtraEditors.SimpleButton _btnApproveChange;
-        private DevExpress.XtraEditors.SimpleButton _btnSelUpdate;
-        private DevExpress.XtraEditors.SimpleButton _btnSelCancel;
-        private DevExpress.XtraEditors.CheckEdit _chkHideIgnore;
-
-        // Created in code (placed beside View Log) so the strict designer file is untouched.
-        // Make every toolbar button the same size and lay them out on an even two-row grid.
-        private void ApplyUniformButtonLayout()
-        {
-            Size sz = new Size(150, 50);
-            int gap = 8;
-
-            DevExpress.XtraEditors.SimpleButton[] row1 =
-            {
-                this.BtnRefresh, this.BtnGenerateSIST, this.BtnGenerateSISTAll,
-                this.BtnMarkIgnore, this.BtnSettings, this.BtnViewLog
-            };
-            DevExpress.XtraEditors.SimpleButton[] row2 =
-            {
-                _btnSelUpdate, _btnSelCancel, _btnApproveChange, _btnCancelXfer
-            };
-
-            int y1 = this.BtnRefresh.Top;
-            int x = this.BtnRefresh.Left;
-            foreach (DevExpress.XtraEditors.SimpleButton b in row1)
-            {
-                if (b == null) continue;
-                b.Size = sz; b.Location = new Point(x, y1);
-                x += sz.Width + gap;
-            }
-
-            int y2 = y1 + sz.Height + 4;
-            x = this.BtnRefresh.Left;
-            foreach (DevExpress.XtraEditors.SimpleButton b in row2)
-            {
-                if (b == null) continue;
-                b.Size = sz; b.Location = new Point(x, y2);
-                x += sz.Width + gap;
-            }
-
-            // View-toggle checkboxes go to the right of row 2.
-            int chkX = (_btnCancelXfer != null ? _btnCancelXfer.Right : x) + 24;
-            this.ChkShowIssue.Location = new Point(chkX, y2 + 6);
-            this.ChkShowTransfer.Location = new Point(chkX, y2 + 28);
-        }
-
-        private void SetupCancelTransferButton()
-        {
-            Control parent = this.BtnViewLog.Parent;
-            if (parent == null) return;
-
-            // Second row, left-aligned UNDER row 1, in workflow order:
-            //   Select All Update | Select All Cancel | Approve Change | Cancel Transfer
-            int rowY = this.BtnRefresh.Bottom + 4;
-            int startX = this.BtnRefresh.Left;
-            int gap = 8;
-            Size btnSize = new Size(150, 50);
-
-            _btnSelUpdate = new DevExpress.XtraEditors.SimpleButton();
-            _btnSelUpdate.Text = "Select All Update";
-            _btnSelUpdate.Size = btnSize;
-            _btnSelUpdate.Location = new Point(startX, rowY);
-            _btnSelUpdate.Click += new EventHandler(BtnSelectAllUpdate_Click);
-            parent.Controls.Add(_btnSelUpdate);
-
-            _btnSelCancel = new DevExpress.XtraEditors.SimpleButton();
-            _btnSelCancel.Text = "Select All Cancel";
-            _btnSelCancel.Size = btnSize;
-            _btnSelCancel.Location = new Point(_btnSelUpdate.Right + gap, rowY);
-            _btnSelCancel.Click += new EventHandler(BtnSelectAllCancel_Click);
-            parent.Controls.Add(_btnSelCancel);
-
-            _btnApproveChange = new DevExpress.XtraEditors.SimpleButton();
-            _btnApproveChange.Text = "Approve Change";
-            _btnApproveChange.Size = btnSize;
-            _btnApproveChange.Location = new Point(_btnSelCancel.Right + gap, rowY);
-            _btnApproveChange.Click += new EventHandler(BtnApproveChange_Click);
-            parent.Controls.Add(_btnApproveChange);
-
-            _btnCancelXfer = new DevExpress.XtraEditors.SimpleButton();
-            _btnCancelXfer.Text = "Cancel Transfer";
-            _btnCancelXfer.Size = btnSize;
-            _btnCancelXfer.Location = new Point(_btnApproveChange.Right + gap, rowY);
-            _btnCancelXfer.Click += new EventHandler(BtnCancelTransfer_Click);
-            parent.Controls.Add(_btnCancelXfer);
-
-            // Move the two "Show ... Request" view toggles to the right of the buttons so the
-            // button row aligns cleanly under row 1.
-            int chkX = _btnCancelXfer.Right + 24;
-            this.ChkShowIssue.Location = new Point(chkX, rowY + 6);
-            this.ChkShowTransfer.Location = new Point(chkX, rowY + 28);
-        }
+        // ---------- Toolbar icons (controls + layout now live in the designer) ----------
 
         // Colourful DevExpress XAF SVG icons on the toolbar buttons (so the UI isn't plain text).
         private void ApplyButtonIcons()
@@ -1359,6 +1261,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
             SetBtnIcon(_btnSelUpdate,            "svgimages/xaf/action_validation_validate.svg");
             SetBtnIcon(_btnSelCancel,            "svgimages/xaf/action_cancel.svg");
+            SetBtnIcon(_btnSelRequest,           "svgimages/xaf/action_new.svg");
         }
 
         private static void SetBtnIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)
@@ -1374,21 +1277,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             btn.ImageOptions.SvgImageColorizationMode = DevExpress.Utils.SvgImageColorizationMode.None;
         }
 
-        // "Hide Ignore" filter checkbox — added in code (under "Show Only New Task") to keep the
-        // strict designer untouched. Reloads the grids immediately when toggled.
-        private void SetupHideIgnoreCheckbox()
+        // "Hide Ignore" filter checkbox handler (the control itself lives in the designer).
+        private void ChkHideIgnore_CheckedChanged(object sender, EventArgs e)
         {
-            _chkHideIgnore = new DevExpress.XtraEditors.CheckEdit();
-            _chkHideIgnore.Properties.Caption = "Hide Ignore";
-            _chkHideIgnore.Properties.Appearance.Font = this.ChkPendingOnly.Properties.Appearance.Font;
-            _chkHideIgnore.Properties.Appearance.Options.UseFont = true;
-            // Bottom row, to the right of "Filter by Stock Transfer" (avoids the From/To row).
-            _chkHideIgnore.Location = new Point(this.ChkFilterTransfer.Right + 6, this.ChkFilterTransfer.Top);
-            _chkHideIgnore.Size = new Size(108, 22);
-            _chkHideIgnore.Checked = false;
-            _chkHideIgnore.CheckedChanged += (s, e) => { LoadGrids(); ResetCountdown(); };
-            if (this.ChkFilterTransfer.Parent != null) this.ChkFilterTransfer.Parent.Controls.Add(_chkHideIgnore);
-            else if (this.ChkPendingOnly.Parent != null) this.ChkPendingOnly.Parent.Controls.Add(_chkHideIgnore);
+            LoadGrids();
+            ResetCountdown();
         }
 
         // Stock Issue change/cancel-request rows: Update = light yellow, Cancel (qty 0) = light red.
@@ -1402,42 +1295,6 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
 
         private static readonly Color UpdateColor = Color.FromArgb(255, 245, 157); // flat yellow
         private static readonly Color CancelColor = Color.FromArgb(255, 205, 210); // flat red
-
-        // Compact one-line colour legend at the top-right (clear of the button rows below).
-        private void SetupColorLegend()
-        {
-            Control parent = this.BtnViewLog.Parent;
-            if (parent == null) return;
-            int y = 8;
-            int x = this.BtnViewLog.Right + 24;
-            DevExpress.XtraEditors.LabelControl header = new DevExpress.XtraEditors.LabelControl();
-            header.Text = "Row colour:";
-            header.Location = new Point(x, y);
-            header.Appearance.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
-            header.Appearance.Options.UseFont = true;
-            parent.Controls.Add(header);
-
-            x += 78;
-            x = AddInlineLegend(parent, x, y, Color.White, "Normal");
-            x = AddInlineLegend(parent, x, y, UpdateColor, "Update");
-            x = AddInlineLegend(parent, x, y, CancelColor, "Cancel");
-        }
-
-        private int AddInlineLegend(Control parent, int x, int y, Color c, string text)
-        {
-            Panel sw = new Panel();
-            sw.Location = new Point(x, y - 1);
-            sw.Size = new Size(26, 16);             // wide colour block (not checkbox-like)
-            sw.BackColor = c;                       // flat solid swatch
-            sw.BorderStyle = BorderStyle.FixedSingle;
-            parent.Controls.Add(sw);
-
-            DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
-            lbl.Location = new Point(x + 30, y);
-            lbl.Text = text;
-            parent.Controls.Add(lbl);
-            return x + 30 + 58;                     // advance to next item
-        }
 
         // Solid (non-gradient) row fill: BackColor2 == BackColor so the skin can't gradient it.
         private static void PaintRow(DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e, Color c)
@@ -1618,6 +1475,52 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 if (string.Equals(Convert.ToString(r[changeCol]), change, StringComparison.OrdinalIgnoreCase))
                 { r["Selected"] = true; n++; }
             return n;
+        }
+
+        // Toggle: select (or unselect) every request that has NO generated document yet
+        // (i.e. not yet turned into a Stock Issue / Transfer), across both grids.
+        private void BtnSelectAllRequest_Click(object sender, EventArgs e)
+        {
+            DataTable di = this.GridIssue.DataSource as DataTable;
+            DataTable dt = this.GridTransfer.DataSource as DataTable;
+            bool anyTicked = AnyNoDocTicked(di) || AnyNoDocTicked(dt);
+            bool select = !anyTicked;   // none ticked → select all; otherwise unselect
+
+            int n = SetNoDocSelected(di, select) + SetNoDocSelected(dt, select);
+            this.GridViewIssue.RefreshData();
+            this.GridViewTransfer.RefreshData();
+            if (_btnSelRequest != null)
+                _btnSelRequest.Text = select ? "Unselect All Request" : "Select All Request";
+
+            XtraMessageBox.Show(this,
+                (select ? n + " request(s) with no document selected." : "Selection cleared."),
+                "Select All Request", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // A row that still needs a document: no GeneratedDocNo and not Ignored/Cancelled/Complete.
+        private static bool IsNoDocRow(DataRow r)
+        {
+            string doc = r.Table.Columns.Contains("GeneratedDocNo") ? Convert.ToString(r["GeneratedDocNo"]) : "";
+            string st = r.Table.Columns.Contains("Status") ? Convert.ToString(r["Status"]) : "";
+            return string.IsNullOrWhiteSpace(doc)
+                   && st != "Ignore" && st != "Cancelled" && st != "Complete";
+        }
+
+        private static int SetNoDocSelected(DataTable dt, bool sel)
+        {
+            if (dt == null || !dt.Columns.Contains("Selected")) return 0;
+            int n = 0;
+            foreach (DataRow r in dt.Rows)
+                if (IsNoDocRow(r)) { r["Selected"] = sel; if (sel) n++; }
+            return n;
+        }
+
+        private static bool AnyNoDocTicked(DataTable dt)
+        {
+            if (dt == null || !dt.Columns.Contains("Selected")) return false;
+            foreach (DataRow r in dt.Rows)
+                if (IsNoDocRow(r) && r["Selected"] is bool b && b) return true;
+            return false;
         }
 
         // Build an "edit the existing document" job from a grid row (Status=Update + ExistingDocNo).

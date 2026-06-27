@@ -9,14 +9,18 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.4.5.0</Version>
+    <Version>1.4.6.0</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.4.5.0 (2026-06-27):
+    <WhatsNew>v1.4.6.0 (2026-06-27):
+1. New "Select All Request" button — toggles selection of every request with no generated document yet (both grids) for one-click bulk Generate.
+2. Stock Request Task toolbar migrated into the WinForms designer (renders in Visual Studio Design view).
+
+v1.4.5.0 (2026-06-27):
 1. Bulk "Select All Update" / "Select All Cancel" + "Approve Change" applies all selected updates/cancels (both grids).
 2. Ctrl+Shift+Delete → password-gated (atp09) hard delete of the row + its generated AutoCount document.
 3. Full DevExpress grid right-click menu + Export to Excel / PDF / CSV / Text.

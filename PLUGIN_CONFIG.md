@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.4.5.0
+- **Version:** 1.4.6.0
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,10 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.4.6.0 (2026-06-27):
+    1. New "Select All Request" toolbar button — toggles selection of every request with no generated document yet (across both grids), for one-click bulk Generate.
+    2. The Stock Request Task toolbar (all buttons, Hide Ignore, colour legend) is now defined in the WinForms designer so it renders in Visual Studio Design view.
+
     v1.4.5.0 (2026-06-27):
     1. Bulk actions: "Select All Update" / "Select All Cancel" tick every matching row across both grids; "Approve Change" then applies them in one go (update + cancel, both Stock Issue and Stock Transfer).
     2. Ctrl+Shift+Delete on a focused row → password-gated (atp09) hard delete of the row, and its generated AutoCount document if any.

@@ -53,6 +53,23 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnSettings;
         private DevExpress.XtraEditors.SimpleButton BtnViewLog;
 
+        // ---- Change / bulk action buttons (row 2) ----
+        private DevExpress.XtraEditors.SimpleButton _btnSelUpdate;
+        private DevExpress.XtraEditors.SimpleButton _btnSelCancel;
+        private DevExpress.XtraEditors.SimpleButton _btnApproveChange;
+        private DevExpress.XtraEditors.SimpleButton _btnCancelXfer;
+        private DevExpress.XtraEditors.SimpleButton _btnSelRequest;
+        private DevExpress.XtraEditors.CheckEdit _chkHideIgnore;
+
+        // ---- Row-colour legend ----
+        private DevExpress.XtraEditors.LabelControl LblLegend;
+        private System.Windows.Forms.Panel PnlSwNormal;
+        private DevExpress.XtraEditors.LabelControl LblSwNormal;
+        private System.Windows.Forms.Panel PnlSwUpdate;
+        private DevExpress.XtraEditors.LabelControl LblSwUpdate;
+        private System.Windows.Forms.Panel PnlSwCancel;
+        private DevExpress.XtraEditors.LabelControl LblSwCancel;
+
         // ---- Auto-refresh timer ----
         private System.Windows.Forms.Timer RefreshTimer;
 
@@ -96,6 +113,19 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnMarkIgnore      = new DevExpress.XtraEditors.SimpleButton();
             this.BtnSettings        = new DevExpress.XtraEditors.SimpleButton();
             this.BtnViewLog         = new DevExpress.XtraEditors.SimpleButton();
+            this._btnSelUpdate      = new DevExpress.XtraEditors.SimpleButton();
+            this._btnSelCancel      = new DevExpress.XtraEditors.SimpleButton();
+            this._btnApproveChange  = new DevExpress.XtraEditors.SimpleButton();
+            this._btnCancelXfer     = new DevExpress.XtraEditors.SimpleButton();
+            this._btnSelRequest     = new DevExpress.XtraEditors.SimpleButton();
+            this._chkHideIgnore     = new DevExpress.XtraEditors.CheckEdit();
+            this.LblLegend          = new DevExpress.XtraEditors.LabelControl();
+            this.PnlSwNormal        = new System.Windows.Forms.Panel();
+            this.LblSwNormal        = new DevExpress.XtraEditors.LabelControl();
+            this.PnlSwUpdate        = new System.Windows.Forms.Panel();
+            this.LblSwUpdate        = new DevExpress.XtraEditors.LabelControl();
+            this.PnlSwCancel        = new System.Windows.Forms.Panel();
+            this.LblSwCancel        = new DevExpress.XtraEditors.LabelControl();
             this.RefreshTimer       = new System.Windows.Forms.Timer(this.components);
             this.SplitContainer     = new DevExpress.XtraEditors.SplitContainerControl();
             this.GridIssue          = new DevExpress.XtraGrid.GridControl();
@@ -120,6 +150,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkFilterBoth.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkShowIssue.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkShowTransfer.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this._chkHideIgnore.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SplitContainer)).BeginInit();
             this.SplitContainer.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridIssue)).BeginInit();
@@ -169,6 +200,18 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.PanelFilter.Controls.Add(this.BtnMarkIgnore);
             this.PanelFilter.Controls.Add(this.BtnSettings);
             this.PanelFilter.Controls.Add(this.BtnViewLog);
+            this.PanelFilter.Controls.Add(this._btnSelUpdate);
+            this.PanelFilter.Controls.Add(this._btnSelCancel);
+            this.PanelFilter.Controls.Add(this._btnApproveChange);
+            this.PanelFilter.Controls.Add(this._btnCancelXfer);
+            this.PanelFilter.Controls.Add(this._btnSelRequest);
+            this.PanelFilter.Controls.Add(this.LblLegend);
+            this.PanelFilter.Controls.Add(this.PnlSwNormal);
+            this.PanelFilter.Controls.Add(this.LblSwNormal);
+            this.PanelFilter.Controls.Add(this.PnlSwUpdate);
+            this.PanelFilter.Controls.Add(this.LblSwUpdate);
+            this.PanelFilter.Controls.Add(this.PnlSwCancel);
+            this.PanelFilter.Controls.Add(this.LblSwCancel);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelFilter.Location = new System.Drawing.Point(0, 42);
             this.PanelFilter.Name = "PanelFilter";
@@ -192,6 +235,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.GrpFilter.Controls.Add(this.ChkFilterIssue);
             this.GrpFilter.Controls.Add(this.ChkFilterTransfer);
             this.GrpFilter.Controls.Add(this.ChkFilterBoth);
+            this.GrpFilter.Controls.Add(this._chkHideIgnore);
             this.GrpFilter.Location = new System.Drawing.Point(8, 6);
             this.GrpFilter.Name = "GrpFilter";
             this.GrpFilter.Size = new System.Drawing.Size(494, 124);
@@ -356,7 +400,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnRefresh.Appearance.Options.UseFont = true;
             this.BtnRefresh.Location = new System.Drawing.Point(510, 28);
             this.BtnRefresh.Name = "BtnRefresh";
-            this.BtnRefresh.Size = new System.Drawing.Size(110, 52);
+            this.BtnRefresh.Size = new System.Drawing.Size(150, 50);
             this.BtnRefresh.TabIndex = 10;
             this.BtnRefresh.Text = "Refresh";
             this.BtnRefresh.Click += new System.EventHandler(this.BtnRefresh_Click);
@@ -364,7 +408,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // ChkShowIssue / ChkShowTransfer — original placement (top-left, x=510)
             //
             this.ChkShowIssue.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
-            this.ChkShowIssue.Location = new System.Drawing.Point(510, 84);
+            this.ChkShowIssue.Location = new System.Drawing.Point(1316, 88);
             this.ChkShowIssue.Name = "ChkShowIssue";
             this.ChkShowIssue.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 8F);
             this.ChkShowIssue.Properties.Appearance.Options.UseFont = true;
@@ -374,7 +418,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.ChkShowIssue.CheckedChanged += new System.EventHandler(this.ChkShowGrid_CheckedChanged);
 
             this.ChkShowTransfer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
-            this.ChkShowTransfer.Location = new System.Drawing.Point(510, 104);
+            this.ChkShowTransfer.Location = new System.Drawing.Point(1316, 110);
             this.ChkShowTransfer.Name = "ChkShowTransfer";
             this.ChkShowTransfer.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 8F);
             this.ChkShowTransfer.Properties.Appearance.Options.UseFont = true;
@@ -390,9 +434,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnGenerateSIST.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnGenerateSIST.Appearance.Options.UseFont = true;
             this.BtnGenerateSIST.Appearance.Options.UseForeColor = true;
-            this.BtnGenerateSIST.Location = new System.Drawing.Point(628, 28);
+            this.BtnGenerateSIST.Location = new System.Drawing.Point(668, 28);
             this.BtnGenerateSIST.Name = "BtnGenerateSIST";
-            this.BtnGenerateSIST.Size = new System.Drawing.Size(170, 52);
+            this.BtnGenerateSIST.Size = new System.Drawing.Size(150, 50);
             this.BtnGenerateSIST.TabIndex = 11;
             this.BtnGenerateSIST.Text = "Generate SI/ST";
             this.BtnGenerateSIST.Click += new System.EventHandler(this.BtnGenerateSIST_Click);
@@ -402,9 +446,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnGenerateSISTAll.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnGenerateSISTAll.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnGenerateSISTAll.Appearance.Options.UseFont = true;
-            this.BtnGenerateSISTAll.Location = new System.Drawing.Point(806, 28);
+            this.BtnGenerateSISTAll.Location = new System.Drawing.Point(826, 28);
             this.BtnGenerateSISTAll.Name = "BtnGenerateSISTAll";
-            this.BtnGenerateSISTAll.Size = new System.Drawing.Size(160, 52);
+            this.BtnGenerateSISTAll.Size = new System.Drawing.Size(150, 50);
             this.BtnGenerateSISTAll.TabIndex = 12;
             this.BtnGenerateSISTAll.Text = "Select All New...";
             this.BtnGenerateSISTAll.Click += new System.EventHandler(this.BtnGenerateSISTAll_Click);
@@ -414,9 +458,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnMarkIgnore.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnMarkIgnore.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnMarkIgnore.Appearance.Options.UseFont = true;
-            this.BtnMarkIgnore.Location = new System.Drawing.Point(974, 28);
+            this.BtnMarkIgnore.Location = new System.Drawing.Point(984, 28);
             this.BtnMarkIgnore.Name = "BtnMarkIgnore";
-            this.BtnMarkIgnore.Size = new System.Drawing.Size(130, 52);
+            this.BtnMarkIgnore.Size = new System.Drawing.Size(150, 50);
             this.BtnMarkIgnore.TabIndex = 13;
             this.BtnMarkIgnore.Text = "Mark as Ignore";
             this.BtnMarkIgnore.Click += new System.EventHandler(this.BtnMarkIgnore_Click);
@@ -426,9 +470,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnSettings.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnSettings.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnSettings.Appearance.Options.UseFont = true;
-            this.BtnSettings.Location = new System.Drawing.Point(1112, 28);
+            this.BtnSettings.Location = new System.Drawing.Point(1142, 28);
             this.BtnSettings.Name = "BtnSettings";
-            this.BtnSettings.Size = new System.Drawing.Size(95, 52);
+            this.BtnSettings.Size = new System.Drawing.Size(150, 50);
             this.BtnSettings.TabIndex = 14;
             this.BtnSettings.Text = "Settings";
             this.BtnSettings.Click += new System.EventHandler(this.BtnSettings_Click);
@@ -438,12 +482,135 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.BtnViewLog.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnViewLog.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnViewLog.Appearance.Options.UseFont = true;
-            this.BtnViewLog.Location = new System.Drawing.Point(1215, 28);
+            this.BtnViewLog.Location = new System.Drawing.Point(1300, 28);
             this.BtnViewLog.Name = "BtnViewLog";
-            this.BtnViewLog.Size = new System.Drawing.Size(95, 52);
+            this.BtnViewLog.Size = new System.Drawing.Size(150, 50);
             this.BtnViewLog.TabIndex = 15;
             this.BtnViewLog.Text = "View Log";
             this.BtnViewLog.Click += new System.EventHandler(this.BtnViewLog_Click);
+            //
+            // _btnSelUpdate  (row 2)
+            //
+            this._btnSelUpdate.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnSelUpdate.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._btnSelUpdate.Appearance.Options.UseFont = true;
+            this._btnSelUpdate.Location = new System.Drawing.Point(510, 82);
+            this._btnSelUpdate.Name = "_btnSelUpdate";
+            this._btnSelUpdate.Size = new System.Drawing.Size(150, 50);
+            this._btnSelUpdate.TabIndex = 17;
+            this._btnSelUpdate.Text = "Select All Update";
+            this._btnSelUpdate.Click += new System.EventHandler(this.BtnSelectAllUpdate_Click);
+            //
+            // _btnSelCancel
+            //
+            this._btnSelCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnSelCancel.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._btnSelCancel.Appearance.Options.UseFont = true;
+            this._btnSelCancel.Location = new System.Drawing.Point(668, 82);
+            this._btnSelCancel.Name = "_btnSelCancel";
+            this._btnSelCancel.Size = new System.Drawing.Size(150, 50);
+            this._btnSelCancel.TabIndex = 18;
+            this._btnSelCancel.Text = "Select All Cancel";
+            this._btnSelCancel.Click += new System.EventHandler(this.BtnSelectAllCancel_Click);
+            //
+            // _btnApproveChange
+            //
+            this._btnApproveChange.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnApproveChange.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._btnApproveChange.Appearance.Options.UseFont = true;
+            this._btnApproveChange.Location = new System.Drawing.Point(826, 82);
+            this._btnApproveChange.Name = "_btnApproveChange";
+            this._btnApproveChange.Size = new System.Drawing.Size(150, 50);
+            this._btnApproveChange.TabIndex = 19;
+            this._btnApproveChange.Text = "Approve Change";
+            this._btnApproveChange.Click += new System.EventHandler(this.BtnApproveChange_Click);
+            //
+            // _btnCancelXfer
+            //
+            this._btnCancelXfer.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnCancelXfer.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._btnCancelXfer.Appearance.Options.UseFont = true;
+            this._btnCancelXfer.Location = new System.Drawing.Point(984, 82);
+            this._btnCancelXfer.Name = "_btnCancelXfer";
+            this._btnCancelXfer.Size = new System.Drawing.Size(150, 50);
+            this._btnCancelXfer.TabIndex = 20;
+            this._btnCancelXfer.Text = "Cancel Transfer";
+            this._btnCancelXfer.Click += new System.EventHandler(this.BtnCancelTransfer_Click);
+            //
+            // _btnSelRequest  (selects all rows that have no generated document)
+            //
+            this._btnSelRequest.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnSelRequest.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._btnSelRequest.Appearance.Options.UseFont = true;
+            this._btnSelRequest.Location = new System.Drawing.Point(1142, 82);
+            this._btnSelRequest.Name = "_btnSelRequest";
+            this._btnSelRequest.Size = new System.Drawing.Size(150, 50);
+            this._btnSelRequest.TabIndex = 28;
+            this._btnSelRequest.Text = "Select All Request";
+            this._btnSelRequest.Click += new System.EventHandler(this.BtnSelectAllRequest_Click);
+            //
+            // _chkHideIgnore  (in the Filter Options group, bottom row)
+            //
+            this._chkHideIgnore.Location = new System.Drawing.Point(382, 92);
+            this._chkHideIgnore.Name = "_chkHideIgnore";
+            this._chkHideIgnore.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this._chkHideIgnore.Properties.Appearance.Options.UseFont = true;
+            this._chkHideIgnore.Properties.Caption = "Hide Ignore";
+            this._chkHideIgnore.Size = new System.Drawing.Size(110, 22);
+            this._chkHideIgnore.TabIndex = 11;
+            this._chkHideIgnore.CheckedChanged += new System.EventHandler(this.ChkHideIgnore_CheckedChanged);
+            //
+            // LblLegend
+            //
+            this.LblLegend.Appearance.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.LblLegend.Appearance.Options.UseFont = true;
+            this.LblLegend.Location = new System.Drawing.Point(1474, 8);
+            this.LblLegend.Name = "LblLegend";
+            this.LblLegend.Size = new System.Drawing.Size(66, 15);
+            this.LblLegend.TabIndex = 21;
+            this.LblLegend.Text = "Row colour:";
+            //
+            // PnlSwNormal / LblSwNormal
+            //
+            this.PnlSwNormal.BackColor = System.Drawing.Color.White;
+            this.PnlSwNormal.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.PnlSwNormal.Location = new System.Drawing.Point(1550, 7);
+            this.PnlSwNormal.Name = "PnlSwNormal";
+            this.PnlSwNormal.Size = new System.Drawing.Size(26, 16);
+            this.PnlSwNormal.TabIndex = 22;
+            this.LblSwNormal.Location = new System.Drawing.Point(1580, 8);
+            this.LblSwNormal.Name = "LblSwNormal";
+            this.LblSwNormal.Size = new System.Drawing.Size(40, 15);
+            this.LblSwNormal.TabIndex = 23;
+            this.LblSwNormal.Text = "Normal";
+            //
+            // PnlSwUpdate / LblSwUpdate
+            //
+            this.PnlSwUpdate.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(245)))), ((int)(((byte)(157)))));
+            this.PnlSwUpdate.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.PnlSwUpdate.Location = new System.Drawing.Point(1640, 7);
+            this.PnlSwUpdate.Name = "PnlSwUpdate";
+            this.PnlSwUpdate.Size = new System.Drawing.Size(26, 16);
+            this.PnlSwUpdate.TabIndex = 24;
+            this.LblSwUpdate.Location = new System.Drawing.Point(1670, 8);
+            this.LblSwUpdate.Name = "LblSwUpdate";
+            this.LblSwUpdate.Size = new System.Drawing.Size(40, 15);
+            this.LblSwUpdate.TabIndex = 25;
+            this.LblSwUpdate.Text = "Update";
+            //
+            // PnlSwCancel / LblSwCancel
+            //
+            this.PnlSwCancel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(205)))), ((int)(((byte)(210)))));
+            this.PnlSwCancel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.PnlSwCancel.Location = new System.Drawing.Point(1730, 7);
+            this.PnlSwCancel.Name = "PnlSwCancel";
+            this.PnlSwCancel.Size = new System.Drawing.Size(26, 16);
+            this.PnlSwCancel.TabIndex = 26;
+            this.LblSwCancel.Location = new System.Drawing.Point(1760, 8);
+            this.LblSwCancel.Name = "LblSwCancel";
+            this.LblSwCancel.Size = new System.Drawing.Size(40, 15);
+            this.LblSwCancel.TabIndex = 27;
+            this.LblSwCancel.Text = "Cancel";
             //
             // RefreshTimer  (1-second tick, drives the Refresh button countdown)
             //
@@ -570,7 +737,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // ================================================================
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1280, 700);
+            this.ClientSize = new System.Drawing.Size(1820, 700);
             this.Controls.Add(this.SplitContainer);
             this.Controls.Add(this.PanelFilter);
             this.Controls.Add(this.PanelTitle);
@@ -599,6 +766,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkFilterBoth.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkShowIssue.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkShowTransfer.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this._chkHideIgnore.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewIssue)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridIssue)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewTransfer)).EndInit();
