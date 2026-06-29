@@ -108,6 +108,7 @@ namespace ServiceContractPhotocopier.StockRequest
             string uom         = AsString(j.Row, "UOM");
             decimal qty        = AsDecimal(j.Row, "Quantity");
             string department  = AsString(j.Row, "Department");
+            string job         = AsString(j.Row, "Job");
             string serialNo    = AsString(j.Row, "SerialNumber");
             DateTime docDate   = AsDateTime(j.Row, "IssueDateTime");
 
@@ -159,7 +160,17 @@ namespace ServiceContractPhotocopier.StockRequest
             line.UOM         = string.IsNullOrWhiteSpace(uom) ? "UNIT" : uom;
             line.Qty         = qty;
             line.Location    = NormalizeLocation(lineLocation);
-            line.ProjNo      = SplitDepartmentForProject(department);
+            // PUMS carries the project/job in "Job" (older feeds used "Department"); normalise to
+            // AutoCount's nvarchar(10) ProjNo. AutoCount validates ProjNo against the Project master
+            // on Save, so auto-create the Project (in Project Maintenance) if it doesn't exist yet —
+            // "exists → take it, missing → create then take it". Mirrors the technician→Location auto-create.
+            string projCode = SplitDepartmentForProject(
+                !string.IsNullOrWhiteSpace(job) ? job : department);
+            if (!string.IsNullOrWhiteSpace(projCode))
+            {
+                EnsureProject(projCode);
+                line.ProjNo = projCode;
+            }
 
             doc.Save();
             return doc.DocNo;
@@ -329,6 +340,30 @@ namespace ServiceContractPhotocopier.StockRequest
         }
 
         /// <summary>
+        /// Ensures an AutoCount Project (ProjNo) exists; if missing, auto-creates it in Project
+        /// Maintenance via AutoCount's own ProjectDeptCommand so the new project is registered in
+        /// the running session's master cache (a raw INSERT into the Project table would NOT be
+        /// seen by the document-save validation and would still throw MissingMasterDataException).
+        /// "Exists → take it; missing → create then take it."
+        /// </summary>
+        private void EnsureProject(string projCode)
+        {
+            if (string.IsNullOrWhiteSpace(projCode)) return;
+
+            AutoCount.GeneralMaint.Project.ProjectDeptCommand pcmd =
+                AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(
+                    AutoCount.GeneralMaint.Project.ProjectType.Project, _userSession);
+
+            if (pcmd.GetProject(projCode) != null) return;   // already exists → take it
+
+            AutoCount.GeneralMaint.Project.ProjectEntity pe =
+                pcmd.NewProject(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+            pe.Row["ProjNo"] = projCode;
+            pe.Row["Description"] = "Auto-created from PUMS Stock Request";
+            pe.Save();
+        }
+
+        /// <summary>
         /// Strips a trailing "[…]" annotation from an item code. "TN-123 [toner cartridge]" → "TN-123".
         /// </summary>
         public static string StripBracketSuffix(string raw)
@@ -446,13 +481,18 @@ namespace ServiceContractPhotocopier.StockRequest
         private static void AppendTicked(DataTable t, bool isTransfer, string labelCol, List<Job> list)
         {
             if (t == null || !t.Columns.Contains("Selected")) return;
+            string changeCol = isTransfer ? "TransferChange" : "IssueChange";
             foreach (DataRow r in t.Rows)
             {
                 if (!(r["Selected"] is bool b) || !b) continue;
-                // Only Complete rows are skipped — Ignored rows are explicitly allowed
-                // through so the operator can re-process them.
+                // Generate only CREATES new documents. Skip rows that are already done
+                // (Complete / Cancelled) and change requests (Update / Cancel) — those go through
+                // "Approve Changes". Ignored rows are allowed so the operator can re-process them.
                 string status = t.Columns.Contains("Status") ? Convert.ToString(r["Status"]) : "";
-                if (status == "Complete") continue;
+                if (status == "Complete" || status == "Cancelled") continue;
+                string change = t.Columns.Contains(changeCol) ? Convert.ToString(r[changeCol]) : "";
+                if (string.Equals(change, "Update", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(change, "Cancel", StringComparison.OrdinalIgnoreCase)) continue;
                 list.Add(BuildJob(r, isTransfer, labelCol));
             }
         }

@@ -95,7 +95,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             GridView view = sender as GridView;
             if (view == null) return;
             DevExpress.XtraGrid.GridControl grid = view.GridControl;
-            string layoutKey = (grid == this.GridIssue) ? "StockRequestTask.Issue" : "StockRequestTask.Transfer";
+            // ".v2" — columns changed (Action added, Issue/Transfer Change hidden); ignore stale pre-v2 layouts.
+            string layoutKey = (grid == this.GridIssue) ? "StockRequestTask.Issue.v2" : "StockRequestTask.Transfer.v2";
 
             DevExpress.Utils.Menu.DXMenuItem xls = new DevExpress.Utils.Menu.DXMenuItem(
                 "Export to Excel...", (s, a) => ExportGrid(grid, "Excel files (*.xlsx)|*.xlsx", "xlsx"));
@@ -146,7 +147,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             {
                 using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
                 {
-                    view.SaveLayoutToStream(ms);
+                    // Mirror AutoCount's native CustomizeGridLayout: store the FULL layout so column
+                    // order/width/visibility all round-trip (the bare overload drops some of it).
+                    view.SaveLayoutToStream(ms, DevExpress.Utils.OptionsLayoutBase.FullLayout);
                     string xml = System.Text.Encoding.UTF8.GetString(ms.ToArray());
                     Data.PumsConfig.Set(_dbSetting, "GRID_LAYOUT::" + layoutKey, xml);
                 }
@@ -170,7 +173,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 string xml = Data.PumsConfig.Get(_dbSetting, "GRID_LAYOUT::" + layoutKey, null);
                 if (string.IsNullOrEmpty(xml)) { if (notify) XtraMessageBox.Show(this, "No saved layout."); return; }
                 using (System.IO.MemoryStream ms = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml)))
-                    view.RestoreLayoutFromStream(ms);
+                    // Restore with the same full-layout options AutoCount uses, and tolerate schema
+                    // drift (AddNewColumns / RemoveOldColumns) so new columns aren't lost.
+                    view.RestoreLayoutFromStream(ms, FullLayoutOptions());
             }
             catch { /* tolerate corrupted layout */ }
         }
@@ -188,9 +193,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private void OpenGeneratedDocFromGrid(GridView v, bool isTransfer)
         {
             if (v == null || v.FocusedRowHandle < 0 || _userSession == null) return;
-            string status = Convert.ToString(v.GetRowCellValue(v.FocusedRowHandle, "Status"));
-            if (!string.Equals(status, "Complete", StringComparison.OrdinalIgnoreCase)) return;
-
+            // Open the linked AutoCount document for any row that has one — Complete rows AND
+            // Update/Cancel change rows, which now carry the target doc in GeneratedDocNo.
             object docObj = v.GetRowCellValue(v.FocusedRowHandle, "GeneratedDocNo");
             if (docObj == null || docObj == DBNull.Value) return;
             string docNo = docObj.ToString();
@@ -717,6 +721,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                             HideColumn(this.GridViewIssue, "AutoKey");
                             HideColumn(this.GridViewIssue, "StockIssueId");
                             HideColumn(this.GridViewIssue, "Description");
+                            // "Action" (operation) replaces the raw "Issue Change" column; placed right before Status (result).
+                            HideColumn(this.GridViewIssue, "IssueChange");
+                            MoveColumnBefore(this.GridViewIssue, "Action", "Status");
                             // Location column is now shown (user request) — it's
                             // populated by SQL with Technician/AutoCount value.
                             FormatDateTimeColumn(this.GridViewIssue, "ReceivedAt");
@@ -746,6 +753,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                         () =>
                         {
                             HideColumn(this.GridViewTransfer, "AutoKey");
+                            // "Action" (operation) replaces the raw "Transfer Change" column; placed right before Status (result).
+                            HideColumn(this.GridViewTransfer, "TransferChange");
+                            MoveColumnBefore(this.GridViewTransfer, "Action", "Status");
                             FormatDateTimeColumn(this.GridViewTransfer, "ReceivedAt");
                             FormatDateTimeColumn(this.GridViewTransfer, "CompletedAt");
                             // From/To Location placed right after Unit; TransferType after ToLocation
@@ -899,6 +909,33 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             toMove.VisibleIndex = anchor.VisibleIndex + 1;
         }
 
+        /// <summary>Re-orders a visible column so it sits immediately BEFORE another visible column.</summary>
+        private static void MoveColumnBefore(GridView v, string fieldToMove, string anchorField)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn toMove = v.Columns.ColumnByFieldName(fieldToMove);
+            DevExpress.XtraGrid.Columns.GridColumn anchor = v.Columns.ColumnByFieldName(anchorField);
+            if (toMove == null || anchor == null || anchor.VisibleIndex < 0) return;
+            toMove.VisibleIndex = anchor.VisibleIndex;   // takes the anchor's slot; anchor shifts right
+        }
+
+        /// <summary>
+        /// Full-layout restore options matching AutoCount's native CustomizeGridLayout:
+        /// store everything and tolerate schema changes (add new columns, drop removed ones)
+        /// so saved layouts keep working when the column set evolves.
+        /// </summary>
+        private static DevExpress.Utils.OptionsLayoutGrid FullLayoutOptions()
+        {
+            DevExpress.Utils.OptionsLayoutGrid o = new DevExpress.Utils.OptionsLayoutGrid();
+            o.StoreAllOptions = true;
+            o.StoreVisualOptions = true;
+            o.StoreDataSettings = true;
+            o.Columns.StoreAllOptions = true;
+            o.Columns.StoreLayout = true;
+            o.Columns.AddNewColumns = true;
+            o.Columns.RemoveOldColumns = true;
+            return o;
+        }
+
         /// <summary>
         /// Rebinds the grid's data source without trashing user column customisations.
         /// On the first call (columnsReady == false) the configure action runs to set
@@ -916,10 +953,10 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             }
             using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
             {
-                view.SaveLayoutToStream(ms);
+                view.SaveLayoutToStream(ms, DevExpress.Utils.OptionsLayoutBase.FullLayout);
                 grid.DataSource = dt;
                 ms.Position = 0;
-                view.RestoreLayoutFromStream(ms);
+                view.RestoreLayoutFromStream(ms, FullLayoutOptions());
             }
             // Restoring a layout can flip preview/auto-filter back on; lock them off again.
             view.OptionsView.ShowPreview       = false;
@@ -987,10 +1024,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (v == null) return;
             string status = Convert.ToString(v.GetRowCellValue(e.RowHandle, "Status"));
             Color? bg = null;
-            if      (status == "New")      bg = ColorNew;
-            else if (status == "Update")   bg = ColorUpdate;
-            else if (status == "Complete") bg = ColorComplete;
-            else if (status == "Ignore")   bg = ColorIgnore;
+            if      (status == "New")       bg = ColorNew;
+            else if (status == "Update")    bg = ColorUpdate;
+            else if (status == "Complete")  bg = ColorComplete;
+            else if (status == "Cancelled") bg = ColorComplete; // cancelled = also a finished (green) state
+            else if (status == "Ignore")    bg = ColorIgnore;
             if (bg == null) return;
             using (System.Drawing.SolidBrush brush = new System.Drawing.SolidBrush(bg.Value))
                 e.Graphics.FillRectangle(brush, e.Bounds);
@@ -1005,10 +1043,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (statusObj == null) return;
             string status = statusObj.ToString();
             Color? bg = null;
-            if      (status == "New")      bg = ColorNew;
-            else if (status == "Update")   bg = ColorUpdate;
-            else if (status == "Complete") bg = ColorComplete;
-            else if (status == "Ignore")   bg = ColorIgnore;
+            if      (status == "New")       bg = ColorNew;
+            else if (status == "Update")    bg = ColorUpdate;
+            else if (status == "Complete")  bg = ColorComplete;
+            else if (status == "Cancelled") bg = ColorComplete; // cancelled = also a finished (green) state
+            else if (status == "Ignore")    bg = ColorIgnore;
             if (bg == null) return;
             e.Appearance.BackColor  = bg.Value;
             e.Appearance.BackColor2 = bg.Value;
@@ -1048,6 +1087,14 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             ResetCountdown();
         }
 
+        private static bool AnySelected(DataTable dt)
+        {
+            if (dt == null || !dt.Columns.Contains("Selected")) return false;
+            foreach (DataRow r in dt.Rows)
+                if (r["Selected"] is bool b && b) return true;
+            return false;
+        }
+
         private void BtnGenerateSIST_Click(object sender, EventArgs e)
         {
             if (_dbSetting == null || _userSession == null)
@@ -1065,8 +1112,12 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 SiStGenerator.BuildJobsFromGrids(issueDt, transferDt);
             if (jobs.Count == 0)
             {
-                XtraMessageBox.Show(this, "Tick at least one row first.",
-                    "Stock Request Task", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Distinguish "nothing ticked" from "only Update/Cancel ticked" (those use Approve Changes).
+                bool anyTicked = AnySelected(issueDt) || AnySelected(transferDt);
+                string msg = anyTicked
+                    ? "Only NEW requests can be generated here.\r\nThe row(s) you ticked are Update / Cancel — use 'Approve Changes' for those."
+                    : "Tick at least one NEW request first.";
+                XtraMessageBox.Show(this, msg, "Generate SI/ST", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -1152,6 +1203,12 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             foreach (DataRow r in dt.Rows)
             {
                 if (!(r["Selected"] is bool b && b)) continue;
+                // Only New rows are generated, so only validate those (skip done + Update/Cancel change rows).
+                string st = dt.Columns.Contains("Status") ? Convert.ToString(r["Status"]) : "";
+                if (st == "Complete" || st == "Cancelled") continue;
+                string tc = dt.Columns.Contains("TransferChange") ? Convert.ToString(r["TransferChange"]) : "";
+                if (string.Equals(tc, "Update", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(tc, "Cancel", StringComparison.OrdinalIgnoreCase)) continue;
                 string from = Convert.ToString(r["FromLocation"]) ?? string.Empty;
                 string to   = Convert.ToString(r["ToLocation"])   ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to)) continue;
@@ -1284,17 +1341,29 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             ResetCountdown();
         }
 
-        // Stock Issue change/cancel-request rows: Update = light yellow, Cancel (qty 0) = light red.
+        // Stock Issue rows: Complete = green, Update = light yellow, Cancel (qty 0) = light red, else Normal.
         private void GridViewIssue_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;
+            string status = Convert.ToString(this.GridViewIssue.GetRowCellValue(e.RowHandle, "Status"));
             string ch = Convert.ToString(this.GridViewIssue.GetRowCellValue(e.RowHandle, "IssueChange"));
-            if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
+            // Complete AND Cancelled are both finished/processed states → green.
+            if (IsDoneStatus(status)) PaintRow(e, CompleteColor);
+            else if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
             else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
         }
 
-        private static readonly Color UpdateColor = Color.FromArgb(255, 245, 157); // flat yellow
-        private static readonly Color CancelColor = Color.FromArgb(255, 205, 210); // flat red
+        private static readonly Color UpdateColor   = Color.FromArgb(255, 245, 157); // flat yellow
+        private static readonly Color CancelColor   = Color.FromArgb(255, 205, 210); // flat red
+        private static readonly Color CompleteColor = Color.FromArgb(165, 214, 167); // flat green
+
+        // A record is "done" (green) once it has been processed — either generated (Complete)
+        // or cancelled (Cancelled). Both are final results, just different outcomes.
+        private static bool IsDoneStatus(string status)
+        {
+            return string.Equals(status, "Complete", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+        }
 
         // Solid (non-gradient) row fill: BackColor2 == BackColor so the skin can't gradient it.
         private static void PaintRow(DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e, Color c)
@@ -1543,8 +1612,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private void GridViewTransfer_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;
+            string status = Convert.ToString(this.GridViewTransfer.GetRowCellValue(e.RowHandle, "Status"));
             string ch = Convert.ToString(this.GridViewTransfer.GetRowCellValue(e.RowHandle, "TransferChange"));
-            if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
+            // Complete AND Cancelled are both finished/processed states → green.
+            if (IsDoneStatus(status)) PaintRow(e, CompleteColor);
+            else if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
             else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
         }
 

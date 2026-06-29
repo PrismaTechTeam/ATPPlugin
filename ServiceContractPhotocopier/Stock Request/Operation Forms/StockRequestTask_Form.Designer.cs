@@ -68,6 +68,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private DevExpress.XtraEditors.LabelControl LblSwUpdate;
         private System.Windows.Forms.Panel PnlSwCancel;
         private DevExpress.XtraEditors.LabelControl LblSwCancel;
+        private System.Windows.Forms.Panel PnlSwComplete;
+        private DevExpress.XtraEditors.LabelControl LblSwComplete;
 
         // ---- Auto-refresh timer ----
         private System.Windows.Forms.Timer RefreshTimer;
@@ -124,6 +126,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.LblSwUpdate = new DevExpress.XtraEditors.LabelControl();
             this.PnlSwCancel = new System.Windows.Forms.Panel();
             this.LblSwCancel = new DevExpress.XtraEditors.LabelControl();
+            this.PnlSwComplete = new System.Windows.Forms.Panel();
+            this.LblSwComplete = new DevExpress.XtraEditors.LabelControl();
             this.RefreshTimer = new System.Windows.Forms.Timer(this.components);
             this.SplitContainer = new DevExpress.XtraEditors.SplitContainerControl();
             this.GridIssue = new DevExpress.XtraGrid.GridControl();
@@ -212,6 +216,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.PanelFilter.Controls.Add(this.LblSwUpdate);
             this.PanelFilter.Controls.Add(this.PnlSwCancel);
             this.PanelFilter.Controls.Add(this.LblSwCancel);
+            this.PanelFilter.Controls.Add(this.PnlSwComplete);
+            this.PanelFilter.Controls.Add(this.LblSwComplete);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelFilter.Location = new System.Drawing.Point(0, 42);
             this.PanelFilter.Name = "PanelFilter";
@@ -555,9 +561,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.LblSwNormal.Location = new System.Drawing.Point(1338, 97);
             this.LblSwNormal.Name = "LblSwNormal";
-            this.LblSwNormal.Size = new System.Drawing.Size(33, 13);
+            this.LblSwNormal.Size = new System.Drawing.Size(20, 13);
             this.LblSwNormal.TabIndex = 23;
-            this.LblSwNormal.Text = "Normal";
+            this.LblSwNormal.Text = "New";
             // 
             // PnlSwUpdate
             // 
@@ -572,26 +578,43 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.LblSwUpdate.Location = new System.Drawing.Point(1428, 97);
             this.LblSwUpdate.Name = "LblSwUpdate";
-            this.LblSwUpdate.Size = new System.Drawing.Size(35, 13);
+            this.LblSwUpdate.Size = new System.Drawing.Size(62, 13);
             this.LblSwUpdate.TabIndex = 25;
-            this.LblSwUpdate.Text = "Update";
+            this.LblSwUpdate.Text = "New Update";
             // 
             // PnlSwCancel
             // 
             this.PnlSwCancel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(205)))), ((int)(((byte)(210)))));
             this.PnlSwCancel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.PnlSwCancel.Location = new System.Drawing.Point(1488, 96);
+            this.PnlSwCancel.Location = new System.Drawing.Point(1512, 96);
             this.PnlSwCancel.Name = "PnlSwCancel";
             this.PnlSwCancel.Size = new System.Drawing.Size(26, 16);
             this.PnlSwCancel.TabIndex = 26;
             // 
             // LblSwCancel
             // 
-            this.LblSwCancel.Location = new System.Drawing.Point(1518, 97);
+            this.LblSwCancel.Location = new System.Drawing.Point(1542, 97);
             this.LblSwCancel.Name = "LblSwCancel";
-            this.LblSwCancel.Size = new System.Drawing.Size(32, 13);
+            this.LblSwCancel.Size = new System.Drawing.Size(60, 13);
             this.LblSwCancel.TabIndex = 27;
-            this.LblSwCancel.Text = "Cancel";
+            this.LblSwCancel.Text = "New Cancel";
+            //
+            // PnlSwComplete
+            //
+            this.PnlSwComplete.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(165)))), ((int)(((byte)(214)))), ((int)(((byte)(167)))));
+            this.PnlSwComplete.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.PnlSwComplete.Location = new System.Drawing.Point(1626, 96);
+            this.PnlSwComplete.Name = "PnlSwComplete";
+            this.PnlSwComplete.Size = new System.Drawing.Size(26, 16);
+            this.PnlSwComplete.TabIndex = 28;
+            //
+            // LblSwComplete
+            //
+            this.LblSwComplete.Location = new System.Drawing.Point(1656, 97);
+            this.LblSwComplete.Name = "LblSwComplete";
+            this.LblSwComplete.Size = new System.Drawing.Size(58, 13);
+            this.LblSwComplete.TabIndex = 29;
+            this.LblSwComplete.Text = "Completed";
             // 
             // RefreshTimer
             // 

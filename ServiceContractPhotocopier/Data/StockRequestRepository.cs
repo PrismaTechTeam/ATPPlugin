@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using AutoCount.Data;
@@ -82,6 +83,11 @@ namespace ServiceContractPhotocopier.Data
 
             DataTable dt = Query(db, sql, fromDate, toDate.AddDays(1), search);
             AddSelectColumn(dt);
+            // Cancel intent for a Stock Issue = quantity 0.
+            CollapsePendingRows(dt, "StockIssueId", "IssueChange",
+                r => r["Quantity"] == DBNull.Value || Convert.ToDecimal(r["Quantity"]) == 0m);
+            AddActionColumn(dt, "IssueChange");
+            FillGeneratedDocFromOriginal(dt);
             return dt;
         }
 
@@ -164,7 +170,123 @@ namespace ServiceContractPhotocopier.Data
 
             DataTable dt = QueryTransfer(db, sql, fromDate, toDate.AddDays(1), search, defaultFromLocation);
             AddSelectColumn(dt);
+            // Cancel intent for a Stock Transfer = approval No.
+            CollapsePendingRows(dt, "RequestId", "TransferChange", IsTransferCancel);
+            AddActionColumn(dt, "TransferChange");
+            FillGeneratedDocFromOriginal(dt);
             return dt;
+        }
+
+        /// <summary>
+        /// Adds an "Action" column describing the OPERATION the record represents — distinct from
+        /// Status, which is the lifecycle RESULT. Update/Cancel come from the change column; an
+        /// already-cancelled record reads "Cancel"; everything else is a "Generate" (new SI/ST).
+        /// </summary>
+        private static void AddActionColumn(DataTable dt, string changeCol)
+        {
+            if (dt == null || dt.Columns.Contains("Action")) return;
+            dt.Columns.Add("Action", typeof(string));
+            foreach (DataRow r in dt.Rows)
+            {
+                string ch = dt.Columns.Contains(changeCol) ? Convert.ToString(r[changeCol]) : "";
+                string st = dt.Columns.Contains("Status")  ? Convert.ToString(r["Status"])  : "";
+                string action;
+                if      (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) action = "Update";
+                else if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) action = "Cancel";
+                else if (string.Equals(st, "Cancelled", StringComparison.OrdinalIgnoreCase)) action = "Cancel";
+                else if (string.Equals(st, "Ignore", StringComparison.OrdinalIgnoreCase)) action = "Ignore";
+                else action = "Generate";
+                r["Action"] = action;
+            }
+            dt.AcceptChanges();
+        }
+
+        private static bool IsTransferCancel(DataRow r)
+        {
+            string a = Convert.ToString(r["Approval"]).Trim().ToUpperInvariant();
+            return a == "NO" || a == "N" || a == "FALSE" || a == "0";
+        }
+
+        /// <summary>
+        /// Collapses re-sent change requests per id and applies the "before vs after generation" rules:
+        ///   • Already generated (OriginalDocNo present): keep the latest pending row as the Update/Cancel
+        ///     change row and surface the target document in GeneratedDocNo; drop no-op re-sends (same qty).
+        ///   • Never generated (no OriginalDocNo): override in place — keep only the latest pending row;
+        ///     a cancel (isCancel) is hidden entirely, otherwise it stays a plain New request (Status=New).
+        /// "Pending" = a row that has not generated a document yet and is still active (not Complete/Ignore/Cancelled).
+        /// Generated/Complete/history rows are left untouched.
+        /// </summary>
+        private static void CollapsePendingRows(DataTable dt, string idCol, string changeCol, Func<DataRow, bool> isCancel)
+        {
+            if (dt == null || !dt.Columns.Contains(idCol)) return;
+
+            Dictionary<string, List<DataRow>> pendingById =
+                new Dictionary<string, List<DataRow>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (DataRow r in dt.Rows)
+            {
+                string gen = dt.Columns.Contains("GeneratedDocNo") ? Convert.ToString(r["GeneratedDocNo"]) : "";
+                string st  = dt.Columns.Contains("Status") ? Convert.ToString(r["Status"]) : "";
+                bool isPending = string.IsNullOrWhiteSpace(gen)
+                                 && st != "Complete" && st != "Ignore" && st != "Cancelled";
+                if (!isPending) continue;
+
+                string id = Convert.ToString(r[idCol]);
+                if (!pendingById.ContainsKey(id)) pendingById[id] = new List<DataRow>();
+                pendingById[id].Add(r);
+            }
+
+            List<DataRow> toRemove = new List<DataRow>();
+            foreach (KeyValuePair<string, List<DataRow>> kv in pendingById)
+            {
+                List<DataRow> rows = kv.Value;
+                rows.Sort((a, b) => Convert.ToInt64(a["AutoKey"]).CompareTo(Convert.ToInt64(b["AutoKey"])));
+                DataRow latest = rows[rows.Count - 1];
+                for (int i = 0; i < rows.Count - 1; i++) toRemove.Add(rows[i]);  // superseded re-sends
+
+                string origDoc = dt.Columns.Contains("OriginalDocNo") ? Convert.ToString(latest["OriginalDocNo"]) : "";
+                bool hasGenDoc = !string.IsNullOrWhiteSpace(origDoc);
+
+                if (hasGenDoc)
+                {
+                    string ch = Convert.ToString(latest[changeCol]);
+                    if (string.Equals(ch, "No", StringComparison.OrdinalIgnoreCase))
+                        toRemove.Add(latest);                       // re-send with no real change → drop
+                    // GeneratedDocNo for the kept row is surfaced by FillGeneratedDocFromOriginal.
+                }
+                else
+                {
+                    if (isCancel(latest))
+                        toRemove.Add(latest);                        // cancel before generation → hide entirely
+                    else
+                    {
+                        if (dt.Columns.Contains("Status")) latest["Status"] = "New";
+                        latest[changeCol] = "No";                    // override → plain New request, new qty
+                    }
+                }
+            }
+
+            foreach (DataRow r in toRemove) dt.Rows.Remove(r);
+            dt.AcceptChanges();
+        }
+
+        /// <summary>
+        /// For any row that links to an AutoCount document but has no GeneratedDocNo of its own
+        /// (Update/Cancel change requests, and cancel-request rows now marked Cancelled), show the
+        /// target document in GeneratedDocNo. This makes the doc visible AND double-clickable —
+        /// e.g. a cancelled row opens the cancelled AutoCount document.
+        /// </summary>
+        private static void FillGeneratedDocFromOriginal(DataTable dt)
+        {
+            if (dt == null || !dt.Columns.Contains("GeneratedDocNo") || !dt.Columns.Contains("OriginalDocNo")) return;
+            foreach (DataRow r in dt.Rows)
+            {
+                string gen = Convert.ToString(r["GeneratedDocNo"]);
+                string orig = Convert.ToString(r["OriginalDocNo"]);
+                if (string.IsNullOrWhiteSpace(gen) && !string.IsNullOrWhiteSpace(orig))
+                    r["GeneratedDocNo"] = orig;
+            }
+            dt.AcceptChanges();
         }
 
         private static DataTable QueryTransfer(DBSetting db, string sql, DateTime from, DateTime toExclusive,
