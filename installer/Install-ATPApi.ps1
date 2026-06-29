@@ -180,6 +180,7 @@ if ($firstTime) {
   "BaseUrl": "http://localhost:5007",
   "Environment": "prod",
   "ApiKey": "<SET_ME>",
+  "AutoCountInstallPath": "C:\\Program Files\\AutoCount\\Accounting 2.2",
   "Cors": { "AllowedOrigin": "*" },
   "Logging": { "MinimumLevel": "Information", "FilePath": "logs/atpapi-.log", "FileRollingDays": 14 },
   "DefaultProfile": "atplugin",
