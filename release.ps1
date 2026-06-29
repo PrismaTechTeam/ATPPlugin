@@ -101,6 +101,8 @@ if (Test-Path $srcCfg) {
     }
 
     $sampleJson = $cfg | ConvertTo-Json -Depth 20
+    # ConvertTo-Json HTML-escapes < > & — unescape so the placeholder reads "<SET_ME>" not "<SET_ME>".
+    $sampleJson = $sampleJson -replace '\\u003c','<' -replace '\\u003e','>' -replace '\\u0026','&'
     [System.IO.File]::WriteAllText(
         (Join-Path $stage "appsettings.sample.json"),
         $sampleJson,
