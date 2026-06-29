@@ -4,7 +4,7 @@
     RUN AS ADMINISTRATOR (the Install-ATPApi.bat launcher elevates for you).
 
 .DESCRIPTION
-    This is a *deployment* installer — it does NOT build anything and needs neither the
+    This is a *deployment* installer - it does NOT build anything and needs neither the
     .NET SDK nor the source code. It obtains the already-built ATPApi binaries one of two
     ways, auto-detected in this order:
 
@@ -15,15 +15,15 @@
                                               verify its SHA256 against latest.json
 
     Then it:
-      • stops/removes any existing ATPApi service,
-      • copies files into the install dir (your existing appsettings.json is PRESERVED),
-      • on a FIRST install, creates appsettings.json from appsettings.sample.json and
+      - stops/removes any existing ATPApi service,
+      - copies files into the install dir (your existing appsettings.json is PRESERVED),
+      - on a FIRST install, creates appsettings.json from appsettings.sample.json and
         applies any -ApiKey / -Db* / -AutoCountPath values you pass,
-      • registers the Topshelf service (install --localsystem --autostart) and starts it,
-      • health-checks http://localhost:5007/api/ping.
+      - registers the Topshelf service (install --localsystem --autostart) and starts it,
+      - health-checks http://localhost:5007/api/ping.
 
     Updates after the first install are normally done from the AutoCount plugin's
-    "About / Check for Updates" menu (which runs ATPApiUpdater.exe) — but re-running this
+    "About / Check for Updates" menu (which runs ATPApiUpdater.exe) - but re-running this
     installer also works and will never overwrite the customer's appsettings.json.
 
 .PARAMETER ApiKey
@@ -32,7 +32,7 @@
     until you edit appsettings.json.
 
 .EXAMPLE
-    # Online install — downloads latest from S3, prompts for config:
+    # Online install - downloads latest from S3, prompts for config:
     powershell -ExecutionPolicy Bypass -File .\Install-ATPApi.ps1 -ApiKey "109izjiwjr14m" `
         -DbServer "localhost,1433" -Database "AED_LIVE" -SqlUser "sa" -SqlPassword "***" `
         -LoginUser "ADMIN" -LoginPassword "***"
@@ -59,7 +59,10 @@ param(
     [string]$LoginPassword = "",
     [string]$AutoCountPath = "",
 
-    [switch]$NoStart
+    [switch]$NoStart,
+    # Install the files + register the service but DO NOT start it; print a checklist of what to
+    # configure in appsettings.json and the exact commands to start it afterwards.
+    [switch]$ConfigureOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -155,7 +158,7 @@ if (-not $firstTime) {
 
 # Copy everything from the payload into the install dir, EXCEPT appsettings.json (preserved /
 # seeded separately). Iterate the payload's TOP-LEVEL items and Copy-Item -Recurse each one so the
-# folder structure is preserved natively — no relative-path math (which previously mis-rooted files
+# folder structure is preserved natively - no relative-path math (which previously mis-rooted files
 # under a stray subfolder). Stray appsettings backups/logs from a dirty source are skipped too.
 Get-ChildItem -Path $payloadDir -Force |
     Where-Object { $_.Name -ne 'appsettings.json' -and $_.Name -ne 'appsettings.json.bak' -and $_.Name -ne 'logs' } |
@@ -228,10 +231,9 @@ Write-Step "5/6" "Installing service '$ServiceName'..."
 if ($LASTEXITCODE -ne 0) { throw "Service install failed (exit $LASTEXITCODE)." }
 Write-Ok "service registered"
 
-$skipStart = $NoStart -or $needsEdit
+$skipStart = $NoStart -or $needsEdit -or $ConfigureOnly
 if ($skipStart) {
-    Write-Warn2 "NOT starting the service (config incomplete or -NoStart)."
-    Write-Warn2 "After editing appsettings.json, start it with:  `"$exe`" start"
+    Write-Warn2 "Service registered but NOT started (configure first)."
 } else {
     & $exe start
     Start-Sleep -Seconds 3
@@ -254,19 +256,51 @@ if (-not $skipStart) {
 # clean temp download
 if ($tempStage -and (Test-Path $tempStage)) { Remove-Item $tempStage -Recurse -Force -ErrorAction SilentlyContinue }
 
-Write-Host "`n===========================================" -ForegroundColor Green
-Write-Host "   DONE" -ForegroundColor Green
 $svc = Get-Service $ServiceName -ErrorAction SilentlyContinue
+Write-Host "`n===========================================" -ForegroundColor Green
+Write-Host "   INSTALL DONE" -ForegroundColor Green
 Write-Host ("   service : {0}" -f ($(if ($svc) { $svc.Status } else { "NOT INSTALLED" })))
 Write-Host ("   config  : {0}" -f $cfgPath)
 Write-Host "===========================================" -ForegroundColor Green
 
-if (-not $ok) {
-    Write-Host "`nService is not answering /api/ping yet. Checklist:" -ForegroundColor Red
-    Write-Host "  1. Edit appsettings.json: ApiKey + DB (Server/Database/SqlUser/SqlPassword) + LoginUser/LoginPassword"
-    Write-Host "  2. AutoCount Accounting must be installed on this PC; if not in the default folder,"
-    Write-Host "     set \"AutoCountInstallPath\" in appsettings.json (or pass -AutoCountPath)."
-    Write-Host "  3. Then run:  `"$exe`" start"
+if ($skipStart) {
+    # -------- Configure-first: list what to set, then how to run --------
+    Write-Host "`n-----------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "  STEP 1 - CONFIGURE  (edit this file)" -ForegroundColor Yellow
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "  $cfgPath`n"
+    Write-Host "  Set these values (replace <SET_ME>):"
+    Write-Host '    ApiKey                          : the X-API-Key PUMS sends   (e.g. 109izjiwjr14m)'
+    Write-Host '    Profiles.atplugin.Server        : SQL server                 (e.g. localhost,1433)'
+    Write-Host '    Profiles.atplugin.Database      : AutoCount account-book DB  (e.g. AED_ATPDEMO0003)'
+    Write-Host '    Profiles.atplugin.SqlUser       : SQL login                  (e.g. sa)'
+    Write-Host '    Profiles.atplugin.SqlPassword   : SQL password'
+    Write-Host '    Profiles.atplugin.LoginUser     : AutoCount login            (e.g. ADMIN)'
+    Write-Host '    Profiles.atplugin.LoginPassword : AutoCount password         (e.g. ADMIN)'
+    Write-Host '    BaseUrl                         : leave http://localhost:5007 unless changing port'
+    Write-Host '    AutoCountInstallPath (optional) : only if AutoCount is in a non-default folder'
+
+    Write-Host "`n-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "  STEP 2 - RUN  (after saving appsettings.json)" -ForegroundColor Cyan
+    Write-Host "-----------------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "  Open PowerShell as Administrator and run:`n"
+    Write-Host "    # start the service"            -ForegroundColor Gray
+    Write-Host "    Start-Service $ServiceName"
+    Write-Host "`n    # check it is up (expect ok:true)" -ForegroundColor Gray
+    Write-Host "    Get-Service $ServiceName"
+    Write-Host "    Invoke-RestMethod $HealthUrl -Headers @{ 'X-Api-Key' = '<your ApiKey>' }"
+    Write-Host "`n    # restart after any future appsettings.json change" -ForegroundColor Gray
+    Write-Host "    Restart-Service $ServiceName"
+    Write-Host "`n  (Logs: $InstallDir\logs\   |   Windows Event Viewer > Application)`n"
+}
+elseif (-not $ok) {
+    Write-Host "`nService started but is not answering /api/ping yet. Checklist:" -ForegroundColor Red
+    Write-Host "  1. appsettings.json: ApiKey + DB (Server/Database/SqlUser/SqlPassword) + LoginUser/LoginPassword"
+    Write-Host "  2. AutoCount must be installed on this PC (auto-detected; set AutoCountInstallPath if non-standard)."
+    Write-Host "  3. Restart-Service $ServiceName    (then re-check $HealthUrl)"
     Write-Host "  4. Logs: $InstallDir\logs\  and Windows Event Viewer > Application"
     exit 1
+}
+else {
+    Write-Host "`nService is running and healthy. Nothing more to do." -ForegroundColor Green
 }
