@@ -13,7 +13,9 @@ using ServiceContractPhotocopier.StockRequest;
 
 namespace ServiceContractPhotocopier.StockRequest.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Stock Request Task", MenuOrder = 440)]
+    // ShowAsDialog = false => AutoCount opens this form as an MDI document inside its
+    // tabbed navigation bar (the "navbar" behavior), not as a floating dialog.
+    [AutoCount.PlugIn.MenuItem("Stock Request Task", MenuOrder = 440, ShowAsDialog = false)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class StockRequestTask_Form : XtraForm
     {
@@ -1253,14 +1255,13 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             SetBtnIcon(this.BtnFilter,           "svgimages/xaf/action_filter.svg");
             SetBtnIcon(this.BtnReset,            "svgimages/xaf/action_reload.svg");
             SetBtnIcon(this.BtnGenerateSIST,     "svgimages/xaf/action_new.svg");
-            SetBtnIcon(this.BtnGenerateSISTAll,  "svgimages/xaf/action_validation_validate.svg");
             SetBtnIcon(this.BtnMarkIgnore,       "svgimages/xaf/state_validation_warning.svg");
             SetBtnIcon(this.BtnSettings,         "svgimages/xaf/action_edit.svg");
             SetBtnIcon(this.BtnViewLog,          "svgimages/xaf/action_aboutinfo.svg");
             SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
-            SetBtnIcon(_btnSelUpdate,            "svgimages/xaf/action_validation_validate.svg");
-            SetBtnIcon(_btnSelCancel,            "svgimages/xaf/action_cancel.svg");
-            SetBtnIcon(_btnSelRequest,           "svgimages/xaf/action_new.svg");
+            // The four "Select All …" buttons are intentionally icon-less — no DevExpress icon
+            // cleanly conveys "select all <state>", and mismatched icons looked worse than none.
+            // (BtnGenerateSISTAll = "Select All New", _btnSelUpdate, _btnSelCancel, _btnSelRequest)
         }
 
         private static void SetBtnIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)

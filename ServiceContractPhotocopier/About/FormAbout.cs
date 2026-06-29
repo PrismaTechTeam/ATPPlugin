@@ -57,6 +57,35 @@ namespace ServiceContractPhotocopier.About
         public FormAbout(DBSetting db) : this() { ApplyDb(db); }
         public FormAbout(UserSession session) : this() { ApplyDb(session != null ? session.DBSetting : null); }
 
+        /// <summary>
+        /// AutoCount opens plug-in menu forms as MDI children of its main window. Because the
+        /// data forms open maximized, MDI makes every new child (including this About box) open
+        /// maximized too, and merges the parent's "Window" menu into the title bar. The About box
+        /// is meant to be a small floating dialog, so detach it from the MDI parent and restore
+        /// the fixed-dialog chrome before it paints. Guarded so a failure can never break the menu.
+        /// </summary>
+        protected override void OnLoad(EventArgs e)
+        {
+            try
+            {
+                if (MdiParent != null)
+                {
+                    MdiParent = null;
+                    TopLevel = true;
+                    FormBorderStyle = FormBorderStyle.FixedDialog;
+                    MaximizeBox = false;
+                    MinimizeBox = false;
+                    WindowState = FormWindowState.Normal;
+                    ClientSize = new Size(470, 440);
+                    StartPosition = FormStartPosition.CenterScreen;
+                    ShowInTaskbar = false;
+                    CenterToScreen();
+                }
+            }
+            catch { /* leave as-is if the host won't allow detaching */ }
+            base.OnLoad(e);
+        }
+
         private void ApplyDb(DBSetting db)
         {
             if (db == null) return;
