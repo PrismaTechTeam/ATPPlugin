@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 using Microsoft.Owin.Hosting;
 using Newtonsoft.Json.Linq;
 using Topshelf;
@@ -28,6 +30,7 @@ namespace ATPApi
 
         private static string ResolveAutoCountDir()
         {
+            // 1. appsettings.json override — customer can pin the path explicitly.
             try
             {
                 string cfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
@@ -38,21 +41,60 @@ namespace ATPApi
                     if (m.Success)
                     {
                         string p = m.Groups[1].Value.Replace("\\\\", "\\");
-                        if (Directory.Exists(p)) return p;
+                        if (Directory.Exists(p) && File.Exists(Path.Combine(p, "AutoCount.dll"))) return p;
                     }
                 }
             }
-            catch { /* fall through to probing */ }
+            catch { /* keep trying */ }
 
-            string[] candidates =
+            // 2. Registry — the AutoCount installer writes the install path here. Most reliable and
+            //    version-independent. Check both 64- and 32-bit registry views.
+            foreach (RegistryView view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
             {
-                @"C:\Program Files\AutoCount\Accounting 2.2",
-                @"C:\Program Files (x86)\AutoCount\Accounting 2.2"
-            };
-            foreach (string c in candidates)
-                if (File.Exists(Path.Combine(c, "AutoCount.dll"))) return c;
+                try
+                {
+                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
+                    using (RegistryKey k = baseKey.OpenSubKey(@"SOFTWARE\AutoCount\Accounting"))
+                    {
+                        string path = k == null ? null : k.GetValue("InstallPath") as string;
+                        if (!string.IsNullOrEmpty(path) && File.Exists(Path.Combine(path, "AutoCount.dll"))) return path;
+                    }
+                }
+                catch { /* keep trying */ }
+            }
 
-            return candidates[0];
+            // 3. Scan Program Files (and x86) for "Accounting <version>", newest first, skipping
+            //    backup folders (e.g. "Accounting 2.2_bk") so a stale copy isn't picked.
+            foreach (string root in new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+            })
+            {
+                try
+                {
+                    string acRoot = Path.Combine(root ?? "", "AutoCount");
+                    if (!Directory.Exists(acRoot)) continue;
+                    string latest = Directory.GetDirectories(acRoot, "Accounting *")
+                        .Where(d => !LooksLikeBackup(Path.GetFileName(d)))
+                        .Where(d => File.Exists(Path.Combine(d, "AutoCount.dll")))
+                        .OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault();
+                    if (latest != null) return latest;
+                }
+                catch { /* keep trying */ }
+            }
+
+            // 4. Hardcoded fallback (matches the csproj HintPath / dev install).
+            return @"C:\Program Files\AutoCount\Accounting 2.2";
+        }
+
+        private static bool LooksLikeBackup(string folderName)
+        {
+            if (string.IsNullOrEmpty(folderName)) return false;
+            string lower = folderName.ToLowerInvariant();
+            return lower.Contains("_bk") || lower.Contains("_backup") || lower.Contains("_old")
+                || lower.Contains("_archive") || lower.Contains(".bak");
         }
 
         [STAThread]
