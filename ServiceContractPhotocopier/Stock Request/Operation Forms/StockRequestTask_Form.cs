@@ -1257,7 +1257,6 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             SetBtnIcon(this.BtnMarkIgnore,       "svgimages/xaf/state_validation_warning.svg");
             SetBtnIcon(this.BtnSettings,         "svgimages/xaf/action_edit.svg");
             SetBtnIcon(this.BtnViewLog,          "svgimages/xaf/action_aboutinfo.svg");
-            SetBtnIcon(_btnCancelXfer,           "svgimages/xaf/action_cancel.svg");
             SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
             SetBtnIcon(_btnSelUpdate,            "svgimages/xaf/action_validation_validate.svg");
             SetBtnIcon(_btnSelCancel,            "svgimages/xaf/action_cancel.svg");
@@ -1548,77 +1547,5 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
         }
 
-        // Cancel the AutoCount Stock Transfer document for each ticked "Cancel Requested" row.
-        private void BtnCancelTransfer_Click(object sender, EventArgs e)
-        {
-            if (_dbSetting == null) return;
-            UserSession session = _userSession ?? UserSession.CurrentUserSession;
-            if (session == null)
-            {
-                XtraMessageBox.Show(this, "No active AutoCount session — cannot cancel documents.",
-                    "Cancel Transfer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            DataTable dt = this.GridTransfer.DataSource as DataTable;
-            if (dt == null || !dt.Columns.Contains("TransferChange")) return;
-
-            List<DataRow> targets = new List<DataRow>();
-            foreach (DataRow r in dt.Rows)
-            {
-                if (!(r["Selected"] is bool b && b)) continue;
-                if (!string.Equals(Convert.ToString(r["TransferChange"]), "Cancel", StringComparison.OrdinalIgnoreCase)) continue;
-                if (string.IsNullOrWhiteSpace(Convert.ToString(r["OriginalDocNo"]))) continue;
-                targets.Add(r);
-            }
-            if (targets.Count == 0)
-            {
-                XtraMessageBox.Show(this,
-                    "Tick at least one transfer row marked 'Cancel Requested' (approval = No with an existing document).",
-                    "Cancel Transfer", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            System.Text.StringBuilder list = new System.Text.StringBuilder();
-            foreach (DataRow r in targets)
-                list.AppendLine("  • " + Convert.ToString(r["RequestId"]) + "  →  doc " + Convert.ToString(r["OriginalDocNo"]));
-            if (XtraMessageBox.Show(this,
-                    "Cancel the following AutoCount Stock Transfer document(s)?\r\n\r\n" + list +
-                    "\r\nThe documents will be marked Cancelled (stock movement reversed).",
-                    "Cancel Transfer", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                return;
-
-            int done = 0;
-            List<string> errs = new List<string>();
-            foreach (DataRow r in targets)
-            {
-                string reqId = Convert.ToString(r["RequestId"]);
-                string docNo = Convert.ToString(r["OriginalDocNo"]);
-                long autoKey = Convert.ToInt64(r["AutoKey"]);
-                try
-                {
-                    AutoCount.Stock.StockTransfer.StockTransferCommand cmd =
-                        AutoCount.Stock.StockTransfer.StockTransferCommand.Create(session, _dbSetting);
-                    bool ok = cmd.CancelDocument(docNo);
-                    if (!ok) { errs.Add(reqId + " (" + docNo + "): AutoCount returned not-cancelled (locked/already cancelled?)"); continue; }
-                    StockRequestRepository.MarkTransferCancelled(_dbSetting, autoKey, reqId, docNo);
-                    PumsLog.Write(_dbSetting, PumsLog.TYPE_INFO, "CancelStockTransfer", reqId,
-                        "Cancelled AutoCount Stock Transfer " + docNo + " (approval=No).", null, docNo, session.LoginUserID);
-                    done++;
-                }
-                catch (Exception ex)
-                {
-                    errs.Add(reqId + " (" + docNo + "): " + ex.Message);
-                    PumsLog.Write(_dbSetting, PumsLog.TYPE_ERROR, "CancelStockTransfer", reqId,
-                        "Cancel failed for " + docNo + ": " + ex.Message, null, ex.ToString(), session.LoginUserID);
-                }
-            }
-
-            LoadGrids();
-            ResetCountdown();
-            string msg = done + " transfer document(s) cancelled.";
-            if (errs.Count > 0) msg += "\r\n\r\nFailed:\r\n" + string.Join("\r\n", errs.ToArray());
-            XtraMessageBox.Show(this, msg, "Cancel Transfer", MessageBoxButtons.OK,
-                errs.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
-        }
     }
 }
