@@ -24,15 +24,23 @@ INSTALL
         AUTOCOUNT_PATH     only if AutoCount is NOT in the default Program Files
 
   2. Right-click Install-ATPApi.bat -> "Run as administrator"
-     (or just double-click — it will ask for admin rights).
+     (or just double-click - it will ask for admin rights).
 
-  3. It installs to C:\Program Files\ATPApi, registers the "ATPApi" service,
-     starts it, and checks http://localhost:5007/api/ping.
+  3. It installs to C:\Program Files\ATPApi and registers the "ATPApi" service,
+     but DOES NOT start it. It then prints a checklist of what to configure.
 
-  If you left the CONFIG blank, edit
-     C:\Program Files\ATPApi\appsettings.json
-  afterwards, then run:
-     "C:\Program Files\ATPApi\ATPApi.exe" start
+  4. CONFIGURE FIRST: open and complete
+        C:\Program Files\ATPApi\appsettings.json
+     (ApiKey, Server, Database, SqlUser, SqlPassword, LoginUser, LoginPassword;
+      AutoCountInstallPath only if AutoCount is in a non-default folder).
+
+  5. THEN start the service (PowerShell as Administrator):
+        Start-Service ATPApi
+        Invoke-RestMethod http://localhost:5007/api/ping -Headers @{ 'X-Api-Key' = 'YOUR_KEY' }
+     Restart after any later appsettings.json change:  Restart-Service ATPApi
+
+  (Advanced: set START=1 in the .bat to start automatically right after install -
+   only do that when appsettings.json is already fully configured.)
 
 OFFLINE INSTALL (no internet)
   Put the extracted release files (ATPApi.exe, all DLLs, appsettings.sample.json,

@@ -24,9 +24,10 @@ set "DB_PASSWORD="
 set "AC_LOGIN_USER=ADMIN"
 set "AC_LOGIN_PASSWORD=ADMIN"
 set "AUTOCOUNT_PATH="
-REM Set CONFIGURE_ONLY=1 to install files + register the service but NOT start it.
-REM The installer then prints a checklist of what to set in appsettings.json and how to run it.
-set "CONFIGURE_ONLY=0"
+REM The installer does NOT start the service by default — it prints a checklist of what to set in
+REM appsettings.json and how to start it. Set START=1 to start immediately (only when appsettings.json
+REM is already fully configured / you have pre-filled the CONFIG block above).
+set "START=0"
 REM ---------------------------------------------------------------------------
 
 REM ---- Self-elevate to Administrator if needed -------------------------------
@@ -58,7 +59,7 @@ if not "%DB_PASSWORD%"==""        set "ARGS=%ARGS% -SqlPassword "%DB_PASSWORD%""
 if not "%AC_LOGIN_USER%"==""      set "ARGS=%ARGS% -LoginUser "%AC_LOGIN_USER%""
 if not "%AC_LOGIN_PASSWORD%"==""  set "ARGS=%ARGS% -LoginPassword "%AC_LOGIN_PASSWORD%""
 if not "%AUTOCOUNT_PATH%"==""     set "ARGS=%ARGS% -AutoCountPath "%AUTOCOUNT_PATH%""
-if "%CONFIGURE_ONLY%"=="1"        set "ARGS=%ARGS% -ConfigureOnly"
+if "%START%"=="1"                 set "ARGS=%ARGS% -Start"
 
 echo.
 echo Running installer...

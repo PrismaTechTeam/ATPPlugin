@@ -19,8 +19,12 @@
       - copies files into the install dir (your existing appsettings.json is PRESERVED),
       - on a FIRST install, creates appsettings.json from appsettings.sample.json and
         applies any -ApiKey / -Db* / -AutoCountPath values you pass,
-      - registers the Topshelf service (install --localsystem --autostart) and starts it,
-      - health-checks http://localhost:5007/api/ping.
+      - registers the Topshelf service, then PRINTS a checklist of what to configure in
+        appsettings.json and the exact commands to start it.
+
+    IMPORTANT: by default the service is NOT started - configure appsettings.json first, then
+    start it (Start-Service ATPApi). Pass -Start to start immediately if the config is already
+    complete (e.g. an unattended re-install that preserves an existing appsettings.json).
 
     Updates after the first install are normally done from the AutoCount plugin's
     "About / Check for Updates" menu (which runs ATPApiUpdater.exe) - but re-running this
@@ -32,10 +36,15 @@
     until you edit appsettings.json.
 
 .EXAMPLE
-    # Online install - downloads latest from S3, prompts for config:
+    # Recommended: install + seed config, then the operator edits appsettings.json and starts it.
     powershell -ExecutionPolicy Bypass -File .\Install-ATPApi.ps1 -ApiKey "109izjiwjr14m" `
         -DbServer "localhost,1433" -Database "AED_LIVE" -SqlUser "sa" -SqlPassword "***" `
         -LoginUser "ADMIN" -LoginPassword "***"
+    # (then) Start-Service ATPApi
+
+.EXAMPLE
+    # Install + start immediately (only when appsettings.json is already fully configured):
+    powershell -ExecutionPolicy Bypass -File .\Install-ATPApi.ps1 -Start
 
 .EXAMPLE
     # Offline install from a folder you copied to the PC:
@@ -59,10 +68,11 @@ param(
     [string]$LoginPassword = "",
     [string]$AutoCountPath = "",
 
-    [switch]$NoStart,
-    # Install the files + register the service but DO NOT start it; print a checklist of what to
-    # configure in appsettings.json and the exact commands to start it afterwards.
-    [switch]$ConfigureOnly
+    # By default the installer does NOT start the service. It installs the files, registers the
+    # service, and prints a checklist of what to set in appsettings.json + how to start it - so the
+    # operator always configures the connection before the service runs. Pass -Start to start it
+    # immediately (only do this once appsettings.json is already fully configured).
+    [switch]$Start
 )
 
 $ErrorActionPreference = "Stop"
@@ -232,9 +242,10 @@ Write-Step "5/6" "Installing service '$ServiceName'..."
 if ($LASTEXITCODE -ne 0) { throw "Service install failed (exit $LASTEXITCODE)." }
 Write-Ok "service registered"
 
-$skipStart = $NoStart -or $needsEdit -or $ConfigureOnly
+# Configure-first by default: only start when -Start is passed AND the config is complete.
+$skipStart = (-not $Start) -or $needsEdit
 if ($skipStart) {
-    Write-Warn2 "Service registered but NOT started (configure first)."
+    Write-Warn2 "Service registered but NOT started - configure appsettings.json first (see below)."
 } else {
     & $exe start
     Start-Sleep -Seconds 3
