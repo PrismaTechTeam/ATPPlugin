@@ -153,14 +153,13 @@ if (-not $firstTime) {
     Write-Ok "preserving existing appsettings.json"
 }
 
-# Copy everything from the payload EXCEPT appsettings.json (never ship/overwrite it here).
-Get-ChildItem -Path $payloadDir -Recurse -File | ForEach-Object {
-    if ($_.Name -eq "appsettings.json") { return }
-    $rel = $_.FullName.Substring($payloadDir.Length).TrimStart('\')
-    $dst = Join-Path $InstallDir $rel
-    New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-    Copy-Item -LiteralPath $_.FullName -Destination $dst -Force
-}
+# Copy everything from the payload into the install dir, EXCEPT appsettings.json (preserved /
+# seeded separately). Iterate the payload's TOP-LEVEL items and Copy-Item -Recurse each one so the
+# folder structure is preserved natively — no relative-path math (which previously mis-rooted files
+# under a stray subfolder). Stray appsettings backups/logs from a dirty source are skipped too.
+Get-ChildItem -Path $payloadDir -Force |
+    Where-Object { $_.Name -ne 'appsettings.json' -and $_.Name -ne 'appsettings.json.bak' -and $_.Name -ne 'logs' } |
+    ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $InstallDir -Recurse -Force }
 if ($backupCfg) { Copy-Item $backupCfg $cfgPath -Force; Remove-Item $backupCfg -Force }
 Write-Ok "files copied"
 

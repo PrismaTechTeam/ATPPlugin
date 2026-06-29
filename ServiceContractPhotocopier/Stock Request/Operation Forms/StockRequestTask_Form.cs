@@ -172,12 +172,44 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             {
                 string xml = Data.PumsConfig.Get(_dbSetting, "GRID_LAYOUT::" + layoutKey, null);
                 if (string.IsNullOrEmpty(xml)) { if (notify) XtraMessageBox.Show(this, "No saved layout."); return; }
-                using (System.IO.MemoryStream ms = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml)))
-                    // Restore with the same full-layout options AutoCount uses, and tolerate schema
-                    // drift (AddNewColumns / RemoveOldColumns) so new columns aren't lost.
-                    view.RestoreLayoutFromStream(ms, FullLayoutOptions());
+                view.BeginUpdate();
+                try
+                {
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml)))
+                        // Restore with the same full-layout options AutoCount uses, and tolerate schema
+                        // drift (AddNewColumns / RemoveOldColumns) so new columns aren't lost.
+                        view.RestoreLayoutFromStream(ms, FullLayoutOptions());
+                    // RestoreLayout drops non-serialised behaviour (checkbox editor, column locks,
+                    // location editors, date formats) — re-apply so the grid isn't left broken.
+                    ReapplyGridBehavior(view);
+                }
+                finally { view.EndUpdate(); }
+                if (notify) XtraMessageBox.Show(this, "Layout loaded.", "Load Layout",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            catch { /* tolerate corrupted layout */ }
+            catch (Exception ex)
+            {
+                if (notify) XtraMessageBox.Show(this, "Load layout failed:\r\n" + ex.Message,
+                    "Load Layout", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Re-applies the non-serialisable grid behaviour after a layout restore: the Selected
+        /// checkbox editor + column locks, the location editors, and date formats. Order/width/
+        /// visibility come from the restored layout; this only fixes up behaviour the layout drops.
+        /// </summary>
+        private void ReapplyGridBehavior(GridView v)
+        {
+            FormatDateTimeColumn(v, "ReceivedAt");
+            FormatDateTimeColumn(v, "CompletedAt");
+            LockColumnsExceptSelected(v);
+            if (v == this.GridViewIssue) ApplyLocationEditor(v, "Location");
+            else if (v == this.GridViewTransfer)
+            {
+                ApplyLocationEditor(v, "FromLocation");
+                ApplyLocationEditor(v, "ToLocation");
+            }
         }
 
         private void ResetGridLayout(GridView view, string layoutKey)
@@ -732,6 +764,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                             ApplyLocationEditor(this.GridViewIssue, "Location");
                             this.GridViewIssue.BestFitColumns();
                             _issueColumnsReady = true;
+                            // Auto-apply a previously saved layout on open (AutoCount does this natively).
+                            TryLoadSavedLayout(this.GridViewIssue, "StockRequestTask.Issue.v2");
                         });
                     // Re-apply on every bind — layout restore may clobber ColumnEdit.
                     ApplyLocationEditor(this.GridViewIssue, "Location");
@@ -767,6 +801,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                             ApplyLocationEditor(this.GridViewTransfer, "ToLocation");
                             this.GridViewTransfer.BestFitColumns();
                             _transferColumnsReady = true;
+                            // Auto-apply a previously saved layout on open (AutoCount does this natively).
+                            TryLoadSavedLayout(this.GridViewTransfer, "StockRequestTask.Transfer.v2");
                         });
                     // Re-apply on every bind — layout restore may clobber ColumnEdit.
                     ApplyLocationEditor(this.GridViewTransfer, "FromLocation");
