@@ -1383,15 +1383,19 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (e.RowHandle < 0) return;
             string status = Convert.ToString(this.GridViewIssue.GetRowCellValue(e.RowHandle, "Status"));
             string ch = Convert.ToString(this.GridViewIssue.GetRowCellValue(e.RowHandle, "IssueChange"));
-            // Complete AND Cancelled are both finished/processed states → green.
+            // Complete/Cancelled = green; Ignore = grey; Cancel = red; Update = yellow; New = light blue.
             if (IsDoneStatus(status)) PaintRow(e, CompleteColor);
+            else if (string.Equals(status, "Ignore", StringComparison.OrdinalIgnoreCase)) PaintRow(e, IgnoreColor);
             else if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
             else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
+            else if (string.Equals(status, "New", StringComparison.OrdinalIgnoreCase)) PaintRow(e, NewColor);
         }
 
+        private static readonly Color NewColor      = Color.FromArgb(187, 222, 251); // flat light blue
         private static readonly Color UpdateColor   = Color.FromArgb(255, 245, 157); // flat yellow
         private static readonly Color CancelColor   = Color.FromArgb(255, 205, 210); // flat red
         private static readonly Color CompleteColor = Color.FromArgb(165, 214, 167); // flat green
+        private static readonly Color IgnoreColor   = Color.FromArgb(207, 216, 220); // flat grey
 
         // A record is "done" (green) once it has been processed — either generated (Complete)
         // or cancelled (Cancelled). Both are final results, just different outcomes.
@@ -1650,10 +1654,12 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             if (e.RowHandle < 0) return;
             string status = Convert.ToString(this.GridViewTransfer.GetRowCellValue(e.RowHandle, "Status"));
             string ch = Convert.ToString(this.GridViewTransfer.GetRowCellValue(e.RowHandle, "TransferChange"));
-            // Complete AND Cancelled are both finished/processed states → green.
+            // Complete/Cancelled = green; Ignore = grey; Cancel = red; Update = yellow; New = light blue.
             if (IsDoneStatus(status)) PaintRow(e, CompleteColor);
+            else if (string.Equals(status, "Ignore", StringComparison.OrdinalIgnoreCase)) PaintRow(e, IgnoreColor);
             else if (string.Equals(ch, "Cancel", StringComparison.OrdinalIgnoreCase)) PaintRow(e, CancelColor);
             else if (string.Equals(ch, "Update", StringComparison.OrdinalIgnoreCase)) PaintRow(e, UpdateColor);
+            else if (string.Equals(status, "New", StringComparison.OrdinalIgnoreCase)) PaintRow(e, NewColor);
         }
 
     }

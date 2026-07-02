@@ -70,6 +70,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private DevExpress.XtraEditors.LabelControl LblSwCancel;
         private System.Windows.Forms.Panel PnlSwComplete;
         private DevExpress.XtraEditors.LabelControl LblSwComplete;
+        private System.Windows.Forms.Panel PnlSwIgnore;
+        private DevExpress.XtraEditors.LabelControl LblSwIgnore;
 
         // ---- Auto-refresh timer ----
         private System.Windows.Forms.Timer RefreshTimer;
@@ -128,6 +130,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.LblSwCancel = new DevExpress.XtraEditors.LabelControl();
             this.PnlSwComplete = new System.Windows.Forms.Panel();
             this.LblSwComplete = new DevExpress.XtraEditors.LabelControl();
+            this.PnlSwIgnore = new System.Windows.Forms.Panel();
+            this.LblSwIgnore = new DevExpress.XtraEditors.LabelControl();
             this.RefreshTimer = new System.Windows.Forms.Timer(this.components);
             this.SplitContainer = new DevExpress.XtraEditors.SplitContainerControl();
             this.GridIssue = new DevExpress.XtraGrid.GridControl();
@@ -218,10 +222,12 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.PanelFilter.Controls.Add(this.LblSwCancel);
             this.PanelFilter.Controls.Add(this.PnlSwComplete);
             this.PanelFilter.Controls.Add(this.LblSwComplete);
+            this.PanelFilter.Controls.Add(this.PnlSwIgnore);
+            this.PanelFilter.Controls.Add(this.LblSwIgnore);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelFilter.Location = new System.Drawing.Point(0, 42);
             this.PanelFilter.Name = "PanelFilter";
-            this.PanelFilter.Size = new System.Drawing.Size(1820, 136);
+            this.PanelFilter.Size = new System.Drawing.Size(1820, 166);
             this.PanelFilter.TabIndex = 1;
             // 
             // GrpFilter
@@ -417,7 +423,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             // ChkShowIssue
             // 
-            this.ChkShowIssue.Location = new System.Drawing.Point(1308, 25);
+            this.ChkShowIssue.Location = new System.Drawing.Point(95, 138);
             this.ChkShowIssue.Name = "ChkShowIssue";
             this.ChkShowIssue.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 8F);
             this.ChkShowIssue.Properties.Appearance.Options.UseFont = true;
@@ -428,7 +434,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             // ChkShowTransfer
             // 
-            this.ChkShowTransfer.Location = new System.Drawing.Point(1308, 47);
+            this.ChkShowTransfer.Location = new System.Drawing.Point(295, 138);
             this.ChkShowTransfer.Name = "ChkShowTransfer";
             this.ChkShowTransfer.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 8F);
             this.ChkShowTransfer.Properties.Appearance.Options.UseFont = true;
@@ -542,7 +548,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.LblLegend.Appearance.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
             this.LblLegend.Appearance.Options.UseFont = true;
-            this.LblLegend.Location = new System.Drawing.Point(1308, 77);
+            this.LblLegend.Location = new System.Drawing.Point(505, 141);
             this.LblLegend.Name = "LblLegend";
             this.LblLegend.Size = new System.Drawing.Size(62, 13);
             this.LblLegend.TabIndex = 21;
@@ -550,16 +556,16 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             // PnlSwNormal
             // 
-            this.PnlSwNormal.BackColor = System.Drawing.Color.White;
+            this.PnlSwNormal.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(187)))), ((int)(((byte)(222)))), ((int)(((byte)(251)))));
             this.PnlSwNormal.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.PnlSwNormal.Location = new System.Drawing.Point(1308, 96);
+            this.PnlSwNormal.Location = new System.Drawing.Point(577, 139);
             this.PnlSwNormal.Name = "PnlSwNormal";
             this.PnlSwNormal.Size = new System.Drawing.Size(26, 16);
             this.PnlSwNormal.TabIndex = 22;
             // 
             // LblSwNormal
             // 
-            this.LblSwNormal.Location = new System.Drawing.Point(1338, 97);
+            this.LblSwNormal.Location = new System.Drawing.Point(607, 141);
             this.LblSwNormal.Name = "LblSwNormal";
             this.LblSwNormal.Size = new System.Drawing.Size(20, 13);
             this.LblSwNormal.TabIndex = 23;
@@ -569,14 +575,14 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.PnlSwUpdate.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(245)))), ((int)(((byte)(157)))));
             this.PnlSwUpdate.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.PnlSwUpdate.Location = new System.Drawing.Point(1398, 96);
+            this.PnlSwUpdate.Location = new System.Drawing.Point(655, 139);
             this.PnlSwUpdate.Name = "PnlSwUpdate";
             this.PnlSwUpdate.Size = new System.Drawing.Size(26, 16);
             this.PnlSwUpdate.TabIndex = 24;
             // 
             // LblSwUpdate
             // 
-            this.LblSwUpdate.Location = new System.Drawing.Point(1428, 97);
+            this.LblSwUpdate.Location = new System.Drawing.Point(685, 141);
             this.LblSwUpdate.Name = "LblSwUpdate";
             this.LblSwUpdate.Size = new System.Drawing.Size(62, 13);
             this.LblSwUpdate.TabIndex = 25;
@@ -586,14 +592,14 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.PnlSwCancel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(205)))), ((int)(((byte)(210)))));
             this.PnlSwCancel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.PnlSwCancel.Location = new System.Drawing.Point(1512, 96);
+            this.PnlSwCancel.Location = new System.Drawing.Point(765, 139);
             this.PnlSwCancel.Name = "PnlSwCancel";
             this.PnlSwCancel.Size = new System.Drawing.Size(26, 16);
             this.PnlSwCancel.TabIndex = 26;
             // 
             // LblSwCancel
             // 
-            this.LblSwCancel.Location = new System.Drawing.Point(1542, 97);
+            this.LblSwCancel.Location = new System.Drawing.Point(795, 141);
             this.LblSwCancel.Name = "LblSwCancel";
             this.LblSwCancel.Size = new System.Drawing.Size(60, 13);
             this.LblSwCancel.TabIndex = 27;
@@ -603,18 +609,35 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             //
             this.PnlSwComplete.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(165)))), ((int)(((byte)(214)))), ((int)(((byte)(167)))));
             this.PnlSwComplete.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.PnlSwComplete.Location = new System.Drawing.Point(1626, 96);
+            this.PnlSwComplete.Location = new System.Drawing.Point(875, 139);
             this.PnlSwComplete.Name = "PnlSwComplete";
             this.PnlSwComplete.Size = new System.Drawing.Size(26, 16);
             this.PnlSwComplete.TabIndex = 28;
             //
             // LblSwComplete
             //
-            this.LblSwComplete.Location = new System.Drawing.Point(1656, 97);
+            this.LblSwComplete.Location = new System.Drawing.Point(905, 141);
             this.LblSwComplete.Name = "LblSwComplete";
             this.LblSwComplete.Size = new System.Drawing.Size(58, 13);
             this.LblSwComplete.TabIndex = 29;
             this.LblSwComplete.Text = "Completed";
+            //
+            // PnlSwIgnore
+            //
+            this.PnlSwIgnore.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(207)))), ((int)(((byte)(216)))), ((int)(((byte)(220)))));
+            this.PnlSwIgnore.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.PnlSwIgnore.Location = new System.Drawing.Point(985, 139);
+            this.PnlSwIgnore.Name = "PnlSwIgnore";
+            this.PnlSwIgnore.Size = new System.Drawing.Size(26, 16);
+            this.PnlSwIgnore.TabIndex = 30;
+            //
+            // LblSwIgnore
+            //
+            this.LblSwIgnore.Location = new System.Drawing.Point(1015, 141);
+            this.LblSwIgnore.Name = "LblSwIgnore";
+            this.LblSwIgnore.Size = new System.Drawing.Size(45, 13);
+            this.LblSwIgnore.TabIndex = 31;
+            this.LblSwIgnore.Text = "Ignored";
             // 
             // RefreshTimer
             // 
@@ -739,7 +762,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             // 
             this.labelControl1.Appearance.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
             this.labelControl1.Appearance.Options.UseFont = true;
-            this.labelControl1.Location = new System.Drawing.Point(1308, 7);
+            this.labelControl1.Location = new System.Drawing.Point(8, 141);
             this.labelControl1.Name = "labelControl1";
             this.labelControl1.Size = new System.Drawing.Size(80, 13);
             this.labelControl1.TabIndex = 29;
