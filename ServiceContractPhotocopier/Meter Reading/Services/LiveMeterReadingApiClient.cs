@@ -1,42 +1,61 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using Newtonsoft.Json;
 
 namespace ServiceContractPhotocopier.MeterReading.Services
 {
     /// <summary>
-    /// LIVE client — calls the real PUMS meter-reading HTTP endpoints with the X-API-Key header.
-    /// Synchronous (blocks the calling thread); the Meter Reading Integration form calls it from a
-    /// background task. Switching from MOCK to LIVE is purely config: set METER_API_MODE=LIVE and
-    /// point METER_API_BASE_URL at the real host — no code change.
+    /// LIVE client — calls the real PUMS meter-reading endpoints (atgroup.asia PHP API):
+    ///   Online : GET {base}/api/meter-reading-online.php?token={token}
+    ///   Offline: GET {base}/api/meter-reading-offline.php?month=YYYY-MM&amp;token={token}
+    /// Auth is a ?token= query parameter (NOT a header). Both return a JSON array of MeterReadingDto
+    /// (Code, SerialNumber, TotalBK, TotalCL, LastAuditDate; offline also has TrackingId).
+    /// Synchronous (blocks the caller); the Meter Reading Integration form calls it from a background
+    /// task. Switching MOCK -> LIVE is config-only: METER_API_MODE=LIVE,
+    /// METER_API_BASE_URL=https://atgroup.asia, METER_API_KEY=&lt;token&gt;.
     /// </summary>
     public class LiveMeterReadingApiClient : IMeterReadingApiClient
     {
+        private const string ONLINE_PATH  = "/api/meter-reading-online.php";
+        private const string OFFLINE_PATH = "/api/meter-reading-offline.php";
+
         private readonly string _baseUrl;
-        private readonly string _apiKey;
+        private readonly string _token;
         private readonly int _timeoutMs;
 
-        public LiveMeterReadingApiClient(string baseUrl, string apiKey, int timeoutMs)
+        public LiveMeterReadingApiClient(string baseUrl, string token, int timeoutMs)
         {
             _baseUrl = (baseUrl ?? string.Empty).TrimEnd('/');
-            _apiKey = apiKey ?? string.Empty;
+            _token = token ?? string.Empty;
             _timeoutMs = timeoutMs > 0 ? timeoutMs : 15000;
         }
 
         public List<MeterReadingDto> GetReadings(MachineStatus status, int month)
         {
-            string path = status == MachineStatus.Offline
-                ? "/api/meter-reading/offline?month=" + month
-                : "/api/meter-reading/online";
-            List<MeterReadingDto> list = GetArray(path);
+            string url;
+            if (status == MachineStatus.Offline)
+            {
+                // The offline endpoint keys by billing month as YYYY-MM. The form works within the
+                // current year (it derives the year from DateTime.Today everywhere), so pair the
+                // selected month with the current year.
+                string yearMonth = string.Format("{0:0000}-{1:00}", DateTime.Today.Year, month);
+                url = _baseUrl + OFFLINE_PATH + "?month=" + Uri.EscapeDataString(yearMonth) + TokenSuffix("&");
+            }
+            else
+            {
+                url = _baseUrl + ONLINE_PATH + TokenSuffix("?");
+            }
+
+            List<MeterReadingDto> list = GetArray(url);
             foreach (MeterReadingDto d in list) d.Status = status;   // tag with the producing endpoint
             return list;
         }
 
         public List<MeterReadingDto> GetOnline()
         {
-            return GetReadings(MachineStatus.Online, System.DateTime.Today.Month);
+            return GetReadings(MachineStatus.Online, DateTime.Today.Month);
         }
 
         public List<MeterReadingDto> GetOffline(int month)
@@ -44,24 +63,35 @@ namespace ServiceContractPhotocopier.MeterReading.Services
             return GetReadings(MachineStatus.Offline, month);
         }
 
-        private List<MeterReadingDto> GetArray(string relativePath)
+        private string TokenSuffix(string separator)
         {
-            string url = _baseUrl + relativePath;
+            return string.IsNullOrEmpty(_token) ? string.Empty : separator + "token=" + Uri.EscapeDataString(_token);
+        }
+
+        private List<MeterReadingDto> GetArray(string url)
+        {
+            // The API is HTTPS; ensure TLS 1.2 is enabled (older .NET Framework defaults can omit it).
+            try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
+
             using (HttpClient client = new HttpClient())
             {
                 client.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
-                if (!string.IsNullOrEmpty(_apiKey))
-                    client.DefaultRequestHeaders.Add("X-API-Key", _apiKey);
 
                 HttpResponseMessage resp = client.GetAsync(url).GetAwaiter().GetResult();
                 string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 if (!resp.IsSuccessStatusCode)
                     throw new MeterReadingApiException(
-                        "Meter API GET " + url + " returned " + (int)resp.StatusCode + " " + resp.StatusCode + ".", body);
+                        "Meter API GET " + Redact(url) + " returned " + (int)resp.StatusCode + " " + resp.StatusCode + ".", body);
 
                 List<MeterReadingDto> list = JsonConvert.DeserializeObject<List<MeterReadingDto>>(body);
                 return list ?? new List<MeterReadingDto>();
             }
+        }
+
+        // Keep the token out of exception messages / logs.
+        private string Redact(string url)
+        {
+            return string.IsNullOrEmpty(_token) ? url : url.Replace(_token, "***");
         }
     }
 

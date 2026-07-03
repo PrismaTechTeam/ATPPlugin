@@ -5,13 +5,12 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Appointment Type",
-    // ParentMenuCaption = "General Setup",
-    // MenuOrder = 80,
-    // ParentMenuOrder = 600,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_APPOINTMENT_TYPE,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_APPOINTMENT_TYPE)]
+    [AutoCount.PlugIn.MenuItem("Appointment Type",
+    ParentMenuCaption = "General Setup",
+    MenuOrder = 80,
+    ParentMenuOrder = 600,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_APPOINTMENT_TYPE,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_APPOINTMENT_TYPE)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class AppointmentTypeLst_Form : ScpLookupLst_Form
     {

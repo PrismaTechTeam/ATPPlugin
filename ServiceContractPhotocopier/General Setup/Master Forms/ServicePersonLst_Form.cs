@@ -6,13 +6,12 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Service Person",
-    // ParentMenuCaption = "General Setup",
-    // MenuOrder = 100,
-    // ParentMenuOrder = 600,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_PERSON,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_PERSON)]
+    [AutoCount.PlugIn.MenuItem("Service Person",
+    ParentMenuCaption = "General Setup",
+    MenuOrder = 100,
+    ParentMenuOrder = 600,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_PERSON,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_PERSON)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class ServicePersonLst_Form : ScpLookupLst_Form
     {

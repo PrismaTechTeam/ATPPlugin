@@ -10,11 +10,10 @@ using static VTACPluginBase.Classes.Helpers.GeneralHelper;
 namespace ServiceContractPhotocopier.ServiceNote.OperationForms
 {
     /// <summary>Service Note Closing dialog — pick note no + solution code + closed date → mark Closed='Y'.</summary>
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Service Note Closing",
-    // MenuOrder = 320,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_CLOSING,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_CLOSING)]
+    [AutoCount.PlugIn.MenuItem("Service Note Closing",
+    MenuOrder = 320,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_CLOSING,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_CLOSING)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class ServiceNoteClosing_Form : XtraForm
     {

@@ -15,8 +15,7 @@ using ServiceContractPhotocopier.MeterReading.Services;
 
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450)]
+    [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class MeterReadingIntegration_Form : XtraForm
     {

@@ -11,8 +11,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
     /// List form for the combined Service Contract module v2 (zSCP2_*). Single entry point that
     /// replaces the old separate "Maintain Service Contract" + "Maintain Service Item" menus.
     /// </summary>
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Maintain Service Contract", MenuOrder = 200)]
+    [AutoCount.PlugIn.MenuItem("Maintain Service Contract", MenuOrder = 200)]
     [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, false)]
     public partial class zSCP2_ContractLst_Form : XtraForm
     {

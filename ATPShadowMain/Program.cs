@@ -68,7 +68,9 @@ namespace ATPShadowMain
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void Run()
         {
-            // === PREVIEW (temporary): open the new combined Service Contract list directly ===
+            // === PREVIEW disabled — using LAUNCH OPTION A (full AutoCount main window) below. ===
+            // Set 'if (true)' to instead open one form directly for fast single-form iteration.
+            if (false)
             {
                 AutoCount.MainEntry.Startup vstartup = new AutoCount.MainEntry.Startup();
                 AutoCount.Data.DBSetting vdb = new AutoCount.Data.DBSetting(
@@ -112,6 +114,27 @@ namespace ATPShadowMain
             // set up. Let MainStartup do the full sequence; that's what this public method is for.
             Log("Run: SetDefaultOEM");
             AutoCount.MainEntry.MainStartup.Default.SetDefaultOEM();
+
+            // DEV: re-register the freshly-built plugin package so the full AutoCount menu reflects
+            // the current build. AutoCount loads plugins from the account-book DB (PlugIn/PlugInFiles),
+            // not our bin — so without this, OPTION A shows the previously-installed (stale) menu.
+            try
+            {
+                AutoCount.Data.DBSetting installDb = new AutoCount.Data.DBSetting(
+                    AutoCount.Data.DBServerType.SQL2000,
+                    ConfigurationManager.AppSettings["DBSetting.ServerName"],
+                    ConfigurationManager.AppSettings["DBSetting.User"],
+                    ConfigurationManager.AppSettings["DBSetting.Password"],
+                    ConfigurationManager.AppSettings["DBSetting.DBName"],
+                    false);
+                string appPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    @"..\..\..\ServiceContractPhotocopier\ServiceContractPhotocopier.app"));
+                Log("Reinstalling plugin from " + appPath + " (exists=" + System.IO.File.Exists(appPath) + ")");
+                AutoCount.PlugIn.PlugInManager.InstallPackage(installDb, appPath, true);
+                Log("Plugin reinstalled OK - fresh menu registered");
+            }
+            catch (Exception pex) { Log("Plugin reinstall FAILED: " + pex); }
 
             AutoCount.MainEntry.StartupInfo startInfo = new AutoCount.MainEntry.StartupInfo();
             startInfo.StartupType  = AutoCount.MainEntry.StartupType.Normal;

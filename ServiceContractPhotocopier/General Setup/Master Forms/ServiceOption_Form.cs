@@ -11,11 +11,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     /// <summary>
     /// Service Option — tabbed global configuration. Persists to z_SysConfig table.
     /// </summary>
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Service Option...",
-    // MenuOrder = 900,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OPTION,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OPTION)]
+    [AutoCount.PlugIn.MenuItem("Service Option...",
+    MenuOrder = 900,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OPTION,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OPTION)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class ServiceOption_Form : XtraForm
     {

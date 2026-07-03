@@ -14,11 +14,10 @@ namespace ServiceContractPhotocopier.ServiceAppointment.OperationForms
     /// Dialog to bulk-generate Service Notes for machines whose PMLastServiceDate+Interval &lt; today.
     /// Fields: Service Date range + "Default Settings" group (Service Note Code, Status, Type, Severity, Problem + remark + Attended By / Assign To + Description) + Tax Inclusive.
     /// </summary>
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Preventive Maintenance - Service Note",
-    // MenuOrder = 410,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_PREVENTIVE_MAINT,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_PREVENTIVE_MAINT)]
+    [AutoCount.PlugIn.MenuItem("Preventive Maintenance - Service Note",
+    MenuOrder = 410,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_PREVENTIVE_MAINT,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_PREVENTIVE_MAINT)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class PreventiveMaintenance_Form : XtraForm
     {

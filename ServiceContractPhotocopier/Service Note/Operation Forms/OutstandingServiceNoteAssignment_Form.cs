@@ -6,11 +6,10 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.ServiceNote.OperationForms
 {
-    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
-    // [AutoCount.PlugIn.MenuItem("Outstanding Service Note Assignment Inquiry",
-    // ParentMenuCaption = "Inquiry", MenuOrder = 50, ParentMenuOrder = 700,
-    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OUTSTANDING_NOTE_ASSIGNMENT,
-    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OUTSTANDING_NOTE_ASSIGNMENT)]
+    [AutoCount.PlugIn.MenuItem("Outstanding Service Note Assignment Inquiry",
+    ParentMenuCaption = "Inquiry", MenuOrder = 50, ParentMenuOrder = 700,
+    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OUTSTANDING_NOTE_ASSIGNMENT,
+    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OUTSTANDING_NOTE_ASSIGNMENT)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
     public partial class OutstandingServiceNoteAssignment_Form : ScpLookupLst_Form
     {

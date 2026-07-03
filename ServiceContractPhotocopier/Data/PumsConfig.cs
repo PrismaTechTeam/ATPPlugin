@@ -32,7 +32,7 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_METER_API_BASE_URL = "METER_API_BASE_URL";
         public const string DEFAULT_METER_API_BASE_URL = "http://localhost:8090";
 
-        /// <summary>Value sent in the X-API-Key header on every meter-reading API call.</summary>
+        /// <summary>Auth token appended as the ?token= query parameter on every meter-reading API call.</summary>
         public const string KEY_METER_API_KEY = "METER_API_KEY";
 
         /// <summary>"MOCK" (default) = deterministic local data; "LIVE" = call the real HTTP endpoints.</summary>
