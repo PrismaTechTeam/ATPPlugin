@@ -30,9 +30,26 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private XtraTabPage _pageConflict;
         private XtraTabPage _pageAll;
         private LabelControl _lblSummary;
-        private SimpleButton _btnManual;
-        private SimpleButton _btnSaveManual;
-        private bool _manualMode;
+        private LabelControl _lblApiStatus;
+        private DevExpress.XtraEditors.PanelControl _pnlFooter;
+        private string _apiBaseUrl;
+        private DevExpress.XtraEditors.PanelControl _pnlFetching;
+        private DevExpress.XtraEditors.MarqueeProgressBarControl _marquee;
+        private LabelControl _lblFetchMsg;
+        private System.Windows.Forms.Timer _fetchTimer;
+        private int _fetchElapsed;
+        private int _fetchMsgIdx;
+        private bool _suppressFilterEvent;   // guards programmatic Day/ShowAll changes from auto-reloading
+        private DevExpress.XtraEditors.CheckEdit _chkInclude0Usage;
+        private DevExpress.XtraEditors.CheckEdit _chkPerCssi;
+        private static readonly string[] FETCH_MSGS = new string[] {
+            "Contacting the meter API...",
+            "Fetching online + offline readings...",
+            "The server can be slow (~15s) - please hold on...",
+            "Still working - matching machines to readings...",
+            "Almost there - finishing up..."
+        };
+        private SimpleButton _btnSetting;
 
         public MeterReadingIntegration_Form()
         {
@@ -44,19 +61,23 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             _userSession = userSession;
             if (userSession != null) _dbSetting = userSession.DBSetting;
+            PopulateDayCombo();
+            InitApiStatus();
             LoadData();
         }
 
         public MeterReadingIntegration_Form(DBSetting dbSetting) : this()
         {
             _dbSetting = dbSetting;
+            PopulateDayCombo();
+            InitApiStatus();
             LoadData();
         }
 
         private void InitDefaults()
         {
             this.LblToday.Text = DateTime.Today.ToString("dd/MM/yyyy (ddd)");
-            this.ChkShowAll.Checked = true;
+            this.ChkShowAll.Checked = false;   // default: filter by the selected billing Day (not show all)
 
             this.CmbMonth.Properties.Items.Clear();
             for (int m = 1; m <= 12; m++)
@@ -66,6 +87,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbDay.Properties.Items.Clear();
             for (int d = 1; d <= 31; d++) this.CmbDay.Properties.Items.Add(d);
             this.CmbDay.SelectedIndex = DateTime.Today.Day - 1;
+
+            // Picking a Day filters to that day (auto-uncheck Show All); toggling Show All reloads too.
+            this.CmbDay.SelectedIndexChanged += new EventHandler(CmbDay_SelectedIndexChanged);
+            this.ChkShowAll.CheckedChanged += new EventHandler(ChkShowAll_CheckedChanged);
 
             this.GridViewMeter.CellValueChanged +=
                 new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewMeter_CellValueChanged);
@@ -106,28 +131,31 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // BK+CL pair is easy to tell apart at a glance. Conflicts override to light red.
             this.GridViewMeter.RowStyle +=
                 new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewMeter_RowStyle);
-            // Manual key-in is gated by _manualMode; API-sourced rows are never directly editable.
+            // Current Reading is read-only in the grid (manual key-in removed); values come from Fetch.
             this.GridViewMeter.ShowingEditor +=
                 new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditor);
             // Double-click a contract → open its detail / override form.
             this.GridViewMeter.DoubleClick += new EventHandler(GridViewMeter_DoubleClick);
 
-            // Manual Key-In + Save Manual buttons (created in code to avoid touching the strict designer).
-            _btnManual = new SimpleButton();
-            _btnManual.Text = "Manual Key-In";
-            _btnManual.Location = new Point(1085, 46);
-            _btnManual.Size = new Size(135, 52);
-            _btnManual.Click += new EventHandler(BtnManual_Click);
-            this.PanelFilter.Controls.Add(_btnManual);
-            _btnManual.BringToFront();
+            // Setting button (created in code to avoid touching the strict designer).
+            _btnSetting = new SimpleButton();
+            _btnSetting.Text = "Setting";
+            _btnSetting.Location = new Point(1085, 46);
+            _btnSetting.Size = new Size(120, 52);
+            _btnSetting.Click += new EventHandler(BtnSetting_Click);
+            this.PanelFilter.Controls.Add(_btnSetting);
+            _btnSetting.BringToFront();
 
-            _btnSaveManual = new SimpleButton();
-            _btnSaveManual.Text = "Save Manual";
-            _btnSaveManual.Location = new Point(1226, 46);
-            _btnSaveManual.Size = new Size(120, 52);
-            _btnSaveManual.Click += new EventHandler(BtnSaveManual_Click);
-            this.PanelFilter.Controls.Add(_btnSaveManual);
-            _btnSaveManual.BringToFront();
+            // Invoice grouping choice (overrides each contract's stored BillingMode when generating):
+            //   ticked  = one invoice per CSSI (service item)
+            //   unticked= one invoice per whole contract
+            _chkPerCssi = new DevExpress.XtraEditors.CheckEdit();
+            _chkPerCssi.Properties.Caption = "Separate invoice per CSSI (else whole contract)";
+            _chkPerCssi.Location = new Point(899, 100);
+            _chkPerCssi.Size = new Size(300, 20);
+            _chkPerCssi.Checked = false;
+            this.PanelFilter.Controls.Add(_chkPerCssi);
+            _chkPerCssi.BringToFront();
 
             // Summary label sitting to the right of the action buttons.
             _lblSummary = new LabelControl();
@@ -141,6 +169,63 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _lblSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             this.PanelFilter.Controls.Add(_lblSummary);
             _lblSummary.BringToFront();
+
+            // Footer: shows the meter-API URL + reachability (green = reachable, red = unreachable).
+            _pnlFooter = new DevExpress.XtraEditors.PanelControl();
+            _pnlFooter.Dock = DockStyle.Bottom;
+            _pnlFooter.Height = 26;
+            _pnlFooter.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            _lblApiStatus = new LabelControl();
+            _lblApiStatus.Dock = DockStyle.Fill;
+            _lblApiStatus.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _lblApiStatus.Appearance.Options.UseFont = true;
+            _lblApiStatus.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            _lblApiStatus.Padding = new System.Windows.Forms.Padding(10, 0, 0, 0);
+            _pnlFooter.Controls.Add(_lblApiStatus);
+            this.Controls.Add(_pnlFooter);
+            _tabView.BringToFront();   // keep the Dock=Fill grid above the bottom footer
+
+            // "Thinking"-style fetch overlay: a marquee bar + cycling wording so the wait feels alive.
+            _pnlFetching = new DevExpress.XtraEditors.PanelControl();
+            _pnlFetching.Size = new Size(480, 100);
+            _pnlFetching.Appearance.BackColor = Color.White;
+            _pnlFetching.Appearance.Options.UseBackColor = true;
+            _pnlFetching.Visible = false;
+            LabelControl fetchTitle = new LabelControl();
+            fetchTitle.Text = "Fetching meter readings";
+            fetchTitle.Appearance.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            fetchTitle.Appearance.Options.UseFont = true;
+            fetchTitle.AutoSizeMode = LabelAutoSizeMode.None;
+            fetchTitle.Location = new Point(24, 15);
+            fetchTitle.Size = new Size(432, 22);
+            _pnlFetching.Controls.Add(fetchTitle);
+            _marquee = new DevExpress.XtraEditors.MarqueeProgressBarControl();
+            _marquee.Location = new Point(24, 45);
+            _marquee.Size = new Size(432, 16);
+            _pnlFetching.Controls.Add(_marquee);
+            _lblFetchMsg = new LabelControl();
+            _lblFetchMsg.Appearance.Font = new Font("Segoe UI", 9F);
+            _lblFetchMsg.Appearance.Options.UseFont = true;
+            _lblFetchMsg.Appearance.ForeColor = Color.FromArgb(90, 90, 90);
+            _lblFetchMsg.Appearance.Options.UseForeColor = true;
+            _lblFetchMsg.AutoSizeMode = LabelAutoSizeMode.None;
+            _lblFetchMsg.Location = new Point(24, 70);
+            _lblFetchMsg.Size = new Size(432, 18);
+            _pnlFetching.Controls.Add(_lblFetchMsg);
+            this.Controls.Add(_pnlFetching);
+            _fetchTimer = new System.Windows.Forms.Timer();
+            _fetchTimer.Interval = 1000;
+            _fetchTimer.Tick += new EventHandler(FetchTimer_Tick);
+
+            // "Include 0 Meter Usage" filter (in the Filter Options group). Unticked = hide 0-usage rows.
+            _chkInclude0Usage = new DevExpress.XtraEditors.CheckEdit();
+            _chkInclude0Usage.Properties.Caption = "Include 0 Meter Usage";
+            _chkInclude0Usage.Location = new Point(272, 92);
+            _chkInclude0Usage.Size = new Size(200, 20);
+            _chkInclude0Usage.Checked = true;
+            _chkInclude0Usage.CheckedChanged += new EventHandler(ChkInclude0Usage_CheckedChanged);
+            this.GrpFilter.Controls.Add(_chkInclude0Usage);
+            _chkInclude0Usage.BringToFront();
         }
 
         // Double-click any row → open the detail / override form for that whole contract.
@@ -190,46 +275,61 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             else if (_tabView.SelectedTabPage == _pageOffline) f = "[MachineStatus] = 'OFFLINE'";
             else if (_tabView.SelectedTabPage == _pageNo) f = "[Status] = 'No API data'";
             else if (_tabView.SelectedTabPage == _pageConflict) f = "[HasConflict] = True";
+
+            // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked.
+            if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked)
+            {
+                string usage = "[MeterUsage] <> 0";
+                f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
+            }
             GridViewMeter.ActiveFilterString = f;
         }
+
+        private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
 
         private void UpdateTabCounts()
         {
             if (_dtGrid == null || _tabView == null) return;
-            int with = 0, no = 0, sel = 0, online = 0, offline = 0, conflict = 0;
+            // Count DISTINCT service items (machines), not meter rows: a colour copier has a BK + a
+            // CL meter, so per-meter counts double it. Tabs/summary read more naturally per machine.
+            int sel = 0;
             decimal selCharge = 0m;
-            System.Collections.Generic.HashSet<string> items = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> allItems = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> withItems = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> onlineItems = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> offlineItems = new System.Collections.Generic.HashSet<string>();
+            System.Collections.Generic.HashSet<string> conflictItems = new System.Collections.Generic.HashSet<string>();
             System.Collections.Generic.HashSet<string> contracts = new System.Collections.Generic.HashSet<string>();
             foreach (DataRow r in _dtGrid.Rows)
             {
-                items.Add(S(r["ItemKey"]));
+                string itemKey = S(r["ItemKey"]);
+                allItems.Add(itemKey);
                 contracts.Add(S(r["ContractKey"]));
-                bool hasData = Dec(r["CurrentReading"]) > 0m || Dec(r["FetchedReading"]) > 0m;
-                if (hasData) with++;
-                else if (S(r["Status"]) == "No API data") no++;
                 string ms = S(r["MachineStatus"]);
-                if (ms == "ONLINE") online++;
-                else if (ms == "OFFLINE") offline++;
-                if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflict++;
+                if (ms == "ONLINE") { onlineItems.Add(itemKey); withItems.Add(itemKey); }
+                else if (ms == "OFFLINE") { offlineItems.Add(itemKey); withItems.Add(itemKey); }
+                if (Dec(r["CurrentReading"]) > 0m || Dec(r["FetchedReading"]) > 0m) withItems.Add(itemKey);
+                if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflictItems.Add(itemKey);
                 if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))
                 { sel++; selCharge += Dec(r["TotalCharges"]); }
             }
-            _pageWith.Text = "With Meter Data (" + with + ")";
-            _pageOnline.Text = "Online (" + online + ")";
-            _pageOffline.Text = "Offline (" + offline + ")";
-            _pageNo.Text = "No API Data (" + no + ")";
-            _pageConflict.Text = "Conflicts (" + conflict + ")";
-            _pageAll.Text = "All (" + _dtGrid.Rows.Count + ")";
+            int noItems = allItems.Count - withItems.Count;   // machines with no reading at all
+            _pageWith.Text = "With Meter Data (" + withItems.Count + ")";
+            _pageOnline.Text = "Online (" + onlineItems.Count + ")";
+            _pageOffline.Text = "Offline (" + offlineItems.Count + ")";
+            _pageNo.Text = "No API Data (" + noItems + ")";
+            _pageConflict.Text = "Conflicts (" + conflictItems.Count + ")";
+            _pageAll.Text = "All (" + allItems.Count + ")";
 
             if (_lblSummary != null)
             {
-                string fetched = (with == 0 && no == 0) ? "  (not fetched yet)" : "";
+                string fetched = (withItems.Count == 0 && noItems == 0) ? "  (not fetched yet)" : "";
                 _lblSummary.Text =
-                    "Contracts: " + contracts.Count + "    Service Items: " + items.Count +
+                    "Contracts: " + contracts.Count + "    Service Items: " + allItems.Count +
                     "    Meters: " + _dtGrid.Rows.Count + "\r\n" +
-                    "✔ With meter data: " + with + fetched + "   (Online: " + online + " / Offline: " + offline + ")\r\n" +
-                    "✖ No API data (need manual key-in): " + no + (conflict > 0 ? "      ⚠ Conflicts: " + conflict : "") + "\r\n" +
-                    "Selected to bill: " + sel + "    Billing total: RM " + selCharge.ToString("n2");
+                    "✔ With meter data: " + withItems.Count + fetched + "   (Online: " + onlineItems.Count + " / Offline: " + offlineItems.Count + ") machines\r\n" +
+                    "✖ No API data (need manual key-in): " + noItems + (conflictItems.Count > 0 ? "      ⚠ Conflicts: " + conflictItems.Count : "") + "\r\n" +
+                    "Selected to bill: " + sel + " meter(s)    Billing total: RM " + selCharge.ToString("n2");
             }
         }
 
@@ -257,8 +357,40 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
         private int SelectedDay()
         {
-            int idx = this.CmbDay.SelectedIndex;
-            return (idx >= 0 && idx <= 30) ? idx + 1 : DateTime.Today.Day;
+            object v = this.CmbDay.SelectedItem;
+            int d;
+            if (v != null && int.TryParse(v.ToString(), out d) && d >= 1 && d <= 31) return d;
+            return DateTime.Today.Day;
+        }
+
+        // Fill the Day combo with only the billing days actually in use (distinct effective billing
+        // day = COALESCE(item override, contract day) across active items), instead of a fixed 1-31
+        // list. Called after _dbSetting is set (InitDefaults runs before that, so it seeds 1-31).
+        private void PopulateDayCombo()
+        {
+            if (_dbSetting == null) return;
+            int prev = SelectedDay();
+            try
+            {
+                string sql = "SELECT DISTINCT COALESCE(i.BillingDayOverride, c.BillingDay) AS d " +
+                    "FROM dbo.zSCP2_Item i JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    "WHERE i.Inactive='N' AND c.Inactive='N' " +
+                    "AND COALESCE(i.BillingDayOverride, c.BillingDay) BETWEEN 1 AND 31 ORDER BY d";
+                DataTable dt = QueryWithTimeout(sql, 60);
+                if (dt != null && dt.Rows.Count > 0)
+                {
+                    this.CmbDay.Properties.Items.Clear();
+                    foreach (DataRow r in dt.Rows)
+                        this.CmbDay.Properties.Items.Add(Convert.ToInt32(r["d"]));
+                }
+            }
+            catch { }
+            int idx = this.CmbDay.Properties.Items.IndexOf(prev);
+            if (idx < 0) idx = this.CmbDay.Properties.Items.IndexOf(DateTime.Today.Day);
+            if (idx < 0 && this.CmbDay.Properties.Items.Count > 0) idx = 0;
+            _suppressFilterEvent = true;
+            this.CmbDay.SelectedIndex = idx;
+            _suppressFilterEvent = false;
         }
 
         // ───────────────────── Load (one row per meter) ─────────────────────
@@ -287,9 +419,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         "%' OR c.ContractNo LIKE '%" + s + "%' OR ISNULL(d.CompanyName,'') LIKE '%" + s + "%') ";
                 }
 
+                // Expired service items are hidden unless the user opts in (Meter Reading > Setting).
+                bool includeExpired = ServiceContractPhotocopier.Data.PumsConfig.GetBool(
+                    _dbSetting, ServiceContractPhotocopier.Data.PumsConfig.KEY_INCLUDE_EXPIRED_ITEMS,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INCLUDE_EXPIRED_ITEMS);
+                string expiryFilter = includeExpired ? "" :
+                    " AND (i.ServiceExpiryDate IS NULL OR i.ServiceExpiryDate >= DATEFROMPARTS(" + year + "," + month + ",1)) ";
+
                 string sql =
                     "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, i.SerialNumber, " +
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
+                    "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     "ISNULL(mt.ACItemCode,'') AS ACItemCode, ISNULL(m.MinimumCharges,0) AS MinCharges, " +
                     "ISNULL(m.ChargesRate,0) AS UnitPrice, ISNULL(m.FOCQty,0) AS FOCQty, " +
@@ -305,8 +445,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "LEFT JOIN (SELECT z.ServiceItemMeterTypeKey, z.MeterTransReading AS LastReading, z.MeterTransDate AS LastDate " +
                     "  FROM (SELECT t.ServiceItemMeterTypeKey, t.MeterTransReading, t.MeterTransDate, " +
                     "        ROW_NUMBER() OVER (PARTITION BY t.ServiceItemMeterTypeKey ORDER BY t.MeterTransDate DESC, t.MeterTransKey DESC) AS rn " +
-                    "        FROM dbo.zSCP_MeterTrans t) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
-                    "WHERE m.MeterRole IN ('BK','CL') AND i.Inactive='N' AND c.Inactive='N' " + dayFilter + searchFilter +
+                    // Last reading = latest MeterTrans STRICTLY BEFORE the selected billing month, so
+                    // the baseline is the previous period's reading (never the current/future month).
+                    "        FROM dbo.zSCP_MeterTrans t WHERE t.MeterTransDate < DATEFROMPARTS(" + year + "," + month + ",1)) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
+                    "WHERE m.MeterRole IN ('BK','CL') AND i.Inactive='N' AND c.Inactive='N' " + dayFilter + searchFilter + expiryFilter +
                     "ORDER BY c.ContractNo, i.ServiceItemNo, m.MeterRole";
                 DataTable src = QueryWithTimeout(sql, 180);
 
@@ -328,6 +470,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["SerialNo"] = S(r["SerialNumber"]);
                     g["Customer"] = S(r["DebtorCode"]) + " - " + S(r["DebtorName"]);
                     g["Mode"] = S(r["BillingMode"]) == "S" ? "Separate" : "Group";
+                    if (r["EffBillingDay"] != DBNull.Value) g["BillingDay"] = Convert.ToInt32(r["EffBillingDay"]);
                     g["MeterType"] = S(r["MeterTypeCode"]);
                     g["MeterTypeName"] = S(r["MeterTypeName"]);
                     g["MinCharges"] = Dec(r["MinCharges"]);
@@ -378,6 +521,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("MachineStatus", typeof(string));   // ONLINE / OFFLINE (set on fetch, per item)
             dt.Columns.Add("Customer", typeof(string));
             dt.Columns.Add("Mode", typeof(string));
+            dt.Columns.Add("BillingDay", typeof(int));   // effective billing day = COALESCE(item override, contract day)
             dt.Columns.Add("MeterType", typeof(string));
             dt.Columns.Add("MeterTypeName", typeof(string));
             dt.Columns.Add("MinCharges", typeof(decimal));
@@ -385,6 +529,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("FOCQty", typeof(decimal));
             dt.Columns.Add("RebatePct", typeof(decimal));
             dt.Columns.Add("LastReadDate", typeof(DateTime));
+            dt.Columns.Add("LastAuditDate", typeof(DateTime));   // API audit date of the CURRENT fetched reading
             dt.Columns.Add("LastReading", typeof(decimal));
             dt.Columns.Add("CurrentReading", typeof(decimal));
             dt.Columns.Add("MeterUsage", typeof(decimal));
@@ -424,6 +569,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("MachineStatus", "Machine Status", 95, false);
             SetCol("Customer", "Customer", 220, false);
             SetCol("Mode", "Mode", 70, false);
+            SetCol("BillingDay", "Billing Day", 80, false);
             SetCol("MeterType", "Meter Type", 130, false);
             SetCol("MeterTypeName", "Meter Type Name", 170, false);
             SetNum("MinCharges", "Min. Charges", 85, false, "n2");
@@ -431,6 +577,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetNum("FOCQty", "FOC Qty", 70, false, "n0");
             SetNum("RebatePct", "Rebate (%)", 80, false, "n2");
             SetCol("LastReadDate", "Last Read Date", 100, false);
+            SetCol("LastAuditDate", "Last Audit Date", 110, false);
             SetNum("LastReading", "Last Reading", 95, false, "n0");
             SetNum("CurrentReading", "Current Reading", 100, true, "n0");
             SetNum("MeterUsage", "Meter Usage", 95, false, "n0");
@@ -438,6 +585,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("UseMin", "Use Min.", 70, true);
             SetCol("Sel", "Selected", 65, true);
             SetCol("Status", "Status", 130, false);
+
+            // Freeze the identifier columns on the left so they stay visible when scrolling horizontally.
+            // (Requires ColumnAutoWidth = false, set above.)
+            foreach (string fx in new string[] { "ContractNo", "ServiceItemNo", "SerialNo" })
+                if (GridViewMeter.Columns[fx] != null)
+                    GridViewMeter.Columns[fx].Fixed = DevExpress.XtraGrid.Columns.FixedStyle.Left;
 
             // Footer totals.
             GridColumn cChg = GridViewMeter.Columns["TotalCharges"];
@@ -482,36 +635,76 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnRefresh_Click(object sender, EventArgs e) { LoadData(); }
         private void BtnFilter_Click(object sender, EventArgs e) { LoadData(); }
 
-        private void BtnReset_Click(object sender, EventArgs e)
+        // Picking a specific billing day means "show only that day" — uncheck Show All (which would
+        // otherwise override the day filter) and reload. Programmatic changes are guarded.
+        private void CmbDay_SelectedIndexChanged(object sender, EventArgs e)
         {
-            this.TxtSearch.EditValue = null;
-            this.ChkShowAll.Checked = true;
-            this.CmbMonth.SelectedIndex = DateTime.Today.Month - 1;
-            this.CmbDay.SelectedIndex = DateTime.Today.Day - 1;
+            if (_suppressFilterEvent || _dbSetting == null) return;
+            _suppressFilterEvent = true;
+            this.ChkShowAll.Checked = false;
+            _suppressFilterEvent = false;
             LoadData();
         }
 
-        private void BtnFetch_Click(object sender, EventArgs e)
+        private void ChkShowAll_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_suppressFilterEvent || _dbSetting == null) return;
+            LoadData();
+        }
+
+        private void BtnReset_Click(object sender, EventArgs e)
+        {
+            this.TxtSearch.EditValue = null;
+            _suppressFilterEvent = true;
+            this.ChkShowAll.Checked = false;   // default: filter by the selected billing Day (not show all)
+            this.CmbMonth.SelectedIndex = DateTime.Today.Month - 1;
+            int rday = this.CmbDay.Properties.Items.IndexOf(DateTime.Today.Day);
+            this.CmbDay.SelectedIndex = rday >= 0 ? rday : (this.CmbDay.Properties.Items.Count > 0 ? 0 : -1);
+            _suppressFilterEvent = false;
+            LoadData();
+        }
+
+        private async void BtnFetch_Click(object sender, EventArgs e)
         {
             if (_dtGrid == null || _dtGrid.Rows.Count == 0)
             { XtraMessageBox.Show("Nothing to fetch — the list is empty.", "Fetch"); return; }
             GridViewMeter.CloseEditor();
             GridViewMeter.UpdateCurrentRow();
 
-            Cursor.Current = Cursors.WaitCursor;
+            int month = SelectedMonth();
+            int day = SelectedDay();
+            int year = DateTime.Today.Year;
+            System.Collections.Generic.List<StageRow> toStage = new System.Collections.Generic.List<StageRow>();
+            this.BtnFetch.Enabled = false;
+            ShowFetching(true);
+            System.Collections.Generic.List<MeterReadingDto> onlineList = null, offlineList = null;
+            string onlineErr = null, offlineErr = null;
             try
             {
-                int month = SelectedMonth();
-                int day = SelectedDay();
-                IMeterReadingApiClient client = MeterReadingApiClientFactory.Create(_dbSetting);
-                // One interface, two machine types: call once per status. Each DTO is tagged with the
-                // endpoint that produced it (Online / Offline), so we know each item's machine type.
+                // Run the (blocking) HTTP calls OFF the UI thread so the window stays responsive, and
+                // catch each endpoint independently so a dead online endpoint still lets offline load.
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    IMeterReadingApiClient client = MeterReadingApiClientFactory.Create(_dbSetting);
+                    // Fetch both endpoints CONCURRENTLY so the total wait is max(online, offline), not
+                    // their sum — each can take ~15s server-side. GetReadings is stateless (a fresh
+                    // HttpClient per call), so sharing one client across the two tasks is safe.
+                    System.Threading.Tasks.Task tOn = System.Threading.Tasks.Task.Run(() =>
+                        { try { onlineList = client.GetReadings(MachineStatus.Online, month); } catch (Exception ex) { onlineErr = ex.Message; } });
+                    System.Threading.Tasks.Task tOff = System.Threading.Tasks.Task.Run(() =>
+                        { try { offlineList = client.GetReadings(MachineStatus.Offline, month); } catch (Exception ex) { offlineErr = ex.Message; } });
+                    System.Threading.Tasks.Task.WaitAll(tOn, tOff);
+                });
+
+                // Merge: online wins over offline for the same code. Each DTO carries its endpoint.
                 Dictionary<string, MeterReadingDto> byCode = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
-                foreach (MeterReadingDto d in client.GetReadings(MachineStatus.Online, month))
-                    if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day)) byCode[d.Code.Trim()] = d;
-                foreach (MeterReadingDto d in client.GetReadings(MachineStatus.Offline, month))
-                    if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day) && !byCode.ContainsKey(d.Code.Trim()))
-                        byCode[d.Code.Trim()] = d;
+                if (onlineList != null)
+                    foreach (MeterReadingDto d in onlineList)
+                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day)) byCode[d.Code.Trim()] = d;
+                if (offlineList != null)
+                    foreach (MeterReadingDto d in offlineList)
+                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day) && !byCode.ContainsKey(d.Code.Trim()))
+                            byCode[d.Code.Trim()] = d;
 
                 int matchedMeters = 0;
                 int onlineMeters = 0, offlineMeters = 0, conflicts = 0;
@@ -527,6 +720,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         if (!string.IsNullOrWhiteSpace(dto.SerialNumber)) r["SerialNo"] = dto.SerialNumber.Trim();
                         r["MachineStatus"] = isOnline ? "ONLINE" : "OFFLINE";
                         r["FetchedReading"] = apiVal;
+                        if (dto.LastAuditDate.HasValue) r["LastAuditDate"] = dto.LastAuditDate.Value;
 
                         string src = S(r["EntrySource"]).ToUpperInvariant();
                         if (src == "MANUAL" && Dec(r["CurrentReading"]) != apiVal)
@@ -548,6 +742,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             r["Sel"] = true;
                             r["Status"] = "Matched (" + (isOnline ? "Online" : "Offline") + ")  " +
                                 (dto.LastAuditDate.HasValue ? dto.LastAuditDate.Value.ToString("dd/MM/yyyy") : "");
+                            toStage.Add(new StageRow(D64(r["ItemMeterKey"]), apiVal, dto.LastAuditDate, isOnline ? "ONLINE" : "OFFLINE"));
                         }
                         matchedMeters++; matchedItems.Add(code);
                         if (isOnline) onlineMeters++; else offlineMeters++;
@@ -559,24 +754,137 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         if (src != "MANUAL") { r["MachineStatus"] = ""; r["Status"] = "No API data"; }
                     }
                 }
+
+                // Persist the fetched readings so reopening the module shows them without re-fetching
+                // (Fetch = update). Manual / conflict rows are left as-is (not in toStage).
+                if (toStage.Count > 0)
+                {
+                    try { await System.Threading.Tasks.Task.Run(() => StageReadings(toStage, year, month)); }
+                    catch { /* staging is best-effort; never fail the fetch on a staging write */ }
+                }
+
                 GridMeter.RefreshDataSource();
                 UpdateTabCounts();
                 if (_tabView != null) _tabView.SelectedTabPage = conflicts > 0 ? _pageConflict : _pageWith;
                 ApplyTabFilter();
+
+                // API status: green if both endpoints answered, red if both failed, grey if one failed.
+                bool onlineOk = onlineErr == null, offlineOk = offlineErr == null;
+                if (onlineOk && offlineOk) UpdateApiStatus(true, "OK");
+                else if (!onlineOk && !offlineOk) UpdateApiStatus(false, "UNREACHABLE");
+                else UpdateApiStatus(null, onlineOk ? "offline endpoint failed" : "online endpoint failed");
+
+                string errNote = "";
+                if (onlineErr != null) errNote += "   ⚠ Online endpoint failed: " + Trunc(onlineErr) + "\r\n";
+                if (offlineErr != null) errNote += "   ⚠ Offline endpoint failed: " + Trunc(offlineErr) + "\r\n";
+
                 XtraMessageBox.Show(matchedItems.Count + " service item(s) / " + matchedMeters +
                     " meter(s) matched with last audit date on/before " + day + " " +
                     new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".\r\n" +
                     "   • Online machines: " + onlineMeters + " meter(s)\r\n" +
                     "   • Offline machines: " + offlineMeters + " meter(s)\r\n" +
                     (conflicts > 0 ? "   ⚠ " + conflicts + " conflict(s) with saved manual readings — see the Conflicts tab, double-click a contract to resolve.\r\n" : "") +
+                    errNote +
+                    "Readings saved — next time just reopen this screen (no need to Fetch again unless you want fresh data).\r\n" +
                     "Use 'Select Matched' then 'Generate Invoice'.",
                     "Fetch complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                UpdateApiStatus(false, "error");
                 XtraMessageBox.Show("Fetch failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { Cursor.Current = Cursors.Default; }
+            finally
+            {
+                ShowFetching(false);
+                this.BtnFetch.Enabled = true;
+            }
+        }
+
+        // ── API status footer + reachability ─────────────────────────────────
+        private void InitApiStatus()
+        {
+            if (_dbSetting != null)
+                _apiBaseUrl = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_BASE_URL,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_API_BASE_URL);
+            UpdateApiStatus(null, "checking...");
+            CheckApiReachable();
+        }
+
+        // Background reachability check of the API host (any HTTP reply = reachable). Non-blocking.
+        private async void CheckApiReachable()
+        {
+            if (string.IsNullOrEmpty(_apiBaseUrl)) { UpdateApiStatus(null, "no URL configured"); return; }
+            bool ok = false;
+            try
+            {
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
+                        using (System.Net.Http.HttpClient c = new System.Net.Http.HttpClient())
+                        {
+                            c.Timeout = TimeSpan.FromSeconds(8);
+                            c.GetAsync(_apiBaseUrl).GetAwaiter().GetResult();
+                            ok = true;
+                        }
+                    }
+                    catch { ok = false; }
+                });
+            }
+            catch { ok = false; }
+            UpdateApiStatus(ok, ok ? "OK" : "UNREACHABLE");
+        }
+
+        // Paint the footer: green = reachable, red = unreachable, grey = unknown/partial.
+        private void UpdateApiStatus(bool? ok, string note)
+        {
+            if (_lblApiStatus == null) return;
+            Color c;
+            if (ok == true) c = Color.FromArgb(46, 125, 50);
+            else if (ok == false) c = Color.FromArgb(198, 40, 40);
+            else c = Color.FromArgb(120, 120, 120);
+            _lblApiStatus.Appearance.ForeColor = c;
+            _lblApiStatus.Appearance.Options.UseForeColor = true;
+            _lblApiStatus.Text = "● Meter API:  " + (_apiBaseUrl ?? "(not configured)") +
+                (string.IsNullOrEmpty(note) ? "" : "     " + note);
+        }
+
+        private static string Trunc(string s)
+        {
+            return string.IsNullOrEmpty(s) ? s : (s.Length > 140 ? s.Substring(0, 140) + "..." : s);
+        }
+
+        // Show/hide the "thinking" fetch overlay (marquee bar + cycling wording), centered on the form.
+        private void ShowFetching(bool on)
+        {
+            if (_pnlFetching == null) return;
+            if (on)
+            {
+                _fetchElapsed = 0; _fetchMsgIdx = 0;
+                if (_lblFetchMsg != null) _lblFetchMsg.Text = FETCH_MSGS[0] + "    (0s)";
+                _pnlFetching.Location = new Point(
+                    Math.Max(0, (this.ClientSize.Width - _pnlFetching.Width) / 2),
+                    Math.Max(0, (this.ClientSize.Height - _pnlFetching.Height) / 2));
+                _pnlFetching.Visible = true;
+                _pnlFetching.BringToFront();
+                if (_fetchTimer != null) _fetchTimer.Start();
+            }
+            else
+            {
+                if (_fetchTimer != null) _fetchTimer.Stop();
+                _pnlFetching.Visible = false;
+            }
+        }
+
+        // Tick once a second while fetching: count elapsed seconds, rotate the wording every 3s.
+        private void FetchTimer_Tick(object sender, EventArgs e)
+        {
+            _fetchElapsed++;
+            if (_fetchElapsed % 3 == 0) _fetchMsgIdx = (_fetchMsgIdx + 1) % FETCH_MSGS.Length;
+            if (_lblFetchMsg != null) _lblFetchMsg.Text = FETCH_MSGS[_fetchMsgIdx] + "    (" + _fetchElapsed + "s)";
         }
 
         // A reading qualifies when its Last Audit Date is in the selected month AND on/before the
@@ -626,6 +934,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 string src = S(s["Source"]).Trim().ToUpperInvariant();
                 r["CurrentReading"] = Dec(s["CurrentReading"]);
                 r["EntrySource"] = src;
+                if (s["ReadingDate"] != DBNull.Value) r["LastAuditDate"] = Convert.ToDateTime(s["ReadingDate"]);
                 r["Sel"] = true;
                 Recalc(r);
                 string dt = (s["ReadingDate"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["ReadingDate"]).ToString("dd/MM/yyyy") : "";
@@ -635,73 +944,47 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
-        // Toggle manual key-in mode: makes the Current Reading column editable so the user can type
-        // readings for machines the API has no data for (or any row), then Save them.
-        private void BtnManual_Click(object sender, EventArgs e)
+        // One fetched reading queued for staging (persisted so a reopen shows it without re-fetching).
+        private class StageRow
         {
-            _manualMode = !_manualMode;
-            GridColumn cr = GridViewMeter.Columns["CurrentReading"];
-            if (cr != null) { cr.OptionsColumn.AllowEdit = _manualMode; cr.OptionsColumn.ReadOnly = !_manualMode; }
-            _btnManual.Text = _manualMode ? "Manual Key-In: ON" : "Manual Key-In";
-            _btnManual.Appearance.BackColor = _manualMode ? Color.FromArgb(255, 244, 200) : Color.Empty;
-            _btnManual.Appearance.Options.UseBackColor = _manualMode;
-            if (_manualMode && _tabView != null) { _tabView.SelectedTabPage = _pageNo; ApplyTabFilter(); }
-            if (_manualMode)
-                XtraMessageBox.Show("Manual mode ON. Type the Current Reading for the rows that have no API data, " +
-                    "fill as many as you like, then click 'Save Manual'.", "Manual Key-In",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            public long ItemMeterKey;
+            public decimal Reading;
+            public DateTime? Date;
+            public string Source;
+            public StageRow(long k, decimal reading, DateTime? d, string s)
+            { ItemMeterKey = k; Reading = reading; Date = d; Source = s; }
         }
 
-        // Persist every manually-typed current reading (not API-sourced) for this period to staging.
-        private void BtnSaveManual_Click(object sender, EventArgs e)
+        // Persist a batch of fetched readings to zSCP2_MeterEntry in one transaction. Overwrites any
+        // existing staged value for the same meter + period (Fetch = update). Safe to call off the UI thread.
+        private void StageReadings(System.Collections.Generic.List<StageRow> rows, int year, int month)
         {
-            if (_dbSetting == null || _dtGrid == null) return;
-            GridViewMeter.CloseEditor();
-            GridViewMeter.UpdateCurrentRow();
-
-            int month = SelectedMonth(), year = DateTime.Today.Year, saved = 0;
+            if (rows == null || rows.Count == 0 || _dbSetting == null) return;
             using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
             {
                 cn.Open();
-                using (SqlTransaction tx = cn.BeginTransaction("SaveManual"))
+                using (SqlTransaction tx = cn.BeginTransaction("StageFetch"))
                 {
                     try
                     {
-                        foreach (DataRow r in _dtGrid.Rows)
-                        {
-                            string src = S(r["EntrySource"]).ToUpperInvariant();
-                            if (src == "ONLINE" || src == "OFFLINE") continue;   // API-sourced — not a manual key-in
-                            if (Dec(r["CurrentReading"]) <= 0m)
-                            {
-                                // Cleared to 0 → remove any previously-saved manual reading.
-                                if (src == "MANUAL")
-                                {
-                                    DeleteStaging(cn, tx, D64(r["ItemMeterKey"]), year, month);
-                                    r["EntrySource"] = ""; r["Sel"] = false; r["Status"] = ""; Recalc(r);
-                                    saved++;
-                                }
-                                continue;
-                            }
-                            UpsertStaging(cn, tx, D64(r["ItemMeterKey"]), year, month,
-                                Dec(r["CurrentReading"]), DateTime.Now, "MANUAL");
-                            r["EntrySource"] = "MANUAL";
-                            r["Sel"] = true;
-                            r["Status"] = "Manual (saved)  " + DateTime.Now.ToString("dd/MM/yyyy");
-                            Recalc(r);
-                            saved++;
-                        }
+                        foreach (StageRow sr in rows)
+                            UpsertStaging(cn, tx, sr.ItemMeterKey, year, month, sr.Reading, sr.Date, sr.Source);
                         tx.Commit();
                     }
-                    catch (Exception ex) { tx.Rollback();
-                        XtraMessageBox.Show("Save failed:\r\n" + ex.Message, "Save Manual", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return; }
+                    catch { tx.Rollback(); throw; }
                 }
             }
-            GridMeter.RefreshDataSource();
-            UpdateTabCounts();
-            XtraMessageBox.Show(saved + " manual reading(s) saved for " +
-                new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".", "Save Manual",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Open the Meter Reading settings dialog; reload the list if the user changed a setting
+        // (e.g. include/exclude expired service items).
+        private void BtnSetting_Click(object sender, EventArgs e)
+        {
+            using (MeterReadingSetting_Form dlg = new MeterReadingSetting_Form(_dbSetting))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                    LoadData();
+            }
         }
 
         // Insert-or-update one staged reading (unique per ItemMeterKey + period).
@@ -739,9 +1022,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (GridViewMeter.FocusedColumn != null && GridViewMeter.FocusedColumn.FieldName == "CurrentReading")
             {
-                DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
-                string src = r != null ? S(r["EntrySource"]).ToUpperInvariant() : "";
-                if (!_manualMode || src == "ONLINE" || src == "OFFLINE") e.Cancel = true;
+                e.Cancel = true;   // Current Reading is read-only (manual key-in removed)
             }
         }
 
@@ -905,15 +1186,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridViewMeter.CloseEditor();
             GridViewMeter.UpdateCurrentRow();
 
-            Dictionary<string, List<MeterBillLine>> groups = new Dictionary<string, List<MeterBillLine>>();
-            Dictionary<string, string> grpRef = new Dictionary<string, string>();
-            Dictionary<string, string> grpDebtor = new Dictionary<string, string>();
+            // Group the selected meter lines: Group mode = one invoice per contract; Separate = per item.
+            Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs =
+                new Dictionary<string, MeterInvoiceGenerator.InvoiceJob>();
+            string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(SelectedMonth());
 
             foreach (DataRow r in _dtGrid.Rows)
             {
                 if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
                 if (Dec(r["CurrentReading"]) <= 0m) continue;
-                string mode = S(r["BillingMode"]);
+                // Invoice grouping: the checkbox overrides each contract's stored BillingMode for this run.
+                string mode = (_chkPerCssi != null && _chkPerCssi.Checked) ? "S" : "G";
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
                 string groupKey = mode == "S" ? ("C" + contractKey + "_I" + itemKey) : ("C" + contractKey);
@@ -943,72 +1226,36 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.UseMin = r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]);
                 if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
 
-                if (!groups.ContainsKey(groupKey))
-                { groups[groupKey] = new List<MeterBillLine>(); grpRef[groupKey] = refNo; grpDebtor[groupKey] = ln.DebtorCode; }
-                groups[groupKey].Add(ln);
+                MeterInvoiceGenerator.InvoiceJob job;
+                if (!jobs.TryGetValue(groupKey, out job))
+                {
+                    job = new MeterInvoiceGenerator.InvoiceJob();
+                    job.DebtorCode = ln.DebtorCode;
+                    job.RefDocNo = refNo;
+                    job.Description = "Meter Billing " + monthName + " - " + refNo;
+                    job.Label = refNo;
+                    job.Lines = new List<MeterBillLine>();
+                    jobs[groupKey] = job;
+                }
+                job.Lines.Add(ln);
             }
 
-            if (groups.Count == 0)
+            if (jobs.Count == 0)
             { XtraMessageBox.Show("No selected meter with a current reading.", "Generate Invoice"); return; }
 
-            string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(SelectedMonth());
-            int created = 0; List<string> docNos = new List<string>();
-            foreach (KeyValuePair<string, List<MeterBillLine>> grp in groups)
-            {
-                string desc = "Meter Billing " + monthName + " - " + grpRef[grp.Key];
-                try
-                {
-                    AutoCount.Invoicing.Sales.Invoice.Invoice doc = ScpInvoiceBuilder.BuildInvoice(
-                        _dbSetting, grpDebtor[grp.Key], grpRef[grp.Key], desc, DateTime.Today, DateTime.Now, grp.Value);
-                    AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry invForm =
-                        new AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry(doc);
-                    invForm.ShowDialog(this);
-                    bool saved = doc.DocumentState == AutoCount.Invoicing.InvoicingDocumentState.View
-                                 && doc.DocNo != AutoCount.Const.AppConst.NewDocumentNo;
-                    if (!saved) continue;
-                    WriteMeterTrans(doc.DocKey, doc.DocNo, grp.Value);
-                    created++; docNos.Add(doc.DocNo);
-                }
-                catch (Exception ex)
-                {
-                    XtraMessageBox.Show("Invoice for " + grpRef[grp.Key] + " failed:\r\n" + ex.Message, "Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-            XtraMessageBox.Show(created + " invoice(s) created:\r\n" + string.Join(", ", docNos.ToArray()),
-                "Generate Invoice", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            LoadData();
-        }
+            List<MeterInvoiceGenerator.InvoiceJob> jobList = new List<MeterInvoiceGenerator.InvoiceJob>(jobs.Values);
+            if (XtraMessageBox.Show(this,
+                    "Generate " + jobList.Count + " invoice(s) now?\r\nThey are saved automatically — no clicking through each one.",
+                    "Generate Invoice", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
 
-        private void WriteMeterTrans(long invoiceDocKey, string docNo, List<MeterBillLine> lines)
-        {
-            using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
+            // Run the generation on a worker task behind a progress dialog (invoices saved headlessly).
+            using (MeterInvoiceGenerateProgress_Form dlg =
+                new MeterInvoiceGenerateProgress_Form(_dbSetting, jobList, DateTime.Today, DateTime.Now))
             {
-                cn.Open();
-                using (SqlTransaction tx = cn.BeginTransaction("MeterTrans"))
-                {
-                    try
-                    {
-                        foreach (MeterBillLine ln in lines)
-                        {
-                            SqlCommand cmd = new SqlCommand(
-                                "INSERT INTO [dbo].[zSCP_MeterTrans] (ServiceItemMeterTypeKey, ServiceItemKey, MeterTypeCode, " +
-                                "MeterTransDate, MeterTransReading, SalesInvoiceDocKey, Remark) " +
-                                "VALUES (@simt,@si,@code,@dt,@rd,@dk,@rmk)", cn, tx);
-                            cmd.Parameters.AddWithValue("@simt", ln.ItemMeterKey);
-                            cmd.Parameters.AddWithValue("@si", ln.ItemKey);
-                            cmd.Parameters.AddWithValue("@code", ln.MeterTypeCode);
-                            cmd.Parameters.AddWithValue("@dt", DateTime.Now);
-                            cmd.Parameters.AddWithValue("@rd", ln.Current);
-                            cmd.Parameters.AddWithValue("@dk", invoiceDocKey);
-                            cmd.Parameters.AddWithValue("@rmk", ln.ColorLabel + " meter - Invoice " + docNo);
-                            cmd.ExecuteNonQuery();
-                        }
-                        tx.Commit();
-                    }
-                    catch { tx.Rollback(); throw; }
-                }
+                dlg.ShowDialog(this);
             }
+            LoadData();
         }
 
         // Runs a query on a direct connection with an explicit command timeout (AutoCount's

@@ -52,6 +52,11 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
         public const string DEFAULT_BILLING_MODE_VALUE = "G";
 
+        /// <summary>Whether the Meter Reading list includes expired service items. Default true = show
+        /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
+        public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
+        public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
+
         /// <summary>Reads an int config value, falling back to <paramref name="defaultValue"/> on missing/invalid.</summary>
         public static int GetInt(DBSetting db, string key, int defaultValue)
         {

@@ -82,6 +82,8 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_Item",                  "02_CreateTable_zSCP2_Item.sql", asm);
             // Evolve an older zSCP2_Item (ItemNo->ServiceItemNo, drop MachineName/StockCode). Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v3.sql", asm);
+            // Add ServiceExpiryDate (per-item expiry, mirrors master serviceitem). Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v4.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
             // Staging of current readings (manual key-ins + accepted API values) per billing period.

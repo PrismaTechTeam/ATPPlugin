@@ -60,21 +60,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("MeterType", "Meter Type", 120);
             SetCol("Role", "Meter", 100);
             SetNum("LastReading", "Last Reading", 95, "n0");
-            SetNum("CurrentReading", "Current (key in here)", 150, "n0");
-            SetNum("FetchedReading", "Fetched (API)", 110, "n0");
+            SetNum("CurrentReading", "Manual Reading", 150, "n0");
+            SetNum("FetchedReading", "API Reading", 110, "n0");
             SetCol("Source", "Source", 75);
 
             // Current Reading is editable here so the user can key in readings manually for this
             // contract (typed values are saved as MANUAL on OK).
             GridColumn cur = this.GridViewDetail.Columns["CurrentReading"];
-            if (cur != null) { cur.OptionsColumn.AllowEdit = true; cur.OptionsColumn.ReadOnly = false; }
-            this.LblHint.Text = "Type a Current Reading to key in manually, or tick \'Accept fetched (override)\' to use the API value.";
+            if (cur != null)
+            {
+                cur.OptionsColumn.AllowEdit = true; cur.OptionsColumn.ReadOnly = false;
+                // Paint the editable column yellow so users see at a glance which one they key into.
+                cur.AppearanceCell.BackColor = Color.FromArgb(255, 249, 196);
+                cur.AppearanceCell.Options.UseBackColor = true;
+            }
+            this.LblHint.Text = "Type the Manual Reading (yellow column) for this machine, or tick \'Use API Reading\' to use the API value instead.";
 
             GridColumn acc = this.GridViewDetail.Columns["AcceptFetched"];
             if (acc != null)
             {
-                acc.Caption = "Accept fetched (override)";
-                acc.Width = 175;
+                acc.Caption = "Use API Reading";
+                acc.Width = 150;
                 acc.ColumnEdit = this.RepoCheck;
                 acc.OptionsColumn.AllowEdit = true;
                 acc.OptionsColumn.ReadOnly = false;

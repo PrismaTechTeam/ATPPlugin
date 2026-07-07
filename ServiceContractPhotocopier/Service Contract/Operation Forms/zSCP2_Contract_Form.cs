@@ -216,6 +216,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 d.JobCode = AsStr(r["JobCode"]);
                 d.StockLocationCode = AsStr(r["StockLocationCode"]);
                 d.Inactive = AsStr(r["Inactive"]) == "Y";
+                d.ServiceExpiryDate = (r["ServiceExpiryDate"] == null || r["ServiceExpiryDate"] == DBNull.Value)
+                    ? (DateTime?)null : Convert.ToDateTime(r["ServiceExpiryDate"]);
                 d.Meters = zSCP2_Item_Form.CreateMetersTable();
                 d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
@@ -263,6 +265,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("BKMeter", typeof(string));
             _dtItemsView.Columns.Add("CLMeter", typeof(string));
             _dtItemsView.Columns.Add("Inactive", typeof(string));
+            _dtItemsView.Columns.Add("Expiry", typeof(DateTime));
 
             int n = 1;
             foreach (ItemEditData d in _items)
@@ -276,6 +279,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["BKMeter"] = MeterForRole(d, "BK");
                 r["CLMeter"] = MeterForRole(d, "CL");
                 r["Inactive"] = d.Inactive ? "Y" : "N";
+                r["Expiry"] = (object)d.ServiceExpiryDate ?? DBNull.Value;
                 _dtItemsView.Rows.Add(r);
             }
             GridItems.DataSource = _dtItemsView;
@@ -345,6 +349,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         private void GridViewItems_DoubleClick(object sender, EventArgs e) { BtnEditItem_Click(null, null); }
+
+        // Expiry column: RED bold if expired (before today), GREEN bold if still active.
+        private void GridViewItems_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column != ColExpiry) return;
+            object v = GridViewItems.GetRowCellValue(e.RowHandle, ColExpiry);
+            if (v == null || v == DBNull.Value) return;
+            DateTime exp = Convert.ToDateTime(v);
+            bool expired = exp.Date < DateTime.Today;
+            e.Appearance.ForeColor = expired
+                ? System.Drawing.Color.FromArgb(198, 40, 40)
+                : System.Drawing.Color.FromArgb(46, 125, 50);
+            e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+        }
 
         private void BtnSave_Click(object sender, EventArgs e)
         {

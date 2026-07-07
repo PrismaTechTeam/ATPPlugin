@@ -21,6 +21,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public string JobCode = "";
         public string StockLocationCode = "";
         public bool Inactive;
+        public DateTime? ServiceExpiryDate;   // from master; null = none. Drives the Expiry column colour.
         public DataTable Meters;          // schema = CreateMetersTable()
         public DataTable ItemCodes;       // schema = CreateItemCodesTable()
     }

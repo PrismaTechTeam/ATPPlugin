@@ -20,6 +20,8 @@ namespace ServiceContractPhotocopier.MeterReading.Services
     {
         private const string ONLINE_PATH  = "/api/meter-reading-online.php";
         private const string OFFLINE_PATH = "/api/meter-reading-offline.php";
+        private const int MAX_ATTEMPTS   = 3;      // retry transient connection failures (endpoint is fast)
+        private const int RETRY_DELAY_MS = 700;
 
         private readonly string _baseUrl;
         private readonly string _token;
@@ -73,19 +75,37 @@ namespace ServiceContractPhotocopier.MeterReading.Services
             // The API is HTTPS; ensure TLS 1.2 is enabled (older .NET Framework defaults can omit it).
             try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
 
-            using (HttpClient client = new HttpClient())
+            // The endpoints are fast (<1s) but occasionally drop the connection (transient server
+            // hiccup). Retry TRANSPORT failures a few times; never retry a real HTTP status error.
+            Exception last = null;
+            for (int i = 1; i <= MAX_ATTEMPTS; i++)
             {
-                client.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
+                try
+                {
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
 
-                HttpResponseMessage resp = client.GetAsync(url).GetAwaiter().GetResult();
-                string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                if (!resp.IsSuccessStatusCode)
-                    throw new MeterReadingApiException(
-                        "Meter API GET " + Redact(url) + " returned " + (int)resp.StatusCode + " " + resp.StatusCode + ".", body);
+                        HttpResponseMessage resp = client.GetAsync(url).GetAwaiter().GetResult();
+                        string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                        if (!resp.IsSuccessStatusCode)
+                            throw new MeterReadingApiException(
+                                "Meter API GET " + Redact(url) + " returned " + (int)resp.StatusCode + " " + resp.StatusCode + ".", body);
 
-                List<MeterReadingDto> list = JsonConvert.DeserializeObject<List<MeterReadingDto>>(body);
-                return list ?? new List<MeterReadingDto>();
+                        List<MeterReadingDto> list = JsonConvert.DeserializeObject<List<MeterReadingDto>>(body);
+                        return list ?? new List<MeterReadingDto>();
+                    }
+                }
+                catch (MeterReadingApiException) { throw; }        // explicit HTTP status — not transient
+                catch (Exception ex)
+                {
+                    last = ex;                                      // connection/transport blip — retry
+                    if (i < MAX_ATTEMPTS) System.Threading.Thread.Sleep(RETRY_DELAY_MS);
+                }
             }
+            throw new MeterReadingApiException(
+                "Meter API GET " + Redact(url) + " failed after " + MAX_ATTEMPTS + " attempts (transient connection error): " +
+                (last != null ? last.Message : "unknown error"), "");
         }
 
         // Keep the token out of exception messages / logs.

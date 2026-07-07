@@ -132,7 +132,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnAcceptAll.Name = "BtnAcceptAll";
             this.BtnAcceptAll.Size = new System.Drawing.Size(180, 36);
             this.BtnAcceptAll.TabIndex = 0;
-            this.BtnAcceptAll.Text = "Accept All Fetched";
+            this.BtnAcceptAll.Text = "Use API for All";
             this.BtnAcceptAll.Click += new System.EventHandler(this.BtnAcceptAll_Click);
             //
             // BtnOk

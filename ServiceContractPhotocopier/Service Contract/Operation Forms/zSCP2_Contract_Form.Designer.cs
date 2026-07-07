@@ -74,6 +74,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColBK;
         private DevExpress.XtraGrid.Columns.GridColumn ColCL;
         private DevExpress.XtraGrid.Columns.GridColumn ColInact;
+        private DevExpress.XtraGrid.Columns.GridColumn ColExpiry;
         private DevExpress.XtraEditors.LabelControl LblRemark1;
         private DevExpress.XtraEditors.TextEdit TxtRemark1;
         private DevExpress.XtraEditors.LabelControl LblRemark2;
@@ -142,6 +143,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColBK = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColCL = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColInact = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColExpiry = new DevExpress.XtraGrid.Columns.GridColumn();
             this.LblRemark1 = new DevExpress.XtraEditors.LabelControl();
             this.TxtRemark1 = new DevExpress.XtraEditors.TextEdit();
             this.LblRemark2 = new DevExpress.XtraEditors.LabelControl();
@@ -631,12 +633,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             this.GridViewItems.Columns.AddRange(new DevExpress.XtraGrid.Columns.GridColumn[] {
                 this.ColNo, this.ColItemNo, this.ColSerial, this.ColStock, this.ColMachine,
-                this.ColBillDay, this.ColBK, this.ColCL, this.ColInact});
+                this.ColBillDay, this.ColBK, this.ColCL, this.ColInact, this.ColExpiry});
             this.GridViewItems.GridControl = this.GridItems;
             this.GridViewItems.Name = "GridViewItems";
             this.GridViewItems.OptionsBehavior.Editable = false;
             this.GridViewItems.OptionsView.ShowGroupPanel = false;
             this.GridViewItems.DoubleClick += new System.EventHandler(this.GridViewItems_DoubleClick);
+            this.GridViewItems.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(this.GridViewItems_RowCellStyle);
             //
             // ColNo
             //
@@ -718,6 +721,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColInact.Visible = true;
             this.ColInact.VisibleIndex = 7;
             this.ColInact.Width = 60;
+            //
+            // ColExpiry
+            //
+            this.ColExpiry.Caption = "Expiry";
+            this.ColExpiry.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.ColExpiry.DisplayFormat.FormatString = "dd/MM/yyyy";
+            this.ColExpiry.FieldName = "Expiry";
+            this.ColExpiry.Name = "ColExpiry";
+            this.ColExpiry.Visible = true;
+            this.ColExpiry.VisibleIndex = 8;
+            this.ColExpiry.Width = 100;
             //
             // PageRemark
             //
