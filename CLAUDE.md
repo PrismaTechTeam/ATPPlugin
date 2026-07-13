@@ -18,6 +18,8 @@
    - **Test after every Designer edit.** After modifying `<Form>.Designer.cs`, reload the form in VS (close the tab, reopen, switch to Design view) and confirm it renders. If it fails, the error pane at the top of Design view names the offending line — fix before continuing. A green `msbuild` is NECESSARY but NOT SUFFICIENT; the C# compiler accepts patterns the Designer parser rejects.
    - **Reference pattern:** `ServiceContractPhotocopier\Service Contract\Operation Forms\ServiceContract_Form.Designer.cs` (986 lines) is the canonical example — copy its structure for any new complex form with grids.
 
+8. **Save / Close confirmation (mirror AutoCount entry behavior).** Every create/edit form (contract editor, service item editor, and any future entry form) MUST mirror AutoCount's create/edit UX: a `Save` action that persists + clears the dirty flag, and a `Close` that — if there are **unsaved changes** — prompts "You have unsaved changes. Discard them and close?" (Yes closes, No cancels). Implement with a `_dirty` flag set on any field/grid edit (wired AFTER the initial load so loading a record doesn't set it), a `_savedOk` flag set on a successful save, and a `FormClosing` handler that cancels the close when `_dirty && !_savedOk` and the user answers No. Never lose user input silently on close. Reference: `zSCP2_Contract_Form.cs` (`WireDirtyTracking` + `OnFormClosing`).
+
 
 ## 🚀 Daily workflow — TWO LOOPS
 

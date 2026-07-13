@@ -227,7 +227,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // barAddItem
             //
-            this.barAddItem.Caption = "Add Service Item";
+            this.barAddItem.Caption = "Add a New Service Item";
             this.barAddItem.Id = 3;
             this.barAddItem.ImageOptions.ImageUri.Uri = "Add;Size32x32";
             this.barAddItem.Name = "barAddItem";

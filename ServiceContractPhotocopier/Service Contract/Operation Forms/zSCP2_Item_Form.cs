@@ -211,6 +211,37 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridMeters.DataSource = _meters;
 
             if (string.IsNullOrEmpty(_data.ServiceItemNo)) AutoPickServiceItemNo();
+
+            // Save/close confirmation (CLAUDE.md rule 8): mark dirty on any edit, wired after load.
+            EventHandler mark = delegate { _dirty = true; };
+            TxtServiceItemNo.EditValueChanged += mark;
+            TxtSerial.EditValueChanged += mark;
+            TxtDescription.EditValueChanged += mark;
+            SpnBillingDayOverride.EditValueChanged += mark;
+            SluDept.EditValueChanged += mark;
+            SluProject.EditValueChanged += mark;
+            TxtLocation.EditValueChanged += mark;
+            ChkInactive.EditValueChanged += mark;
+            _itemCodes.RowChanged += delegate { _dirty = true; };
+            _itemCodes.RowDeleted += delegate { _dirty = true; };
+            _meters.RowChanged += delegate { _dirty = true; };
+            _meters.RowDeleted += delegate { _dirty = true; };
+            if (_lkCustomer != null) _lkCustomer.EditValueChanged += mark;
+            if (_lkContract != null) _lkContract.EditValueChanged += mark;
+            _dirty = false;
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(OnItemFormClosing);
+        }
+
+        private bool _dirty;
+        private bool _savedOk;
+
+        private void OnItemFormClosing(object sender, System.Windows.Forms.FormClosingEventArgs e)
+        {
+            if (_savedOk || !_dirty || this.DialogResult == DialogResult.OK) return;
+            DialogResult r = XtraMessageBox.Show(
+                "You have unsaved changes. Discard them and close?", "Unsaved Changes",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) e.Cancel = true;
         }
 
         private void LoadMeterTypeLookup()
@@ -398,6 +429,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _meters.AcceptChanges();
             _data.Meters = _meters;
 
+            _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
             this.DialogResult = DialogResult.OK;
             this.Close();
         }

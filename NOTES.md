@@ -193,3 +193,61 @@ Two fixes applied during testing:
 - ServiceItemLst_Form: added `GridView.OptionsView.ShowAutoFilterRow = true` to the Designer; rewrote `OnNew` and `OnEdit` to detect the shell.
 - BUILD: ServiceContractPhotocopier.dll compiled clean. ATPShadowMain.exe copy-to-bin failed (`MSB3027`) because the user is still running ATPShadowMain.exe (PID 52556) and Visual Studio Remote Debugger has the dll locked. NOT a code error. User must close ATPShadowMain.exe and rebuild to pick up changes; not killed automatically per CLAUDE.md harness rule (no GUI-popping).
 - Followups (other list forms with the same modal-ShowDialog +New/Edit pattern that should be migrated next): see grep audit below — every `*Lst_Form.cs` under Service Contract / Service Note / Appointment / General Setup / Stock Request likely follows this pattern. Pick them off as a follow-up sweep.
+
+## 2026-07-13 — Contract editor epic: Part A done, Part B staged
+
+User request (Image #101/#103/#104 + text): a large multi-feature pass on the Service Contract editor.
+Delivered **Part A** this turn (buildable, committed); **Part B** below is the remaining large work,
+staged here with a concrete plan.
+
+### Part A — DONE (build green, committed)
+- **Save/Close confirmation** on both the contract editor and the service item editor. Dirty tracking
+  (`WireDirtyTracking` / `_dirty` / `_savedOk`) wired after load; `FormClosing` prompts "You have
+  unsaved changes. Discard them and close?" when dirty & not saved. Codified as **CLAUDE.md rule 8**.
+- Ribbon **"Add Service Item" → "Add a New Service Item"**.
+- Service Items grid **Delete** now confirms before removing an item from the contract.
+
+### Part B — STAGED (not yet built; needs decisions + schema)
+
+**B-1. OPEN DECISION — "attach a service item with no contract" (blocks the +/- attach feature).**
+Requirement 5 says the Service Items tab should have a `+` that adds a row where you pick a *Service
+Item No* that is *not attached to any contract*, and a `-` that removes the selected item. BUT the
+current schema makes `zSCP2_Item.ContractKey` NOT NULL (legacy split = one contract per CSSI), so no
+item is ever "contract-less". Two ways to resolve — needs the user's call:
+  (a) Make ContractKey NULLABLE: service items can exist standalone (created without a contract) and
+      later be attached. Biggest change; matches the request literally. New: a way to create loose
+      items, migration to allow NULL, "unattached items" picker for `+`.
+  (b) `+` = move an EXISTING item from its (auto/bare) contract into this one (re-parent), deleting
+      the now-empty source contract. No schema change; keeps "one item always has a contract".
+Default if forced: (b) — least invasive. Confirm before building.
+
+**B-2. Spare Parts / Services Provided tab (Image #101).** New tab AFTER "Service Item Under
+Contract", a grid mirroring AutoCount's document detail grid:
+  - Columns: No, Item Code, Description, Unlimited, UOM, Quantity, Discount, Unit Price, Amount,
+    Tax Type, Tax Inclusive, Tax(%), Tax Amount, Amount After Tax. "Item Format: Standard GST" combo
+    + Customize button (can stub Customize initially).
+  - Buttons: Insert Row / Remove Row / Move Up / Move Down. Up/Down reorder logic: follow AutoCount's
+    detail-grid pattern (swap the bound rows' Seq/Pos and re-sort; AutoCount uses a `Seq`/`Sequence`
+    column and `MoveUp/MoveDown` on the entity — see FormItemBom `sbtnBomUp/Down` and the detail
+    entry command in AutoCount source under AutoCount.Invoicing/*Entry).
+  - New table: `zSCP2_ContractSparePart` (ContractKey FK, ItemCode, Description, Unlimited, UOM, Qty,
+    Discount, UnitPrice, TaxType, TaxInclusive, TaxPct, Pos, ...). Migration + ScpMigrations + csproj.
+  - Also appears on the **Service Item** form (spare parts bound to a service item). On the CONTRACT
+    it must SHOW item-bound spare parts read-only (cannot delete if bound to a service item) but the
+    user can still ADD contract-level spare parts. So the grid is a UNION of (item-bound, read-only) +
+    (contract-level, editable).
+
+**B-3. More Header tab (Image #103).** New tab with: City, Postal Code, State, Country, Phone, Fax,
+Ref1-4, and a "Delivery Address" group (Branch Code + Search/Copy, Branch Name, Address(multi-line),
+State, Country, Phone, Fax, Email, Contact Person, City, Postal Code). Needs new columns on
+zSCP2_Contract (or a child table) + a migration. Branch "Search/Copy" mirrors AutoCount's delivery
+address picker (can wire to dbo.BranchDeliveryInfo/DeliveryAddress later; stub Search first).
+
+**B-4. Note / Remarks tabs.** Contract already has Remark1/Remark2/Note fields on the existing
+"Remark" tab — restructure into "4. Note" + "5. Remarks" tabs to match the screenshot's tab set:
+`1. Spare Parts/Services Provided | 2. Service Item Under Contract | 3. More Header | 4. Note | 5. Remarks`.
+
+**B-5. "Add a New Service Item" mapping (Image #104 scenario).** When adding a new service item from
+inside a contract, prefill the item editor with the shared contract fields and show the **contract as
+read-only** (Contract No read-only). Partly in place (billing day is passed); finish the field-map
+(customer/agent/etc. → item context) and lock the contract selector when opened from a contract.

@@ -21,6 +21,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private bool _isNew;
         private bool _modeGuard;
         private bool _loading;
+        private bool _dirty;       // unsaved-changes flag; drives the close confirmation (see CLAUDE.md rule 8)
+        private bool _savedOk;     // set true after a successful save so closing skips the confirmation
         private readonly List<ItemEditData> _items = new List<ItemEditData>();
         private DataTable _debtorLookup;
         private DataTable _dtItemsView;
@@ -68,6 +70,47 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
 
             RebuildItemsView();
+
+            // Dirty tracking for the close confirmation: any header edit marks the form dirty. Wired
+            // AFTER the initial load so loading an existing contract does not itself set the flag.
+            WireDirtyTracking();
+            _dirty = false;
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(OnFormClosing);
+        }
+
+        private void WireDirtyTracking()
+        {
+            EventHandler h = delegate { if (!_loading) _dirty = true; };
+            TxtContractNo.EditValueChanged += h;
+            SluContractType.EditValueChanged += h;
+            LkDebtorCode.EditValueChanged += h;
+            DtContractDate.EditValueChanged += h;
+            DtStartDate.EditValueChanged += h;
+            DtExpiryDate.EditValueChanged += h;
+            SpnContractValue.EditValueChanged += h;
+            SpnBillingDay.EditValueChanged += h;
+            SluAgent.EditValueChanged += h;
+            TxtAddress.EditValueChanged += h;
+            TxtAttention.EditValueChanged += h;
+            TxtPhone.EditValueChanged += h;
+            TxtTerm.EditValueChanged += h;
+            TxtArea.EditValueChanged += h;
+            TxtDescription.EditValueChanged += h;
+            TxtRemark1.EditValueChanged += h;
+            TxtRemark2.EditValueChanged += h;
+            TxtNote.EditValueChanged += h;
+            ChkInactive.EditValueChanged += h;
+        }
+
+        // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
+        // prompts for confirmation. A successful Save clears the flag so it closes silently.
+        private void OnFormClosing(object sender, System.Windows.Forms.FormClosingEventArgs e)
+        {
+            if (_savedOk || !_dirty) return;
+            DialogResult r = XtraMessageBox.Show(
+                "You have unsaved changes. Discard them and close?", "Unsaved Changes",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) e.Cancel = true;
         }
 
         private void LoadDebtorLookup()
@@ -398,6 +441,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
                     _items.Add(d);
+                    _dirty = true;
                     RebuildItemsView();
                 }
             }
@@ -411,7 +455,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (idx < 0 || idx >= _items.Count) return;
             using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, _items[idx], (int)SpnBillingDay.Value))
             {
-                if (dlg.ShowDialog(this) == DialogResult.OK) RebuildItemsView();
+                if (dlg.ShowDialog(this) == DialogResult.OK) { _dirty = true; RebuildItemsView(); }
             }
         }
 
@@ -421,7 +465,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (rh < 0) return;
             int idx = Convert.ToInt32(GridViewItems.GetRowCellValue(rh, "No")) - 1;
             if (idx < 0 || idx >= _items.Count) return;
+            if (XtraMessageBox.Show("Remove the selected service item from this contract?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             _items.RemoveAt(idx);
+            _dirty = true;
             RebuildItemsView();
         }
 
@@ -495,6 +542,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                 }
                 XtraMessageBox.Show("Contract saved.", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                _dirty = false;
+                _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }
