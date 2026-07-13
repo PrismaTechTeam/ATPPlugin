@@ -334,6 +334,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (visibleIndex >= 0) c.VisibleIndex = visibleIndex;
         }
 
+        // RowCellStyle fires per visible cell on every repaint/scroll, so the bold font is cached
+        // once (a new Font() per cell was the main list-scroll lag). Also short-circuit fast.
+        private System.Drawing.Font _boldFont;
+        private static readonly System.Drawing.Color _expiredRed = System.Drawing.Color.FromArgb(198, 40, 40);
+        private static readonly System.Drawing.Color _activeGreen = System.Drawing.Color.FromArgb(46, 125, 50);
+
         // Expiry Date: RED bold when expired, GREEN bold when still active (same as the editor grid).
         private void GridView_ExpiryCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
@@ -341,11 +347,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             object v = GridView.GetRowCellValue(e.RowHandle, e.Column);
             if (v == null || v == DBNull.Value) return;
             DateTime expiry = Convert.ToDateTime(v);
-            bool expired = expiry.Date < DateTime.Today;
-            e.Appearance.ForeColor = expired
-                ? System.Drawing.Color.FromArgb(198, 40, 40)
-                : System.Drawing.Color.FromArgb(46, 125, 50);
-            e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+            e.Appearance.ForeColor = expiry.Date < DateTime.Today ? _expiredRed : _activeGreen;
+            if (_boldFont == null)
+                _boldFont = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+            e.Appearance.Font = _boldFont;
         }
     }
 }

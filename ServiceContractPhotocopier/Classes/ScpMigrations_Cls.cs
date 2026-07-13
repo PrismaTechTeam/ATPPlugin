@@ -94,6 +94,9 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
+            // Performance indexes for the contract/service-item lists + meter load. Idempotent
+            // (guarded by sys.indexes) — first install creates them; existing books get any missing.
+            RunDDL(dbsetting, "02_CreateIndex_zSCP2_Performance.sql", asm);
 
             // === Tier 9: views (always drop-and-recreate) ===
             RecreateViews(dbsetting, asm);

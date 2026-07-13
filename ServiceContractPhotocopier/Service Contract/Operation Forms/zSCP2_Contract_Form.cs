@@ -365,17 +365,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void GridViewItems_DoubleClick(object sender, EventArgs e) { BtnEditItem_Click(null, null); }
 
         // Expiry column: RED bold if expired (before today), GREEN bold if still active.
+        // RowCellStyle fires per cell per repaint — cache the bold font instead of allocating one each time.
+        private System.Drawing.Font _boldFont;
+        private static readonly System.Drawing.Color _expiredRed = System.Drawing.Color.FromArgb(198, 40, 40);
+        private static readonly System.Drawing.Color _activeGreen = System.Drawing.Color.FromArgb(46, 125, 50);
+
         private void GridViewItems_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
             if (e.Column != ColExpiry) return;
             object v = GridViewItems.GetRowCellValue(e.RowHandle, ColExpiry);
             if (v == null || v == DBNull.Value) return;
             DateTime exp = Convert.ToDateTime(v);
-            bool expired = exp.Date < DateTime.Today;
-            e.Appearance.ForeColor = expired
-                ? System.Drawing.Color.FromArgb(198, 40, 40)
-                : System.Drawing.Color.FromArgb(46, 125, 50);
-            e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+            e.Appearance.ForeColor = exp.Date < DateTime.Today ? _expiredRed : _activeGreen;
+            if (_boldFont == null)
+                _boldFont = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+            e.Appearance.Font = _boldFont;
         }
 
         private void BtnSave_Click(object sender, EventArgs e)
