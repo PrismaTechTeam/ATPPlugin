@@ -326,56 +326,133 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             _items.Clear();
             DataTable it = _db.GetDataTable(
-                "SELECT * FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + _contractKey + " ORDER BY Pos, ItemKey", false);
+                "SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + _contractKey + " ORDER BY Pos, ItemKey", false);
             foreach (DataRow r in it.Rows)
+                _items.Add(LoadOneItem(Convert.ToInt64(r["ItemKey"])));
+        }
+
+        // Load a single service item (+ its meters + item codes) into an ItemEditData. Reused by the
+        // "+" attach picker so an existing contract-less item can be pulled into this contract.
+        private ItemEditData LoadOneItem(long itemKey)
+        {
+            ItemEditData d = new ItemEditData();
+            DataTable it = _db.GetDataTable("SELECT * FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
+            if (it.Rows.Count == 0) return d;
+            DataRow r = it.Rows[0];
+            d.ItemKey = itemKey;
+            d.ServiceItemNo = AsStr(r["ServiceItemNo"]);
+            d.SerialNumber = AsStr(r["SerialNumber"]);
+            d.Description = AsStr(r["Description"]);
+            d.BillingDayOverride = (r["BillingDayOverride"] == null || r["BillingDayOverride"] == DBNull.Value)
+                ? (int?)null : Convert.ToInt32(r["BillingDayOverride"]);
+            d.DepartmentCode = AsStr(r["DepartmentCode"]);
+            d.JobCode = AsStr(r["JobCode"]);
+            d.StockLocationCode = AsStr(r["StockLocationCode"]);
+            d.Inactive = AsStr(r["Inactive"]) == "Y";
+            d.ServiceExpiryDate = (r["ServiceExpiryDate"] == null || r["ServiceExpiryDate"] == DBNull.Value)
+                ? (DateTime?)null : Convert.ToDateTime(r["ServiceExpiryDate"]);
+            d.Meters = zSCP2_Item_Form.CreateMetersTable();
+            d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
+
+            DataTable m = _db.GetDataTable(
+                "SELECT * FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + itemKey + " ORDER BY ItemMeterKey", false);
+            foreach (DataRow mr in m.Rows)
             {
-                ItemEditData d = new ItemEditData();
-                d.ItemKey = Convert.ToInt64(r["ItemKey"]);
-                d.ServiceItemNo = AsStr(r["ServiceItemNo"]);
-                d.SerialNumber = AsStr(r["SerialNumber"]);
-                d.Description = AsStr(r["Description"]);
-                d.BillingDayOverride = (r["BillingDayOverride"] == null || r["BillingDayOverride"] == DBNull.Value)
-                    ? (int?)null : Convert.ToInt32(r["BillingDayOverride"]);
-                d.DepartmentCode = AsStr(r["DepartmentCode"]);
-                d.JobCode = AsStr(r["JobCode"]);
-                d.StockLocationCode = AsStr(r["StockLocationCode"]);
-                d.Inactive = AsStr(r["Inactive"]) == "Y";
-                d.ServiceExpiryDate = (r["ServiceExpiryDate"] == null || r["ServiceExpiryDate"] == DBNull.Value)
-                    ? (DateTime?)null : Convert.ToDateTime(r["ServiceExpiryDate"]);
-                d.Meters = zSCP2_Item_Form.CreateMetersTable();
-                d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
-
-                DataTable m = _db.GetDataTable(
-                    "SELECT * FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + d.ItemKey + " ORDER BY ItemMeterKey", false);
-                foreach (DataRow mr in m.Rows)
-                {
-                    DataRow nr = d.Meters.NewRow();
-                    nr["MeterTypeCode"] = AsStr(mr["MeterTypeCode"]);
-                    nr["MeterRole"] = AsStr(mr["MeterRole"]);
-                    nr["MinimumCharges"] = AsDec(mr["MinimumCharges"]);
-                    nr["ChargesRate"] = AsDec(mr["ChargesRate"]);
-                    nr["MeterMultiPriceCode"] = AsStr(mr["MeterMultiPriceCode"]);
-                    nr["RebateQtyInPercent"] = AsDec(mr["RebateQtyInPercent"]);
-                    nr["FOCQty"] = AsDec(mr["FOCQty"]);
-                    nr["InitialReading"] = AsDec(mr["InitialReading"]);
-                    d.Meters.Rows.Add(nr);
-                }
-                d.Meters.AcceptChanges();
-
-                DataTable ics = _db.GetDataTable(
-                    "SELECT * FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=" + d.ItemKey + " ORDER BY Pos, ItemCodeKey", false);
-                foreach (DataRow ir in ics.Rows)
-                {
-                    DataRow nr = d.ItemCodes.NewRow();
-                    nr["ItemCode"] = AsStr(ir["ItemCode"]);
-                    nr["Description"] = AsStr(ir["Description"]);
-                    nr["Qty"] = AsDec(ir["Qty"]);
-                    nr["SerialNumber"] = AsStr(ir["SerialNumber"]);
-                    d.ItemCodes.Rows.Add(nr);
-                }
-                d.ItemCodes.AcceptChanges();
-                _items.Add(d);
+                DataRow nr = d.Meters.NewRow();
+                nr["MeterTypeCode"] = AsStr(mr["MeterTypeCode"]);
+                nr["MeterRole"] = AsStr(mr["MeterRole"]);
+                nr["MinimumCharges"] = AsDec(mr["MinimumCharges"]);
+                nr["ChargesRate"] = AsDec(mr["ChargesRate"]);
+                nr["MeterMultiPriceCode"] = AsStr(mr["MeterMultiPriceCode"]);
+                nr["RebateQtyInPercent"] = AsDec(mr["RebateQtyInPercent"]);
+                nr["FOCQty"] = AsDec(mr["FOCQty"]);
+                nr["InitialReading"] = AsDec(mr["InitialReading"]);
+                d.Meters.Rows.Add(nr);
             }
+            d.Meters.AcceptChanges();
+
+            DataTable ics = _db.GetDataTable(
+                "SELECT * FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=" + itemKey + " ORDER BY Pos, ItemCodeKey", false);
+            foreach (DataRow ir in ics.Rows)
+            {
+                DataRow nr = d.ItemCodes.NewRow();
+                nr["ItemCode"] = AsStr(ir["ItemCode"]);
+                nr["Description"] = AsStr(ir["Description"]);
+                nr["Qty"] = AsDec(ir["Qty"]);
+                nr["SerialNumber"] = AsStr(ir["SerialNumber"]);
+                d.ItemCodes.Rows.Add(nr);
+            }
+            d.ItemCodes.AcceptChanges();
+            return d;
+        }
+
+        // "+" Attach: pick a service item that has NO contract (ContractKey IS NULL) and pull it into
+        // this contract. On save it is re-parented (its ItemKey + meter history are preserved).
+        private void BtnItemAttach_Click(object sender, EventArgs e)
+        {
+            DataTable loose;
+            try
+            {
+                loose = _db.GetDataTable(
+                    "SELECT ItemKey, ServiceItemNo, SerialNumber, ISNULL(Description,'') AS Description " +
+                    "FROM [dbo].[zSCP2_Item] WHERE ContractKey IS NULL ORDER BY ServiceItemNo", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            if (loose.Rows.Count == 0)
+            { XtraMessageBox.Show("There are no unattached service items (items with no contract) to attach.", "Nothing to attach"); return; }
+
+            long key = PickLooseItem(loose);
+            if (key == 0) return;
+            foreach (ItemEditData ex2 in _items)
+                if (ex2.ItemKey == key) { XtraMessageBox.Show("That item is already in this contract.", "Already added"); return; }
+            _items.Add(LoadOneItem(key));
+            _dirty = true;
+            RebuildItemsView();
+        }
+
+        private long PickLooseItem(DataTable loose)
+        {
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = "Attach Service Item (no contract)";
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false; dlg.MinimizeBox = false;
+                dlg.ClientSize = new System.Drawing.Size(460, 105);
+
+                LabelControl lbl = new LabelControl();
+                lbl.Text = "Service Item"; lbl.Location = new System.Drawing.Point(14, 18);
+                dlg.Controls.Add(lbl);
+                LookUpEdit lk = new LookUpEdit();
+                lk.Location = new System.Drawing.Point(100, 15); lk.Size = new System.Drawing.Size(340, 20);
+                lk.Properties.DataSource = loose;
+                lk.Properties.ValueMember = "ItemKey";
+                lk.Properties.DisplayMember = "ServiceItemNo";
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ServiceItemNo", "Service Item No", 120));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("SerialNumber", "Serial", 100));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("Description", "Description", 180));
+                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                dlg.Controls.Add(lk);
+
+                SimpleButton ok = new SimpleButton();
+                ok.Text = "Attach"; ok.Location = new System.Drawing.Point(265, 62); ok.Size = new System.Drawing.Size(85, 28);
+                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; };
+                dlg.Controls.Add(ok);
+                SimpleButton cancel = new SimpleButton();
+                cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(356, 62); cancel.Size = new System.Drawing.Size(85, 28);
+                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; };
+                dlg.Controls.Add(cancel);
+
+                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
+                long k; return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
+            }
+        }
+
+        // "-" Remove selected service item from the contract (detach — the item survives as
+        // contract-less; existing items get ContractKey=NULL on save, new ones are just dropped).
+        private void BtnItemDetach_Click(object sender, EventArgs e)
+        {
+            BtnDelItem_Click(sender, e);
         }
 
         private void RebuildItemsView()
@@ -897,16 +974,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         if (_isNew) InsertContract(conn, tx, debtor);
                         else UpdateContract(conn, tx, debtor);
 
-                        // delete-then-reinsert children (cascade removes meters when item rows go)
-                        ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_Item] WHERE ContractKey=@ck",
-                            P("@ck", _contractKey));
+                        // Upsert items, preserving ItemKeys (attach/detach model). Existing items no
+                        // longer in the contract are DETACHED (ContractKey=NULL), not deleted, so they
+                        // survive as contract-less and keep their meter history.
+                        System.Collections.Generic.HashSet<long> kept = new System.Collections.Generic.HashSet<long>();
+                        foreach (ItemEditData d in _items) if (d.ItemKey > 0) kept.Add(d.ItemKey);
+                        using (SqlCommand ex = new SqlCommand("SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=@ck", conn, tx))
+                        {
+                            ex.Parameters.AddWithValue("@ck", _contractKey);
+                            System.Collections.Generic.List<long> present = new System.Collections.Generic.List<long>();
+                            using (SqlDataReader rd = ex.ExecuteReader()) { while (rd.Read()) present.Add(rd.GetInt64(0)); }
+                            foreach (long k in present)
+                                if (!kept.Contains(k))
+                                    ExecNonQuery(conn, tx, "UPDATE [dbo].[zSCP2_Item] SET ContractKey=NULL, LastModified=GETDATE() WHERE ItemKey=@ik", P("@ik", k));
+                        }
 
                         int pos = 0;
                         foreach (ItemEditData d in _items)
                         {
-                            long itemKey = InsertItem(conn, tx, d, pos++);
+                            long itemKey;
+                            if (d.ItemKey > 0)
+                            {
+                                UpdateItem(conn, tx, d, pos);
+                                itemKey = d.ItemKey;
+                                // children are rebuilt each save; wipe this item's rows first
+                                ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=@ik", P("@ik", itemKey));
+                                ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=@ik", P("@ik", itemKey));
+                            }
+                            else
+                            {
+                                itemKey = InsertItem(conn, tx, d, pos);
+                            }
                             InsertMeters(conn, tx, d, itemKey);
                             InsertItemCodes(conn, tx, d, itemKey);
+                            pos++;
                         }
                         SaveSpareParts(conn, tx);
                         SaveMoreHeader(conn, tx);
@@ -1003,6 +1104,31 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@pos", pos);
                 cmd.Parameters.AddWithValue("@inact", d.Inactive ? "Y" : "N");
                 return Convert.ToInt64(cmd.ExecuteScalar());
+            }
+        }
+
+        // Re-parent + update an EXISTING service item (used for attached items and edited items) so
+        // its ItemKey (and meter history) is preserved instead of delete+reinsert.
+        private void UpdateItem(SqlConnection conn, SqlTransaction tx, ItemEditData d, int pos)
+        {
+            string sql =
+                "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, ServiceItemNo=@no, SerialNumber=@serial, " +
+                "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
+                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, LastModified=GETDATE() WHERE ItemKey=@ik";
+            using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
+            {
+                cmd.Parameters.AddWithValue("@ck", _contractKey);
+                cmd.Parameters.AddWithValue("@no", d.ServiceItemNo ?? "");
+                cmd.Parameters.AddWithValue("@serial", d.SerialNumber ?? "");
+                cmd.Parameters.AddWithValue("@desc", d.Description ?? "");
+                cmd.Parameters.AddWithValue("@bday", (object)d.BillingDayOverride ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@dept", d.DepartmentCode ?? "");
+                cmd.Parameters.AddWithValue("@job", d.JobCode ?? "");
+                cmd.Parameters.AddWithValue("@loc", d.StockLocationCode ?? "");
+                cmd.Parameters.AddWithValue("@pos", pos);
+                cmd.Parameters.AddWithValue("@inact", d.Inactive ? "Y" : "N");
+                cmd.Parameters.AddWithValue("@ik", d.ItemKey);
+                cmd.ExecuteNonQuery();
             }
         }
 

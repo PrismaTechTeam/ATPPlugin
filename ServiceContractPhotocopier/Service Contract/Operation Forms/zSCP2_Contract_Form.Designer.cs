@@ -64,6 +64,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private DevExpress.XtraTab.XtraTabControl TabMain;
         private DevExpress.XtraTab.XtraTabPage PageItems;
+        private DevExpress.XtraEditors.PanelControl PnlItemBar;
+        private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
+        private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
         private DevExpress.XtraTab.XtraTabPage PageSpareParts;
         private DevExpress.XtraEditors.PanelControl PnlSpBar;
         private DevExpress.XtraEditors.SimpleButton BtnSpInsert;
@@ -146,6 +149,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain = new DevExpress.XtraTab.XtraTabControl();
             this.PageItems = new DevExpress.XtraTab.XtraTabPage();
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
+            this.PnlItemBar = new DevExpress.XtraEditors.PanelControl();
+            this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
             this.PageSpareParts = new DevExpress.XtraTab.XtraTabPage();
             this.PnlSpBar = new DevExpress.XtraEditors.PanelControl();
             this.BtnSpInsert = new DevExpress.XtraEditors.SimpleButton();
@@ -203,6 +209,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TabMain)).BeginInit();
             this.TabMain.SuspendLayout();
             this.PageItems.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.PnlItemBar)).BeginInit();
+            this.PnlItemBar.SuspendLayout();
             this.PageRemark.SuspendLayout();
             this.PageSpareParts.SuspendLayout();
             this.PageMoreHeader.SuspendLayout();
@@ -676,14 +684,43 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // PageItems
             //
             this.PageItems.Controls.Add(this.GridItems);
+            this.PageItems.Controls.Add(this.PnlItemBar);
             this.PageItems.Name = "PageItems";
             this.PageItems.Size = new System.Drawing.Size(1174, 389);
             this.PageItems.Text = "Service Item Under Contract";
             //
+            // PnlItemBar
+            //
+            this.PnlItemBar.Controls.Add(this.BtnItemAttach);
+            this.PnlItemBar.Controls.Add(this.BtnItemDetach);
+            this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.PnlItemBar.Location = new System.Drawing.Point(0, 0);
+            this.PnlItemBar.Name = "PnlItemBar";
+            this.PnlItemBar.Size = new System.Drawing.Size(1174, 34);
+            this.PnlItemBar.TabIndex = 0;
+            //
+            // BtnItemAttach
+            //
+            this.BtnItemAttach.Location = new System.Drawing.Point(6, 5);
+            this.BtnItemAttach.Name = "BtnItemAttach";
+            this.BtnItemAttach.Size = new System.Drawing.Size(190, 24);
+            this.BtnItemAttach.TabIndex = 0;
+            this.BtnItemAttach.Text = "+  Attach existing Service Item";
+            this.BtnItemAttach.Click += new System.EventHandler(this.BtnItemAttach_Click);
+            //
+            // BtnItemDetach
+            //
+            this.BtnItemDetach.Location = new System.Drawing.Point(200, 5);
+            this.BtnItemDetach.Name = "BtnItemDetach";
+            this.BtnItemDetach.Size = new System.Drawing.Size(190, 24);
+            this.BtnItemDetach.TabIndex = 1;
+            this.BtnItemDetach.Text = "–  Remove selected from contract";
+            this.BtnItemDetach.Click += new System.EventHandler(this.BtnItemDetach_Click);
+            //
             // GridItems
             //
             this.GridItems.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.GridItems.Location = new System.Drawing.Point(0, 0);
+            this.GridItems.Location = new System.Drawing.Point(0, 34);
             this.GridItems.MainView = this.GridViewItems;
             this.GridItems.Name = "GridItems";
             this.GridItems.Size = new System.Drawing.Size(1174, 389);
@@ -980,6 +1017,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageRemark.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridItems)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewItems)).EndInit();
+            this.PnlItemBar.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.PnlItemBar)).EndInit();
             this.PageMoreHeader.ResumeLayout(false);
             this.PageNote.ResumeLayout(false);
             this.PageNote.PerformLayout();
