@@ -70,6 +70,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
 
             RebuildItemsView();
+            SetupSparePartsGrid();
+            LoadSpareParts();
 
             // Dirty tracking for the close confirmation: any header edit marks the form dirty. Wired
             // AFTER the initial load so loading an existing contract does not itself set the flag.
@@ -492,6 +494,255 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             e.Appearance.Font = _boldFont;
         }
 
+        // ===================== Spare Parts / Services Provided =====================
+
+        private DataTable _spareParts;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _spCheck;
+
+        private static DataTable CreateSparePartsTable()
+        {
+            DataTable dt = new DataTable("SpareParts");
+            dt.Columns.Add("SparePartKey", typeof(long));
+            dt.Columns.Add("ItemKey", typeof(long));       // set => item-bound (read-only on the contract)
+            dt.Columns.Add("Bound", typeof(bool));         // ItemKey present -> true
+            dt.Columns.Add("No", typeof(int));
+            dt.Columns.Add("ItemCode", typeof(string));
+            dt.Columns.Add("Description", typeof(string));
+            dt.Columns.Add("Unlimited", typeof(bool));
+            dt.Columns.Add("UOM", typeof(string));
+            dt.Columns.Add("Quantity", typeof(decimal));
+            dt.Columns.Add("Discount", typeof(string));
+            dt.Columns.Add("UnitPrice", typeof(decimal));
+            dt.Columns.Add("Amount", typeof(decimal));
+            dt.Columns.Add("TaxType", typeof(string));
+            dt.Columns.Add("TaxInclusive", typeof(bool));
+            dt.Columns.Add("TaxRate", typeof(decimal));
+            dt.Columns.Add("TaxAmount", typeof(decimal));
+            dt.Columns.Add("AmountAfterTax", typeof(decimal));
+            dt.Columns.Add("Pos", typeof(int));
+            return dt;
+        }
+
+        private void SetupSparePartsGrid()
+        {
+            _spCheck = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            GridSpareParts.RepositoryItems.Add(_spCheck);
+
+            GridViewSpareParts.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
+            GridViewSpareParts.OptionsBehavior.Editable = true;
+            GridViewSpareParts.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(SpareParts_CellValueChanged);
+            GridViewSpareParts.ShowingEditor += new System.ComponentModel.CancelEventHandler(SpareParts_ShowingEditor);
+
+            _spareParts = CreateSparePartsTable();
+            GridSpareParts.DataSource = _spareParts.DefaultView;
+            _spareParts.DefaultView.Sort = "Pos";
+
+            GridViewSpareParts.Columns.Clear();
+            GridViewSpareParts.PopulateColumns();
+            SpCol("SparePartKey", null, 0, -1); if (GridViewSpareParts.Columns["SparePartKey"] != null) GridViewSpareParts.Columns["SparePartKey"].Visible = false;
+            SpCol("ItemKey", null, 0, -1); if (GridViewSpareParts.Columns["ItemKey"] != null) GridViewSpareParts.Columns["ItemKey"].Visible = false;
+            SpCol("Bound", null, 0, -1); if (GridViewSpareParts.Columns["Bound"] != null) GridViewSpareParts.Columns["Bound"].Visible = false;
+            SpCol("Pos", null, 0, -1); if (GridViewSpareParts.Columns["Pos"] != null) GridViewSpareParts.Columns["Pos"].Visible = false;
+            SpCol("No", "No", 40, 0, true);
+            SpCol("ItemCode", "Item Code", 130, 1);
+            SpCol("Description", "Description", 240, 2);
+            SpBoolCol("Unlimited", "Unlimited", 70, 3);
+            SpCol("UOM", "UOM", 70, 4);
+            SpCol("Quantity", "Quantity", 80, 5);
+            SpCol("Discount", "Discount", 80, 6);
+            SpCol("UnitPrice", "Unit Price", 90, 7);
+            SpCol("Amount", "Amount", 90, 8, true);
+            SpCol("TaxType", "Tax Type", 80, 9);
+            SpBoolCol("TaxInclusive", "Tax Inclusive", 90, 10);
+            SpCol("TaxRate", "Tax (%)", 70, 11);
+            SpCol("TaxAmount", "Tax Amount", 90, 12, true);
+            SpCol("AmountAfterTax", "Amount After Tax", 110, 13, true);
+        }
+
+        private void SpCol(string field, string caption, int width, int visibleIndex, bool readOnly = false)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = GridViewSpareParts.Columns[field];
+            if (c == null) return;
+            if (caption != null) c.Caption = caption;
+            if (width > 0) c.Width = width;
+            if (visibleIndex >= 0) { c.Visible = true; c.VisibleIndex = visibleIndex; }
+            if (readOnly) { c.OptionsColumn.AllowEdit = false; c.OptionsColumn.ReadOnly = true; }
+        }
+
+        private void SpBoolCol(string field, string caption, int width, int visibleIndex)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = GridViewSpareParts.Columns[field];
+            if (c == null) return;
+            c.Caption = caption; c.Width = width; c.Visible = true; c.VisibleIndex = visibleIndex;
+            c.ColumnEdit = _spCheck;
+        }
+
+        // Item-bound lines are read-only on the contract (they belong to a service item); block editing.
+        private void SpareParts_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            int rh = GridViewSpareParts.FocusedRowHandle;
+            if (rh < 0) return;
+            object bound = GridViewSpareParts.GetRowCellValue(rh, "Bound");
+            if (bound != null && bound != DBNull.Value && Convert.ToBoolean(bound)) e.Cancel = true;
+        }
+
+        private void SpareParts_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            _dirty = true;
+            if (e.Column.FieldName == "Amount" || e.Column.FieldName == "TaxAmount" ||
+                e.Column.FieldName == "AmountAfterTax" || e.Column.FieldName == "No") return;
+            GridViewSpareParts.PostEditor();
+            DataRowView drv = GridViewSpareParts.GetRow(e.RowHandle) as DataRowView;
+            if (drv != null) ComputeSpareRow(drv.Row);
+            GridViewSpareParts.RefreshData();
+        }
+
+        private static void ComputeSpareRow(DataRow r)
+        {
+            decimal qty = r["Quantity"] == DBNull.Value ? 0 : Convert.ToDecimal(r["Quantity"]);
+            decimal price = r["UnitPrice"] == DBNull.Value ? 0 : Convert.ToDecimal(r["UnitPrice"]);
+            decimal gross = qty * price;
+            // Discount: "10%" -> percent of gross; a plain number -> absolute amount off.
+            string disc = r["Discount"] == DBNull.Value ? "" : Convert.ToString(r["Discount"]).Trim();
+            decimal discAmt = 0m;
+            if (disc.EndsWith("%"))
+            {
+                decimal p; if (decimal.TryParse(disc.TrimEnd('%').Trim(), out p)) discAmt = gross * p / 100m;
+            }
+            else { decimal a; if (decimal.TryParse(disc, out a)) discAmt = a; }
+            decimal amount = gross - discAmt; if (amount < 0) amount = 0;
+            decimal rate = r["TaxRate"] == DBNull.Value ? 0 : Convert.ToDecimal(r["TaxRate"]);
+            bool inclusive = r["TaxInclusive"] != DBNull.Value && Convert.ToBoolean(r["TaxInclusive"]);
+            decimal taxAmt, afterTax;
+            if (inclusive) { afterTax = amount; taxAmt = rate == 0 ? 0 : amount - (amount / (1 + rate / 100m)); }
+            else { taxAmt = amount * rate / 100m; afterTax = amount + taxAmt; }
+            r["Amount"] = decimal.Round(amount, 2);
+            r["TaxAmount"] = decimal.Round(taxAmt, 2);
+            r["AmountAfterTax"] = decimal.Round(afterTax, 2);
+        }
+
+        private void LoadSpareParts()
+        {
+            if (_spareParts == null) SetupSparePartsGrid();
+            _spareParts.Rows.Clear();
+            if (_isNew || _contractKey == 0) { RenumberSpareParts(); return; }
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT SparePartKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, " +
+                    "UnitPrice, TaxType, TaxInclusive, TaxRate, Pos FROM [dbo].[zSCP2_ContractSparePart] " +
+                    "WHERE ContractKey=" + _contractKey + " ORDER BY Pos", false);
+                foreach (DataRow s in dt.Rows)
+                {
+                    DataRow r = _spareParts.NewRow();
+                    r["SparePartKey"] = s["SparePartKey"];
+                    r["ItemKey"] = s["ItemKey"];
+                    r["Bound"] = s["ItemKey"] != DBNull.Value;
+                    r["ItemCode"] = s["ItemCode"]; r["Description"] = s["Description"];
+                    r["Unlimited"] = Convert.ToString(s["Unlimited"]) == "Y";
+                    r["UOM"] = s["UOM"]; r["Quantity"] = s["Quantity"]; r["Discount"] = s["Discount"];
+                    r["UnitPrice"] = s["UnitPrice"]; r["TaxType"] = s["TaxType"];
+                    r["TaxInclusive"] = Convert.ToString(s["TaxInclusive"]) == "Y";
+                    r["TaxRate"] = s["TaxRate"]; r["Pos"] = s["Pos"];
+                    ComputeSpareRow(r);
+                    _spareParts.Rows.Add(r);
+                }
+            }
+            catch { }
+            RenumberSpareParts();
+        }
+
+        private void RenumberSpareParts()
+        {
+            if (_spareParts == null) return;
+            System.Data.DataView v = _spareParts.DefaultView;
+            for (int i = 0; i < v.Count; i++) { v[i].Row["No"] = i + 1; v[i].Row["Pos"] = i; }
+        }
+
+        private void BtnSpInsert_Click(object sender, EventArgs e)
+        {
+            if (_spareParts == null) return;
+            GridViewSpareParts.PostEditor();
+            DataRow r = _spareParts.NewRow();
+            r["SparePartKey"] = 0L; r["ItemKey"] = DBNull.Value; r["Bound"] = false;
+            r["ItemCode"] = ""; r["Description"] = ""; r["Unlimited"] = false; r["UOM"] = "";
+            r["Quantity"] = 0m; r["Discount"] = ""; r["UnitPrice"] = 0m; r["Amount"] = 0m;
+            r["TaxType"] = ""; r["TaxInclusive"] = false; r["TaxRate"] = 0m; r["TaxAmount"] = 0m;
+            r["AmountAfterTax"] = 0m; r["Pos"] = _spareParts.Rows.Count;
+            _spareParts.Rows.Add(r);
+            _dirty = true;
+            RenumberSpareParts();
+            GridViewSpareParts.RefreshData();
+            GridViewSpareParts.FocusedRowHandle = GridViewSpareParts.RowCount - 1;
+        }
+
+        private void BtnSpRemove_Click(object sender, EventArgs e)
+        {
+            int rh = GridViewSpareParts.FocusedRowHandle;
+            if (rh < 0) return;
+            DataRowView drv = GridViewSpareParts.GetRow(rh) as DataRowView;
+            if (drv == null) return;
+            if (drv.Row["ItemKey"] != DBNull.Value)
+            { XtraMessageBox.Show("This spare part belongs to a service item and cannot be removed here. Edit it on the service item.", "Read-only"); return; }
+            drv.Row.Delete();
+            _dirty = true;
+            RenumberSpareParts();
+            GridViewSpareParts.RefreshData();
+        }
+
+        private void BtnSpUp_Click(object sender, EventArgs e) { MoveSparePart(-1); }
+        private void BtnSpDown_Click(object sender, EventArgs e) { MoveSparePart(1); }
+
+        // Move Up/Down mirrors AutoCount's detail-grid reorder: swap the Pos of the two adjacent rows,
+        // the Pos-sorted view then re-orders, and focus follows the moved row.
+        private void MoveSparePart(int dir)
+        {
+            int rh = GridViewSpareParts.FocusedRowHandle;
+            if (rh < 0) return;
+            int target = rh + dir;
+            if (target < 0 || target >= GridViewSpareParts.RowCount) return;
+            DataRowView a = GridViewSpareParts.GetRow(rh) as DataRowView;
+            DataRowView b = GridViewSpareParts.GetRow(target) as DataRowView;
+            if (a == null || b == null) return;
+            int pa = Convert.ToInt32(a.Row["Pos"]), pb = Convert.ToInt32(b.Row["Pos"]);
+            a.Row["Pos"] = pb; b.Row["Pos"] = pa;
+            _dirty = true;
+            RenumberSpareParts();
+            GridViewSpareParts.RefreshData();
+            GridViewSpareParts.FocusedRowHandle = target;
+        }
+
+        private void SaveSpareParts(SqlConnection conn, SqlTransaction tx)
+        {
+            if (_spareParts == null) return;
+            GridViewSpareParts.PostEditor();
+            // Replace only contract-level lines; item-bound lines are owned by the service item and
+            // are left untouched (they were shown read-only).
+            ExecNonQuery(conn, tx,
+                "DELETE FROM [dbo].[zSCP2_ContractSparePart] WHERE ContractKey=@ck AND ItemKey IS NULL",
+                P("@ck", _contractKey));
+            foreach (DataRowView drv in _spareParts.DefaultView)
+            {
+                DataRow r = drv.Row;
+                if (r["ItemKey"] != DBNull.Value) continue;   // item-bound: not owned here
+                string code = r["ItemCode"] == DBNull.Value ? "" : Convert.ToString(r["ItemCode"]).Trim();
+                if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
+                ExecNonQuery(conn, tx,
+                    "INSERT INTO [dbo].[zSCP2_ContractSparePart] " +
+                    "(ContractKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
+                    " TaxType, TaxInclusive, TaxRate, Pos, LastModified) " +
+                    "VALUES (@ck, NULL, @code, @desc, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
+                    P("@ck", _contractKey), P("@code", code),
+                    P("@desc", AsStr(r["Description"])),
+                    P("@unl", Convert.ToBoolean(r["Unlimited"]) ? "Y" : "N"),
+                    P("@uom", AsStr(r["UOM"])), P("@qty", AsDec(r["Quantity"])),
+                    P("@disc", AsStr(r["Discount"])), P("@price", AsDec(r["UnitPrice"])),
+                    P("@ttype", AsStr(r["TaxType"])),
+                    P("@tinc", Convert.ToBoolean(r["TaxInclusive"]) ? "Y" : "N"),
+                    P("@trate", AsDec(r["TaxRate"])), P("@pos", Convert.ToInt32(r["Pos"])));
+            }
+        }
+
         private void BtnSave_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TxtContractNo.Text))
@@ -538,6 +789,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             InsertMeters(conn, tx, d, itemKey);
                             InsertItemCodes(conn, tx, d, itemKey);
                         }
+                        SaveSpareParts(conn, tx);
                         tx.Commit();
                     }
                 }

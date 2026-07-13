@@ -703,6 +703,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v2.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_DocNoFormat.sql" />
     <EmbeddedResource Include="SQL\02_CreateIndex_zSCP2_Performance.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractSparePart.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterEntry.sql" />

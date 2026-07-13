@@ -251,3 +251,29 @@ address picker (can wire to dbo.BranchDeliveryInfo/DeliveryAddress later; stub S
 inside a contract, prefill the item editor with the shared contract fields and show the **contract as
 read-only** (Contract No read-only). Partly in place (billing day is passed); finish the field-map
 (customer/agent/etc. → item context) and lock the contract selector when opened from a contract.
+
+## 2026-07-13 — Spare Parts tab BUILT + two decisions recorded
+
+- DECISION (B-1): user chose **contract-less items** — make zSCP2_Item.ContractKey NULLABLE; `+`
+  attaches items WHERE ContractKey IS NULL, `-` detaches (ContractKey=NULL, item survives). NOT yet
+  built (the +/- attach UI + the nullable migration is the next item-model chunk).
+- DONE: **Spare Parts / Services Provided tab** on the contract editor. New table
+  zSCP2_ContractSparePart (contract-cascade FK only; ItemKey is a plain nullable link — a 2nd cascade
+  FK to zSCP2_Item is illegal here, "multiple cascade paths", since Item already cascades from
+  Contract). Grid columns per Image #101 (No/Item Code/Description/Unlimited/UOM/Quantity/Discount/
+  Unit Price/Amount/Tax Type/Tax Inclusive/Tax %/Tax Amount/Amount After Tax) with Insert Row /
+  Remove Row / Move Up / Move Down. Amount/Tax computed on edit. Item-bound rows (ItemKey set) show
+  read-only and can't be removed on the contract. Save replaces only contract-level (ItemKey NULL)
+  rows. Migration auto-creates the table on install (verified on AED_ATPTEST).
+- STILL PENDING from the epic: item-form spare parts sub-grid (so item-bound lines exist);
+  the "Item Format: Standard GST" combo + Customize button (cosmetic, not added); More Header tab
+  (B-3); Note/Remarks tab split (B-4); +/- attach with the nullable model (B-1); add-item mapping
+  (B-5).
+
+## 2026-07-13 — NEW request (Image #105/#106): Copy / Clipboard ribbon for Service Contract
+Add to the contract editor ribbon, mirroring AutoCount's document entry:
+- **Copy group**: "Copy from other Service Contract" (load another contract's data into a NEW unsaved
+  contract) + "Copy to a new Service Contract" (clone the current contract into a new one).
+- **Clipboard group**: "Copy Whole Document", "Copy Selected Details", "Copy as Spreadsheet",
+  "Paste Whole Document", "Paste Item Detail Only". Look at AutoCount's Form*Entry clipboard commands
+  (AutoCount.Invoicing / document entry) for the serialization format + paste behavior. NOT built yet.

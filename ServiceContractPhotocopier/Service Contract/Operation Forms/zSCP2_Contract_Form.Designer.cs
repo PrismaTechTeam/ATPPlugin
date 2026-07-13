@@ -64,6 +64,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private DevExpress.XtraTab.XtraTabControl TabMain;
         private DevExpress.XtraTab.XtraTabPage PageItems;
+        private DevExpress.XtraTab.XtraTabPage PageSpareParts;
+        private DevExpress.XtraEditors.PanelControl PnlSpBar;
+        private DevExpress.XtraEditors.SimpleButton BtnSpInsert;
+        private DevExpress.XtraEditors.SimpleButton BtnSpRemove;
+        private DevExpress.XtraEditors.SimpleButton BtnSpUp;
+        private DevExpress.XtraEditors.SimpleButton BtnSpDown;
+        private DevExpress.XtraGrid.GridControl GridSpareParts;
+        private DevExpress.XtraGrid.Views.Grid.GridView GridViewSpareParts;
         private DevExpress.XtraTab.XtraTabPage PageRemark;
         private DevExpress.XtraGrid.GridControl GridItems;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewItems;
@@ -136,6 +144,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain = new DevExpress.XtraTab.XtraTabControl();
             this.PageItems = new DevExpress.XtraTab.XtraTabPage();
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
+            this.PageSpareParts = new DevExpress.XtraTab.XtraTabPage();
+            this.PnlSpBar = new DevExpress.XtraEditors.PanelControl();
+            this.BtnSpInsert = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnSpRemove = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnSpUp = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnSpDown = new DevExpress.XtraEditors.SimpleButton();
+            this.GridSpareParts = new DevExpress.XtraGrid.GridControl();
+            this.GridViewSpareParts = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.GridItems = new DevExpress.XtraGrid.GridControl();
             this.GridViewItems = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.ColNo = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -184,6 +200,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain.SuspendLayout();
             this.PageItems.SuspendLayout();
             this.PageRemark.SuspendLayout();
+            this.PageSpareParts.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.PnlSpBar)).BeginInit();
+            this.PnlSpBar.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GridSpareParts)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewSpareParts)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridItems)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewItems)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRemark1.Properties)).BeginInit();
@@ -643,7 +664,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain.Size = new System.Drawing.Size(1180, 417);
             this.TabMain.TabIndex = 2;
             this.TabMain.TabPages.AddRange(new DevExpress.XtraTab.XtraTabPage[] {
-                this.PageItems, this.PageRemark});
+                this.PageItems, this.PageSpareParts, this.PageRemark});
             //
             // PageItems
             //
@@ -767,6 +788,79 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColExpiry.VisibleIndex = 8;
             this.ColExpiry.Width = 100;
             //
+            // PageSpareParts
+            //
+            this.PageSpareParts.Controls.Add(this.GridSpareParts);
+            this.PageSpareParts.Controls.Add(this.PnlSpBar);
+            this.PageSpareParts.Name = "PageSpareParts";
+            this.PageSpareParts.Size = new System.Drawing.Size(1174, 389);
+            this.PageSpareParts.Text = "Spare Parts / Services Provided";
+            //
+            // PnlSpBar
+            //
+            this.PnlSpBar.Controls.Add(this.BtnSpInsert);
+            this.PnlSpBar.Controls.Add(this.BtnSpRemove);
+            this.PnlSpBar.Controls.Add(this.BtnSpUp);
+            this.PnlSpBar.Controls.Add(this.BtnSpDown);
+            this.PnlSpBar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.PnlSpBar.Location = new System.Drawing.Point(0, 0);
+            this.PnlSpBar.Name = "PnlSpBar";
+            this.PnlSpBar.Size = new System.Drawing.Size(1174, 34);
+            this.PnlSpBar.TabIndex = 0;
+            //
+            // BtnSpInsert
+            //
+            this.BtnSpInsert.Location = new System.Drawing.Point(6, 5);
+            this.BtnSpInsert.Name = "BtnSpInsert";
+            this.BtnSpInsert.Size = new System.Drawing.Size(90, 24);
+            this.BtnSpInsert.TabIndex = 0;
+            this.BtnSpInsert.Text = "Insert Row";
+            this.BtnSpInsert.Click += new System.EventHandler(this.BtnSpInsert_Click);
+            //
+            // BtnSpRemove
+            //
+            this.BtnSpRemove.Location = new System.Drawing.Point(100, 5);
+            this.BtnSpRemove.Name = "BtnSpRemove";
+            this.BtnSpRemove.Size = new System.Drawing.Size(90, 24);
+            this.BtnSpRemove.TabIndex = 1;
+            this.BtnSpRemove.Text = "Remove Row";
+            this.BtnSpRemove.Click += new System.EventHandler(this.BtnSpRemove_Click);
+            //
+            // BtnSpUp
+            //
+            this.BtnSpUp.Location = new System.Drawing.Point(198, 5);
+            this.BtnSpUp.Name = "BtnSpUp";
+            this.BtnSpUp.Size = new System.Drawing.Size(80, 24);
+            this.BtnSpUp.TabIndex = 2;
+            this.BtnSpUp.Text = "Move Up";
+            this.BtnSpUp.Click += new System.EventHandler(this.BtnSpUp_Click);
+            //
+            // BtnSpDown
+            //
+            this.BtnSpDown.Location = new System.Drawing.Point(282, 5);
+            this.BtnSpDown.Name = "BtnSpDown";
+            this.BtnSpDown.Size = new System.Drawing.Size(80, 24);
+            this.BtnSpDown.TabIndex = 3;
+            this.BtnSpDown.Text = "Move Down";
+            this.BtnSpDown.Click += new System.EventHandler(this.BtnSpDown_Click);
+            //
+            // GridSpareParts
+            //
+            this.GridSpareParts.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.GridSpareParts.Location = new System.Drawing.Point(0, 34);
+            this.GridSpareParts.MainView = this.GridViewSpareParts;
+            this.GridSpareParts.Name = "GridSpareParts";
+            this.GridSpareParts.Size = new System.Drawing.Size(1174, 355);
+            this.GridSpareParts.TabIndex = 1;
+            this.GridSpareParts.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
+                this.GridViewSpareParts});
+            //
+            // GridViewSpareParts
+            //
+            this.GridViewSpareParts.GridControl = this.GridSpareParts;
+            this.GridViewSpareParts.Name = "GridViewSpareParts";
+            this.GridViewSpareParts.OptionsView.ShowGroupPanel = false;
+            //
             // PageRemark
             //
             this.PageRemark.Controls.Add(this.TxtNote);
@@ -867,6 +961,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageRemark.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridItems)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewItems)).EndInit();
+            this.PageSpareParts.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.PnlSpBar)).EndInit();
+            this.PnlSpBar.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.GridSpareParts)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewSpareParts)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRemark1.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRemark2.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtNote.Properties)).EndInit();
