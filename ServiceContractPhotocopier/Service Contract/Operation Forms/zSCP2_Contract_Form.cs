@@ -148,31 +148,28 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return ChkBillSeparate.Checked ? "S" : "G";
         }
 
+        private string _autoPeekNo;   // previewed auto number; if the box still shows it at save, a real one is drawn
+
         private void AutoPickContractNo()
         {
-            // Draw from the plugin's Document Numbering Format (customisable in "Document Numbering
-            // Format" under Service & Contract). Falls back to the legacy MAX+1 scan if that fails.
-            try
+            // PREVIEW ONLY (peek, no consume) — clicking Auto never increments the counter. The real
+            // number is reserved by ScpDocNo.Next() at save time (see BtnSave_Click).
+            string peek = ServiceContractPhotocopier.Classes.ScpDocNo.Peek(
+                _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_CONTRACT);
+            if (string.IsNullOrEmpty(peek))
             {
-                TxtContractNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
-                    _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_CONTRACT);
-                return;
+                try
+                {
+                    object o = _db.ExecuteScalar(
+                        "SELECT ISNULL(MAX(CONVERT(int, SUBSTRING(ContractNo,4,20))),0)+1 " +
+                        "FROM [dbo].[zSCP2_Contract] WHERE ContractNo LIKE 'SC-%' AND ISNUMERIC(SUBSTRING(ContractNo,4,20))=1");
+                    int next = (o == null || o == DBNull.Value) ? 1 : Convert.ToInt32(o);
+                    peek = "SC-" + next.ToString("000000");
+                }
+                catch { peek = "SC-000001"; }
             }
-            catch { }
-            AutoPickContractNoLegacy();
-        }
-
-        private void AutoPickContractNoLegacy()
-        {
-            try
-            {
-                object o = _db.ExecuteScalar(
-                    "SELECT ISNULL(MAX(CONVERT(int, SUBSTRING(ContractNo,4,20))),0)+1 " +
-                    "FROM [dbo].[zSCP2_Contract] WHERE ContractNo LIKE 'SC-%' AND ISNUMERIC(SUBSTRING(ContractNo,4,20))=1");
-                int next = (o == null || o == DBNull.Value) ? 1 : Convert.ToInt32(o);
-                TxtContractNo.Text = "SC-" + next.ToString("000000");
-            }
-            catch { TxtContractNo.Text = "SC-000001"; }
+            _autoPeekNo = peek;
+            TxtContractNo.Text = peek;
         }
 
         private void BtnAutoNo_Click(object sender, EventArgs e) { AutoPickContractNo(); }
@@ -389,6 +386,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
             if (string.IsNullOrWhiteSpace(debtor))
             { XtraMessageBox.Show("Customer (Debtor) is required.", "Validation"); return; }
+
+            // Reserve the REAL contract number now (only if new & still showing the auto-preview) so
+            // the counter is consumed on save, not on every Auto click.
+            if (_isNew && !string.IsNullOrEmpty(_autoPeekNo) && TxtContractNo.Text.Trim() == _autoPeekNo)
+                TxtContractNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
+                    _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_CONTRACT);
+
+            // Embedded items showing an auto-preview number: reserve a real one each at save.
+            foreach (ItemEditData d in _items)
+            {
+                if (d.ServiceItemNoIsAuto)
+                {
+                    d.ServiceItemNo = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
+                        _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+                    d.ServiceItemNoIsAuto = false;
+                }
+            }
 
             try
             {

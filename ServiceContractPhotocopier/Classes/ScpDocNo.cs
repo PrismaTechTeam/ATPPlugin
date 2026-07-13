@@ -16,6 +16,31 @@ namespace ServiceContractPhotocopier.Classes
         public const string DOCTYPE_CONTRACT = "SC";
         public const string DOCTYPE_SERVICE_ITEM = "SI";
 
+        /// <summary>Previews the next number WITHOUT consuming it (for the Auto button). Clicking Auto
+        /// repeatedly always shows the same number; the number is only reserved when <see cref="Next"/>
+        /// is called at save time. Returns "" if the format row does not exist yet.</summary>
+        public static string Peek(DBSetting db, string docType)
+        {
+            try
+            {
+                using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+                {
+                    cn.Open();
+                    using (SqlCommand cmd = new SqlCommand(
+                        "SELECT FormatString, NextNumber FROM [dbo].[zSCP2_DocNoFormat] WHERE DocType=@t", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@t", docType);
+                        using (SqlDataReader r = cmd.ExecuteReader())
+                        {
+                            if (r.Read()) return Format(r.GetString(0), r.GetInt32(1));
+                        }
+                    }
+                }
+            }
+            catch { }
+            return "";
+        }
+
         /// <summary>Draws the next number for the doc type (consumes it). Self-heals a missing row.</summary>
         public static string Next(DBSetting db, string docType)
         {

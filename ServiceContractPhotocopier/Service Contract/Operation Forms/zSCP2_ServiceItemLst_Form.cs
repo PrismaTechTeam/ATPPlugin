@@ -196,6 +196,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // Item + its child rows, inside the caller's transaction. Same SQL as the contract editor.
         private void InsertItemTree(SqlConnection cn, SqlTransaction tx, ItemEditData d, long contractKey)
         {
+            // Reserve the REAL service item number now (only if it was an auto-preview) so the counter
+            // is only consumed on an actual save — clicking Auto never burned a number.
+            if (d.ServiceItemNoIsAuto)
+                d.ServiceItemNo = Classes.ScpDocNo.Next(_dbSetting, Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+
             long itemKey;
             using (SqlCommand cmd = new SqlCommand(
                 "INSERT INTO [dbo].[zSCP2_Item] " +

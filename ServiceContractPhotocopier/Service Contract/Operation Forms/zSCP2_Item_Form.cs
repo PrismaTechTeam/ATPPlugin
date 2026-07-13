@@ -21,6 +21,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public string JobCode = "";
         public string StockLocationCode = "";
         public bool Inactive;
+        public bool ServiceItemNoIsAuto;   // true = number is an auto-preview; the save path draws a fresh committed number
         public DateTime? ServiceExpiryDate;   // from master; null = none. Drives the Expiry column colour.
         public DataTable Meters;          // schema = CreateMetersTable()
         public DataTable ItemCodes;       // schema = CreateItemCodesTable()
@@ -165,12 +166,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
                 _lblCustomer = new DevExpress.XtraEditors.LabelControl();
                 _lblCustomer.Text = "Customer *";
-                _lblCustomer.Location = new System.Drawing.Point(350, 264);
+                _lblCustomer.Location = new System.Drawing.Point(470, 264);   // align with the right column (Dept/Project)
                 this.Controls.Add(_lblCustomer);
                 _lblCustomer.BringToFront();
 
                 _lkCustomer = new DevExpress.XtraEditors.LookUpEdit();
-                _lkCustomer.Location = new System.Drawing.Point(420, 261);
+                _lkCustomer.Location = new System.Drawing.Point(600, 261);
                 _lkCustomer.Size = new System.Drawing.Size(210, 20);
                 _lkCustomer.Properties.NullText = "Select customer...";
                 _lkCustomer.Properties.ValueMember = "AccNo";
@@ -266,26 +267,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ed.Properties.Items.Add(r["SerialNumber"].ToString());
         }
 
+        private string _autoPeekNo;   // the previewed auto number; if the box still shows it at save, a real number is drawn
+
         private void AutoPickServiceItemNo()
         {
-            // Draw from the plugin's Document Numbering Format (customisable in "Document Numbering
-            // Format" under Service & Contract). Falls back to the legacy MAX+1 scan if that fails.
-            try
+            // PREVIEW ONLY (peek, no consume) — so clicking Auto repeatedly never increments the counter.
+            // The real number is reserved by ScpDocNo.Next() at save time (see the list/contract save path).
+            string peek = ServiceContractPhotocopier.Classes.ScpDocNo.Peek(
+                _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+            if (string.IsNullOrEmpty(peek))
             {
-                TxtServiceItemNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
-                    _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
-                return;
+                // No format row yet — fall back to a legacy MAX+1 preview.
+                try
+                {
+                    object o = _db.ExecuteScalar(
+                        "SELECT ISNULL(MAX(CONVERT(int, SUBSTRING(ServiceItemNo,4,20))),0)+1 " +
+                        "FROM [dbo].[zSCP2_Item] WHERE ServiceItemNo LIKE 'SI-%' AND ISNUMERIC(SUBSTRING(ServiceItemNo,4,20))=1");
+                    int next = (o == null || o == DBNull.Value) ? 1 : Convert.ToInt32(o);
+                    peek = "SI-" + next.ToString("000000");
+                }
+                catch { peek = "SI-000001"; }
             }
-            catch { }
-            try
-            {
-                object o = _db.ExecuteScalar(
-                    "SELECT ISNULL(MAX(CONVERT(int, SUBSTRING(ServiceItemNo,4,20))),0)+1 " +
-                    "FROM [dbo].[zSCP2_Item] WHERE ServiceItemNo LIKE 'SI-%' AND ISNUMERIC(SUBSTRING(ServiceItemNo,4,20))=1");
-                int next = (o == null || o == DBNull.Value) ? 1 : Convert.ToInt32(o);
-                TxtServiceItemNo.Text = "SI-" + next.ToString("000000");
-            }
-            catch { TxtServiceItemNo.Text = "SI-000001"; }
+            _autoPeekNo = peek;
+            TxtServiceItemNo.Text = peek;
         }
 
         private void BtnAutoNo_Click(object sender, EventArgs e) { AutoPickServiceItemNo(); }
@@ -379,6 +383,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (cl > 1) { XtraMessageBox.Show("Only one meter can be tagged Colour (CL).", "Validation"); return; }
 
             _data.ServiceItemNo = TxtServiceItemNo.Text.Trim();
+            // Number still shows the auto-preview & the user didn't type their own -> reserve a real one at insert.
+            _data.ServiceItemNoIsAuto = (!string.IsNullOrEmpty(_autoPeekNo) && _data.ServiceItemNo == _autoPeekNo);
             _data.SerialNumber = TxtSerial.Text.Trim();
             _data.Description = TxtDescription.Text.Trim();
             int bd = (int)SpnBillingDayOverride.Value;
@@ -423,47 +429,65 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             catch { }
         }
 
-        // "+" button on the Department dropdown: create a new AutoCount Department on the fly (via
-        // the official ProjectDeptCommand so master caches stay valid), then select it.
+        // "+" button on the Department dropdown: open AutoCount's OWN "New Department" form
+        // (FormProjectEdit, ProjectType.Department) — the exact module AutoCount uses.
         private void SluDept_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
-            CreateMaster(AutoCount.GeneralMaint.Project.ProjectType.Department, "New Department No:", SluDept);
+            OpenNativeDepartmentEditor();
         }
 
-        // "+" button on the Project dropdown: create a new AutoCount Project on the fly.
+        // "+" button on the Project dropdown: open AutoCount's OWN "New Project" form.
         private void SluProject_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
-            CreateMaster(AutoCount.GeneralMaint.Project.ProjectType.Project, "New Project No:", SluProject);
+            OpenNativeProjectEditor();
         }
 
-        private void CreateMaster(AutoCount.GeneralMaint.Project.ProjectType type, string prompt,
-            DevExpress.XtraEditors.SearchLookUpEdit target)
+        private void OpenNativeDepartmentEditor()
         {
-            string code = XtraInputBox.Show(prompt, "New", "");
-            if (string.IsNullOrWhiteSpace(code)) return;
-            code = code.Trim();
             try
             {
                 AutoCount.Authentication.UserSession session = AutoCount.Authentication.UserSession.CurrentUserSession;
                 AutoCount.GeneralMaint.Project.ProjectDeptCommand cmd =
-                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(type, session);
-                if (cmd.GetProject(code) == null)
+                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(
+                        AutoCount.GeneralMaint.Project.ProjectType.Department, session);
+                AutoCount.GeneralMaint.Project.DepartmentEntity entity =
+                    cmd.NewDepartment(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+                using (AutoCount.GeneralMaint.Project.FormProjectEdit form =
+                    new AutoCount.GeneralMaint.Project.FormProjectEdit(entity, AutoCount.GeneralMaint.Project.ProjectType.Department))
                 {
-                    AutoCount.GeneralMaint.Project.ProjectEntity pe =
-                        cmd.NewProject(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
-                    // The entity's key column follows the type (Dept -> DeptNo, Project -> ProjNo).
-                    string keyCol = pe.Row.Table.Columns.Contains("DeptNo") ? "DeptNo" : "ProjNo";
-                    pe.Row[keyCol] = code;
-                    pe.Row["Description"] = code;
-                    pe.Save();
+                    form.ShowDialog(this);
                 }
                 LoadDeptProjectLookups();
-                target.EditValue = code;
+                string code = entity.Row["DeptNo"] == null ? "" : entity.Row["DeptNo"].ToString().Trim();
+                if (code.Length > 0) SluDept.EditValue = code;
             }
             catch (Exception ex)
-            { XtraMessageBox.Show("Create failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            { XtraMessageBox.Show("Create Department failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        private void OpenNativeProjectEditor()
+        {
+            try
+            {
+                AutoCount.Authentication.UserSession session = AutoCount.Authentication.UserSession.CurrentUserSession;
+                AutoCount.GeneralMaint.Project.ProjectDeptCommand cmd =
+                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(
+                        AutoCount.GeneralMaint.Project.ProjectType.Project, session);
+                AutoCount.GeneralMaint.Project.ProjectEntity entity =
+                    cmd.NewProject(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+                using (AutoCount.GeneralMaint.Project.FormProjectEdit form =
+                    new AutoCount.GeneralMaint.Project.FormProjectEdit(entity, AutoCount.GeneralMaint.Project.ProjectType.Project))
+                {
+                    form.ShowDialog(this);
+                }
+                LoadDeptProjectLookups();
+                string code = entity.Row["ProjNo"] == null ? "" : entity.Row["ProjNo"].ToString().Trim();
+                if (code.Length > 0) SluProject.EditValue = code;
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create Project failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         // "Copy From..." — copy another service item's configuration into this one, EXCLUDING its
