@@ -25,6 +25,9 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
         protected DataRow _existing;
 
         protected virtual string TableName   { get { return "zSCP_LK_Unknown"; } }
+        /// <summary>The code that was saved (set on OK) — lets a caller select the newly created row.</summary>
+        public string SavedCode { get; private set; }
+
         protected virtual string KeyColumn   { get { return "Code"; } }
         protected virtual string DescColumn  { get { return "Description"; } }
         protected virtual string FormCaption { get { return "Edit Lookup"; } }
@@ -120,6 +123,7 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
                 }
                 _dbSetting.ExecuteNonQuery(sql);
 
+                SavedCode = TxtCode.Text.Trim();
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }

@@ -28,7 +28,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.TextEdit TxtContractNo;
         private DevExpress.XtraEditors.SimpleButton BtnAutoNo;
         private DevExpress.XtraEditors.LabelControl LblType;
-        private DevExpress.XtraEditors.TextEdit TxtContractType;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluContractType;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluContractTypeView;
         private DevExpress.XtraEditors.LabelControl LblDebtor;
         private DevExpress.XtraEditors.LookUpEdit LkDebtorCode;
         private DevExpress.XtraEditors.LabelControl LblContractDate;
@@ -50,7 +51,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.LabelControl LblArea;
         private DevExpress.XtraEditors.TextEdit TxtArea;
         private DevExpress.XtraEditors.LabelControl LblStaff;
-        private DevExpress.XtraEditors.TextEdit TxtStaff;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluAgent;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluAgentView;
         private DevExpress.XtraEditors.LabelControl LblBillDay;
         private DevExpress.XtraEditors.SpinEdit SpnBillingDay;
         private DevExpress.XtraEditors.LabelControl LblBillMode;
@@ -98,7 +100,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TxtContractNo = new DevExpress.XtraEditors.TextEdit();
             this.BtnAutoNo = new DevExpress.XtraEditors.SimpleButton();
             this.LblType = new DevExpress.XtraEditors.LabelControl();
-            this.TxtContractType = new DevExpress.XtraEditors.TextEdit();
+            this.SluContractType = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluContractTypeView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblDebtor = new DevExpress.XtraEditors.LabelControl();
             this.LkDebtorCode = new DevExpress.XtraEditors.LookUpEdit();
             this.LblContractDate = new DevExpress.XtraEditors.LabelControl();
@@ -120,7 +123,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblArea = new DevExpress.XtraEditors.LabelControl();
             this.TxtArea = new DevExpress.XtraEditors.TextEdit();
             this.LblStaff = new DevExpress.XtraEditors.LabelControl();
-            this.TxtStaff = new DevExpress.XtraEditors.TextEdit();
+            this.SluAgent = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluAgentView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblBillDay = new DevExpress.XtraEditors.LabelControl();
             this.SpnBillingDay = new DevExpress.XtraEditors.SpinEdit();
             this.LblBillMode = new DevExpress.XtraEditors.LabelControl();
@@ -154,7 +158,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.PanelHeaderFields)).BeginInit();
             this.PanelHeaderFields.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.TxtContractNo.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtContractType.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractType.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractTypeView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.LkDebtorCode.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties.CalendarTimeProperties)).BeginInit();
@@ -168,7 +173,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtPhone.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtTerm.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtArea.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtStaff.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluAgent.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluAgentView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillGroup.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).BeginInit();
@@ -274,7 +280,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.TxtContractNo);
             this.PanelHeaderFields.Controls.Add(this.BtnAutoNo);
             this.PanelHeaderFields.Controls.Add(this.LblType);
-            this.PanelHeaderFields.Controls.Add(this.TxtContractType);
+            this.PanelHeaderFields.Controls.Add(this.SluContractType);
             this.PanelHeaderFields.Controls.Add(this.LblDebtor);
             this.PanelHeaderFields.Controls.Add(this.LkDebtorCode);
             this.PanelHeaderFields.Controls.Add(this.LblContractDate);
@@ -296,7 +302,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.LblArea);
             this.PanelHeaderFields.Controls.Add(this.TxtArea);
             this.PanelHeaderFields.Controls.Add(this.LblStaff);
-            this.PanelHeaderFields.Controls.Add(this.TxtStaff);
+            this.PanelHeaderFields.Controls.Add(this.SluAgent);
             this.PanelHeaderFields.Controls.Add(this.LblBillDay);
             this.PanelHeaderFields.Controls.Add(this.SpnBillingDay);
             this.PanelHeaderFields.Controls.Add(this.LblBillMode);
@@ -313,84 +319,97 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblContractNo
             //
-            this.LblContractNo.Location = new System.Drawing.Point(12, 13);
+            this.LblContractNo.Location = new System.Drawing.Point(12, 39);
             this.LblContractNo.Name = "LblContractNo";
             this.LblContractNo.Size = new System.Drawing.Size(58, 13);
-            this.LblContractNo.TabIndex = 0;
+            this.LblContractNo.TabIndex = 2;
             this.LblContractNo.Text = "Contract No";
             //
             // TxtContractNo
             //
-            this.TxtContractNo.Location = new System.Drawing.Point(110, 10);
+            this.TxtContractNo.Location = new System.Drawing.Point(110, 36);
             this.TxtContractNo.Name = "TxtContractNo";
             this.TxtContractNo.Size = new System.Drawing.Size(150, 20);
-            this.TxtContractNo.TabIndex = 1;
+            this.TxtContractNo.TabIndex = 3;
             //
             // BtnAutoNo
             //
-            this.BtnAutoNo.Location = new System.Drawing.Point(264, 9);
+            this.BtnAutoNo.Location = new System.Drawing.Point(264, 35);
             this.BtnAutoNo.Name = "BtnAutoNo";
             this.BtnAutoNo.Size = new System.Drawing.Size(58, 22);
-            this.BtnAutoNo.TabIndex = 2;
+            this.BtnAutoNo.TabIndex = 4;
             this.BtnAutoNo.Text = "Auto No";
             this.BtnAutoNo.Click += new System.EventHandler(this.BtnAutoNo_Click);
             //
             // LblType
             //
-            this.LblType.Location = new System.Drawing.Point(12, 37);
+            this.LblType.Location = new System.Drawing.Point(12, 63);
             this.LblType.Name = "LblType";
             this.LblType.Size = new System.Drawing.Size(67, 13);
-            this.LblType.TabIndex = 3;
+            this.LblType.TabIndex = 5;
             this.LblType.Text = "Contract Type";
             //
-            // TxtContractType
+            // SluContractType
             //
-            this.TxtContractType.Location = new System.Drawing.Point(110, 34);
-            this.TxtContractType.Name = "TxtContractType";
-            this.TxtContractType.Size = new System.Drawing.Size(234, 20);
-            this.TxtContractType.TabIndex = 4;
+            this.SluContractType.Location = new System.Drawing.Point(110, 60);
+            this.SluContractType.Name = "SluContractType";
+            this.SluContractType.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            this.SluContractType.Properties.NullText = "";
+            this.SluContractType.Properties.PopupView = this.SluContractTypeView;
+            this.SluContractType.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.SluContractType_ButtonClick);
+            this.SluContractType.Size = new System.Drawing.Size(234, 20);
+            this.SluContractType.TabIndex = 6;
+            //
+            // SluContractTypeView
+            //
+            this.SluContractTypeView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluContractTypeView.Name = "SluContractTypeView";
+            this.SluContractTypeView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluContractTypeView.OptionsView.ShowGroupPanel = false;
             //
             // LblDebtor
             //
-            this.LblDebtor.Location = new System.Drawing.Point(12, 61);
+            this.LblDebtor.Location = new System.Drawing.Point(12, 87);
             this.LblDebtor.Name = "LblDebtor";
             this.LblDebtor.Size = new System.Drawing.Size(72, 13);
-            this.LblDebtor.TabIndex = 5;
+            this.LblDebtor.TabIndex = 7;
             this.LblDebtor.Text = "Customer *";
             //
             // LkDebtorCode
             //
-            this.LkDebtorCode.Location = new System.Drawing.Point(110, 58);
+            this.LkDebtorCode.Location = new System.Drawing.Point(110, 84);
             this.LkDebtorCode.Name = "LkDebtorCode";
             this.LkDebtorCode.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.LkDebtorCode.Properties.NullText = "";
             this.LkDebtorCode.Size = new System.Drawing.Size(234, 20);
-            this.LkDebtorCode.TabIndex = 6;
+            this.LkDebtorCode.TabIndex = 8;
             //
             // LblContractDate
             //
-            this.LblContractDate.Location = new System.Drawing.Point(12, 85);
+            this.LblContractDate.Location = new System.Drawing.Point(12, 15);
             this.LblContractDate.Name = "LblContractDate";
             this.LblContractDate.Size = new System.Drawing.Size(67, 13);
-            this.LblContractDate.TabIndex = 7;
+            this.LblContractDate.TabIndex = 0;
             this.LblContractDate.Text = "Contract Date";
             //
             // DtContractDate
             //
             this.DtContractDate.EditValue = null;
-            this.DtContractDate.Location = new System.Drawing.Point(110, 82);
+            this.DtContractDate.Location = new System.Drawing.Point(110, 12);
             this.DtContractDate.Name = "DtContractDate";
             this.DtContractDate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.DtContractDate.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.DtContractDate.Size = new System.Drawing.Size(150, 20);
-            this.DtContractDate.TabIndex = 8;
+            this.DtContractDate.TabIndex = 1;
             //
             // LblStartDate
             //
-            this.LblStartDate.Location = new System.Drawing.Point(12, 109);
+            this.LblStartDate.Location = new System.Drawing.Point(12, 111);
             this.LblStartDate.Name = "LblStartDate";
             this.LblStartDate.Size = new System.Drawing.Size(85, 13);
             this.LblStartDate.TabIndex = 9;
@@ -399,7 +418,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // DtStartDate
             //
             this.DtStartDate.EditValue = null;
-            this.DtStartDate.Location = new System.Drawing.Point(110, 106);
+            this.DtStartDate.Location = new System.Drawing.Point(110, 108);
             this.DtStartDate.Name = "DtStartDate";
             this.DtStartDate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -410,7 +429,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblExpiryDate
             //
-            this.LblExpiryDate.Location = new System.Drawing.Point(12, 133);
+            this.LblExpiryDate.Location = new System.Drawing.Point(12, 135);
             this.LblExpiryDate.Name = "LblExpiryDate";
             this.LblExpiryDate.Size = new System.Drawing.Size(85, 13);
             this.LblExpiryDate.TabIndex = 11;
@@ -419,7 +438,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // DtExpiryDate
             //
             this.DtExpiryDate.EditValue = null;
-            this.DtExpiryDate.Location = new System.Drawing.Point(110, 130);
+            this.DtExpiryDate.Location = new System.Drawing.Point(110, 132);
             this.DtExpiryDate.Name = "DtExpiryDate";
             this.DtExpiryDate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -430,7 +449,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblValue
             //
-            this.LblValue.Location = new System.Drawing.Point(12, 157);
+            this.LblValue.Location = new System.Drawing.Point(12, 159);
             this.LblValue.Name = "LblValue";
             this.LblValue.Size = new System.Drawing.Size(67, 13);
             this.LblValue.TabIndex = 13;
@@ -439,7 +458,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // SpnContractValue
             //
             this.SpnContractValue.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
-            this.SpnContractValue.Location = new System.Drawing.Point(110, 154);
+            this.SpnContractValue.Location = new System.Drawing.Point(110, 156);
             this.SpnContractValue.Name = "SpnContractValue";
             this.SpnContractValue.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -523,18 +542,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblStaff
             //
-            this.LblStaff.Location = new System.Drawing.Point(12, 184);
+            this.LblStaff.Location = new System.Drawing.Point(12, 183);
             this.LblStaff.Name = "LblStaff";
             this.LblStaff.Size = new System.Drawing.Size(30, 13);
-            this.LblStaff.TabIndex = 25;
+            this.LblStaff.TabIndex = 15;
             this.LblStaff.Text = "Agent";
             //
-            // TxtStaff
+            // SluAgent
             //
-            this.TxtStaff.Location = new System.Drawing.Point(110, 181);
-            this.TxtStaff.Name = "TxtStaff";
-            this.TxtStaff.Size = new System.Drawing.Size(150, 20);
-            this.TxtStaff.TabIndex = 26;
+            this.SluAgent.Location = new System.Drawing.Point(110, 180);
+            this.SluAgent.Name = "SluAgent";
+            this.SluAgent.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluAgent.Properties.NullText = "";
+            this.SluAgent.Properties.PopupView = this.SluAgentView;
+            this.SluAgent.Size = new System.Drawing.Size(150, 20);
+            this.SluAgent.TabIndex = 16;
+            //
+            // SluAgentView
+            //
+            this.SluAgentView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluAgentView.Name = "SluAgentView";
+            this.SluAgentView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluAgentView.OptionsView.ShowGroupPanel = false;
             //
             // LblBillDay
             //
@@ -807,7 +837,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             ((System.ComponentModel.ISupportInitialize)(this.RibbonCtl)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtContractNo.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtContractType.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractType.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractTypeView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.LkDebtorCode.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties.CalendarTimeProperties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties)).EndInit();
@@ -821,7 +852,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtPhone.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtTerm.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtArea.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtStaff.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluAgent.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluAgentView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillGroup.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).EndInit();

@@ -49,6 +49,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             if (_db == null) return;
             LoadDebtorLookup();
+            LoadContractTypeLookup();
+            LoadAgentLookup();
             WireBillingModeRadios();
             LkDebtorCode.EditValueChanged += new EventHandler(OnDebtorChanged);
 
@@ -87,6 +89,63 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LkDebtorCode.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Name", 220));
         }
 
+        // Contract Type dropdown: values come from Service Contract Type Maintenance
+        // (zSCP_LK_ServiceContractType). Stores the CODE by value, so contracts already referencing a
+        // type keep working even if the type's description changes (no hard FK; matched by code).
+        private void LoadContractTypeLookup()
+        {
+            DataTable dt;
+            try
+            {
+                dt = _db.GetDataTable(
+                    "SELECT ServiceContractTypeCode, Description FROM [dbo].[zSCP_LK_ServiceContractType] " +
+                    "WHERE Inactive = 'N' ORDER BY ServiceContractTypeCode", false);
+            }
+            catch { dt = new DataTable(); }
+            SluContractType.Properties.DataSource = dt;
+            SluContractType.Properties.ValueMember = "ServiceContractTypeCode";
+            SluContractType.Properties.DisplayMember = "ServiceContractTypeCode";
+            // Popup shows the 2 datasource columns (Code + Description) auto-populated by the view.
+        }
+
+        // Agent dropdown: values come from AutoCount's Sales Agent Maintenance (dbo.SalesAgent).
+        private void LoadAgentLookup()
+        {
+            DataTable dt;
+            try
+            {
+                dt = _db.GetDataTable(
+                    "SELECT SalesAgent, ISNULL(Description,'') AS Description FROM [dbo].[SalesAgent] " +
+                    "WHERE IsActive = 'T' ORDER BY SalesAgent", false);
+            }
+            catch { dt = new DataTable(); }
+            SluAgent.Properties.DataSource = dt;
+            SluAgent.Properties.ValueMember = "SalesAgent";
+            SluAgent.Properties.DisplayMember = "SalesAgent";
+            // Popup shows the 2 datasource columns (Agent + Description) auto-populated by the view.
+        }
+
+        // "+" on the Contract Type dropdown: open the Service Contract Type edit dialog to add a new
+        // one, then reload the list and select it. (Same edit form as the Type Maintenance menu.)
+        private void SluContractType_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceContractType_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceContractType_Form(_db, null))
+                {
+                    if (f.ShowDialog(this) == DialogResult.OK)
+                    {
+                        LoadContractTypeLookup();
+                        if (!string.IsNullOrEmpty(f.SavedCode)) SluContractType.EditValue = f.SavedCode;
+                    }
+                }
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create Contract Type failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
         // When the customer changes interactively, auto-fill address/contact/term/area/agent from the
         // Debtor master — the same behaviour as AutoCount's Quotation/Invoice entry. Guarded by _loading
         // so loading an existing contract does not overwrite its saved values.
@@ -107,7 +166,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtPhone.Text = AsStr(d["Phone1"]);
             TxtTerm.Text = AsStr(d["DisplayTerm"]);
             TxtArea.Text = AsStr(d["AreaCode"]);
-            TxtStaff.Text = AsStr(d["SalesAgent"]);
+            SluAgent.EditValue = SetOrNull(AsStr(d["SalesAgent"]));
+        }
+
+        // SearchLookUpEdit shows NullText when its value isn't in the list; empty string -> null so
+        // the placeholder shows instead of a blank selected row.
+        private static object SetOrNull(string code)
+        {
+            return string.IsNullOrEmpty(code) ? null : (object)code;
         }
 
         private void WireBillingModeRadios()
@@ -184,7 +250,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (dt.Rows.Count == 0) { _isNew = true; AutoPickContractNo(); return; }
             DataRow r = dt.Rows[0];
             TxtContractNo.Text = AsStr(r["ContractNo"]);
-            TxtContractType.Text = AsStr(r["ContractTypeCode"]);
+            SluContractType.EditValue = SetOrNull(AsStr(r["ContractTypeCode"]));
             LkDebtorCode.EditValue = AsStr(r["DebtorCode"]);
             DtContractDate.EditValue = AsDate(r["ContractDate"]);
             DtStartDate.EditValue = AsDate(r["ServiceStartDate"]);
@@ -197,7 +263,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtPhone.Text = AsStr(r["Phone"]);
             TxtTerm.Text = AsStr(r["TermCode"]);
             TxtArea.Text = AsStr(r["AreaCode"]);
-            TxtStaff.Text = AsStr(r["StaffCode"]);
+            SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
             TxtDescription.Text = AsStr(r["Description"]);
             TxtRemark1.Text = AsStr(r["Remark1"]);
             TxtRemark2.Text = AsStr(r["Remark2"]);
@@ -474,7 +540,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void AddContractParams(SqlCommand cmd, string debtor)
         {
             cmd.Parameters.AddWithValue("@no", TxtContractNo.Text.Trim());
-            cmd.Parameters.AddWithValue("@type", TxtContractType.Text.Trim());
+            cmd.Parameters.AddWithValue("@type", SluContractType.EditValue == null ? "" : SluContractType.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@debtor", debtor);
             cmd.Parameters.AddWithValue("@cdate", DateParam(DtContractDate.EditValue));
             cmd.Parameters.AddWithValue("@sdate", DateParam(DtStartDate.EditValue));
@@ -487,7 +553,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@phone", TxtPhone.Text.Trim());
             cmd.Parameters.AddWithValue("@term", TxtTerm.Text.Trim());
             cmd.Parameters.AddWithValue("@area", TxtArea.Text.Trim());
-            cmd.Parameters.AddWithValue("@staff", TxtStaff.Text.Trim());
+            cmd.Parameters.AddWithValue("@staff", SluAgent.EditValue == null ? "" : SluAgent.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@desc", TxtDescription.Text.Trim());
             cmd.Parameters.AddWithValue("@r1", TxtRemark1.Text.Trim());
             cmd.Parameters.AddWithValue("@r2", TxtRemark2.Text.Trim());
