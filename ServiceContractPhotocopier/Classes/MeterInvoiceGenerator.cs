@@ -35,12 +35,16 @@ namespace ServiceContractPhotocopier.Classes
         private readonly DBSetting _db;
         private readonly DateTime _docDate;
         private readonly DateTime _readingDate;
+        private readonly int _periodYear;
+        private readonly int _periodMonth;
 
-        public MeterInvoiceGenerator(DBSetting db, DateTime docDate, DateTime readingDate)
+        public MeterInvoiceGenerator(DBSetting db, DateTime docDate, DateTime readingDate, int periodYear, int periodMonth)
         {
             _db = db;
             _docDate = docDate;
             _readingDate = readingDate;
+            _periodYear = periodYear;
+            _periodMonth = periodMonth;
         }
 
         public void Run(IList<InvoiceJob> jobs, ProgressHandler onProgress, Func<bool> isCancelled)
@@ -95,11 +99,31 @@ namespace ServiceContractPhotocopier.Classes
                             cmd.Parameters.AddWithValue("@simt", ln.ItemMeterKey);
                             cmd.Parameters.AddWithValue("@si", ln.ItemKey);
                             cmd.Parameters.AddWithValue("@code", ln.MeterTypeCode);
-                            cmd.Parameters.AddWithValue("@dt", DateTime.Now);
+                            // Real meter-read date (API LastAuditDate) so the next period's
+                            // "Last Read Date" is accurate; falls back to now when absent.
+                            cmd.Parameters.AddWithValue("@dt", (object)(ln.AuditDate ?? DateTime.Now));
                             cmd.Parameters.AddWithValue("@rd", ln.Current);
                             cmd.Parameters.AddWithValue("@dk", invoiceDocKey);
                             cmd.Parameters.AddWithValue("@rmk", ln.ColorLabel + " meter - Invoice " + docNo);
                             cmd.ExecuteNonQuery();
+
+                            // Billing-period guard: stamp the staging row so this meter + period can
+                            // never be invoiced twice (Generate skips stamped rows).
+                            SqlCommand st = new SqlCommand(
+                                "UPDATE dbo.zSCP2_MeterEntry SET InvoicedDocKey=@dk, InvoicedDocNo=@dn, InvoicedAt=GETDATE() " +
+                                "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo; " +
+                                "IF @@ROWCOUNT=0 INSERT INTO dbo.zSCP2_MeterEntry " +
+                                "  (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,InvoicedDocKey,InvoicedDocNo,InvoicedAt) " +
+                                "  VALUES (@imk,@yr,@mo,@rd2,@dt2,@src,@dk,@dn,GETDATE())", cn, tx);
+                            st.Parameters.AddWithValue("@dk", invoiceDocKey);
+                            st.Parameters.AddWithValue("@dn", docNo ?? "");
+                            st.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
+                            st.Parameters.AddWithValue("@yr", _periodYear);
+                            st.Parameters.AddWithValue("@mo", _periodMonth);
+                            st.Parameters.AddWithValue("@rd2", ln.Current);
+                            st.Parameters.AddWithValue("@dt2", (object)(ln.AuditDate ?? DateTime.Now));
+                            st.Parameters.AddWithValue("@src", "INVOICE");
+                            st.ExecuteNonQuery();
                         }
                         tx.Commit();
                     }

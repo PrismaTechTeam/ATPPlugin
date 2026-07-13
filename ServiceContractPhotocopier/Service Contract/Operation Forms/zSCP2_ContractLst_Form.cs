@@ -11,13 +11,37 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
     /// List form for the combined Service Contract module v2 (zSCP2_*). Single entry point that
     /// replaces the old separate "Maintain Service Contract" + "Maintain Service Item" menus.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Maintain Service Contract", MenuOrder = 200)]
-    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, false)]
+    // SingleInstanceThreadForm(..., mergeMainMenu: true) merges AutoCount's main menu bar (File,
+    // G/L, A/R, ... Service & Contract) into this window - the native "navbar" look.
+    [AutoCount.PlugIn.MenuItem("Maintain Service Contract", MenuOrder = 200, ShowAsDialog = false)]
+    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, true)]
     public partial class zSCP2_ContractLst_Form : XtraForm
     {
-        private DBSetting _dbSetting;
+        protected DBSetting _dbSetting;   // protected: shared with the "Maintain Service Item" alias subclass
 
-        public zSCP2_ContractLst_Form() { InitializeComponent(); }
+        public zSCP2_ContractLst_Form() { InitializeComponent(); ApplyAutoCountToolbarImages(); }
+
+        // Native AutoCount toolbar look: the official large icons (same ones Stock Item / Address
+        // Maintenance use), image left + caption right, default boxed button style.
+        private void ApplyAutoCountToolbarImages()
+        {
+            try
+            {
+                // GetAutoCountImage expects DPI-based dimensions (96/120/144...). Native AutoCount
+                // forms use AutoScaleMode=Dpi so their AutoScaleDimensions ARE the DPI; ours is
+                // Font-based (7,14) which would shrink the icons to ~1% — pass the real DPI instead.
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                this.BtnNew.ImageOptions.Image = img.GetLargeImage_New();
+                this.BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                this.BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
+                this.BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
+                this.BtnExit.ImageOptions.Image = img.GetLargeImage_Close();
+            }
+            catch { }   // icons are cosmetic — never block the form over an image lookup
+        }
 
         public zSCP2_ContractLst_Form(UserSession userSession) : this()
         {
@@ -38,7 +62,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridView.DoubleClick += delegate { OnEdit(null, null); };
         }
 
-        private void LoadGrid()
+        // Virtual so the "Maintain Service Item" alias can present the SAME data at service-item
+        // level (one row per CSSI) while every CRUD handler below keeps working off row["ContractKey"].
+        protected virtual void LoadGrid()
         {
             try
             {
@@ -56,7 +82,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return rh < 0 ? null : GridView.GetDataRow(rh);
         }
 
-        private void OnNew(object sender, EventArgs e)
+        // Virtual so the "Maintain Service Item" alias can open the Service Item editor instead.
+        protected virtual void OnNew(object sender, EventArgs e)
         {
             using (zSCP2_Contract_Form f = new zSCP2_Contract_Form(_dbSetting))
             { f.ShowDialog(this); LoadGrid(); }

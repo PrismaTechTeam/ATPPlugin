@@ -16,7 +16,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     ParentMenuCaption = "General Setup", MenuOrder = 140, ParentMenuOrder = 600,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MeterMultiPricingLst_Form : XtraForm
     {
         private DBSetting _dbSetting;

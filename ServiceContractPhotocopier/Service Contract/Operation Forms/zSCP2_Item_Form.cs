@@ -40,6 +40,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DataTable _meterTypeLookup;
         private DataTable _itemLookup;
         private DataTable _serialLookup;
+        private bool _standalone;                                   // opened from "Maintain Service Item" New
+        private DevExpress.XtraEditors.LabelControl _lblCustomer;
+        private DevExpress.XtraEditors.LookUpEdit _lkCustomer;
+        private DevExpress.XtraEditors.LookUpEdit _lkContract;      // standalone: attach to an EXISTING contract
 
         public zSCP2_Item_Form()
         {
@@ -52,6 +56,35 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data = data;
             _contractBillingDay = contractBillingDay;
             this.Load += new EventHandler(OnFormLoad);
+        }
+
+        /// <summary>Standalone-new mode: the item is created on its own (from "Maintain Service Item"),
+        /// so the dialog also asks for the Customer — the caller then creates the item's own contract.</summary>
+        public zSCP2_Item_Form(DBSetting db, ItemEditData data, int contractBillingDay, bool standaloneNewItem)
+            : this(db, data, contractBillingDay)
+        {
+            _standalone = standaloneNewItem;
+        }
+
+        /// <summary>Debtor picked in standalone mode ("" when not standalone / nothing picked).</summary>
+        public string SelectedDebtorCode
+        {
+            get
+            {
+                return (_lkCustomer == null || _lkCustomer.EditValue == null)
+                    ? "" : _lkCustomer.EditValue.ToString().Trim();
+            }
+        }
+
+        /// <summary>Existing contract picked in standalone mode (0 = none → caller creates a new one).</summary>
+        public long SelectedContractKey
+        {
+            get
+            {
+                if (_lkContract == null || _lkContract.EditValue == null || _lkContract.EditValue == DBNull.Value) return 0;
+                long k;
+                return long.TryParse(_lkContract.EditValue.ToString(), out k) ? k : 0;
+            }
         }
 
         /// <summary>Schema for the per-item meter grid (shared by parent + dialog).</summary>
@@ -86,17 +119,87 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             LblBillDayHint.Text = "0 = follow contract day (" + _contractBillingDay + ")";
 
+            // Standalone-new (opened from "Maintain Service Item"): the item needs a home. A new row 5
+            // (made by pushing the two groups down) lets the user attach it to an EXISTING contract, or
+            // leave that empty and pick a Customer — the caller then auto-creates a contract for it.
+            // Created in code — the strict designer file stays untouched.
+            if (_standalone)
+            {
+                GrpItemCodes.Top += 30;
+                GrpMeters.Top += 30;
+                GrpMeters.Height -= 30;
+
+                DevExpress.XtraEditors.LabelControl lblContract = new DevExpress.XtraEditors.LabelControl();
+                lblContract.Text = "Contract No";
+                lblContract.Location = new System.Drawing.Point(14, 264);
+                this.Controls.Add(lblContract);
+                lblContract.BringToFront();
+
+                _lkContract = new DevExpress.XtraEditors.LookUpEdit();
+                _lkContract.Location = new System.Drawing.Point(120, 261);
+                _lkContract.Size = new System.Drawing.Size(214, 20);
+                _lkContract.Properties.NullText = "(create new contract)";
+                _lkContract.Properties.ValueMember = "ContractKey";
+                _lkContract.Properties.DisplayMember = "ContractNo";
+                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ContractNo", "Contract No", 90));
+                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("DebtorCode", "Customer", 80));
+                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 220));
+                _lkContract.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                _lkContract.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+                try
+                {
+                    // Only SAVED contracts appear here — an unsaved contract cannot take service items.
+                    _lkContract.Properties.DataSource = _db.GetDataTable(
+                        "SELECT c.ContractKey, c.ContractNo, c.DebtorCode, ISNULL(d.CompanyName,'') AS CompanyName " +
+                        "FROM [dbo].[zSCP2_Contract] c LEFT JOIN [dbo].[Debtor] d ON d.AccNo = c.DebtorCode " +
+                        "WHERE c.Inactive = 'N' ORDER BY c.ContractNo", false);
+                }
+                catch { }
+                _lkContract.EditValueChanged += delegate
+                {
+                    if (_lkCustomer != null)
+                        _lkCustomer.Enabled = (_lkContract.EditValue == null || _lkContract.EditValue == DBNull.Value);
+                };
+                this.Controls.Add(_lkContract);
+                _lkContract.BringToFront();
+
+                _lblCustomer = new DevExpress.XtraEditors.LabelControl();
+                _lblCustomer.Text = "Customer *";
+                _lblCustomer.Location = new System.Drawing.Point(350, 264);
+                this.Controls.Add(_lblCustomer);
+                _lblCustomer.BringToFront();
+
+                _lkCustomer = new DevExpress.XtraEditors.LookUpEdit();
+                _lkCustomer.Location = new System.Drawing.Point(420, 261);
+                _lkCustomer.Size = new System.Drawing.Size(210, 20);
+                _lkCustomer.Properties.NullText = "Select customer...";
+                _lkCustomer.Properties.ValueMember = "AccNo";
+                _lkCustomer.Properties.DisplayMember = "AccNo";
+                _lkCustomer.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("AccNo", "Code", 90));
+                _lkCustomer.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 240));
+                _lkCustomer.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                try
+                {
+                    _lkCustomer.Properties.DataSource = _db.GetDataTable(
+                        "SELECT AccNo, CompanyName FROM [dbo].[Debtor] ORDER BY AccNo", false);
+                }
+                catch { }
+                this.Controls.Add(_lkCustomer);
+                _lkCustomer.BringToFront();
+            }
+
             LoadMeterTypeLookup();
             LoadItemLookup();
             LoadSerialLookup();
+            LoadDeptProjectLookups();
             GridViewItemCodes.ShownEditor += new EventHandler(GridViewItemCodes_ShownEditor);
 
             TxtServiceItemNo.Text = _data.ServiceItemNo;
             TxtSerial.Text = _data.SerialNumber;
             TxtDescription.Text = _data.Description;
             SpnBillingDayOverride.Value = _data.BillingDayOverride.HasValue ? _data.BillingDayOverride.Value : 0;
-            TxtDept.Text = _data.DepartmentCode;
-            TxtJob.Text = _data.JobCode;
+            SluDept.EditValue = string.IsNullOrEmpty(_data.DepartmentCode) ? null : (object)_data.DepartmentCode;
+            SluProject.EditValue = string.IsNullOrEmpty(_data.JobCode) ? null : (object)_data.JobCode;   // JobCode column stores the AutoCount ProjNo
             TxtLocation.Text = _data.StockLocationCode;
             ChkInactive.Checked = _data.Inactive;
 
@@ -165,6 +268,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void AutoPickServiceItemNo()
         {
+            // Draw from the plugin's Document Numbering Format (customisable in "Document Numbering
+            // Format" under Service & Contract). Falls back to the legacy MAX+1 scan if that fails.
+            try
+            {
+                TxtServiceItemNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
+                    _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+                return;
+            }
+            catch { }
             try
             {
                 object o = _db.ExecuteScalar(
@@ -250,6 +362,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { XtraMessageBox.Show("Service Item No is required.", "Validation"); return; }
             if (string.IsNullOrWhiteSpace(TxtSerial.Text))
             { XtraMessageBox.Show("Serial Number is required (it is the key the meter API matches on).", "Validation"); return; }
+            if (_standalone && SelectedContractKey == 0 && SelectedDebtorCode.Length == 0)
+            { XtraMessageBox.Show("Pick a Contract No, or pick a Customer (a new contract is then created).", "Validation"); return; }
 
             int bk = 0, cl = 0;
             foreach (DataRow r in _meters.Rows)
@@ -269,8 +383,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data.Description = TxtDescription.Text.Trim();
             int bd = (int)SpnBillingDayOverride.Value;
             _data.BillingDayOverride = (bd >= 1 && bd <= 31) ? (int?)bd : null;
-            _data.DepartmentCode = TxtDept.Text.Trim();
-            _data.JobCode = TxtJob.Text.Trim();
+            _data.DepartmentCode = SluDept.EditValue == null ? "" : SluDept.EditValue.ToString().Trim();
+            _data.JobCode = SluProject.EditValue == null ? "" : SluProject.EditValue.ToString().Trim();   // AutoCount ProjNo
             _data.StockLocationCode = TxtLocation.Text.Trim();
             _data.Inactive = ChkInactive.Checked;
             _itemCodes.AcceptChanges();
@@ -286,6 +400,190 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             this.DialogResult = DialogResult.Cancel;
             this.Close();
+        }
+
+        // Department + Project dropdowns list AutoCount's own masters (Dept / Project tables).
+        private void LoadDeptProjectLookups()
+        {
+            try
+            {
+                SluDept.Properties.DataSource = _db.GetDataTable(
+                    "SELECT DeptNo, Description FROM [dbo].[Dept] ORDER BY DeptNo", false);
+                SluDept.Properties.ValueMember = "DeptNo";
+                SluDept.Properties.DisplayMember = "DeptNo";
+            }
+            catch { }
+            try
+            {
+                SluProject.Properties.DataSource = _db.GetDataTable(
+                    "SELECT ProjNo, Description FROM [dbo].[Project] ORDER BY ProjNo", false);
+                SluProject.Properties.ValueMember = "ProjNo";
+                SluProject.Properties.DisplayMember = "ProjNo";
+            }
+            catch { }
+        }
+
+        // "+" button on the Department dropdown: create a new AutoCount Department on the fly (via
+        // the official ProjectDeptCommand so master caches stay valid), then select it.
+        private void SluDept_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            CreateMaster(AutoCount.GeneralMaint.Project.ProjectType.Department, "New Department No:", SluDept);
+        }
+
+        // "+" button on the Project dropdown: create a new AutoCount Project on the fly.
+        private void SluProject_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            CreateMaster(AutoCount.GeneralMaint.Project.ProjectType.Project, "New Project No:", SluProject);
+        }
+
+        private void CreateMaster(AutoCount.GeneralMaint.Project.ProjectType type, string prompt,
+            DevExpress.XtraEditors.SearchLookUpEdit target)
+        {
+            string code = XtraInputBox.Show(prompt, "New", "");
+            if (string.IsNullOrWhiteSpace(code)) return;
+            code = code.Trim();
+            try
+            {
+                AutoCount.Authentication.UserSession session = AutoCount.Authentication.UserSession.CurrentUserSession;
+                AutoCount.GeneralMaint.Project.ProjectDeptCommand cmd =
+                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(type, session);
+                if (cmd.GetProject(code) == null)
+                {
+                    AutoCount.GeneralMaint.Project.ProjectEntity pe =
+                        cmd.NewProject(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+                    // The entity's key column follows the type (Dept -> DeptNo, Project -> ProjNo).
+                    string keyCol = pe.Row.Table.Columns.Contains("DeptNo") ? "DeptNo" : "ProjNo";
+                    pe.Row[keyCol] = code;
+                    pe.Row["Description"] = code;
+                    pe.Save();
+                }
+                LoadDeptProjectLookups();
+                target.EditValue = code;
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        // "Copy From..." — copy another service item's configuration into this one, EXCLUDING its
+        // unique identity: Service Item No, Serial Number, provided-item serials, initial readings.
+        private void barCopyFrom_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            long key = PickServiceItem();
+            if (key == 0) return;
+            try
+            {
+                DataTable it = _db.GetDataTable("SELECT * FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + key, false);
+                if (it.Rows.Count == 0) return;
+                DataRow r = it.Rows[0];
+
+                TxtDescription.Text = r["Description"] as string ?? "";
+                SpnBillingDayOverride.Value = r["BillingDayOverride"] == DBNull.Value ? 0 : Convert.ToInt32(r["BillingDayOverride"]);
+                string dept = r["DepartmentCode"] as string ?? "";
+                string proj = r["JobCode"] as string ?? "";
+                SluDept.EditValue = dept.Length == 0 ? null : (object)dept;
+                SluProject.EditValue = proj.Length == 0 ? null : (object)proj;
+                TxtLocation.Text = r["StockLocationCode"] as string ?? "";
+
+                _itemCodes.Rows.Clear();
+                DataTable ic = _db.GetDataTable(
+                    "SELECT ItemCode, Description, Qty FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=" + key + " ORDER BY Pos", false);
+                foreach (DataRow s in ic.Rows)
+                {
+                    DataRow nr = _itemCodes.NewRow();
+                    nr["ItemCode"] = s["ItemCode"];
+                    nr["Description"] = s["Description"];
+                    nr["Qty"] = s["Qty"];
+                    nr["SerialNumber"] = "";      // unique per physical machine — not copied
+                    _itemCodes.Rows.Add(nr);
+                }
+
+                _meters.Rows.Clear();
+                DataTable mt = _db.GetDataTable(
+                    "SELECT MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
+                    "RebateQtyInPercent, FOCQty FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + key + " ORDER BY ItemMeterKey", false);
+                foreach (DataRow s in mt.Rows)
+                {
+                    DataRow nr = _meters.NewRow();
+                    nr["MeterTypeCode"] = s["MeterTypeCode"];
+                    nr["MeterRole"] = s["MeterRole"];
+                    nr["MinimumCharges"] = s["MinimumCharges"];
+                    nr["ChargesRate"] = s["ChargesRate"];
+                    nr["MeterMultiPriceCode"] = s["MeterMultiPriceCode"];
+                    nr["RebateQtyInPercent"] = s["RebateQtyInPercent"];
+                    nr["FOCQty"] = s["FOCQty"];
+                    nr["InitialReading"] = 0m;    // unique per physical machine — starts fresh
+                    _meters.Rows.Add(nr);
+                }
+
+                GridItemCodes.RefreshDataSource();
+                GridMeters.RefreshDataSource();
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Copy failed:\r\n" + ex.Message, "Error"); }
+        }
+
+        // Small picker dialog: choose the service item to copy from (searchable).
+        private long PickServiceItem()
+        {
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = "Copy From Service Item";
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false; dlg.MinimizeBox = false;
+                dlg.ClientSize = new System.Drawing.Size(440, 105);
+
+                DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
+                lbl.Text = "Service Item";
+                lbl.Location = new System.Drawing.Point(14, 18);
+                dlg.Controls.Add(lbl);
+
+                DevExpress.XtraEditors.LookUpEdit lk = new DevExpress.XtraEditors.LookUpEdit();
+                lk.Location = new System.Drawing.Point(100, 15);
+                lk.Size = new System.Drawing.Size(320, 20);
+                lk.Properties.ValueMember = "ItemKey";
+                lk.Properties.DisplayMember = "ServiceItemNo";
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ServiceItemNo", "Service Item No", 110));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("SerialNumber", "Serial", 90));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 200));
+                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                try
+                {
+                    lk.Properties.DataSource = _db.GetDataTable(
+                        "SELECT i.ItemKey, i.ServiceItemNo, i.SerialNumber, ISNULL(d.CompanyName,'') AS CompanyName " +
+                        "FROM [dbo].[zSCP2_Item] i " +
+                        "JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                        "LEFT JOIN [dbo].[Debtor] d ON d.AccNo = c.DebtorCode " +
+                        "ORDER BY i.ServiceItemNo", false);
+                }
+                catch { }
+                dlg.Controls.Add(lk);
+
+                SimpleButton ok = new SimpleButton();
+                ok.Text = "OK"; ok.Location = new System.Drawing.Point(245, 62); ok.Size = new System.Drawing.Size(85, 28);
+                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; };
+                dlg.Controls.Add(ok);
+                SimpleButton cancel = new SimpleButton();
+                cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(336, 62); cancel.Size = new System.Drawing.Size(85, 28);
+                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; };
+                dlg.Controls.Add(cancel);
+
+                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
+                long k;
+                return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
+            }
+        }
+
+        // Ribbon Save/Close (same toolbar style as the contract editor) — same logic as OK/Cancel.
+        private void barSave_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            BtnOK_Click(sender, EventArgs.Empty);
+        }
+
+        private void barClose_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            BtnCancel_Click(sender, EventArgs.Empty);
         }
     }
 }

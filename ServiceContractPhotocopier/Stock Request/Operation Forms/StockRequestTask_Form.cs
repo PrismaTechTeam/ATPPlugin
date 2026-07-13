@@ -16,7 +16,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
     // ShowAsDialog = false => AutoCount opens this form as an MDI document inside its
     // tabbed navigation bar (the "navbar" behavior), not as a floating dialog.
     [AutoCount.PlugIn.MenuItem("Stock Request Task", MenuOrder = 440, ShowAsDialog = false)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class StockRequestTask_Form : XtraForm
     {
         private const int RefreshSeconds = 5;

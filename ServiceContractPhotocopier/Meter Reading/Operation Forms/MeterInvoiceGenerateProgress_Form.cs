@@ -24,10 +24,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         public MeterInvoiceGenerateProgress_Form() { InitializeComponent(); }
 
         public MeterInvoiceGenerateProgress_Form(DBSetting db, IList<MeterInvoiceGenerator.InvoiceJob> jobs,
-            DateTime docDate, DateTime readingDate) : this()
+            DateTime docDate, DateTime readingDate, int periodYear, int periodMonth) : this()
         {
             _jobs = jobs ?? new List<MeterInvoiceGenerator.InvoiceJob>();
-            _gen = new MeterInvoiceGenerator(db, docDate, readingDate);
+            _gen = new MeterInvoiceGenerator(db, docDate, readingDate, periodYear, periodMonth);
             this.LblTotal.Text = "Total: " + _jobs.Count;
             this.LblDone.Text  = "Done: 0";
             this.LblFail.Text  = "Failed: 0";

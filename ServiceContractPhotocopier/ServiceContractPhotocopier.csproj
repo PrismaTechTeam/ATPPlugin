@@ -36,6 +36,10 @@
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="AutoCount.Images">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Images.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="AutoCount.Accounting">
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>False</Private>
@@ -137,6 +141,7 @@
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
+    <Compile Include="Classes\ScpDocNo.cs" />
     <Compile Include="Data\StockRequestRepository.cs" />
     <Compile Include="Data\PumsTaskLock.cs" />
     <Compile Include="Data\PumsConfig.cs" />
@@ -147,6 +152,9 @@
     <Compile Include="Meter Reading\Services\LiveMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\MockMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\MeterReadingApiClientFactory.cs" />
+    <Compile Include="Service Contract\Operation Forms\zSCP2_ServiceItemLst_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Service Contract\Operation Forms\zSCP2_ContractLst_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -261,6 +269,12 @@
     </Compile>
     <Compile Include="General Setup\Master Forms\ServiceItemGrade_Form.Designer.cs">
       <DependentUpon>ServiceItemGrade_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\DocNoFormat_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\DocNoFormat_Form.Designer.cs">
+      <DependentUpon>DocNoFormat_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="General Setup\Master Forms\ServiceOption_Form.cs">
       <SubType>Form</SubType>
@@ -686,6 +700,8 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_Item.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v3.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v4.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v2.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_DocNoFormat.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterEntry.sql" />
@@ -772,6 +788,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceItemGrade_Form.resx">
       <DependentUpon>ServiceItemGrade_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\DocNoFormat_Form.resx">
+      <DependentUpon>DocNoFormat_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceOption_Form.resx">
       <DependentUpon>ServiceOption_Form.cs</DependentUpon>

@@ -10,7 +10,7 @@ namespace ServiceContractPhotocopier.ServiceNote.OperationForms
     ParentMenuCaption = "Inquiry", MenuOrder = 50, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OUTSTANDING_NOTE_ASSIGNMENT,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OUTSTANDING_NOTE_ASSIGNMENT)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class OutstandingServiceNoteAssignment_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zvSCP_OutstandingServiceNoteAssignment"; } }

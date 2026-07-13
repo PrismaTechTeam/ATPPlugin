@@ -11,7 +11,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     ParentMenuOrder = 600,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_APPOINTMENT_PRIORITY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_APPOINTMENT_PRIORITY)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class AppointmentPriorityLst_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zSCP_LK_AppointmentPriority"; } }

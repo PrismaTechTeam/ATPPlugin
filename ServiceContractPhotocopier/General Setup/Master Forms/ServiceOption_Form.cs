@@ -15,7 +15,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     MenuOrder = 900,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OPTION,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OPTION)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceOption_Form : XtraForm
     {
         private DBSetting _dbSetting;

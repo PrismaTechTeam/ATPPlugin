@@ -12,11 +12,12 @@ namespace ServiceContractPhotocopier.ServiceNote.OperationForms
     /// Service Note - Quick Entry — minimal one-page form for fast front-desk intake.
     /// Fields: Date, Debtor, Service Item, Problem, Severity, Description, Assign To. Save + New workflow.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Service Note - Quick Entry",
-    MenuOrder = 150,
-    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_QUICK_ENTRY,
-    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_QUICK_ENTRY)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Service Note - Quick Entry",
+    // MenuOrder = 150,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_QUICK_ENTRY,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_QUICK_ENTRY)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceNoteQuickEntry_Form : XtraForm
     {
         private DBSetting _dbSetting;

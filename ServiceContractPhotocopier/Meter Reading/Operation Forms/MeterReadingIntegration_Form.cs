@@ -15,8 +15,10 @@ using ServiceContractPhotocopier.MeterReading.Services;
 
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    // SingleInstanceThreadForm(..., mergeMainMenu: true) merges AutoCount's main menu bar (File,
+    // G/L, A/R, ... Service & Contract) into this window - the native "navbar" look.
+    [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450, ShowAsDialog = false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MeterReadingIntegration_Form : XtraForm
     {
         private DBSetting _dbSetting;
@@ -42,6 +44,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private bool _suppressFilterEvent;   // guards programmatic Day/ShowAll changes from auto-reloading
         private DevExpress.XtraEditors.CheckEdit _chkInclude0Usage;
         private DevExpress.XtraEditors.CheckEdit _chkPerCssi;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _selCssiEditor;
         private static readonly string[] FETCH_MSGS = new string[] {
             "Contacting the meter API...",
             "Fetching online + offline readings...",
@@ -151,8 +154,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //   unticked= one invoice per whole contract
             _chkPerCssi = new DevExpress.XtraEditors.CheckEdit();
             _chkPerCssi.Properties.Caption = "Separate invoice per CSSI (else whole contract)";
-            _chkPerCssi.Location = new Point(899, 100);
-            _chkPerCssi.Size = new Size(300, 20);
+            _chkPerCssi.Properties.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _chkPerCssi.Properties.Appearance.Options.UseFont = true;
+            _chkPerCssi.Properties.Appearance.ForeColor = Color.FromArgb(27, 94, 32);
+            _chkPerCssi.Properties.Appearance.Options.UseForeColor = true;
+            _chkPerCssi.Location = new Point(899, 102);
+            _chkPerCssi.Size = new Size(310, 22);
             _chkPerCssi.Checked = false;
             this.PanelFilter.Controls.Add(_chkPerCssi);
             _chkPerCssi.BringToFront();
@@ -222,7 +229,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _chkInclude0Usage.Properties.Caption = "Include 0 Meter Usage";
             _chkInclude0Usage.Location = new Point(272, 92);
             _chkInclude0Usage.Size = new Size(200, 20);
-            _chkInclude0Usage.Checked = true;
+            _chkInclude0Usage.Checked = false;   // default: hide 0-usage rows
             _chkInclude0Usage.CheckedChanged += new EventHandler(ChkInclude0Usage_CheckedChanged);
             this.GrpFilter.Controls.Add(_chkInclude0Usage);
             _chkInclude0Usage.BringToFront();
@@ -276,13 +283,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             else if (_tabView.SelectedTabPage == _pageNo) f = "[Status] = 'No API data'";
             else if (_tabView.SelectedTabPage == _pageConflict) f = "[HasConflict] = True";
 
-            // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked.
+            // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked. Rows that still BILL
+            // (minimum charges -> TotalCharges > 0) are never hidden, or they would be missed at
+            // Generate (which only sees the current tab).
             if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked)
             {
-                string usage = "[MeterUsage] <> 0";
+                string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0)";
                 f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
             }
             GridViewMeter.ActiveFilterString = f;
+            UpdateSelectAllButton();   // caption follows the tab's selection state
         }
 
         private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
@@ -341,7 +351,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             string f = e.Column.FieldName;
             bool perContract = (f == "ContractNo" || f == "Customer" || f == "Mode");
-            bool perItem = (f == "ServiceItemNo" || f == "SerialNo" || f == "MachineStatus");
+            bool perItem = (f == "ServiceItemNo" || f == "SerialNo" || f == "MachineStatus" || f == "SelCssi");
             if (!perContract && !perItem) { e.Merge = false; e.Handled = true; return; }
             string keyField = perContract ? "ContractKey" : "ItemKey";
             object k1 = GridViewMeter.GetRowCellValue(e.RowHandle1, keyField);
@@ -361,6 +371,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             int d;
             if (v != null && int.TryParse(v.ToString(), out d) && d >= 1 && d <= 31) return d;
             return DateTime.Today.Day;
+        }
+
+        // Billing YEAR for the selected month: a month LATER than the current one means the previous
+        // year (e.g. running December's billing in January 2027 -> 2026-12). Billing never targets a
+        // future period, so "December selected in July" is last December, not next.
+        private int SelectedYear()
+        {
+            return SelectedMonth() > DateTime.Today.Month ? DateTime.Today.Year - 1 : DateTime.Today.Year;
         }
 
         // Fill the Day combo with only the billing days actually in use (distinct effective billing
@@ -401,7 +419,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 int month = SelectedMonth();
-                int year = DateTime.Today.Year;
+                int year = SelectedYear();
                 int target = SelectedDay();
                 int monthEnd = DateTime.DaysInMonth(year, month);
                 if (target > monthEnd) target = monthEnd;
@@ -425,6 +443,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INCLUDE_EXPIRED_ITEMS);
                 string expiryFilter = includeExpired ? "" :
                     " AND (i.ServiceExpiryDate IS NULL OR i.ServiceExpiryDate >= DATEFROMPARTS(" + year + "," + month + ",1)) ";
+
+                // Show the resolved billing period so cross-year runs are unambiguous (e.g. Dec = last Dec).
+                this.GrpFilter.Text = "Filter Options   —   billing period: " +
+                    new CultureInfo("en-US").DateTimeFormat.GetAbbreviatedMonthName(month) + " " + year;
 
                 string sql =
                     "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, i.SerialNumber, " +
@@ -465,6 +487,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         shadeByContract[ck] = shade;
                     }
                     g["Shade"] = shade;
+                    g["SelCssi"] = false;
                     g["ContractNo"] = S(r["ContractNo"]);
                     g["ServiceItemNo"] = S(r["ServiceItemNo"]);
                     g["SerialNo"] = S(r["SerialNumber"]);
@@ -498,7 +521,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     _dtGrid.Rows.Add(g);
                 }
 
-                PrefillFromStaging(SelectedMonth(), DateTime.Today.Year);
+                PrefillFromStaging(SelectedMonth(), SelectedYear());
 
                 GridMeter.DataSource = _dtGrid;
                 ConfigureGrid();
@@ -515,6 +538,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             DataTable dt = new DataTable();
             // ---- visible: item columns (these merge), then meter columns ----
+            dt.Columns.Add("SelCssi", typeof(bool));   // ONE merged checkbox per CSSI — ticks/unticks the whole machine (both meters)
             dt.Columns.Add("ContractNo", typeof(string));
             dt.Columns.Add("ServiceItemNo", typeof(string));
             dt.Columns.Add("SerialNo", typeof(string));
@@ -549,6 +573,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("EntrySource", typeof(string));    // where CurrentReading came from: MANUAL/ONLINE/OFFLINE/'' (hidden)
             dt.Columns.Add("FetchedReading", typeof(decimal)); // last value the API returned for this meter (hidden)
             dt.Columns.Add("HasConflict", typeof(bool));       // saved-manual value differs from a fresh API value (hidden)
+            dt.Columns.Add("InvoicedDocNo", typeof(string));   // non-empty = this meter+period is already invoiced (hidden)
             return dt;
         }
 
@@ -560,9 +585,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridViewMeter.OptionsView.ShowFooter = true;       // footer band for totals
             GridViewMeter.OptionsView.ColumnAutoWidth = false;
 
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade" })
+            // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
+            // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
 
+            SetCol("SelCssi", "Select", 55, true);
+            GridColumn selc = GridViewMeter.Columns["SelCssi"];
+            if (selc != null)
+            {
+                // Sorting by the checkbox makes ticked rows jump position mid-click — disable it.
+                selc.OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
+                selc.SortOrder = DevExpress.Data.ColumnSortOrder.None;
+                // Commit the toggle on the click itself (no waiting for focus to leave the cell).
+                if (_selCssiEditor == null)
+                {
+                    _selCssiEditor = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+                    _selCssiEditor.EditValueChanged += new EventHandler(SelCssiEditor_EditValueChanged);
+                    GridMeter.RepositoryItems.Add(_selCssiEditor);
+                }
+                selc.ColumnEdit = _selCssiEditor;
+            }
             SetCol("ContractNo", "Contract", 110, false);
             SetCol("ServiceItemNo", "Service Item No", 120, false);
             SetCol("SerialNo", "Serial", 110, false);
@@ -583,12 +626,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetNum("MeterUsage", "Meter Usage", 95, false, "n0");
             SetNum("TotalCharges", "Total Charges", 95, false, "n2");
             SetCol("UseMin", "Use Min.", 70, true);
-            SetCol("Sel", "Selected", 65, true);
             SetCol("Status", "Status", 130, false);
 
             // Freeze the identifier columns on the left so they stay visible when scrolling horizontally.
             // (Requires ColumnAutoWidth = false, set above.)
-            foreach (string fx in new string[] { "ContractNo", "ServiceItemNo", "SerialNo" })
+            foreach (string fx in new string[] { "SelCssi", "ContractNo", "ServiceItemNo", "SerialNo" })
                 if (GridViewMeter.Columns[fx] != null)
                     GridViewMeter.Columns[fx].Fixed = DevExpress.XtraGrid.Columns.FixedStyle.Left;
 
@@ -672,8 +714,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridViewMeter.UpdateCurrentRow();
 
             int month = SelectedMonth();
-            int day = SelectedDay();
-            int year = DateTime.Today.Year;
+            int year = SelectedYear();
+            // Clamp the day to the month's length so day 31 behaves in 30-day months (B-6).
+            int day = Math.Min(SelectedDay(), DateTime.DaysInMonth(year, month));
             System.Collections.Generic.List<StageRow> toStage = new System.Collections.Generic.List<StageRow>();
             this.BtnFetch.Enabled = false;
             ShowFetching(true);
@@ -690,9 +733,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // their sum — each can take ~15s server-side. GetReadings is stateless (a fresh
                     // HttpClient per call), so sharing one client across the two tasks is safe.
                     System.Threading.Tasks.Task tOn = System.Threading.Tasks.Task.Run(() =>
-                        { try { onlineList = client.GetReadings(MachineStatus.Online, month); } catch (Exception ex) { onlineErr = ex.Message; } });
+                        { try { onlineList = client.GetReadings(MachineStatus.Online, year, month); } catch (Exception ex) { onlineErr = ex.Message; } });
                     System.Threading.Tasks.Task tOff = System.Threading.Tasks.Task.Run(() =>
-                        { try { offlineList = client.GetReadings(MachineStatus.Offline, month); } catch (Exception ex) { offlineErr = ex.Message; } });
+                        { try { offlineList = client.GetReadings(MachineStatus.Offline, year, month); } catch (Exception ex) { offlineErr = ex.Message; } });
                     System.Threading.Tasks.Task.WaitAll(tOn, tOff);
                 });
 
@@ -700,10 +743,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 Dictionary<string, MeterReadingDto> byCode = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
                 if (onlineList != null)
                     foreach (MeterReadingDto d in onlineList)
-                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day)) byCode[d.Code.Trim()] = d;
+                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, year, month, day)) byCode[d.Code.Trim()] = d;
                 if (offlineList != null)
                     foreach (MeterReadingDto d in offlineList)
-                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, month, day) && !byCode.ContainsKey(d.Code.Trim()))
+                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, year, month, day) && !byCode.ContainsKey(d.Code.Trim()))
                             byCode[d.Code.Trim()] = d;
 
                 int matchedMeters = 0;
@@ -711,6 +754,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 System.Collections.Generic.HashSet<string> matchedItems = new System.Collections.Generic.HashSet<string>();
                 foreach (DataRow r in _dtGrid.Rows)
                 {
+                    // Already invoiced for this period — done; don't overwrite the reading or status.
+                    if (S(r["InvoicedDocNo"]).Trim().Length > 0) continue;
+
                     string code = S(r["ServiceItemNo"]).Trim();
                     MeterReadingDto dto;
                     if (code.Length > 0 && byCode.TryGetValue(code, out dto))
@@ -739,7 +785,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             r["EntrySource"] = isOnline ? "ONLINE" : "OFFLINE";
                             r["HasConflict"] = false;
                             Recalc(r);
-                            r["Sel"] = true;
+                            // NOT auto-selected — the user picks rows (or Select All) before generating.
                             r["Status"] = "Matched (" + (isOnline ? "Online" : "Offline") + ")  " +
                                 (dto.LastAuditDate.HasValue ? dto.LastAuditDate.Value.ToString("dd/MM/yyyy") : "");
                             toStage.Add(new StageRow(D64(r["ItemMeterKey"]), apiVal, dto.LastAuditDate, isOnline ? "ONLINE" : "OFFLINE"));
@@ -763,6 +809,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     catch { /* staging is best-effort; never fail the fetch on a staging write */ }
                 }
 
+                SyncSelCssi();
                 GridMeter.RefreshDataSource();
                 UpdateTabCounts();
                 if (_tabView != null) _tabView.SelectedTabPage = conflicts > 0 ? _pageConflict : _pageWith;
@@ -780,13 +827,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
                 XtraMessageBox.Show(matchedItems.Count + " service item(s) / " + matchedMeters +
                     " meter(s) matched with last audit date on/before " + day + " " +
-                    new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + ".\r\n" +
+                    new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + " " + year + ".\r\n" +
                     "   • Online machines: " + onlineMeters + " meter(s)\r\n" +
                     "   • Offline machines: " + offlineMeters + " meter(s)\r\n" +
                     (conflicts > 0 ? "   ⚠ " + conflicts + " conflict(s) with saved manual readings — see the Conflicts tab, double-click a contract to resolve.\r\n" : "") +
                     errNote +
                     "Readings saved — next time just reopen this screen (no need to Fetch again unless you want fresh data).\r\n" +
-                    "Use 'Select Matched' then 'Generate Invoice'.",
+                    "Tick the rows to bill (or 'Select All' on a tab), then 'Generate Invoice'.",
                     "Fetch complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -889,28 +936,55 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // A reading qualifies when its Last Audit Date is in the selected month AND on/before the
         // selected day (e.g. April + 16 → readings dated 01–16 April; 17/04, 20/04 are excluded).
-        private static bool QualifiesByDate(MeterReadingDto d, int month, int day)
+        private static bool QualifiesByDate(MeterReadingDto d, int year, int month, int day)
         {
             if (!d.LastAuditDate.HasValue) return false;
             DateTime la = d.LastAuditDate.Value;
-            return la.Month == month && la.Day <= day;
+            return la.Year == year && la.Month == month && la.Day <= day;
         }
 
         // "Select Matched" — tick every meter that got a current reading.
+        // "Select All" — toggles selection of every row on the CURRENT TAB only (the grid's active
+        // filter). If any visible row is unticked → tick all; if all are ticked → untick all.
         private void BtnSelfManualKeyIn_Click(object sender, EventArgs e)
         {
             if (_dtGrid == null) return;
             GridViewMeter.CloseEditor();
-            int n = 0;
-            foreach (DataRow r in _dtGrid.Rows)
+
+            List<DataRow> visible = new List<DataRow>();
+            for (int rh = 0; rh < GridViewMeter.RowCount; rh++)
             {
-                bool ok = Dec(r["CurrentReading"]) > 0m;
-                r["Sel"] = ok; if (ok) n++;
+                DataRow r = GridViewMeter.GetDataRow(rh);
+                if (r != null) visible.Add(r);
             }
+            if (visible.Count == 0)
+            { XtraMessageBox.Show("No rows on this tab.", "Select All"); return; }
+
+            bool anyUnticked = false;
+            foreach (DataRow r in visible)
+                if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) { anyUnticked = true; break; }
+
+            foreach (DataRow r in visible) r["Sel"] = anyUnticked;
+            SyncSelCssi();
             GridMeter.RefreshDataSource();
             UpdateTabCounts();
-            XtraMessageBox.Show(n + " meter(s) selected. Click Generate Invoice.", "Select Matched",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            UpdateSelectAllButton();   // Select All <-> Unselect All
+        }
+
+        // Button caption mirrors the CURRENT TAB's state: all visible rows ticked -> "Unselect All",
+        // otherwise "Select All".
+        private void UpdateSelectAllButton()
+        {
+            if (_dtGrid == null) return;
+            bool anyRow = false, anyUnticked = false;
+            for (int rh = 0; rh < GridViewMeter.RowCount; rh++)
+            {
+                DataRow r = GridViewMeter.GetDataRow(rh);
+                if (r == null) continue;
+                anyRow = true;
+                if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) { anyUnticked = true; break; }
+            }
+            this.BtnSelfManualKeyIn.Text = (anyRow && !anyUnticked) ? "Unselect All" : "Select All";
         }
 
         // ───────────────────── Manual key-in + staging (zSCP2_MeterEntry) ─────────────────────
@@ -921,8 +995,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (_dtGrid == null) return;
             Dictionary<long, DataRow> byMeter = new Dictionary<long, DataRow>();
-            string sql = "SELECT ItemMeterKey, CurrentReading, ReadingDate, Source FROM dbo.zSCP2_MeterEntry " +
-                         "WHERE PeriodYear=" + year + " AND PeriodMonth=" + month;
+            string sql = "SELECT ItemMeterKey, CurrentReading, ReadingDate, Source, InvoicedDocNo, InvoicedAt " +
+                         "FROM dbo.zSCP2_MeterEntry WHERE PeriodYear=" + year + " AND PeriodMonth=" + month;
             DataTable saved = QueryWithTimeout(sql, 60);
             foreach (DataRow s in saved.Rows) byMeter[D64(s["ItemMeterKey"])] = s;
             if (byMeter.Count == 0) return;
@@ -935,13 +1009,22 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 r["CurrentReading"] = Dec(s["CurrentReading"]);
                 r["EntrySource"] = src;
                 if (s["ReadingDate"] != DBNull.Value) r["LastAuditDate"] = Convert.ToDateTime(s["ReadingDate"]);
-                r["Sel"] = true;
-                Recalc(r);
+                Recalc(r);   // restored but NOT auto-selected — user picks rows before generating
                 string dt = (s["ReadingDate"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["ReadingDate"]).ToString("dd/MM/yyyy") : "";
                 if (src == "ONLINE") { r["MachineStatus"] = "ONLINE"; r["Status"] = "Online (saved)" + dt; }
                 else if (src == "OFFLINE") { r["MachineStatus"] = "OFFLINE"; r["Status"] = "Offline (saved)" + dt; }
                 else { r["Status"] = "Manual (saved)" + dt; }
+
+                // Billing-period guard: already invoiced for this period -> show it and lock out of Generate.
+                string invNo = S(s["InvoicedDocNo"]).Trim();
+                if (invNo.Length > 0)
+                {
+                    r["InvoicedDocNo"] = invNo;
+                    string invAt = (s["InvoicedAt"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["InvoicedAt"]).ToString("dd/MM/yyyy") : "";
+                    r["Status"] = "INVOICED " + invNo + invAt;
+                }
             }
+            SyncSelCssi();
         }
 
         // One fetched reading queued for staging (persisted so a reopen shows it without re-fetching).
@@ -1073,7 +1156,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (f.ShowDialog(this) != DialogResult.OK) return;
             }
 
-            int year = DateTime.Today.Year, month = SelectedMonth(), applied = 0;
+            int year = SelectedYear(), month = SelectedMonth(), applied = 0;
             using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
             {
                 cn.Open();
@@ -1154,6 +1237,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
+        // One click on the Select checkbox posts immediately (fires CellValueChanged right away).
+        private void SelCssiEditor_EditValueChanged(object sender, EventArgs e)
+        {
+            GridViewMeter.PostEditor();
+        }
+
         private void GridViewMeter_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (e.Column == null) return;
@@ -1162,8 +1251,56 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
                 if (r != null) Recalc(r);
             }
-            if (e.Column.FieldName == "Sel" || e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
+            if (e.Column.FieldName == "SelCssi")
+            {
+                // The per-CSSI checkbox drives the whole machine: tick/untick BOTH meter rows.
+                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                if (r != null && _dtGrid != null)
+                {
+                    bool v = r["SelCssi"] != DBNull.Value && Convert.ToBoolean(r["SelCssi"]);
+                    long ik = D64(r["ItemKey"]);
+                    foreach (DataRow x in _dtGrid.Rows)
+                        if (D64(x["ItemKey"]) == ik) { x["Sel"] = v; x["SelCssi"] = v; }
+                    GridViewMeter.LayoutChanged();   // repaint merged cells; no full rebind mid-edit
+                }
+            }
+            else if (e.Column.FieldName == "Sel")
+            {
+                // Per-meter tick: mirror the CSSI checkbox = "all this machine's meters are ticked".
+                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                if (r != null && _dtGrid != null)
+                {
+                    long ik = D64(r["ItemKey"]);
+                    bool all = true;
+                    foreach (DataRow x in _dtGrid.Rows)
+                        if (D64(x["ItemKey"]) == ik &&
+                            !(x["Sel"] != DBNull.Value && Convert.ToBoolean(x["Sel"]))) { all = false; break; }
+                    foreach (DataRow x in _dtGrid.Rows)
+                        if (D64(x["ItemKey"]) == ik) x["SelCssi"] = all;
+                }
+            }
+            if (e.Column.FieldName == "Sel" || e.Column.FieldName == "SelCssi" ||
+                e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
+            {
                 UpdateTabCounts();   // keep the billing-total summary live
+                UpdateSelectAllButton();
+            }
+        }
+
+        // Recompute every CSSI checkbox from its meter rows (call after any bulk Sel change).
+        private void SyncSelCssi()
+        {
+            if (_dtGrid == null) return;
+            Dictionary<long, bool> allByItem = new Dictionary<long, bool>();
+            foreach (DataRow x in _dtGrid.Rows)
+            {
+                long ik = D64(x["ItemKey"]);
+                bool sel = x["Sel"] != DBNull.Value && Convert.ToBoolean(x["Sel"]);
+                bool cur;
+                allByItem[ik] = allByItem.TryGetValue(ik, out cur) ? (cur && sel) : sel;
+            }
+            foreach (DataRow x in _dtGrid.Rows)
+                x["SelCssi"] = allByItem[D64(x["ItemKey"])];
         }
 
         private void Recalc(DataRow r)
@@ -1189,13 +1326,26 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Group the selected meter lines: Group mode = one invoice per contract; Separate = per item.
             Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs =
                 new Dictionary<string, MeterInvoiceGenerator.InvoiceJob>();
-            string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(SelectedMonth());
+            int genMonth = SelectedMonth(), genYear = SelectedYear();
+            int alreadyInvoiced = 0;
+            string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(genMonth) + " " + genYear;
 
-            foreach (DataRow r in _dtGrid.Rows)
+            // Only rows on the CURRENT TAB (the grid's active filter) are considered.
+            List<DataRow> visibleRows = new List<DataRow>();
+            for (int rh = 0; rh < GridViewMeter.RowCount; rh++)
+            {
+                DataRow vr = GridViewMeter.GetDataRow(rh);
+                if (vr != null) visibleRows.Add(vr);
+            }
+
+            foreach (DataRow r in visibleRows)
             {
                 if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
+                // Billing-period guard: this meter + period already has an invoice — never bill twice.
+                if (S(r["InvoicedDocNo"]).Trim().Length > 0) { alreadyInvoiced++; continue; }
                 if (Dec(r["CurrentReading"]) <= 0m) continue;
                 // Invoice grouping: the checkbox overrides each contract's stored BillingMode for this run.
+                // (Legacy data is one CSSI per contract, so either way it's one invoice per machine there.)
                 string mode = (_chkPerCssi != null && _chkPerCssi.Checked) ? "S" : "G";
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
@@ -1225,6 +1375,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.Charge = Dec(r["TotalCharges"]);
                 ln.UseMin = r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]);
                 if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
+                if (r["LastAuditDate"] != DBNull.Value) ln.AuditDate = Convert.ToDateTime(r["LastAuditDate"]);
 
                 MeterInvoiceGenerator.InvoiceJob job;
                 if (!jobs.TryGetValue(groupKey, out job))
@@ -1241,17 +1392,26 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
 
             if (jobs.Count == 0)
-            { XtraMessageBox.Show("No selected meter with a current reading.", "Generate Invoice"); return; }
+            {
+                XtraMessageBox.Show(alreadyInvoiced > 0
+                        ? "All selected meters are ALREADY INVOICED for " + monthName + " — nothing to generate."
+                        : "No selected meter with a current reading.",
+                    "Generate Invoice");
+                return;
+            }
 
             List<MeterInvoiceGenerator.InvoiceJob> jobList = new List<MeterInvoiceGenerator.InvoiceJob>(jobs.Values);
+            string skippedNote = alreadyInvoiced > 0
+                ? "\r\n(" + alreadyInvoiced + " meter(s) skipped — already invoiced for " + monthName + ".)"
+                : "";
             if (XtraMessageBox.Show(this,
-                    "Generate " + jobList.Count + " invoice(s) now?\r\nThey are saved automatically — no clicking through each one.",
+                    "Generate " + jobList.Count + " invoice(s) for " + monthName + " now?\r\nThey are saved automatically — no clicking through each one." + skippedNote,
                     "Generate Invoice", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
             // Run the generation on a worker task behind a progress dialog (invoices saved headlessly).
             using (MeterInvoiceGenerateProgress_Form dlg =
-                new MeterInvoiceGenerateProgress_Form(_dbSetting, jobList, DateTime.Today, DateTime.Now))
+                new MeterInvoiceGenerateProgress_Form(_dbSetting, jobList, DateTime.Today, DateTime.Now, genYear, genMonth))
             {
                 dlg.ShowDialog(this);
             }

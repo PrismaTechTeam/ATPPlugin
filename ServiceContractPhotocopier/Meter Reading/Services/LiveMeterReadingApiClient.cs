@@ -36,13 +36,16 @@ namespace ServiceContractPhotocopier.MeterReading.Services
 
         public List<MeterReadingDto> GetReadings(MachineStatus status, int month)
         {
+            return GetReadings(status, DateTime.Today.Year, month);
+        }
+
+        public List<MeterReadingDto> GetReadings(MachineStatus status, int year, int month)
+        {
             string url;
             if (status == MachineStatus.Offline)
             {
-                // The offline endpoint keys by billing month as YYYY-MM. The form works within the
-                // current year (it derives the year from DateTime.Today everywhere), so pair the
-                // selected month with the current year.
-                string yearMonth = string.Format("{0:0000}-{1:00}", DateTime.Today.Year, month);
+                // The offline endpoint keys by billing month as YYYY-MM.
+                string yearMonth = string.Format("{0:0000}-{1:00}", year, month);
                 url = _baseUrl + OFFLINE_PATH + "?month=" + Uri.EscapeDataString(yearMonth) + TokenSuffix("&");
             }
             else

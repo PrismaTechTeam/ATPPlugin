@@ -150,6 +150,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void AutoPickContractNo()
         {
+            // Draw from the plugin's Document Numbering Format (customisable in "Document Numbering
+            // Format" under Service & Contract). Falls back to the legacy MAX+1 scan if that fails.
+            try
+            {
+                TxtContractNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
+                    _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_CONTRACT);
+                return;
+            }
+            catch { }
+            AutoPickContractNoLegacy();
+        }
+
+        private void AutoPickContractNoLegacy()
+        {
             try
             {
                 object o = _db.ExecuteScalar(

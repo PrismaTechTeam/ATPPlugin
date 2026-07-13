@@ -17,7 +17,7 @@ namespace ServiceContractPhotocopier.ServiceItem.MasterForms
     MenuOrder = 420,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_RESET_ITEM_DEBTOR,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_RESET_ITEM_DEBTOR)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ResetServiceItemDebtorOwnership_Form : XtraForm
     {
         private DBSetting _dbSetting;

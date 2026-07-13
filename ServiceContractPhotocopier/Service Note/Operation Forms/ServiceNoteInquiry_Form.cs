@@ -10,7 +10,7 @@ namespace ServiceContractPhotocopier.ServiceNote.OperationForms
     ParentMenuCaption = "Inquiry", MenuOrder = 30, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_INQUIRY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_INQUIRY)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceNoteInquiry_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zvSCP_ServiceNoteList"; } }

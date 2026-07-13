@@ -6,7 +6,7 @@ namespace ServiceContractPhotocopier.Reports
 {
     [AutoCount.PlugIn.MenuItem("Service Solution Listing Report",
     ParentMenuCaption = "Reports", MenuOrder = 60, ParentMenuOrder = 800)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceSolutionListingReport_Form : ScpPlaceholder_Form
     {
         protected override string FormCaption { get { return "Service Solution Listing Report"; } }

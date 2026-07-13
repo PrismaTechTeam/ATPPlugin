@@ -13,15 +13,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             base.Dispose(disposing);
         }
 
-        private AutoCount.Controls.PanelHeader PanelHeaderTop;
-        private DevExpress.XtraEditors.PanelControl PanelToolbar;
+        protected AutoCount.Controls.PanelHeader PanelHeaderTop;   // protected: the "Maintain Service Item" alias retitles it
+        protected DevExpress.XtraEditors.PanelControl PanelToolbar;   // protected: the item alias adds a Copy-to-New button
         private DevExpress.XtraEditors.SimpleButton BtnNew;
         private DevExpress.XtraEditors.SimpleButton BtnEdit;
         private DevExpress.XtraEditors.SimpleButton BtnDelete;
         private DevExpress.XtraEditors.SimpleButton BtnRefresh;
         private DevExpress.XtraEditors.SimpleButton BtnExit;
-        private DevExpress.XtraGrid.GridControl Grid;
-        private DevExpress.XtraGrid.Views.Grid.GridView GridView;
+        protected DevExpress.XtraGrid.GridControl Grid;                 // protected: the "Maintain Service Item"
+        protected DevExpress.XtraGrid.Views.Grid.GridView GridView;    // alias rebuilds the list at item level
         private DevExpress.XtraGrid.Columns.GridColumn ColContractNo;
         private DevExpress.XtraGrid.Columns.GridColumn ColDebtorCode;
         private DevExpress.XtraGrid.Columns.GridColumn ColDebtorName;
@@ -87,11 +87,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnNew
             //
-            this.BtnNew.ImageOptions.ImageUri.Uri = "Add";
-            this.BtnNew.ImageOptions.SvgImageSize = new System.Drawing.Size(22, 22);
+            this.BtnNew.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             this.BtnNew.Location = new System.Drawing.Point(8, 6);
             this.BtnNew.Name = "BtnNew";
-            this.BtnNew.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             this.BtnNew.Size = new System.Drawing.Size(86, 50);
             this.BtnNew.TabIndex = 0;
             this.BtnNew.Text = "New";
@@ -99,11 +97,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnEdit
             //
-            this.BtnEdit.ImageOptions.ImageUri.Uri = "Edit";
-            this.BtnEdit.ImageOptions.SvgImageSize = new System.Drawing.Size(22, 22);
+            this.BtnEdit.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             this.BtnEdit.Location = new System.Drawing.Point(98, 6);
             this.BtnEdit.Name = "BtnEdit";
-            this.BtnEdit.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             this.BtnEdit.Size = new System.Drawing.Size(86, 50);
             this.BtnEdit.TabIndex = 1;
             this.BtnEdit.Text = "Edit";
@@ -111,11 +107,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnDelete
             //
-            this.BtnDelete.ImageOptions.ImageUri.Uri = "Delete";
-            this.BtnDelete.ImageOptions.SvgImageSize = new System.Drawing.Size(22, 22);
+            this.BtnDelete.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             this.BtnDelete.Location = new System.Drawing.Point(188, 6);
             this.BtnDelete.Name = "BtnDelete";
-            this.BtnDelete.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             this.BtnDelete.Size = new System.Drawing.Size(86, 50);
             this.BtnDelete.TabIndex = 2;
             this.BtnDelete.Text = "Delete";
@@ -123,11 +117,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnRefresh
             //
-            this.BtnRefresh.ImageOptions.ImageUri.Uri = "Refresh";
-            this.BtnRefresh.ImageOptions.SvgImageSize = new System.Drawing.Size(22, 22);
+            this.BtnRefresh.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             this.BtnRefresh.Location = new System.Drawing.Point(278, 6);
             this.BtnRefresh.Name = "BtnRefresh";
-            this.BtnRefresh.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             this.BtnRefresh.Size = new System.Drawing.Size(86, 50);
             this.BtnRefresh.TabIndex = 3;
             this.BtnRefresh.Text = "Refresh";
@@ -135,11 +127,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnExit
             //
-            this.BtnExit.ImageOptions.ImageUri.Uri = "Close";
-            this.BtnExit.ImageOptions.SvgImageSize = new System.Drawing.Size(22, 22);
+            this.BtnExit.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             this.BtnExit.Location = new System.Drawing.Point(368, 6);
             this.BtnExit.Name = "BtnExit";
-            this.BtnExit.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             this.BtnExit.Size = new System.Drawing.Size(86, 50);
             this.BtnExit.TabIndex = 4;
             this.BtnExit.Text = "Exit (F2)";

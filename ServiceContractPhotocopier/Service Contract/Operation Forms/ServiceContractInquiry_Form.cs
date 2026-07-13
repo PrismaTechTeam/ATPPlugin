@@ -10,7 +10,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
     ParentMenuCaption = "Inquiry", MenuOrder = 20, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_CONTRACT_INQUIRY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_CONTRACT_INQUIRY)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceContractInquiry_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zvSCP_ServiceContractList"; } }

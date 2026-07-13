@@ -24,9 +24,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SpinEdit SpnBillingDayOverride;
         private DevExpress.XtraEditors.LabelControl LblBillDayHint;
         private DevExpress.XtraEditors.LabelControl LblDept;
-        private DevExpress.XtraEditors.TextEdit TxtDept;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluDept;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluDeptView;
         private DevExpress.XtraEditors.LabelControl LblJob;
-        private DevExpress.XtraEditors.TextEdit TxtJob;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluProject;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluProjectView;
         private DevExpress.XtraEditors.LabelControl LblLocation;
         private DevExpress.XtraEditors.TextEdit TxtLocation;
         private DevExpress.XtraEditors.CheckEdit ChkInactive;
@@ -56,8 +58,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColMtInitial;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit RepoMeterType;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox RepoMeterRole;
-        private DevExpress.XtraEditors.SimpleButton BtnOK;
-        private DevExpress.XtraEditors.SimpleButton BtnCancel;
+        private DevExpress.XtraBars.Ribbon.RibbonControl RibbonCtl;
+        private DevExpress.XtraBars.Ribbon.RibbonPage ribbonPageHome;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpSave;
+        private DevExpress.XtraBars.BarButtonItem barSave;
+        private DevExpress.XtraBars.BarButtonItem barClose;
+        private DevExpress.XtraBars.BarButtonItem barCopyFrom;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpCopy;
 
         private void InitializeComponent()
         {
@@ -72,9 +79,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.SpnBillingDayOverride = new DevExpress.XtraEditors.SpinEdit();
             this.LblBillDayHint = new DevExpress.XtraEditors.LabelControl();
             this.LblDept = new DevExpress.XtraEditors.LabelControl();
-            this.TxtDept = new DevExpress.XtraEditors.TextEdit();
+            this.SluDept = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluDeptView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblJob = new DevExpress.XtraEditors.LabelControl();
-            this.TxtJob = new DevExpress.XtraEditors.TextEdit();
+            this.SluProject = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluProjectView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblLocation = new DevExpress.XtraEditors.LabelControl();
             this.TxtLocation = new DevExpress.XtraEditors.TextEdit();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
@@ -104,14 +113,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtInitial = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoMeterType = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
             this.RepoMeterRole = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
-            this.BtnOK = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnCancel = new DevExpress.XtraEditors.SimpleButton();
+            this.RibbonCtl = new DevExpress.XtraBars.Ribbon.RibbonControl();
+            this.barSave = new DevExpress.XtraBars.BarButtonItem();
+            this.barClose = new DevExpress.XtraBars.BarButtonItem();
+            this.barCopyFrom = new DevExpress.XtraBars.BarButtonItem();
+            this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
+            this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpCopy = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            ((System.ComponentModel.ISupportInitialize)(this.RibbonCtl)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtServiceItemNo.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtSerial.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDayOverride.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDept.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtJob.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProjectView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtLocation.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpItemCodes)).BeginInit();
@@ -130,7 +147,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblServiceItemNo
             //
-            this.LblServiceItemNo.Location = new System.Drawing.Point(14, 17);
+            this.LblServiceItemNo.Location = new System.Drawing.Point(14, 160);
             this.LblServiceItemNo.Name = "LblServiceItemNo";
             this.LblServiceItemNo.Size = new System.Drawing.Size(76, 13);
             this.LblServiceItemNo.TabIndex = 0;
@@ -138,14 +155,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // TxtServiceItemNo
             //
-            this.TxtServiceItemNo.Location = new System.Drawing.Point(120, 14);
+            this.TxtServiceItemNo.Location = new System.Drawing.Point(120, 157);
             this.TxtServiceItemNo.Name = "TxtServiceItemNo";
             this.TxtServiceItemNo.Size = new System.Drawing.Size(150, 20);
             this.TxtServiceItemNo.TabIndex = 1;
             //
             // BtnAutoNo
             //
-            this.BtnAutoNo.Location = new System.Drawing.Point(274, 13);
+            this.BtnAutoNo.Location = new System.Drawing.Point(274, 156);
             this.BtnAutoNo.Name = "BtnAutoNo";
             this.BtnAutoNo.Size = new System.Drawing.Size(60, 22);
             this.BtnAutoNo.TabIndex = 2;
@@ -154,7 +171,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblSerial
             //
-            this.LblSerial.Location = new System.Drawing.Point(14, 43);
+            this.LblSerial.Location = new System.Drawing.Point(14, 186);
             this.LblSerial.Name = "LblSerial";
             this.LblSerial.Size = new System.Drawing.Size(95, 13);
             this.LblSerial.TabIndex = 3;
@@ -162,14 +179,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // TxtSerial
             //
-            this.TxtSerial.Location = new System.Drawing.Point(120, 40);
+            this.TxtSerial.Location = new System.Drawing.Point(120, 183);
             this.TxtSerial.Name = "TxtSerial";
             this.TxtSerial.Size = new System.Drawing.Size(214, 20);
             this.TxtSerial.TabIndex = 4;
             //
             // LblDesc
             //
-            this.LblDesc.Location = new System.Drawing.Point(14, 69);
+            this.LblDesc.Location = new System.Drawing.Point(14, 212);
             this.LblDesc.Name = "LblDesc";
             this.LblDesc.Size = new System.Drawing.Size(56, 13);
             this.LblDesc.TabIndex = 5;
@@ -177,14 +194,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // TxtDescription
             //
-            this.TxtDescription.Location = new System.Drawing.Point(120, 66);
+            this.TxtDescription.Location = new System.Drawing.Point(120, 209);
             this.TxtDescription.Name = "TxtDescription";
             this.TxtDescription.Size = new System.Drawing.Size(330, 20);
             this.TxtDescription.TabIndex = 6;
             //
             // LblLocation
             //
-            this.LblLocation.Location = new System.Drawing.Point(14, 95);
+            this.LblLocation.Location = new System.Drawing.Point(14, 238);
             this.LblLocation.Name = "LblLocation";
             this.LblLocation.Size = new System.Drawing.Size(72, 13);
             this.LblLocation.TabIndex = 7;
@@ -192,14 +209,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // TxtLocation
             //
-            this.TxtLocation.Location = new System.Drawing.Point(120, 92);
+            this.TxtLocation.Location = new System.Drawing.Point(120, 235);
             this.TxtLocation.Name = "TxtLocation";
             this.TxtLocation.Size = new System.Drawing.Size(160, 20);
             this.TxtLocation.TabIndex = 8;
             //
             // LblBillDay
             //
-            this.LblBillDay.Location = new System.Drawing.Point(470, 17);
+            this.LblBillDay.Location = new System.Drawing.Point(470, 160);
             this.LblBillDay.Name = "LblBillDay";
             this.LblBillDay.Size = new System.Drawing.Size(100, 13);
             this.LblBillDay.TabIndex = 9;
@@ -208,7 +225,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // SpnBillingDayOverride
             //
             this.SpnBillingDayOverride.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
-            this.SpnBillingDayOverride.Location = new System.Drawing.Point(600, 14);
+            this.SpnBillingDayOverride.Location = new System.Drawing.Point(600, 157);
             this.SpnBillingDayOverride.Name = "SpnBillingDayOverride";
             this.SpnBillingDayOverride.Properties.IsFloatValue = false;
             this.SpnBillingDayOverride.Properties.MaxValue = new decimal(new int[] { 31, 0, 0, 0 });
@@ -219,7 +236,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // LblBillDayHint
             //
             this.LblBillDayHint.Appearance.ForeColor = System.Drawing.Color.Gray;
-            this.LblBillDayHint.Location = new System.Drawing.Point(676, 17);
+            this.LblBillDayHint.Location = new System.Drawing.Point(676, 160);
             this.LblBillDayHint.Name = "LblBillDayHint";
             this.LblBillDayHint.Size = new System.Drawing.Size(200, 13);
             this.LblBillDayHint.TabIndex = 11;
@@ -227,37 +244,63 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblDept
             //
-            this.LblDept.Location = new System.Drawing.Point(470, 43);
+            this.LblDept.Location = new System.Drawing.Point(470, 186);
             this.LblDept.Name = "LblDept";
             this.LblDept.Size = new System.Drawing.Size(56, 13);
             this.LblDept.TabIndex = 12;
             this.LblDept.Text = "Department";
             //
-            // TxtDept
+            // SluDept
             //
-            this.TxtDept.Location = new System.Drawing.Point(600, 40);
-            this.TxtDept.Name = "TxtDept";
-            this.TxtDept.Size = new System.Drawing.Size(160, 20);
-            this.TxtDept.TabIndex = 13;
+            this.SluDept.Location = new System.Drawing.Point(600, 183);
+            this.SluDept.Name = "SluDept";
+            this.SluDept.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            this.SluDept.Properties.NullText = "";
+            this.SluDept.Properties.PopupView = this.SluDeptView;
+            this.SluDept.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.SluDept_ButtonClick);
+            this.SluDept.Size = new System.Drawing.Size(160, 20);
+            this.SluDept.TabIndex = 13;
+            //
+            // SluDeptView
+            //
+            this.SluDeptView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluDeptView.Name = "SluDeptView";
+            this.SluDeptView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluDeptView.OptionsView.ShowGroupPanel = false;
             //
             // LblJob
             //
-            this.LblJob.Location = new System.Drawing.Point(470, 69);
+            this.LblJob.Location = new System.Drawing.Point(470, 212);
             this.LblJob.Name = "LblJob";
             this.LblJob.Size = new System.Drawing.Size(18, 13);
             this.LblJob.TabIndex = 14;
-            this.LblJob.Text = "Job";
+            this.LblJob.Text = "Project";
             //
-            // TxtJob
+            // SluProject
             //
-            this.TxtJob.Location = new System.Drawing.Point(600, 66);
-            this.TxtJob.Name = "TxtJob";
-            this.TxtJob.Size = new System.Drawing.Size(160, 20);
-            this.TxtJob.TabIndex = 15;
+            this.SluProject.Location = new System.Drawing.Point(600, 209);
+            this.SluProject.Name = "SluProject";
+            this.SluProject.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            this.SluProject.Properties.NullText = "";
+            this.SluProject.Properties.PopupView = this.SluProjectView;
+            this.SluProject.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.SluProject_ButtonClick);
+            this.SluProject.Size = new System.Drawing.Size(160, 20);
+            this.SluProject.TabIndex = 15;
+            //
+            // SluProjectView
+            //
+            this.SluProjectView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluProjectView.Name = "SluProjectView";
+            this.SluProjectView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluProjectView.OptionsView.ShowGroupPanel = false;
             //
             // ChkInactive
             //
-            this.ChkInactive.Location = new System.Drawing.Point(600, 91);
+            this.ChkInactive.Location = new System.Drawing.Point(600, 234);
             this.ChkInactive.Name = "ChkInactive";
             this.ChkInactive.Properties.Caption = "Inactive";
             this.ChkInactive.Size = new System.Drawing.Size(120, 20);
@@ -270,11 +313,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GrpItemCodes.Controls.Add(this.BtnAddItemCode);
             this.GrpItemCodes.Controls.Add(this.BtnDelItemCode);
             this.GrpItemCodes.Controls.Add(this.GridItemCodes);
-            this.GrpItemCodes.Location = new System.Drawing.Point(14, 122);
+            this.GrpItemCodes.Location = new System.Drawing.Point(14, 265);
             this.GrpItemCodes.Name = "GrpItemCodes";
-            this.GrpItemCodes.Size = new System.Drawing.Size(892, 184);
+            this.GrpItemCodes.Size = new System.Drawing.Size(1122, 184);
             this.GrpItemCodes.TabIndex = 17;
-            this.GrpItemCodes.Text = "Provided AutoCount Items";
+            this.GrpItemCodes.Text = "Provided Items (items supplied to the customer under this service)";
             //
             // BtnAddItemCode
             //
@@ -385,9 +428,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GrpMeters.Controls.Add(this.BtnAddMeter);
             this.GrpMeters.Controls.Add(this.BtnDelMeter);
             this.GrpMeters.Controls.Add(this.GridMeters);
-            this.GrpMeters.Location = new System.Drawing.Point(14, 312);
+            this.GrpMeters.Location = new System.Drawing.Point(14, 455);
             this.GrpMeters.Name = "GrpMeters";
-            this.GrpMeters.Size = new System.Drawing.Size(892, 372);
+            this.GrpMeters.Size = new System.Drawing.Size(1122, 372);
             this.GrpMeters.TabIndex = 18;
             this.GrpMeters.Text = "Meter Configuration (tag one Black + one Colour)";
             //
@@ -543,38 +586,80 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.RepoMeterRole.Name = "RepoMeterRole";
             this.RepoMeterRole.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             //
-            // BtnOK
+            // RibbonCtl
             //
-            this.BtnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.BtnOK.Appearance.Font = new System.Drawing.Font("Tahoma", 9F, System.Drawing.FontStyle.Bold);
-            this.BtnOK.Location = new System.Drawing.Point(716, 694);
-            this.BtnOK.Name = "BtnOK";
-            this.BtnOK.Size = new System.Drawing.Size(90, 30);
-            this.BtnOK.TabIndex = 19;
-            this.BtnOK.Text = "OK";
-            this.BtnOK.Click += new System.EventHandler(this.BtnOK_Click);
+            this.RibbonCtl.ExpandCollapseItem.Id = 0;
+            this.RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] {
+                this.barSave, this.barClose, this.barCopyFrom});
+            this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
+            this.RibbonCtl.MaxItemId = 4;
+            this.RibbonCtl.Name = "RibbonCtl";
+            this.RibbonCtl.ShowApplicationButton = DevExpress.Utils.DefaultBoolean.False;
+            this.RibbonCtl.ShowToolbarCustomizeItem = false;
+            this.RibbonCtl.ToolbarLocation = DevExpress.XtraBars.Ribbon.RibbonQuickAccessToolbarLocation.Hidden;
+            this.RibbonCtl.ShowExpandCollapseButton = DevExpress.Utils.DefaultBoolean.False;
+            this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
+                this.ribbonPageHome});
+            this.RibbonCtl.Size = new System.Drawing.Size(1150, 143);
             //
-            // BtnCancel
+            // barSave
             //
-            this.BtnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.BtnCancel.Location = new System.Drawing.Point(812, 694);
-            this.BtnCancel.Name = "BtnCancel";
-            this.BtnCancel.Size = new System.Drawing.Size(90, 30);
-            this.BtnCancel.TabIndex = 20;
-            this.BtnCancel.Text = "Cancel";
-            this.BtnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
+            this.barSave.Caption = "Save";
+            this.barSave.Id = 1;
+            this.barSave.ImageOptions.ImageUri.Uri = "Save;Size32x32";
+            this.barSave.Name = "barSave";
+            this.barSave.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barSave.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barSave_ItemClick);
+            //
+            // barClose
+            //
+            this.barClose.Caption = "Close";
+            this.barClose.Id = 2;
+            this.barClose.ImageOptions.ImageUri.Uri = "Close;Size32x32";
+            this.barClose.Name = "barClose";
+            this.barClose.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barClose.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barClose_ItemClick);
+            //
+            // barCopyFrom
+            //
+            this.barCopyFrom.Caption = "Copy From...";
+            this.barCopyFrom.Id = 3;
+            this.barCopyFrom.ImageOptions.ImageUri.Uri = "Copy;Size32x32";
+            this.barCopyFrom.Name = "barCopyFrom";
+            this.barCopyFrom.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barCopyFrom.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopyFrom_ItemClick);
+            //
+            // ribbonPageHome
+            //
+            this.ribbonPageHome.Groups.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPageGroup[] {
+                this.grpSave, this.grpCopy});
+            this.ribbonPageHome.Name = "ribbonPageHome";
+            this.ribbonPageHome.Text = "Home";
+            //
+            // grpSave
+            //
+            this.grpSave.ItemLinks.Add(this.barSave);
+            this.grpSave.ItemLinks.Add(this.barClose);
+            this.grpSave.Name = "grpSave";
+            this.grpSave.Text = "Save";
+            //
+            // grpCopy
+            //
+            this.grpCopy.ItemLinks.Add(this.barCopyFrom);
+            this.grpCopy.Name = "grpCopy";
+            this.grpCopy.Text = "Copy";
             //
             // zSCP2_Item_Form
             //
-            this.ClientSize = new System.Drawing.Size(920, 736);
+            this.ClientSize = new System.Drawing.Size(1150, 879);
             this.Controls.Add(this.GrpMeters);
             this.Controls.Add(this.GrpItemCodes);
             this.Controls.Add(this.ChkInactive);
             this.Controls.Add(this.TxtLocation);
             this.Controls.Add(this.LblLocation);
-            this.Controls.Add(this.TxtJob);
+            this.Controls.Add(this.SluProject);
             this.Controls.Add(this.LblJob);
-            this.Controls.Add(this.TxtDept);
+            this.Controls.Add(this.SluDept);
             this.Controls.Add(this.LblDept);
             this.Controls.Add(this.LblBillDayHint);
             this.Controls.Add(this.SpnBillingDayOverride);
@@ -586,9 +671,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Controls.Add(this.BtnAutoNo);
             this.Controls.Add(this.TxtServiceItemNo);
             this.Controls.Add(this.LblServiceItemNo);
-            this.Controls.Add(this.BtnOK);
-            this.Controls.Add(this.BtnCancel);
-            this.MinimumSize = new System.Drawing.Size(820, 620);
+            this.Controls.Add(this.RibbonCtl);
+            this.MinimumSize = new System.Drawing.Size(1000, 763);
             this.Name = "zSCP2_Item_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Service Item";
@@ -596,8 +680,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtSerial.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDayOverride.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDept.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtJob.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProjectView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtLocation.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridItemCodes)).EndInit();
@@ -612,6 +698,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.RepoMeterRole)).EndInit();
             this.GrpMeters.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeters)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RibbonCtl)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }

@@ -12,7 +12,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     ParentMenuOrder = 600,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_MECHANIC,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_MECHANIC)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MechanicLst_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zSCP_Mechanic"; } }

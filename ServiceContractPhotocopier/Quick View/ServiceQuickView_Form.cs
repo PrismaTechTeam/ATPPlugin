@@ -12,11 +12,12 @@ namespace ServiceContractPhotocopier.QuickView
     /// Service - Quick View dashboard — matches UI/08-service-quick-view/01-dashboard.png.
     /// Shows counts for Today/Tomorrow appointments, Open service notes, and the top service stock codes.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Service - Quick View",
-    MenuOrder = 100,
-    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_QUICK_VIEW,
-    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_QUICK_VIEW)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Service - Quick View",
+    // MenuOrder = 100,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_QUICK_VIEW,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_QUICK_VIEW)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceQuickView_Form : XtraForm
     {
         private DBSetting _dbSetting;

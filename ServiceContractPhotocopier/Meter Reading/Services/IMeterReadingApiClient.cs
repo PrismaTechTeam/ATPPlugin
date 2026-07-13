@@ -18,6 +18,10 @@ namespace ServiceContractPhotocopier.MeterReading.Services
         /// </summary>
         List<MeterReadingDto> GetReadings(MachineStatus status, int month);
 
+        /// <summary>Year-aware variant — use this for billing so a December run started in January
+        /// queries the correct YEAR-12 period (the 2-param overload assumes the current year).</summary>
+        List<MeterReadingDto> GetReadings(MachineStatus status, int year, int month);
+
         /// <summary>Convenience: GetReadings(Online, currentMonth).</summary>
         List<MeterReadingDto> GetOnline();
 

@@ -22,7 +22,7 @@ namespace ServiceContractPhotocopier.ServiceAppointment.OperationForms
     //     MenuOrder = 430,
     //     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_METER_TYPE_TRANS,
     //     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_METER_TYPE_TRANS)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MeterTypeTransactionEntry_Form : XtraForm
     {
         private DBSetting _dbSetting;

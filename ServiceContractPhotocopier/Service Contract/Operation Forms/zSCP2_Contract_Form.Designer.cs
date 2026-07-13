@@ -193,6 +193,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
             this.RibbonCtl.MaxItemId = 6;
             this.RibbonCtl.Name = "Ribbon";
+            this.RibbonCtl.ShowApplicationButton = DevExpress.Utils.DefaultBoolean.False;
+            this.RibbonCtl.ShowToolbarCustomizeItem = false;
+            this.RibbonCtl.ToolbarLocation = DevExpress.XtraBars.Ribbon.RibbonQuickAccessToolbarLocation.Hidden;
+            this.RibbonCtl.ShowExpandCollapseButton = DevExpress.Utils.DefaultBoolean.False;
             this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
                 this.ribbonPageHome});
             this.RibbonCtl.Size = new System.Drawing.Size(1180, 143);

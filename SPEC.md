@@ -34,10 +34,29 @@ the box?
 ### SPEC-MR-002 — Billing day beyond month length clamps to month-end
 **Rule.** Billing day 31 (or 29/30) in a shorter month bills on that month's **last day**
 (31 → 30 in June, → 28/29 in Feb).
-**Implementation.** LoadData clamps the effective day in the WHERE clause.
-**Status 🐛 latent.** The Day combo can still list **31**; picking 31 in a 30-day month may match
-nothing (effective day clamps to 30 ≠ 31). **No machines currently use day 31** (in-use days:
-7/20/21/25/28/30), so latent only — fix if a day-31 machine ever appears.
+**Implementation.** LoadData clamps BOTH the selected target day and the effective day; Fetch clamps
+its audit-day cutoff the same way. ✅ (was latent 🐛; verified consistent 2026-07-11)
+
+---
+
+### SPEC-MR-009 — A meter + billing period can be invoiced only ONCE
+**Rule.** When an invoice saves, each line's staging row (`zSCP2_MeterEntry`, meter + year + month)
+is stamped `InvoicedDocKey/DocNo/At`. Stamped rows: show `INVOICED <docno> <date>` on reopen, are
+skipped by Fetch (reading not overwritten) and by Generate (reported as "already invoiced"). Re-running
+Generate for the same period can never double-bill.
+**Implementation.** `02_Update_zSCP2_MeterEntry_v2.sql` + `MeterInvoiceGenerator` stamp +
+`PrefillFromStaging` / `BtnFetch_Click` / `BtnGenerateInvoice_Click` guards. ✅
+
+### SPEC-MR-010 — Billing period is year-aware; readings carry their true dates
+**Rule.** The billing YEAR = current year, unless the selected month is later than the current month
+(then it's the previous year — December billed in January = last December). All period touchpoints use
+it (baseline cutoff, expiry filter, staging period, offline `?month=YYYY-MM`, `QualifiesByDate` which
+also compares the year). The filter panel shows the resolved period ("billing period: Dec 2026").
+`zSCP_MeterTrans` rows are dated with the API **LastAuditDate** (fallback: now), so the next period's
+"Last Read Date" is the real meter-read date. Zero-usage rows that still bill (minimum charges,
+TotalCharges > 0) are never hidden by the "Include 0 Meter Usage" filter.
+**Implementation.** `SelectedYear()` + year-aware `IMeterReadingApiClient.GetReadings(status, year,
+month)` + `MeterBillLine.AuditDate` + ApplyTabFilter exemption. ✅
 
 ---
 
@@ -111,6 +130,14 @@ every open. Fixed.
 (`v8_atp_main.serviceitem`) by service-item code.
 **Status.** ✅ imported to AED_ATPTEST (2,981 expiry, 1,199 already expired; 86 have none because the
 master has none). Inactive items/contracts are already excluded from the billing list.
+
+### SPEC-SC-004 — Legacy data: ONE contract per CSSI; only new contracts may group
+**Rule.** The customer's legacy CSSI (imported from the V8 master) each live under their **own
+contract** — we have no authority to group a customer's existing machines. Only contracts **created
+in the plugin** may hold multiple CSSI.
+**Status.** ✅ data migration applied to AED_ATPTEST (2026-07-07): 379 multi-CSSI contracts split →
+2,173 new contracts cloned from their parents (SC-000895…SC-003067); now 3,067 contracts = 3,067 CSSI.
+Backups: `zSCP2_Contract_bak20260707`, `zSCP2_ItemContract_bak20260707`.
 
 ### SPEC-SC-003 — Contract billing day = the most common item override
 **Rule.** A contract's `BillingDay` is set to the **mode** (most frequent) of its items'

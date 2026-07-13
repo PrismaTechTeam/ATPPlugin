@@ -11,7 +11,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     ParentMenuOrder = 600,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_SETUP_STATUS,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_SETUP_STATUS)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceStatusLst_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zSCP_LK_ServiceStatus"; } }

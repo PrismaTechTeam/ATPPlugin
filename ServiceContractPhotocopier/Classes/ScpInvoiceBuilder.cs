@@ -32,6 +32,9 @@ namespace ServiceContractPhotocopier.Classes
         public decimal Charge;
         public bool UseMin;
         public DateTime? LastDate;
+        /// <summary>API LastAuditDate of the CURRENT reading — used as the MeterTrans date so the
+        /// next period's "Last Read Date" is the real meter-read date (falls back to now if absent).</summary>
+        public DateTime? AuditDate;
     }
 
     /// <summary>
@@ -103,7 +106,8 @@ namespace ServiceContractPhotocopier.Classes
                 dSerial.Description = "Serial : " + ln.SerialNumber + "   (" + ln.MeterTypeCode + ")";
 
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dCur = doc.AddDetail();
-                dCur.Description = "Current Meter Reading (" + readingDateStr + ") : " + ln.Current.ToString("n0");
+                string curDateStr = ln.AuditDate.HasValue ? ln.AuditDate.Value.ToString("dd/MM/yyyy") : readingDateStr;
+                dCur.Description = "Current Meter Reading (" + curDateStr + ") : " + ln.Current.ToString("n0");
 
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dPrev = doc.AddDetail();
                 string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "N/A";

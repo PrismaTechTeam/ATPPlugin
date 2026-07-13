@@ -13,7 +13,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
     //     MenuOrder = 200,
     //     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_CONTRACT,
     //     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_CONTRACT)]
-    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, true)]
     public partial class ServiceContractLst_Form : XtraForm
     {
         private DBSetting _dbSetting;

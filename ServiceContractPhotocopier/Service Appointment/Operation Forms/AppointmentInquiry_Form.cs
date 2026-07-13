@@ -10,7 +10,7 @@ namespace ServiceContractPhotocopier.ServiceAppointment.OperationForms
     ParentMenuCaption = "Inquiry", MenuOrder = 40, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_APPOINTMENT_INQUIRY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_APPOINTMENT_INQUIRY)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class AppointmentInquiry_Form : ScpLookupLst_Form
     {
         protected override string TableName   { get { return "zvSCP_AppointmentCalendar"; } }

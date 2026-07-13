@@ -13,11 +13,12 @@ namespace ServiceContractPhotocopier.ServiceNote.OperationForms
     /// Service Note Assignment — shows all open unassigned/assigned service notes
     /// with bulk-assign to a selected service person.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Service Note Assignment",
-    MenuOrder = 310,
-    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_ASSIGNMENT,
-    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_ASSIGNMENT)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, false)]
+    // [MENU HIDDEN FOR CUSTOMER RELEASE - uncomment to show]
+    // [AutoCount.PlugIn.MenuItem("Service Note Assignment",
+    // MenuOrder = 310,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_ASSIGNMENT,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_ASSIGNMENT)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceNoteAssignment_Form : XtraForm
     {
         private DBSetting _dbSetting;

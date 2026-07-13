@@ -25,6 +25,11 @@ namespace ServiceContractPhotocopier.MeterReading.Services
             return Build(status, month);
         }
 
+        public List<MeterReadingDto> GetReadings(MachineStatus status, int year, int month)
+        {
+            return Build(status, month);   // mock data is deterministic per month; year is irrelevant
+        }
+
         public List<MeterReadingDto> GetOnline()
         {
             return Build(MachineStatus.Online, DateTime.Today.Month);

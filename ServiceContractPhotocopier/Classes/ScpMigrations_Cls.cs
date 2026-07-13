@@ -88,6 +88,10 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
             // Staging of current readings (manual key-ins + accepted API values) per billing period.
             RunIfTableMissing(dbsetting, "zSCP2_MeterEntry",            "02_CreateTable_zSCP2_MeterEntry.sql", asm);
+            // Add Invoiced stamp columns (billing-period duplicate guard). Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v2.sql", asm);
+            // Plugin document numbering (SC / SI formats + running numbers), seeded past legacy max.
+            RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
 
