@@ -25,6 +25,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public DateTime? ServiceExpiryDate;   // from master; null = none. Drives the Expiry column colour.
         public DataTable Meters;          // schema = CreateMetersTable()
         public DataTable ItemCodes;       // schema = CreateItemCodesTable()
+        public DataTable SpareParts;      // schema = zSCP2_Contract_Form.CreateSparePartsTable(); item-bound spare parts
     }
 
     /// <summary>
@@ -237,6 +238,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _meters = _data.Meters != null ? _data.Meters.Copy() : CreateMetersTable();
             GridMeters.DataSource = _meters;
 
+            BuildItemSparePartsGrid();
+
             if (string.IsNullOrEmpty(_data.ServiceItemNo)) AutoPickServiceItemNo();
 
             // Save/close confirmation (CLAUDE.md rule 8): mark dirty on any edit, wired after load.
@@ -253,6 +256,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _itemCodes.RowDeleted += delegate { _dirty = true; };
             _meters.RowChanged += delegate { _dirty = true; };
             _meters.RowDeleted += delegate { _dirty = true; };
+            if (_itemSpareParts != null) { _itemSpareParts.RowChanged += delegate { _dirty = true; }; _itemSpareParts.RowDeleted += delegate { _dirty = true; }; }
             if (_lkCustomer != null) _lkCustomer.EditValueChanged += mark;
             if (_lkContract != null) _lkContract.EditValueChanged += mark;
             _dirty = false;
@@ -455,6 +459,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data.ItemCodes = _itemCodes;
             _meters.AcceptChanges();
             _data.Meters = _meters;
+            if (_viewItemSp != null) _viewItemSp.PostEditor();
+            if (_itemSpareParts != null) { _itemSpareParts.AcceptChanges(); _data.SpareParts = _itemSpareParts; }
 
             _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
             this.DialogResult = DialogResult.OK;
@@ -656,6 +662,120 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 long k;
                 return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
             }
+        }
+
+        // ===================== Spare Parts provided by this Service Item =====================
+        // These are stored in zSCP2_ContractSparePart with ItemKey set, so they show read-only on the
+        // parent contract. Built in code below the Meter group (reuses the contract's shared column
+        // layout + compute so the two grids are identical).
+
+        private DataTable _itemSpareParts;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _itemSpCheck;
+        private DevExpress.XtraGrid.GridControl _gridItemSp;
+        private DevExpress.XtraGrid.Views.Grid.GridView _viewItemSp;
+
+        private void BuildItemSparePartsGrid()
+        {
+            // Make room: shrink the Meter group and dock a Spare Parts group beneath it.
+            GrpMeters.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            if (GrpMeters.Height > 220) GrpMeters.Height = 220;
+
+            DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
+            grp.Text = "Spare Parts / Services Provided by this Service Item";
+            grp.Location = new System.Drawing.Point(GrpMeters.Left, GrpMeters.Bottom + 8);
+            grp.Size = new System.Drawing.Size(GrpMeters.Width, Math.Max(150, this.ClientSize.Height - GrpMeters.Bottom - 20));
+            grp.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this.Controls.Add(grp);
+            grp.BringToFront();
+
+            DevExpress.XtraEditors.SimpleButton bIns = new DevExpress.XtraEditors.SimpleButton();
+            bIns.Text = "Insert Row"; bIns.Location = new System.Drawing.Point(8, 26); bIns.Size = new System.Drawing.Size(90, 24);
+            bIns.Click += new EventHandler(ItemSpInsert_Click); grp.Controls.Add(bIns);
+            DevExpress.XtraEditors.SimpleButton bRem = new DevExpress.XtraEditors.SimpleButton();
+            bRem.Text = "Remove Row"; bRem.Location = new System.Drawing.Point(102, 26); bRem.Size = new System.Drawing.Size(90, 24);
+            bRem.Click += new EventHandler(ItemSpRemove_Click); grp.Controls.Add(bRem);
+            DevExpress.XtraEditors.SimpleButton bUp = new DevExpress.XtraEditors.SimpleButton();
+            bUp.Text = "Move Up"; bUp.Location = new System.Drawing.Point(200, 26); bUp.Size = new System.Drawing.Size(80, 24);
+            bUp.Click += delegate { ItemSpMove(-1); }; grp.Controls.Add(bUp);
+            DevExpress.XtraEditors.SimpleButton bDn = new DevExpress.XtraEditors.SimpleButton();
+            bDn.Text = "Move Down"; bDn.Location = new System.Drawing.Point(284, 26); bDn.Size = new System.Drawing.Size(80, 24);
+            bDn.Click += delegate { ItemSpMove(1); }; grp.Controls.Add(bDn);
+
+            _gridItemSp = new DevExpress.XtraGrid.GridControl();
+            _gridItemSp.Location = new System.Drawing.Point(2, 54);
+            _gridItemSp.Size = new System.Drawing.Size(grp.Width - 6, grp.Height - 58);
+            _gridItemSp.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            _viewItemSp = new DevExpress.XtraGrid.Views.Grid.GridView(_gridItemSp);
+            _gridItemSp.MainView = _viewItemSp;
+            _gridItemSp.ViewCollection.Add(_viewItemSp);
+            grp.Controls.Add(_gridItemSp);
+
+            _itemSpCheck = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            _gridItemSp.RepositoryItems.Add(_itemSpCheck);
+
+            _itemSpareParts = _data.SpareParts != null ? _data.SpareParts.Copy() : zSCP2_Contract_Form.CreateSparePartsTable();
+            _gridItemSp.DataSource = _itemSpareParts.DefaultView;
+            _itemSpareParts.DefaultView.Sort = "Pos";
+            zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck);
+            RenumberItemSp();
+
+            _viewItemSp.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(ItemSp_CellValueChanged);
+        }
+
+        private void ItemSp_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            _dirty = true;
+            if (e.Column.FieldName == "Amount" || e.Column.FieldName == "TaxAmount" ||
+                e.Column.FieldName == "AmountAfterTax" || e.Column.FieldName == "No") return;
+            _viewItemSp.PostEditor();
+            DataRowView drv = _viewItemSp.GetRow(e.RowHandle) as DataRowView;
+            if (drv != null) zSCP2_Contract_Form.ComputeSpareRow(drv.Row);
+            _viewItemSp.RefreshData();
+        }
+
+        private void RenumberItemSp()
+        {
+            System.Data.DataView v = _itemSpareParts.DefaultView;
+            for (int i = 0; i < v.Count; i++) { v[i].Row["No"] = i + 1; v[i].Row["Pos"] = i; }
+        }
+
+        private void ItemSpInsert_Click(object sender, EventArgs e)
+        {
+            _viewItemSp.PostEditor();
+            DataRow r = _itemSpareParts.NewRow();
+            r["SparePartKey"] = 0L; r["ItemKey"] = DBNull.Value; r["Bound"] = false;
+            r["ItemCode"] = ""; r["Description"] = ""; r["Unlimited"] = false; r["UOM"] = "";
+            r["Quantity"] = 0m; r["Discount"] = ""; r["UnitPrice"] = 0m; r["Amount"] = 0m;
+            r["TaxType"] = ""; r["TaxInclusive"] = false; r["TaxRate"] = 0m; r["TaxAmount"] = 0m;
+            r["AmountAfterTax"] = 0m; r["Pos"] = _itemSpareParts.Rows.Count;
+            _itemSpareParts.Rows.Add(r);
+            _dirty = true; RenumberItemSp(); _viewItemSp.RefreshData();
+            _viewItemSp.FocusedRowHandle = _viewItemSp.RowCount - 1;
+        }
+
+        private void ItemSpRemove_Click(object sender, EventArgs e)
+        {
+            int rh = _viewItemSp.FocusedRowHandle;
+            if (rh < 0) return;
+            DataRowView drv = _viewItemSp.GetRow(rh) as DataRowView;
+            if (drv == null) return;
+            drv.Row.Delete();
+            _dirty = true; RenumberItemSp(); _viewItemSp.RefreshData();
+        }
+
+        private void ItemSpMove(int dir)
+        {
+            int rh = _viewItemSp.FocusedRowHandle;
+            if (rh < 0) return;
+            int target = rh + dir;
+            if (target < 0 || target >= _viewItemSp.RowCount) return;
+            DataRowView a = _viewItemSp.GetRow(rh) as DataRowView;
+            DataRowView b = _viewItemSp.GetRow(target) as DataRowView;
+            if (a == null || b == null) return;
+            int pa = Convert.ToInt32(a.Row["Pos"]), pb = Convert.ToInt32(b.Row["Pos"]);
+            a.Row["Pos"] = pb; b.Row["Pos"] = pa;
+            _dirty = true; RenumberItemSp(); _viewItemSp.RefreshData();
+            _viewItemSp.FocusedRowHandle = target;
         }
 
         // Ribbon Save/Close (same toolbar style as the contract editor) — same logic as OK/Cancel.

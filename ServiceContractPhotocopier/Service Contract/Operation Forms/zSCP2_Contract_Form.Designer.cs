@@ -17,11 +17,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraBars.Ribbon.RibbonPage ribbonPageHome;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpSave;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpItem;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpCopy;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpClipboard;
         private DevExpress.XtraBars.BarButtonItem barSave;
         private DevExpress.XtraBars.BarButtonItem barClose;
         private DevExpress.XtraBars.BarButtonItem barAddItem;
         private DevExpress.XtraBars.BarButtonItem barEditItem;
         private DevExpress.XtraBars.BarButtonItem barDelItem;
+        private DevExpress.XtraBars.BarButtonItem barCopyFrom;
+        private DevExpress.XtraBars.BarButtonItem barCopyToNew;
+        private DevExpress.XtraBars.BarButtonItem barCopyWhole;
+        private DevExpress.XtraBars.BarButtonItem barCopySelected;
+        private DevExpress.XtraBars.BarButtonItem barCopySpreadsheet;
+        private DevExpress.XtraBars.BarButtonItem barPasteWhole;
+        private DevExpress.XtraBars.BarButtonItem barPasteItems;
 
         private DevExpress.XtraEditors.PanelControl PanelHeaderFields;
         private DevExpress.XtraEditors.LabelControl LblContractNo;
@@ -108,6 +117,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
             this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpCopy = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpClipboard = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.barCopyFrom = new DevExpress.XtraBars.BarButtonItem();
+            this.barCopyToNew = new DevExpress.XtraBars.BarButtonItem();
+            this.barCopyWhole = new DevExpress.XtraBars.BarButtonItem();
+            this.barCopySelected = new DevExpress.XtraBars.BarButtonItem();
+            this.barCopySpreadsheet = new DevExpress.XtraBars.BarButtonItem();
+            this.barPasteWhole = new DevExpress.XtraBars.BarButtonItem();
+            this.barPasteItems = new DevExpress.XtraBars.BarButtonItem();
             this.PanelHeaderFields = new DevExpress.XtraEditors.PanelControl();
             this.LblContractNo = new DevExpress.XtraEditors.LabelControl();
             this.TxtContractNo = new DevExpress.XtraEditors.TextEdit();
@@ -230,9 +248,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             this.RibbonCtl.ExpandCollapseItem.Id = 0;
             this.RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] {
-                this.barSave, this.barClose, this.barAddItem, this.barEditItem, this.barDelItem});
+                this.barSave, this.barClose, this.barAddItem, this.barEditItem, this.barDelItem,
+                this.barCopyFrom, this.barCopyToNew, this.barCopyWhole, this.barCopySelected,
+                this.barCopySpreadsheet, this.barPasteWhole, this.barPasteItems});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 6;
+            this.RibbonCtl.MaxItemId = 13;
             this.RibbonCtl.Name = "Ribbon";
             this.RibbonCtl.ShowApplicationButton = DevExpress.Utils.DefaultBoolean.False;
             this.RibbonCtl.ShowToolbarCustomizeItem = false;
@@ -287,10 +307,68 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.barDelItem.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barDelItem.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barDelItem_ItemClick);
             //
+            // barCopyFrom
+            //
+            this.barCopyFrom.Caption = "Copy from other\r\nService Contract";
+            this.barCopyFrom.Id = 6;
+            this.barCopyFrom.ImageOptions.ImageUri.Uri = "Copy;Size32x32";
+            this.barCopyFrom.Name = "barCopyFrom";
+            this.barCopyFrom.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barCopyFrom.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopyFrom_ItemClick);
+            //
+            // barCopyToNew
+            //
+            this.barCopyToNew.Caption = "Copy to a new\r\nService Contract";
+            this.barCopyToNew.Id = 7;
+            this.barCopyToNew.ImageOptions.ImageUri.Uri = "Paste;Size32x32";
+            this.barCopyToNew.Name = "barCopyToNew";
+            this.barCopyToNew.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barCopyToNew.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopyToNew_ItemClick);
+            //
+            // barCopyWhole
+            //
+            this.barCopyWhole.Caption = "Copy Whole Document";
+            this.barCopyWhole.Id = 8;
+            this.barCopyWhole.ImageOptions.ImageUri.Uri = "Copy;Size16x16";
+            this.barCopyWhole.Name = "barCopyWhole";
+            this.barCopyWhole.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopyWhole_ItemClick);
+            //
+            // barCopySelected
+            //
+            this.barCopySelected.Caption = "Copy Selected Details";
+            this.barCopySelected.Id = 9;
+            this.barCopySelected.ImageOptions.ImageUri.Uri = "Copy;Size16x16";
+            this.barCopySelected.Name = "barCopySelected";
+            this.barCopySelected.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopySelected_ItemClick);
+            //
+            // barCopySpreadsheet
+            //
+            this.barCopySpreadsheet.Caption = "Copy as Spreadsheet";
+            this.barCopySpreadsheet.Id = 10;
+            this.barCopySpreadsheet.ImageOptions.ImageUri.Uri = "Excel;Size16x16";
+            this.barCopySpreadsheet.Name = "barCopySpreadsheet";
+            this.barCopySpreadsheet.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCopySpreadsheet_ItemClick);
+            //
+            // barPasteWhole
+            //
+            this.barPasteWhole.Caption = "Paste Whole Document";
+            this.barPasteWhole.Id = 11;
+            this.barPasteWhole.ImageOptions.ImageUri.Uri = "Paste;Size16x16";
+            this.barPasteWhole.Name = "barPasteWhole";
+            this.barPasteWhole.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barPasteWhole_ItemClick);
+            //
+            // barPasteItems
+            //
+            this.barPasteItems.Caption = "Paste Item Detail Only";
+            this.barPasteItems.Id = 12;
+            this.barPasteItems.ImageOptions.ImageUri.Uri = "Paste;Size16x16";
+            this.barPasteItems.Name = "barPasteItems";
+            this.barPasteItems.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barPasteItems_ItemClick);
+            //
             // ribbonPageHome
             //
             this.ribbonPageHome.Groups.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPageGroup[] {
-                this.grpSave, this.grpItem});
+                this.grpSave, this.grpItem, this.grpCopy, this.grpClipboard});
             this.ribbonPageHome.Name = "ribbonPageHome";
             this.ribbonPageHome.Text = "Home";
             //
@@ -308,6 +386,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.grpItem.ItemLinks.Add(this.barDelItem);
             this.grpItem.Name = "grpItem";
             this.grpItem.Text = "Service Item";
+            //
+            // grpCopy
+            //
+            this.grpCopy.ItemLinks.Add(this.barCopyFrom);
+            this.grpCopy.ItemLinks.Add(this.barCopyToNew);
+            this.grpCopy.Name = "grpCopy";
+            this.grpCopy.Text = "Copy";
+            //
+            // grpClipboard
+            //
+            this.grpClipboard.ItemLinks.Add(this.barCopyWhole);
+            this.grpClipboard.ItemLinks.Add(this.barCopySelected);
+            this.grpClipboard.ItemLinks.Add(this.barCopySpreadsheet);
+            this.grpClipboard.ItemLinks.Add(this.barPasteWhole);
+            this.grpClipboard.ItemLinks.Add(this.barPasteItems);
+            this.grpClipboard.Name = "grpClipboard";
+            this.grpClipboard.Text = "Clipboard";
             //
             // PanelHeaderFields
             //

@@ -272,6 +272,39 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                 }
             }
+
+            // Item-bound spare parts (from the service item editor's grid).
+            if (d.SpareParts != null)
+            {
+                int spPos = 0;
+                foreach (DataRow r in d.SpareParts.Rows)
+                {
+                    if (r.RowState == DataRowState.Deleted) continue;
+                    string code = r["ItemCode"] == DBNull.Value ? "" : Convert.ToString(r["ItemCode"]).Trim();
+                    if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
+                    using (SqlCommand cmd = new SqlCommand(
+                        "INSERT INTO [dbo].[zSCP2_ContractSparePart] " +
+                        "(ContractKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
+                        " TaxType, TaxInclusive, TaxRate, Pos, LastModified) " +
+                        "VALUES (@ck,@ik,@code,@desc,@unl,@uom,@qty,@disc,@price,@ttype,@tinc,@trate,@pos,GETDATE());", cn, tx))
+                    {
+                        cmd.Parameters.AddWithValue("@ck", contractKey);
+                        cmd.Parameters.AddWithValue("@ik", itemKey);
+                        cmd.Parameters.AddWithValue("@code", code);
+                        cmd.Parameters.AddWithValue("@desc", r["Description"] == DBNull.Value ? "" : Convert.ToString(r["Description"]));
+                        cmd.Parameters.AddWithValue("@unl", Convert.ToBoolean(r["Unlimited"]) ? "Y" : "N");
+                        cmd.Parameters.AddWithValue("@uom", r["UOM"] == DBNull.Value ? "" : Convert.ToString(r["UOM"]));
+                        cmd.Parameters.AddWithValue("@qty", Dec(r["Quantity"]));
+                        cmd.Parameters.AddWithValue("@disc", r["Discount"] == DBNull.Value ? "" : Convert.ToString(r["Discount"]));
+                        cmd.Parameters.AddWithValue("@price", Dec(r["UnitPrice"]));
+                        cmd.Parameters.AddWithValue("@ttype", r["TaxType"] == DBNull.Value ? "" : Convert.ToString(r["TaxType"]));
+                        cmd.Parameters.AddWithValue("@tinc", Convert.ToBoolean(r["TaxInclusive"]) ? "Y" : "N");
+                        cmd.Parameters.AddWithValue("@trate", Dec(r["TaxRate"]));
+                        cmd.Parameters.AddWithValue("@pos", spPos++);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
         }
 
         private static decimal Dec(object v)

@@ -277,3 +277,14 @@ Add to the contract editor ribbon, mirroring AutoCount's document entry:
 - **Clipboard group**: "Copy Whole Document", "Copy Selected Details", "Copy as Spreadsheet",
   "Paste Whole Document", "Paste Item Detail Only". Look at AutoCount's Form*Entry clipboard commands
   (AutoCount.Invoicing / document entry) for the serialization format + paste behavior. NOT built yet.
+
+## 2026-07-13 — Contract-editor epic: remaining 4 items ALL done
+- (4) Delivery Address Search (customer branches from dbo.Branch) + Copy (main address -> delivery). DONE.
+- (2) "Add a New Service Item" from a contract shows Contract No READ-ONLY, billing day mapped. DONE.
+- (3) Copy/Clipboard ribbon (Image #105/#106): Copy from other / Copy to a new Service Contract + Copy
+  Whole Document / Copy Selected Details / Copy as Spreadsheet / Paste Whole Document / Paste Item
+  Detail Only. Clipboard format = tagged tab-separated (ATP-SCP-DOC-V1); TSV is Excel-pasteable. DONE.
+- (1) Service Item editor now has its OWN Spare Parts grid (Insert/Remove/Move Up/Down), stored in
+  zSCP2_ContractSparePart with ItemKey set -> shows read-only on the contract's Spare Parts tab.
+  Shared column layout + compute reused from the contract (ConfigureSpareView/CreateSparePartsTable/
+  ComputeSpareRow made internal static). Contract save + standalone-item save both persist them. DONE.

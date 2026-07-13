@@ -47,6 +47,42 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Load += new EventHandler(OnFormLoad);
         }
 
+        // Clone-as-new ("Copy to a new Service Contract"): a NEW contract pre-filled from sourceKey.
+        private long _cloneFromKey;
+        public zSCP2_Contract_Form(DBSetting db, long sourceKey, bool cloneAsNew) : this()
+        {
+            _db = db;
+            _isNew = true;
+            _cloneFromKey = cloneAsNew ? sourceKey : 0;
+            this.Load += new EventHandler(OnFormLoad);
+        }
+
+        private long PickContract(DataTable src, string title)
+        {
+            if (src == null || src.Rows.Count == 0) { XtraMessageBox.Show("No contracts found.", title); return 0; }
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = title; dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false; dlg.MinimizeBox = false; dlg.ClientSize = new System.Drawing.Size(470, 105);
+                LabelControl lbl = new LabelControl(); lbl.Text = "Contract"; lbl.Location = new System.Drawing.Point(14, 18); dlg.Controls.Add(lbl);
+                LookUpEdit lk = new LookUpEdit();
+                lk.Location = new System.Drawing.Point(80, 15); lk.Size = new System.Drawing.Size(370, 20);
+                lk.Properties.DataSource = src; lk.Properties.ValueMember = "ContractKey"; lk.Properties.DisplayMember = "ContractNo";
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ContractNo", "Contract No", 90));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("DebtorCode", "Customer", 80));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 200));
+                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                dlg.Controls.Add(lk);
+                SimpleButton ok = new SimpleButton(); ok.Text = "OK"; ok.Location = new System.Drawing.Point(275, 62); ok.Size = new System.Drawing.Size(85, 28);
+                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; }; dlg.Controls.Add(ok);
+                SimpleButton cancel = new SimpleButton(); cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(366, 62); cancel.Size = new System.Drawing.Size(85, 28);
+                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; }; dlg.Controls.Add(cancel);
+                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
+                long k; return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
+            }
+        }
+
         private void OnFormLoad(object sender, EventArgs e)
         {
             if (_db == null) return;
@@ -63,6 +99,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SpnBillingDay.Value = PumsConfig.GetInt(_db, PumsConfig.KEY_DEFAULT_BILLING_DAY, PumsConfig.DEFAULT_BILLING_DAY_VALUE);
                 string mode = PumsConfig.Get(_db, PumsConfig.KEY_DEFAULT_BILLING_MODE, PumsConfig.DEFAULT_BILLING_MODE_VALUE);
                 SetBillingMode(mode);
+                // Copy-to-a-new: pre-fill from the source contract (fresh copies of its items).
+                if (_cloneFromKey > 0) LoadContractAsTemplate(_cloneFromKey);
             }
             else
             {
@@ -383,6 +421,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 d.ItemCodes.Rows.Add(nr);
             }
             d.ItemCodes.AcceptChanges();
+
+            d.SpareParts = CreateSparePartsTable();
+            DataTable sp = _db.GetDataTable(
+                "SELECT * FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=" + itemKey + " ORDER BY Pos", false);
+            int spPos = 0;
+            foreach (DataRow s in sp.Rows)
+            {
+                DataRow nr = d.SpareParts.NewRow();
+                nr["SparePartKey"] = s["SparePartKey"]; nr["ItemKey"] = itemKey; nr["Bound"] = false;
+                nr["No"] = ++spPos;
+                nr["ItemCode"] = AsStr(s["ItemCode"]); nr["Description"] = AsStr(s["Description"]);
+                nr["Unlimited"] = AsStr(s["Unlimited"]) == "Y"; nr["UOM"] = AsStr(s["UOM"]);
+                nr["Quantity"] = AsDec(s["Quantity"]); nr["Discount"] = AsStr(s["Discount"]);
+                nr["UnitPrice"] = AsDec(s["UnitPrice"]); nr["TaxType"] = AsStr(s["TaxType"]);
+                nr["TaxInclusive"] = AsStr(s["TaxInclusive"]) == "Y"; nr["TaxRate"] = AsDec(s["TaxRate"]);
+                nr["Pos"] = AsInt(s["Pos"], spPos);
+                ComputeSpareRow(nr);
+                d.SpareParts.Rows.Add(nr);
+            }
+            d.SpareParts.AcceptChanges();
             return d;
         }
 
@@ -579,7 +637,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DataTable _spareParts;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _spCheck;
 
-        private static DataTable CreateSparePartsTable()
+        internal static DataTable CreateSparePartsTable()
         {
             DataTable dt = new DataTable("SpareParts");
             dt.Columns.Add("SparePartKey", typeof(long));
@@ -616,32 +674,42 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _spareParts = CreateSparePartsTable();
             GridSpareParts.DataSource = _spareParts.DefaultView;
             _spareParts.DefaultView.Sort = "Pos";
-
-            GridViewSpareParts.Columns.Clear();
-            GridViewSpareParts.PopulateColumns();
-            SpCol("SparePartKey", null, 0, -1); if (GridViewSpareParts.Columns["SparePartKey"] != null) GridViewSpareParts.Columns["SparePartKey"].Visible = false;
-            SpCol("ItemKey", null, 0, -1); if (GridViewSpareParts.Columns["ItemKey"] != null) GridViewSpareParts.Columns["ItemKey"].Visible = false;
-            SpCol("Bound", null, 0, -1); if (GridViewSpareParts.Columns["Bound"] != null) GridViewSpareParts.Columns["Bound"].Visible = false;
-            SpCol("Pos", null, 0, -1); if (GridViewSpareParts.Columns["Pos"] != null) GridViewSpareParts.Columns["Pos"].Visible = false;
-            SpCol("No", "No", 40, 0, true);
-            SpCol("ItemCode", "Item Code", 130, 1);
-            SpCol("Description", "Description", 240, 2);
-            SpBoolCol("Unlimited", "Unlimited", 70, 3);
-            SpCol("UOM", "UOM", 70, 4);
-            SpCol("Quantity", "Quantity", 80, 5);
-            SpCol("Discount", "Discount", 80, 6);
-            SpCol("UnitPrice", "Unit Price", 90, 7);
-            SpCol("Amount", "Amount", 90, 8, true);
-            SpCol("TaxType", "Tax Type", 80, 9);
-            SpBoolCol("TaxInclusive", "Tax Inclusive", 90, 10);
-            SpCol("TaxRate", "Tax (%)", 70, 11);
-            SpCol("TaxAmount", "Tax Amount", 90, 12, true);
-            SpCol("AmountAfterTax", "Amount After Tax", 110, 13, true);
+            ConfigureSpareView(GridViewSpareParts, _spCheck);
         }
 
-        private void SpCol(string field, string caption, int width, int visibleIndex, bool readOnly = false)
+        // Shared spare-parts column layout — used by BOTH the contract editor and the service item
+        // editor so the two grids match exactly.
+        internal static void ConfigureSpareView(DevExpress.XtraGrid.Views.Grid.GridView v,
+            DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit check)
         {
-            DevExpress.XtraGrid.Columns.GridColumn c = GridViewSpareParts.Columns[field];
+            v.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
+            v.OptionsBehavior.Editable = true;
+            v.OptionsView.ShowGroupPanel = false;
+            v.Columns.Clear();
+            v.PopulateColumns();
+            SpHide(v, "SparePartKey"); SpHide(v, "ItemKey"); SpHide(v, "Bound"); SpHide(v, "Pos");
+            SpCol2(v, "No", "No", 40, 0, true);
+            SpCol2(v, "ItemCode", "Item Code", 130, 1);
+            SpCol2(v, "Description", "Description", 240, 2);
+            SpBool2(v, check, "Unlimited", "Unlimited", 70, 3);
+            SpCol2(v, "UOM", "UOM", 70, 4);
+            SpCol2(v, "Quantity", "Quantity", 80, 5);
+            SpCol2(v, "Discount", "Discount", 80, 6);
+            SpCol2(v, "UnitPrice", "Unit Price", 90, 7);
+            SpCol2(v, "Amount", "Amount", 90, 8, true);
+            SpCol2(v, "TaxType", "Tax Type", 80, 9);
+            SpBool2(v, check, "TaxInclusive", "Tax Inclusive", 90, 10);
+            SpCol2(v, "TaxRate", "Tax (%)", 70, 11);
+            SpCol2(v, "TaxAmount", "Tax Amount", 90, 12, true);
+            SpCol2(v, "AmountAfterTax", "Amount After Tax", 110, 13, true);
+        }
+
+        private static void SpHide(DevExpress.XtraGrid.Views.Grid.GridView v, string field)
+        { DevExpress.XtraGrid.Columns.GridColumn c = v.Columns[field]; if (c != null) c.Visible = false; }
+
+        private static void SpCol2(DevExpress.XtraGrid.Views.Grid.GridView v, string field, string caption, int width, int visibleIndex, bool readOnly = false)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = v.Columns[field];
             if (c == null) return;
             if (caption != null) c.Caption = caption;
             if (width > 0) c.Width = width;
@@ -649,12 +717,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (readOnly) { c.OptionsColumn.AllowEdit = false; c.OptionsColumn.ReadOnly = true; }
         }
 
-        private void SpBoolCol(string field, string caption, int width, int visibleIndex)
+        private static void SpBool2(DevExpress.XtraGrid.Views.Grid.GridView v, DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit check, string field, string caption, int width, int visibleIndex)
         {
-            DevExpress.XtraGrid.Columns.GridColumn c = GridViewSpareParts.Columns[field];
+            DevExpress.XtraGrid.Columns.GridColumn c = v.Columns[field];
             if (c == null) return;
             c.Caption = caption; c.Width = width; c.Visible = true; c.VisibleIndex = visibleIndex;
-            c.ColumnEdit = _spCheck;
+            c.ColumnEdit = check;
         }
 
         // Item-bound lines are read-only on the contract (they belong to a service item); block editing.
@@ -677,7 +745,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewSpareParts.RefreshData();
         }
 
-        private static void ComputeSpareRow(DataRow r)
+        internal static void ComputeSpareRow(DataRow r)
         {
             decimal qty = r["Quantity"] == DBNull.Value ? 0 : Convert.ToDecimal(r["Quantity"]);
             decimal price = r["UnitPrice"] == DBNull.Value ? 0 : Convert.ToDecimal(r["UnitPrice"]);
@@ -790,6 +858,33 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             RenumberSpareParts();
             GridViewSpareParts.RefreshData();
             GridViewSpareParts.FocusedRowHandle = target;
+        }
+
+        // Persist a service item's own (item-bound) spare parts. These show read-only on the contract.
+        private void SaveItemSpareParts(SqlConnection conn, SqlTransaction tx, ItemEditData d, long itemKey)
+        {
+            ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=@ik", P("@ik", itemKey));
+            if (d.SpareParts == null) return;
+            int pos = 0;
+            foreach (DataRow r in d.SpareParts.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string code = r["ItemCode"] == DBNull.Value ? "" : Convert.ToString(r["ItemCode"]).Trim();
+                if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
+                ExecNonQuery(conn, tx,
+                    "INSERT INTO [dbo].[zSCP2_ContractSparePart] " +
+                    "(ContractKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
+                    " TaxType, TaxInclusive, TaxRate, Pos, LastModified) " +
+                    "VALUES (@ck, @ik, @code, @desc, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
+                    P("@ck", _contractKey), P("@ik", itemKey), P("@code", code),
+                    P("@desc", AsStr(r["Description"])),
+                    P("@unl", Convert.ToBoolean(r["Unlimited"]) ? "Y" : "N"),
+                    P("@uom", AsStr(r["UOM"])), P("@qty", AsDec(r["Quantity"])),
+                    P("@disc", AsStr(r["Discount"])), P("@price", AsDec(r["UnitPrice"])),
+                    P("@ttype", AsStr(r["TaxType"])),
+                    P("@tinc", Convert.ToBoolean(r["TaxInclusive"]) ? "Y" : "N"),
+                    P("@trate", AsDec(r["TaxRate"])), P("@pos", pos++));
+            }
         }
 
         private void SaveSpareParts(SqlConnection conn, SqlTransaction tx)
@@ -1089,6 +1184,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             }
                             InsertMeters(conn, tx, d, itemKey);
                             InsertItemCodes(conn, tx, d, itemKey);
+                            SaveItemSpareParts(conn, tx, d, itemKey);
                             pos++;
                         }
                         SaveSpareParts(conn, tx);
@@ -1289,6 +1385,206 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void barAddItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnAddItem_Click(sender, System.EventArgs.Empty); }
         private void barEditItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnEditItem_Click(sender, System.EventArgs.Empty); }
         private void barDelItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnDelItem_Click(sender, System.EventArgs.Empty); }
+
+        // ===================== Copy / Clipboard ribbon =====================
+
+        private const string CLIP_HEADER = "ATP-SCP-DOC-V1";
+
+        // "Copy from other Service Contract": pick a saved contract and load its content into THIS
+        // (usually new) contract as a template — header + items (as fresh copies) + spare parts.
+        private void barCopyFrom_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            DataTable src;
+            try
+            {
+                src = _db.GetDataTable(
+                    "SELECT c.ContractKey, c.ContractNo, c.DebtorCode, ISNULL(d.CompanyName,'') AS CompanyName " +
+                    "FROM [dbo].[zSCP2_Contract] c LEFT JOIN [dbo].[Debtor] d ON d.AccNo=c.DebtorCode " +
+                    "ORDER BY c.ContractNo", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            long key = PickContract(src, "Copy from Service Contract");
+            if (key == 0) return;
+            LoadContractAsTemplate(key);
+            _dirty = true;
+            XtraMessageBox.Show("Copied. Review the details and Save to create this contract.", "Copied",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // "Copy to a new Service Contract": open a NEW contract editor pre-filled from the current one.
+        private void barCopyToNew_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            if (_isNew && _contractKey == 0)
+            { XtraMessageBox.Show("Save this contract first before copying it to a new one.", "Copy to new"); return; }
+            using (zSCP2_Contract_Form f = new zSCP2_Contract_Form(_db, _contractKey, true))
+            { f.ShowDialog(this); }
+        }
+
+        // Serialize header + items to the clipboard (custom tagged text).
+        private void barCopyWhole_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.AppendLine(CLIP_HEADER);
+            sb.Append("H\t")
+              .Append(Cv(SluContractType)).Append('\t').Append(Cv(LkDebtorCode)).Append('\t')
+              .Append(TxtAddress.Text.Replace("\r", " ").Replace("\n", " ")).Append('\t')
+              .Append(TxtAttention.Text).Append('\t').Append(TxtPhone.Text).Append('\t')
+              .Append(TxtTerm.Text).Append('\t').Append(TxtArea.Text).Append('\t')
+              .Append(Cv(SluAgent)).Append('\t').Append(TxtDescription.Text).Append('\t')
+              .Append(((int)SpnBillingDay.Value)).Append('\t').Append(CurrentBillingMode()).AppendLine();
+            foreach (ItemEditData d in _items)
+                sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
+                  .Append(Tsv(d.Description)).Append('\t')
+                  .Append(d.BillingDayOverride.HasValue ? d.BillingDayOverride.Value.ToString() : "").Append('\t')
+                  .Append(Tsv(d.DepartmentCode)).Append('\t').Append(Tsv(d.JobCode)).Append('\t')
+                  .Append(Tsv(d.StockLocationCode)).Append('\t').Append(d.Inactive ? "Y" : "N").AppendLine();
+            try { System.Windows.Forms.Clipboard.SetText(sb.ToString()); XtraMessageBox.Show("Whole document copied to clipboard.", "Copied"); }
+            catch (Exception ex) { XtraMessageBox.Show("Clipboard failed:\r\n" + ex.Message, "Error"); }
+        }
+
+        // Copy the SELECTED service item rows as tab-separated (Excel-pasteable).
+        private void barCopySelected_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            int[] sel = GridViewItems.GetSelectedRows();
+            if (sel == null || sel.Length == 0) { XtraMessageBox.Show("Select one or more service item rows first.", "Copy Selected"); return; }
+            System.Collections.Generic.List<int> handles = new System.Collections.Generic.List<int>(sel);
+            CopyItemsAsTsv(handles);
+        }
+
+        // Copy the WHOLE service item grid as a spreadsheet (TSV with a header row).
+        private void barCopySpreadsheet_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            System.Collections.Generic.List<int> handles = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < GridViewItems.RowCount; i++) handles.Add(GridViewItems.GetVisibleRowHandle(i));
+            CopyItemsAsTsv(handles);
+        }
+
+        private void CopyItemsAsTsv(System.Collections.Generic.List<int> handles)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.AppendLine("No\tService Item No\tSerial Number\tProvided Items\tBilling Day\tBlack Meter\tColour Meter\tInactive\tExpiry");
+            foreach (int rh in handles)
+            {
+                if (rh < 0) continue;
+                sb.Append(Gv(rh, "No")).Append('\t').Append(Gv(rh, "ServiceItemNo")).Append('\t')
+                  .Append(Gv(rh, "SerialNumber")).Append('\t').Append(Gv(rh, "Items")).Append('\t')
+                  .Append(Gv(rh, "BillingDay")).Append('\t').Append(Gv(rh, "BKMeter")).Append('\t')
+                  .Append(Gv(rh, "CLMeter")).Append('\t').Append(Gv(rh, "Inactive")).Append('\t')
+                  .Append(Gv(rh, "Expiry")).AppendLine();
+            }
+            try { System.Windows.Forms.Clipboard.SetText(sb.ToString()); XtraMessageBox.Show(handles.Count + " row(s) copied.", "Copied"); }
+            catch (Exception ex) { XtraMessageBox.Show("Clipboard failed:\r\n" + ex.Message, "Error"); }
+        }
+
+        private string Gv(int rh, string field)
+        {
+            object v = GridViewItems.GetRowCellValue(rh, field);
+            return v == null || v == DBNull.Value ? "" : v.ToString().Replace("\t", " ").Replace("\r", " ").Replace("\n", " ");
+        }
+
+        // Paste a whole document (from Copy Whole Document): replaces header + items in this form.
+        private void barPasteWhole_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            string text = SafeClipboardText();
+            if (text == null || !text.StartsWith(CLIP_HEADER))
+            { XtraMessageBox.Show("The clipboard does not contain a copied Service Contract document.", "Paste"); return; }
+            string[] lines = text.Replace("\r\n", "\n").Split('\n');
+            _items.Clear();
+            foreach (string line in lines)
+            {
+                string[] p = line.Split('\t');
+                if (p.Length == 0) continue;
+                if (p[0] == "H" && p.Length >= 13)
+                {
+                    SluContractType.EditValue = SetOrNull(p[1]);
+                    LkDebtorCode.EditValue = SetOrNull(p[2]);
+                    TxtAddress.Text = p[3]; TxtAttention.Text = p[4]; TxtPhone.Text = p[5];
+                    TxtTerm.Text = p[6]; TxtArea.Text = p[7]; SluAgent.EditValue = SetOrNull(p[8]);
+                    TxtDescription.Text = p[9];
+                    int bd; if (int.TryParse(p[10], out bd)) SpnBillingDay.Value = bd;
+                    SetBillingMode(p[11]);
+                }
+                else if (p[0] == "I") _items.Add(ItemFromTsv(p, 1));
+            }
+            _dirty = true; RebuildItemsView();
+            XtraMessageBox.Show("Document pasted. Review and Save.", "Pasted");
+        }
+
+        // Paste ONLY item detail rows (accepts our I-lines or plain TSV): appends to the item list.
+        private void barPasteItems_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            string text = SafeClipboardText();
+            if (string.IsNullOrEmpty(text)) { XtraMessageBox.Show("Clipboard is empty.", "Paste"); return; }
+            string[] lines = text.Replace("\r\n", "\n").Split('\n');
+            int added = 0;
+            foreach (string line in lines)
+            {
+                if (line.Trim().Length == 0) continue;
+                string[] p = line.Split('\t');
+                if (p[0] == CLIP_HEADER || p[0] == "H") continue;
+                if (p[0] == "I") { _items.Add(ItemFromTsv(p, 1)); added++; }
+                else if (p.Length >= 2 && p[0] != "No")   // plain TSV: No, ServiceItemNo, Serial, ...
+                { _items.Add(ItemFromTsv(p, 1)); added++; }
+            }
+            if (added == 0) { XtraMessageBox.Show("No item rows found on the clipboard.", "Paste"); return; }
+            _dirty = true; RebuildItemsView();
+            XtraMessageBox.Show(added + " item(s) pasted.", "Pasted");
+        }
+
+        // Build a fresh ItemEditData (ItemKey=0 => inserted as new) from a tab-split line at offset.
+        private ItemEditData ItemFromTsv(string[] p, int off)
+        {
+            ItemEditData d = new ItemEditData();
+            d.Meters = zSCP2_Item_Form.CreateMetersTable();
+            d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
+            d.ServiceItemNo = At(p, off); d.SerialNumber = At(p, off + 1); d.Description = At(p, off + 2);
+            int bd; d.BillingDayOverride = int.TryParse(At(p, off + 3), out bd) ? (int?)bd : null;
+            d.DepartmentCode = At(p, off + 4); d.JobCode = At(p, off + 5); d.StockLocationCode = At(p, off + 6);
+            d.Inactive = At(p, off + 7) == "Y";
+            return d;
+        }
+
+        private static string At(string[] a, int i) { return (i >= 0 && i < a.Length) ? a[i] : ""; }
+        private static string Tsv(string s) { return (s ?? "").Replace("\t", " ").Replace("\r", " ").Replace("\n", " "); }
+        private static string Cv(DevExpress.XtraEditors.BaseEdit ed) { return ed.EditValue == null ? "" : ed.EditValue.ToString(); }
+        private static string SafeClipboardText()
+        { try { return System.Windows.Forms.Clipboard.ContainsText() ? System.Windows.Forms.Clipboard.GetText() : null; } catch { return null; } }
+
+        // Load another contract's content into THIS form as a template (fresh copies; keeps this form new).
+        private void LoadContractAsTemplate(long sourceKey)
+        {
+            _loading = true;
+            try
+            {
+                DataTable dt = _db.GetDataTable("SELECT * FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + sourceKey, false);
+                if (dt.Rows.Count == 0) return;
+                DataRow r = dt.Rows[0];
+                SluContractType.EditValue = SetOrNull(AsStr(r["ContractTypeCode"]));
+                LkDebtorCode.EditValue = AsStr(r["DebtorCode"]);
+                DtStartDate.EditValue = AsDate(r["ServiceStartDate"]);
+                DtExpiryDate.EditValue = AsDate(r["ServiceExpiryDate"]);
+                SpnContractValue.Value = AsDec(r["ContractValue"]);
+                SpnBillingDay.Value = AsInt(r["BillingDay"], 1);
+                SetBillingMode(AsStr(r["BillingMode"]));
+                TxtAddress.Text = AsStr(r["Address1"]); TxtAttention.Text = AsStr(r["Attention"]);
+                TxtPhone.Text = AsStr(r["Phone"]); TxtTerm.Text = AsStr(r["TermCode"]);
+                TxtArea.Text = AsStr(r["AreaCode"]); SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
+                TxtDescription.Text = AsStr(r["Description"]);
+                TxtRemark1.Text = AsStr(r["Remark1"]); TxtRemark2.Text = AsStr(r["Remark2"]); TxtNote.Text = AsStr(r["Note"]);
+
+                _items.Clear();
+                DataTable it = _db.GetDataTable("SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + sourceKey + " ORDER BY Pos, ItemKey", false);
+                foreach (DataRow ir in it.Rows)
+                {
+                    ItemEditData d = LoadOneItem(Convert.ToInt64(ir["ItemKey"]));
+                    d.ItemKey = 0;                 // fresh copy -> inserted as a new item
+                    d.ServiceItemNoIsAuto = true;  // draw a new number on save
+                    _items.Add(d);
+                }
+            }
+            finally { _loading = false; }
+            RebuildItemsView();
+        }
 
         // ---- value helpers ----
         private static string AsStr(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
