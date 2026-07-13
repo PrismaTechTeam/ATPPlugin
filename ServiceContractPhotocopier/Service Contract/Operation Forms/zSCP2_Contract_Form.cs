@@ -517,7 +517,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ItemEditData d = new ItemEditData();
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
-            using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, d, (int)SpnBillingDay.Value))
+            // Add a New Service Item under THIS contract: contract shown read-only, billing day mapped.
+            using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, d, (int)SpnBillingDay.Value, TxtContractNo.Text.Trim()))
             {
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
@@ -850,6 +851,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             grp.Size = new System.Drawing.Size(820, 210);
             PageMoreHeader.Controls.Add(grp);
 
+            // Search = pick one of the customer's branches; Copy = copy the main contract address here.
+            DevExpress.XtraEditors.SimpleButton btnSearch = new DevExpress.XtraEditors.SimpleButton();
+            btnSearch.Text = "Search"; btnSearch.Location = new System.Drawing.Point(300, 27); btnSearch.Size = new System.Drawing.Size(60, 22);
+            btnSearch.Click += new EventHandler(DelSearch_Click);
+            grp.Controls.Add(btnSearch);
+            DevExpress.XtraEditors.SimpleButton btnCopy = new DevExpress.XtraEditors.SimpleButton();
+            btnCopy.Text = "Copy"; btnCopy.Location = new System.Drawing.Point(364, 27); btnCopy.Size = new System.Drawing.Size(55, 22);
+            btnCopy.Click += new EventHandler(DelCopy_Click);
+            grp.Controls.Add(btnCopy);
+
             MhFieldIn(grp, "DelBranchCode", "Branch Code", 10, 28, 180);
             MhFieldIn(grp, "DelState", "State", 430, 28, 180);
             MhFieldIn(grp, "DelBranchName", "Branch Name", 10, 54, 180);
@@ -937,6 +948,77 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             DevExpress.XtraEditors.TextEdit ed;
             return _mh.TryGetValue(col, out ed) ? (ed.Text ?? "").Trim() : "";
+        }
+
+        private void MhSet(string col, string val)
+        {
+            DevExpress.XtraEditors.TextEdit ed;
+            if (_mh.TryGetValue(col, out ed)) ed.Text = val ?? "";
+        }
+
+        // "Copy": copy the main contract contact/address into the Delivery Address block.
+        private void DelCopy_Click(object sender, EventArgs e)
+        {
+            if (_mhDelAddress != null) _mhDelAddress.Text = TxtAddress.Text;
+            MhSet("DelCity", MhVal("City"));
+            MhSet("DelPostalCode", MhVal("PostalCode"));
+            MhSet("DelState", MhVal("State"));
+            MhSet("DelCountry", MhVal("Country"));
+            MhSet("DelPhone", TxtPhone.Text);
+            MhSet("DelFax", MhVal("Fax"));
+            _dirty = true;
+        }
+
+        // "Search": pick one of the current customer's branches (dbo.Branch) and fill the delivery block.
+        private void DelSearch_Click(object sender, EventArgs e)
+        {
+            string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString().Trim();
+            if (debtor.Length == 0) { XtraMessageBox.Show("Pick a Customer first.", "Search"); return; }
+            DataTable br;
+            try
+            {
+                br = _db.GetDataTable(
+                    "SELECT BranchCode, ISNULL(BranchName,'') AS BranchName, ISNULL(Address1,'') AS Address1, " +
+                    "ISNULL(Address2,'') AS Address2, ISNULL(Address3,'') AS Address3, ISNULL(Address4,'') AS Address4, " +
+                    "ISNULL(PostCode,'') AS PostCode, ISNULL(Phone1,'') AS Phone1, ISNULL(Fax1,'') AS Fax1, " +
+                    "ISNULL(EmailAddress,'') AS EmailAddress, ISNULL(Contact,'') AS Contact " +
+                    "FROM [dbo].[Branch] WHERE AccNo=N'" + debtor.Replace("'", "''") + "' ORDER BY BranchCode", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            if (br.Rows.Count == 0) { XtraMessageBox.Show("This customer has no branches.", "Search"); return; }
+
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = "Select Branch"; dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false; dlg.MinimizeBox = false; dlg.ClientSize = new System.Drawing.Size(460, 105);
+                LabelControl lbl = new LabelControl(); lbl.Text = "Branch"; lbl.Location = new System.Drawing.Point(14, 18); dlg.Controls.Add(lbl);
+                LookUpEdit lk = new LookUpEdit();
+                lk.Location = new System.Drawing.Point(80, 15); lk.Size = new System.Drawing.Size(360, 20);
+                lk.Properties.DataSource = br; lk.Properties.ValueMember = "BranchCode"; lk.Properties.DisplayMember = "BranchCode";
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("BranchCode", "Code", 90));
+                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("BranchName", "Name", 240));
+                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
+                dlg.Controls.Add(lk);
+                SimpleButton ok = new SimpleButton(); ok.Text = "OK"; ok.Location = new System.Drawing.Point(265, 62); ok.Size = new System.Drawing.Size(85, 28);
+                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; }; dlg.Controls.Add(ok);
+                SimpleButton cancel = new SimpleButton(); cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(356, 62); cancel.Size = new System.Drawing.Size(85, 28);
+                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; }; dlg.Controls.Add(cancel);
+                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null) return;
+                DataRow[] f = br.Select("BranchCode='" + lk.EditValue.ToString().Replace("'", "''") + "'");
+                if (f.Length == 0) return;
+                DataRow b = f[0];
+                MhSet("DelBranchCode", AsStr(b["BranchCode"]));
+                MhSet("DelBranchName", AsStr(b["BranchName"]));
+                if (_mhDelAddress != null)
+                    _mhDelAddress.Text = string.Join("\r\n", new string[] { AsStr(b["Address1"]), AsStr(b["Address2"]), AsStr(b["Address3"]), AsStr(b["Address4"]) }).Trim('\r', '\n');
+                MhSet("DelPostalCode", AsStr(b["PostCode"]));
+                MhSet("DelPhone", AsStr(b["Phone1"]));
+                MhSet("DelFax", AsStr(b["Fax1"]));
+                MhSet("DelEmail", AsStr(b["EmailAddress"]));
+                MhSet("DelContactPerson", AsStr(b["Contact"]));
+                _dirty = true;
+            }
         }
 
         private void BtnSave_Click(object sender, EventArgs e)

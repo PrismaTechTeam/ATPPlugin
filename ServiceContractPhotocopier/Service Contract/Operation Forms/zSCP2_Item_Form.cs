@@ -45,6 +45,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.LabelControl _lblCustomer;
         private DevExpress.XtraEditors.LookUpEdit _lkCustomer;
         private DevExpress.XtraEditors.LookUpEdit _lkContract;      // standalone: attach to an EXISTING contract
+        private string _parentContractNo;                          // embedded add: shows contract read-only
 
         public zSCP2_Item_Form()
         {
@@ -65,6 +66,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             : this(db, data, contractBillingDay)
         {
             _standalone = standaloneNewItem;
+        }
+
+        /// <summary>Embedded-add mode (from within a contract): shows the parent Contract No READ-ONLY
+        /// so the user knows the item's home and cannot change it here.</summary>
+        public zSCP2_Item_Form(DBSetting db, ItemEditData data, int contractBillingDay, string parentContractNo)
+            : this(db, data, contractBillingDay)
+        {
+            _parentContractNo = parentContractNo;
         }
 
         /// <summary>Debtor picked in standalone mode ("" when not standalone / nothing picked).</summary>
@@ -119,6 +128,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (_db == null || _data == null) return;
 
             LblBillDayHint.Text = "0 = follow contract day (" + _contractBillingDay + ")";
+
+            // Embedded add (from within a contract): show the parent Contract No READ-ONLY so the user
+            // knows the item's home. The contract itself can't be changed here (that's the "read-only"
+            // scenario) — only the item fields are editable.
+            if (!_standalone && !string.IsNullOrEmpty(_parentContractNo))
+            {
+                DevExpress.XtraEditors.LabelControl lblC = new DevExpress.XtraEditors.LabelControl();
+                lblC.Text = "Contract No";
+                lblC.Location = new System.Drawing.Point(470, 264);
+                this.Controls.Add(lblC); lblC.BringToFront();
+                DevExpress.XtraEditors.TextEdit txtC = new DevExpress.XtraEditors.TextEdit();
+                txtC.Location = new System.Drawing.Point(600, 261);
+                txtC.Size = new System.Drawing.Size(160, 20);
+                txtC.Text = _parentContractNo;
+                txtC.Properties.ReadOnly = true;
+                txtC.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+                this.Controls.Add(txtC); txtC.BringToFront();
+            }
 
             // Standalone-new (opened from "Maintain Service Item"): the item needs a home. A new row 5
             // (made by pushing the two groups down) lets the user attach it to an EXISTING contract, or
