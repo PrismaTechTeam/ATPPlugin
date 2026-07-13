@@ -94,6 +94,8 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Spare parts / services provided lines under a contract (contract- or item-bound).
             RunIfTableMissing(dbsetting, "zSCP2_ContractSparePart",     "02_CreateTable_zSCP2_ContractSparePart.sql", asm);
+            // More Header tab fields (extra contact + delivery address block). Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v2_MoreHeader.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent

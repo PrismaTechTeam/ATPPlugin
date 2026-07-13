@@ -72,6 +72,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             RebuildItemsView();
             SetupSparePartsGrid();
             LoadSpareParts();
+            BuildMoreHeaderTab();
+            LoadMoreHeader();
 
             // Dirty tracking for the close confirmation: any header edit marks the form dirty. Wired
             // AFTER the initial load so loading an existing contract does not itself set the flag.
@@ -743,6 +745,123 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
         }
 
+        // ===================== More Header tab =====================
+        // Built in code (many simple fields) into the designer's empty PageMoreHeader shell. Each edit
+        // is keyed by its zSCP2_Contract column name so load/save is a simple loop.
+
+        private readonly System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit> _mh
+            = new System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit>();
+        private DevExpress.XtraEditors.MemoEdit _mhDelAddress;
+
+        private void BuildMoreHeaderTab()
+        {
+            // Top block: two columns of contact fields.
+            MhField("City", "City", 12, 14, 200);
+            MhField("PostalCode", "Postal Code", 430, 14, 200);
+            MhField("State", "State", 12, 40, 200);
+            MhField("Country", "Country", 430, 40, 200);
+            MhField("Fax", "Fax", 12, 66, 200);
+            MhField("Ref1", "Ref 1", 430, 66, 200);
+            MhField("Ref2", "Ref 2", 12, 92, 200);
+            MhField("Ref3", "Ref 3", 430, 92, 200);
+            MhField("Ref4", "Ref 4", 12, 118, 200);
+
+            // Delivery Address group.
+            DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
+            grp.Text = "Delivery Address";
+            grp.Location = new System.Drawing.Point(12, 150);
+            grp.Size = new System.Drawing.Size(820, 210);
+            PageMoreHeader.Controls.Add(grp);
+
+            MhFieldIn(grp, "DelBranchCode", "Branch Code", 10, 28, 180);
+            MhFieldIn(grp, "DelState", "State", 430, 28, 180);
+            MhFieldIn(grp, "DelBranchName", "Branch Name", 10, 54, 180);
+            MhFieldIn(grp, "DelCountry", "Country", 430, 54, 180);
+
+            DevExpress.XtraEditors.LabelControl lblAddr = new DevExpress.XtraEditors.LabelControl();
+            lblAddr.Text = "Address"; lblAddr.Location = new System.Drawing.Point(10, 83);
+            grp.Controls.Add(lblAddr);
+            _mhDelAddress = new DevExpress.XtraEditors.MemoEdit();
+            _mhDelAddress.Location = new System.Drawing.Point(110, 80);
+            _mhDelAddress.Size = new System.Drawing.Size(200, 60);
+            _mhDelAddress.EditValueChanged += delegate { if (!_loading) _dirty = true; };
+            grp.Controls.Add(_mhDelAddress);
+
+            MhFieldIn(grp, "DelPhone", "Phone", 430, 83, 180);
+            MhFieldIn(grp, "DelFax", "Fax", 430, 109, 180);
+            MhFieldIn(grp, "DelEmail", "Email", 430, 135, 180);
+            MhFieldIn(grp, "DelContactPerson", "Contact Person", 430, 161, 180);
+            MhFieldIn(grp, "DelCity", "City", 10, 150, 180);
+            MhFieldIn(grp, "DelPostalCode", "Postal Code", 10, 176, 180);
+        }
+
+        private void MhField(string col, string caption, int x, int y, int width)
+        {
+            MhFieldOn(PageMoreHeader, col, caption, x, y, width);
+        }
+        private void MhFieldIn(DevExpress.XtraEditors.GroupControl grp, string col, string caption, int x, int y, int width)
+        {
+            MhFieldOn(grp, col, caption, x, y, width);
+        }
+        private void MhFieldOn(System.Windows.Forms.Control parent, string col, string caption, int x, int y, int width)
+        {
+            DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
+            lbl.Text = caption; lbl.Location = new System.Drawing.Point(x, y + 3);
+            parent.Controls.Add(lbl);
+            DevExpress.XtraEditors.TextEdit ed = new DevExpress.XtraEditors.TextEdit();
+            ed.Location = new System.Drawing.Point(x + 98, y);
+            ed.Size = new System.Drawing.Size(width, 20);
+            ed.EditValueChanged += delegate { if (!_loading) _dirty = true; };
+            parent.Controls.Add(ed);
+            _mh[col] = ed;
+        }
+
+        private void LoadMoreHeader()
+        {
+            if (_isNew || _contractKey == 0) return;
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT City, PostalCode, State, Country, Fax, Ref1, Ref2, Ref3, Ref4, " +
+                    "DelBranchCode, DelBranchName, DelAddress, DelCity, DelPostalCode, DelState, " +
+                    "DelCountry, DelPhone, DelFax, DelEmail, DelContactPerson " +
+                    "FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + _contractKey, false);
+                if (dt.Rows.Count == 0) return;
+                DataRow r = dt.Rows[0];
+                foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _mh)
+                    if (dt.Columns.Contains(kv.Key)) kv.Value.Text = AsStr(r[kv.Key]);
+                if (_mhDelAddress != null) _mhDelAddress.Text = AsStr(r["DelAddress"]);
+            }
+            catch { }
+        }
+
+        private void SaveMoreHeader(SqlConnection conn, SqlTransaction tx)
+        {
+            ExecNonQuery(conn, tx,
+                "UPDATE [dbo].[zSCP2_Contract] SET City=@City, PostalCode=@PostalCode, State=@State, " +
+                "Country=@Country, Fax=@Fax, Ref1=@Ref1, Ref2=@Ref2, Ref3=@Ref3, Ref4=@Ref4, " +
+                "DelBranchCode=@DelBranchCode, DelBranchName=@DelBranchName, DelAddress=@DelAddress, " +
+                "DelCity=@DelCity, DelPostalCode=@DelPostalCode, DelState=@DelState, DelCountry=@DelCountry, " +
+                "DelPhone=@DelPhone, DelFax=@DelFax, DelEmail=@DelEmail, DelContactPerson=@DelContactPerson " +
+                "WHERE ContractKey=@ck",
+                P("@City", MhVal("City")), P("@PostalCode", MhVal("PostalCode")), P("@State", MhVal("State")),
+                P("@Country", MhVal("Country")), P("@Fax", MhVal("Fax")), P("@Ref1", MhVal("Ref1")),
+                P("@Ref2", MhVal("Ref2")), P("@Ref3", MhVal("Ref3")), P("@Ref4", MhVal("Ref4")),
+                P("@DelBranchCode", MhVal("DelBranchCode")), P("@DelBranchName", MhVal("DelBranchName")),
+                P("@DelAddress", _mhDelAddress == null ? "" : _mhDelAddress.Text.Trim()),
+                P("@DelCity", MhVal("DelCity")), P("@DelPostalCode", MhVal("DelPostalCode")),
+                P("@DelState", MhVal("DelState")), P("@DelCountry", MhVal("DelCountry")),
+                P("@DelPhone", MhVal("DelPhone")), P("@DelFax", MhVal("DelFax")),
+                P("@DelEmail", MhVal("DelEmail")), P("@DelContactPerson", MhVal("DelContactPerson")),
+                P("@ck", _contractKey));
+        }
+
+        private string MhVal(string col)
+        {
+            DevExpress.XtraEditors.TextEdit ed;
+            return _mh.TryGetValue(col, out ed) ? (ed.Text ?? "").Trim() : "";
+        }
+
         private void BtnSave_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TxtContractNo.Text))
@@ -790,6 +909,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             InsertItemCodes(conn, tx, d, itemKey);
                         }
                         SaveSpareParts(conn, tx);
+                        SaveMoreHeader(conn, tx);
                         tx.Commit();
                     }
                 }

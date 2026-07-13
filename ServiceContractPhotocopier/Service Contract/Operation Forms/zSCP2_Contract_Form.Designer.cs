@@ -72,6 +72,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnSpDown;
         private DevExpress.XtraGrid.GridControl GridSpareParts;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewSpareParts;
+        private DevExpress.XtraTab.XtraTabPage PageMoreHeader;
+        private DevExpress.XtraTab.XtraTabPage PageNote;
         private DevExpress.XtraTab.XtraTabPage PageRemark;
         private DevExpress.XtraGrid.GridControl GridItems;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewItems;
@@ -152,6 +154,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.BtnSpDown = new DevExpress.XtraEditors.SimpleButton();
             this.GridSpareParts = new DevExpress.XtraGrid.GridControl();
             this.GridViewSpareParts = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.PageMoreHeader = new DevExpress.XtraTab.XtraTabPage();
+            this.PageNote = new DevExpress.XtraTab.XtraTabPage();
             this.GridItems = new DevExpress.XtraGrid.GridControl();
             this.GridViewItems = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.ColNo = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -201,6 +205,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageItems.SuspendLayout();
             this.PageRemark.SuspendLayout();
             this.PageSpareParts.SuspendLayout();
+            this.PageMoreHeader.SuspendLayout();
+            this.PageNote.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PnlSpBar)).BeginInit();
             this.PnlSpBar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridSpareParts)).BeginInit();
@@ -431,10 +437,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // LblStartDate
             //
             this.LblStartDate.Location = new System.Drawing.Point(12, 111);
+            this.LblStartDate.MinimumSize = new System.Drawing.Size(95, 13);
             this.LblStartDate.Name = "LblStartDate";
-            this.LblStartDate.Size = new System.Drawing.Size(85, 13);
+            this.LblStartDate.Size = new System.Drawing.Size(95, 13);
             this.LblStartDate.TabIndex = 9;
-            this.LblStartDate.Text = "Service Start";
+            this.LblStartDate.Text = "Service Start Date";
             //
             // DtStartDate
             //
@@ -445,32 +452,32 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.DtStartDate.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.DtStartDate.Size = new System.Drawing.Size(150, 20);
+            this.DtStartDate.Size = new System.Drawing.Size(105, 20);
             this.DtStartDate.TabIndex = 10;
             //
             // LblExpiryDate
             //
-            this.LblExpiryDate.Location = new System.Drawing.Point(12, 135);
+            this.LblExpiryDate.Location = new System.Drawing.Point(222, 111);
             this.LblExpiryDate.Name = "LblExpiryDate";
-            this.LblExpiryDate.Size = new System.Drawing.Size(85, 13);
+            this.LblExpiryDate.Size = new System.Drawing.Size(18, 13);
             this.LblExpiryDate.TabIndex = 11;
-            this.LblExpiryDate.Text = "Service Expiry";
+            this.LblExpiryDate.Text = "To";
             //
             // DtExpiryDate
             //
             this.DtExpiryDate.EditValue = null;
-            this.DtExpiryDate.Location = new System.Drawing.Point(110, 132);
+            this.DtExpiryDate.Location = new System.Drawing.Point(245, 108);
             this.DtExpiryDate.Name = "DtExpiryDate";
             this.DtExpiryDate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.DtExpiryDate.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.DtExpiryDate.Size = new System.Drawing.Size(150, 20);
+            this.DtExpiryDate.Size = new System.Drawing.Size(99, 20);
             this.DtExpiryDate.TabIndex = 12;
             //
             // LblValue
             //
-            this.LblValue.Location = new System.Drawing.Point(12, 159);
+            this.LblValue.Location = new System.Drawing.Point(12, 135);
             this.LblValue.Name = "LblValue";
             this.LblValue.Size = new System.Drawing.Size(67, 13);
             this.LblValue.TabIndex = 13;
@@ -479,7 +486,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // SpnContractValue
             //
             this.SpnContractValue.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
-            this.SpnContractValue.Location = new System.Drawing.Point(110, 156);
+            this.SpnContractValue.Location = new System.Drawing.Point(110, 132);
             this.SpnContractValue.Name = "SpnContractValue";
             this.SpnContractValue.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -563,7 +570,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblStaff
             //
-            this.LblStaff.Location = new System.Drawing.Point(12, 183);
+            this.LblStaff.Location = new System.Drawing.Point(12, 159);
             this.LblStaff.Name = "LblStaff";
             this.LblStaff.Size = new System.Drawing.Size(30, 13);
             this.LblStaff.TabIndex = 15;
@@ -571,7 +578,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // SluAgent
             //
-            this.SluAgent.Location = new System.Drawing.Point(110, 180);
+            this.SluAgent.Location = new System.Drawing.Point(110, 156);
             this.SluAgent.Name = "SluAgent";
             this.SluAgent.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -664,14 +671,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain.Size = new System.Drawing.Size(1180, 417);
             this.TabMain.TabIndex = 2;
             this.TabMain.TabPages.AddRange(new DevExpress.XtraTab.XtraTabPage[] {
-                this.PageItems, this.PageSpareParts, this.PageRemark});
+                this.PageSpareParts, this.PageItems, this.PageMoreHeader, this.PageNote, this.PageRemark});
             //
             // PageItems
             //
             this.PageItems.Controls.Add(this.GridItems);
             this.PageItems.Name = "PageItems";
             this.PageItems.Size = new System.Drawing.Size(1174, 389);
-            this.PageItems.Text = "Service Items";
+            this.PageItems.Text = "Service Item Under Contract";
             //
             // GridItems
             //
@@ -861,17 +868,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GridViewSpareParts.Name = "GridViewSpareParts";
             this.GridViewSpareParts.OptionsView.ShowGroupPanel = false;
             //
+            // PageMoreHeader  (content built in code via BuildMoreHeaderTab)
+            //
+            this.PageMoreHeader.Name = "PageMoreHeader";
+            this.PageMoreHeader.Size = new System.Drawing.Size(1174, 389);
+            this.PageMoreHeader.Text = "More Header";
+            //
             // PageRemark
             //
-            this.PageRemark.Controls.Add(this.TxtNote);
-            this.PageRemark.Controls.Add(this.LblNote);
             this.PageRemark.Controls.Add(this.TxtRemark2);
             this.PageRemark.Controls.Add(this.LblRemark2);
             this.PageRemark.Controls.Add(this.TxtRemark1);
             this.PageRemark.Controls.Add(this.LblRemark1);
             this.PageRemark.Name = "PageRemark";
             this.PageRemark.Size = new System.Drawing.Size(1174, 389);
-            this.PageRemark.Text = "Remark / Note";
+            this.PageRemark.Text = "Remarks";
+            //
+            // PageNote
+            //
+            this.PageNote.Controls.Add(this.TxtNote);
+            this.PageNote.Controls.Add(this.LblNote);
+            this.PageNote.Name = "PageNote";
+            this.PageNote.Size = new System.Drawing.Size(1174, 389);
+            this.PageNote.Text = "Note";
             //
             // LblRemark1
             //
@@ -905,7 +924,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // LblNote
             //
-            this.LblNote.Location = new System.Drawing.Point(12, 68);
+            this.LblNote.Location = new System.Drawing.Point(12, 16);
             this.LblNote.Name = "LblNote";
             this.LblNote.Size = new System.Drawing.Size(23, 13);
             this.LblNote.TabIndex = 4;
@@ -913,9 +932,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // TxtNote
             //
-            this.TxtNote.Location = new System.Drawing.Point(110, 65);
+            this.TxtNote.Location = new System.Drawing.Point(110, 13);
             this.TxtNote.Name = "TxtNote";
-            this.TxtNote.Size = new System.Drawing.Size(600, 180);
+            this.TxtNote.Size = new System.Drawing.Size(700, 320);
             this.TxtNote.TabIndex = 5;
             //
             // zSCP2_Contract_Form
@@ -961,6 +980,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageRemark.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridItems)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewItems)).EndInit();
+            this.PageMoreHeader.ResumeLayout(false);
+            this.PageNote.ResumeLayout(false);
+            this.PageNote.PerformLayout();
             this.PageSpareParts.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.PnlSpBar)).EndInit();
             this.PnlSpBar.ResumeLayout(false);
