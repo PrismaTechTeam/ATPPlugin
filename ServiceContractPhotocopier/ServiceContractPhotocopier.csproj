@@ -142,6 +142,12 @@
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpDocNo.cs" />
+    <Compile Include="Classes\CommonForms\AdvanceSearch_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\AdvanceSearch_Form.Designer.cs">
+      <DependentUpon>AdvanceSearch_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Data\StockRequestRepository.cs" />
     <Compile Include="Data\PumsTaskLock.cs" />
     <Compile Include="Data\PumsConfig.cs" />
@@ -783,6 +789,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceContractTypeLst_Form.resx">
       <DependentUpon>ServiceContractTypeLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\AdvanceSearch_Form.resx">
+      <DependentUpon>AdvanceSearch_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceContractType_Form.resx">
       <DependentUpon>ServiceContractType_Form.cs</DependentUpon>

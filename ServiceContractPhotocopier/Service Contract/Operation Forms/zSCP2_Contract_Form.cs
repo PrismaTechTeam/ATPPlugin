@@ -59,28 +59,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private long PickContract(DataTable src, string title)
         {
-            if (src == null || src.Rows.Count == 0) { XtraMessageBox.Show("No contracts found.", title); return 0; }
-            using (XtraForm dlg = new XtraForm())
-            {
-                dlg.Text = title; dlg.StartPosition = FormStartPosition.CenterParent;
-                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-                dlg.MaximizeBox = false; dlg.MinimizeBox = false; dlg.ClientSize = new System.Drawing.Size(470, 105);
-                LabelControl lbl = new LabelControl(); lbl.Text = "Contract"; lbl.Location = new System.Drawing.Point(14, 18); dlg.Controls.Add(lbl);
-                LookUpEdit lk = new LookUpEdit();
-                lk.Location = new System.Drawing.Point(80, 15); lk.Size = new System.Drawing.Size(370, 20);
-                lk.Properties.DataSource = src; lk.Properties.ValueMember = "ContractKey"; lk.Properties.DisplayMember = "ContractNo";
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ContractNo", "Contract No", 90));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("DebtorCode", "Customer", 80));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 200));
-                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
-                dlg.Controls.Add(lk);
-                SimpleButton ok = new SimpleButton(); ok.Text = "OK"; ok.Location = new System.Drawing.Point(275, 62); ok.Size = new System.Drawing.Size(85, 28);
-                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; }; dlg.Controls.Add(ok);
-                SimpleButton cancel = new SimpleButton(); cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(366, 62); cancel.Size = new System.Drawing.Size(85, 28);
-                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; }; dlg.Controls.Add(cancel);
-                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
-                long k; return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
-            }
+            object k = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
+                this, title, src, "ContractKey",
+                new string[] { "ContractNo", "DebtorCode", "CompanyName" },
+                new string[] { "Contract No", "Customer", "Company Name" },
+                new int[] { 110, 90, 260 });
+            long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
 
         private void OnFormLoad(object sender, EventArgs e)
@@ -470,40 +454,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private long PickLooseItem(DataTable loose)
         {
-            using (XtraForm dlg = new XtraForm())
-            {
-                dlg.Text = "Attach Service Item (no contract)";
-                dlg.StartPosition = FormStartPosition.CenterParent;
-                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-                dlg.MaximizeBox = false; dlg.MinimizeBox = false;
-                dlg.ClientSize = new System.Drawing.Size(460, 105);
-
-                LabelControl lbl = new LabelControl();
-                lbl.Text = "Service Item"; lbl.Location = new System.Drawing.Point(14, 18);
-                dlg.Controls.Add(lbl);
-                LookUpEdit lk = new LookUpEdit();
-                lk.Location = new System.Drawing.Point(100, 15); lk.Size = new System.Drawing.Size(340, 20);
-                lk.Properties.DataSource = loose;
-                lk.Properties.ValueMember = "ItemKey";
-                lk.Properties.DisplayMember = "ServiceItemNo";
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ServiceItemNo", "Service Item No", 120));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("SerialNumber", "Serial", 100));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("Description", "Description", 180));
-                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
-                dlg.Controls.Add(lk);
-
-                SimpleButton ok = new SimpleButton();
-                ok.Text = "Attach"; ok.Location = new System.Drawing.Point(265, 62); ok.Size = new System.Drawing.Size(85, 28);
-                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; };
-                dlg.Controls.Add(ok);
-                SimpleButton cancel = new SimpleButton();
-                cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(356, 62); cancel.Size = new System.Drawing.Size(85, 28);
-                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; };
-                dlg.Controls.Add(cancel);
-
-                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
-                long k; return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
-            }
+            object k = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
+                this, "Attach Service Item (no contract)", loose, "ItemKey",
+                new string[] { "ServiceItemNo", "SerialNumber", "Description" },
+                new string[] { "Service Item No", "Serial Number", "Description" },
+                new int[] { 130, 110, 220 });
+            long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
 
         // "-" Remove selected service item from the contract (detach — the item survives as
@@ -1082,25 +1038,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
             if (br.Rows.Count == 0) { XtraMessageBox.Show("This customer has no branches.", "Search"); return; }
 
-            using (XtraForm dlg = new XtraForm())
+            object sel = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
+                this, "Select Branch", br, "BranchCode",
+                new string[] { "BranchCode", "BranchName", "Address1", "PostCode", "Phone1" },
+                new string[] { "Branch Code", "Branch Name", "Address", "Post Code", "Phone" },
+                new int[] { 90, 200, 200, 80, 100 });
+            if (sel == null || sel == DBNull.Value) return;
             {
-                dlg.Text = "Select Branch"; dlg.StartPosition = FormStartPosition.CenterParent;
-                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-                dlg.MaximizeBox = false; dlg.MinimizeBox = false; dlg.ClientSize = new System.Drawing.Size(460, 105);
-                LabelControl lbl = new LabelControl(); lbl.Text = "Branch"; lbl.Location = new System.Drawing.Point(14, 18); dlg.Controls.Add(lbl);
-                LookUpEdit lk = new LookUpEdit();
-                lk.Location = new System.Drawing.Point(80, 15); lk.Size = new System.Drawing.Size(360, 20);
-                lk.Properties.DataSource = br; lk.Properties.ValueMember = "BranchCode"; lk.Properties.DisplayMember = "BranchCode";
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("BranchCode", "Code", 90));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("BranchName", "Name", 240));
-                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
-                dlg.Controls.Add(lk);
-                SimpleButton ok = new SimpleButton(); ok.Text = "OK"; ok.Location = new System.Drawing.Point(265, 62); ok.Size = new System.Drawing.Size(85, 28);
-                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; }; dlg.Controls.Add(ok);
-                SimpleButton cancel = new SimpleButton(); cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(356, 62); cancel.Size = new System.Drawing.Size(85, 28);
-                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; }; dlg.Controls.Add(cancel);
-                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null) return;
-                DataRow[] f = br.Select("BranchCode='" + lk.EditValue.ToString().Replace("'", "''") + "'");
+                DataRow[] f = br.Select("BranchCode='" + sel.ToString().Replace("'", "''") + "'");
                 if (f.Length == 0) return;
                 DataRow b = f[0];
                 MhSet("DelBranchCode", AsStr(b["BranchCode"]));

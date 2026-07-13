@@ -615,53 +615,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // Small picker dialog: choose the service item to copy from (searchable).
         private long PickServiceItem()
         {
-            using (XtraForm dlg = new XtraForm())
+            DataTable dt;
+            try
             {
-                dlg.Text = "Copy From Service Item";
-                dlg.StartPosition = FormStartPosition.CenterParent;
-                dlg.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-                dlg.MaximizeBox = false; dlg.MinimizeBox = false;
-                dlg.ClientSize = new System.Drawing.Size(440, 105);
-
-                DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
-                lbl.Text = "Service Item";
-                lbl.Location = new System.Drawing.Point(14, 18);
-                dlg.Controls.Add(lbl);
-
-                DevExpress.XtraEditors.LookUpEdit lk = new DevExpress.XtraEditors.LookUpEdit();
-                lk.Location = new System.Drawing.Point(100, 15);
-                lk.Size = new System.Drawing.Size(320, 20);
-                lk.Properties.ValueMember = "ItemKey";
-                lk.Properties.DisplayMember = "ServiceItemNo";
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ServiceItemNo", "Service Item No", 110));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("SerialNumber", "Serial", 90));
-                lk.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 200));
-                lk.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
-                try
-                {
-                    lk.Properties.DataSource = _db.GetDataTable(
-                        "SELECT i.ItemKey, i.ServiceItemNo, i.SerialNumber, ISNULL(d.CompanyName,'') AS CompanyName " +
-                        "FROM [dbo].[zSCP2_Item] i " +
-                        "JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
-                        "LEFT JOIN [dbo].[Debtor] d ON d.AccNo = c.DebtorCode " +
-                        "ORDER BY i.ServiceItemNo", false);
-                }
-                catch { }
-                dlg.Controls.Add(lk);
-
-                SimpleButton ok = new SimpleButton();
-                ok.Text = "OK"; ok.Location = new System.Drawing.Point(245, 62); ok.Size = new System.Drawing.Size(85, 28);
-                ok.Click += delegate { dlg.DialogResult = DialogResult.OK; };
-                dlg.Controls.Add(ok);
-                SimpleButton cancel = new SimpleButton();
-                cancel.Text = "Cancel"; cancel.Location = new System.Drawing.Point(336, 62); cancel.Size = new System.Drawing.Size(85, 28);
-                cancel.Click += delegate { dlg.DialogResult = DialogResult.Cancel; };
-                dlg.Controls.Add(cancel);
-
-                if (dlg.ShowDialog(this) != DialogResult.OK || lk.EditValue == null || lk.EditValue == DBNull.Value) return 0;
-                long k;
-                return long.TryParse(lk.EditValue.ToString(), out k) ? k : 0;
+                dt = _db.GetDataTable(
+                    "SELECT i.ItemKey, i.ServiceItemNo, i.SerialNumber, ISNULL(d.CompanyName,'') AS CompanyName " +
+                    "FROM [dbo].[zSCP2_Item] i " +
+                    "JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                    "LEFT JOIN [dbo].[Debtor] d ON d.AccNo = c.DebtorCode " +
+                    "ORDER BY i.ServiceItemNo", false);
             }
+            catch { return 0; }
+            object k = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
+                this, "Copy From Service Item", dt, "ItemKey",
+                new string[] { "ServiceItemNo", "SerialNumber", "CompanyName" },
+                new string[] { "Service Item No", "Serial Number", "Company Name" },
+                new int[] { 130, 110, 220 });
+            long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
 
         // ===================== Spare Parts provided by this Service Item =====================
