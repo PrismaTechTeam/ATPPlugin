@@ -386,7 +386,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             this.grpItem.ItemLinks.Add(this.barAddItem);
             this.grpItem.ItemLinks.Add(this.barEditItem);
-            this.grpItem.ItemLinks.Add(this.barDelItem);
             this.grpItem.Name = "grpItem";
             this.grpItem.Text = "Service Item";
             //
@@ -711,7 +710,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // LblBillDay
             //
             this.LblBillDay.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
-            this.LblBillDay.Location = new System.Drawing.Point(290, 184);
+            this.LblBillDay.Location = new System.Drawing.Point(12, 184);
             this.LblBillDay.Name = "LblBillDay";
             this.LblBillDay.Size = new System.Drawing.Size(54, 13);
             this.LblBillDay.TabIndex = 27;
@@ -720,7 +719,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // SpnBillingDay
             //
             this.SpnBillingDay.EditValue = new decimal(new int[] { 1, 0, 0, 0 });
-            this.SpnBillingDay.Location = new System.Drawing.Point(372, 181);
+            this.SpnBillingDay.Location = new System.Drawing.Point(110, 181);
             this.SpnBillingDay.Name = "SpnBillingDay";
             this.SpnBillingDay.Properties.IsFloatValue = false;
             this.SpnBillingDay.Properties.MaxValue = new decimal(new int[] { 31, 0, 0, 0 });
@@ -731,7 +730,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // LblBillMode
             //
             this.LblBillMode.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
-            this.LblBillMode.Location = new System.Drawing.Point(452, 184);
+            this.LblBillMode.Location = new System.Drawing.Point(200, 184);
             this.LblBillMode.Name = "LblBillMode";
             this.LblBillMode.Size = new System.Drawing.Size(63, 13);
             this.LblBillMode.TabIndex = 29;
@@ -739,7 +738,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ChkBillGroup
             //
-            this.ChkBillGroup.Location = new System.Drawing.Point(524, 181);
+            this.ChkBillGroup.Location = new System.Drawing.Point(285, 181);
             this.ChkBillGroup.Name = "ChkBillGroup";
             this.ChkBillGroup.Properties.Caption = "One invoice (group whole contract)";
             this.ChkBillGroup.Size = new System.Drawing.Size(230, 20);
@@ -747,7 +746,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ChkBillSeparate
             //
-            this.ChkBillSeparate.Location = new System.Drawing.Point(758, 181);
+            this.ChkBillSeparate.Location = new System.Drawing.Point(600, 181);
             this.ChkBillSeparate.Name = "ChkBillSeparate";
             this.ChkBillSeparate.Properties.Caption = "Separate invoice per service item";
             this.ChkBillSeparate.Size = new System.Drawing.Size(230, 20);
