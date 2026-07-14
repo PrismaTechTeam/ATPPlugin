@@ -33,6 +33,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColBillingMode;
         private DevExpress.XtraGrid.Columns.GridColumn ColItemCount;
         private DevExpress.XtraGrid.Columns.GridColumn ColInactive;
+        private DevExpress.XtraGrid.Columns.GridColumn ColContractType;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMonthEnd;
+        private DevExpress.XtraGrid.Columns.GridColumn ColAgent;
+        private DevExpress.XtraGrid.Columns.GridColumn ColArea;
+        private DevExpress.XtraGrid.Columns.GridColumn ColDescription;
 
         private void InitializeComponent()
         {
@@ -56,6 +61,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColBillingMode = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColItemCount = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColInactive = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColContractType = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMonthEnd = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColAgent = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColArea = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColDescription = new DevExpress.XtraGrid.Columns.GridColumn();
             ((System.ComponentModel.ISupportInitialize)(this.PanelToolbar)).BeginInit();
             this.PanelToolbar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.Grid)).BeginInit();
@@ -160,7 +170,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 this.ColBillingDay,
                 this.ColBillingMode,
                 this.ColItemCount,
-                this.ColInactive});
+                this.ColInactive,
+                this.ColContractType,
+                this.ColMonthEnd,
+                this.ColAgent,
+                this.ColArea,
+                this.ColDescription});
             this.GridView.GridControl = this.Grid;
             this.GridView.Name = "GridView";
             this.GridView.OptionsBehavior.Editable = false;
@@ -184,7 +199,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColDebtorCode.FieldName = "DebtorCode";
             this.ColDebtorCode.Name = "ColDebtorCode";
             this.ColDebtorCode.Visible = true;
-            this.ColDebtorCode.VisibleIndex = 1;
+            this.ColDebtorCode.VisibleIndex = 2;
             this.ColDebtorCode.Width = 110;
             //
             // ColDebtorName
@@ -193,7 +208,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColDebtorName.FieldName = "DebtorName";
             this.ColDebtorName.Name = "ColDebtorName";
             this.ColDebtorName.Visible = true;
-            this.ColDebtorName.VisibleIndex = 2;
+            this.ColDebtorName.VisibleIndex = 3;
             this.ColDebtorName.Width = 240;
             //
             // ColContractDate
@@ -202,7 +217,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColContractDate.FieldName = "ContractDate";
             this.ColContractDate.Name = "ColContractDate";
             this.ColContractDate.Visible = true;
-            this.ColContractDate.VisibleIndex = 3;
+            this.ColContractDate.VisibleIndex = 4;
             this.ColContractDate.Width = 100;
             //
             // ColStartDate
@@ -211,7 +226,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColStartDate.FieldName = "ServiceStartDate";
             this.ColStartDate.Name = "ColStartDate";
             this.ColStartDate.Visible = true;
-            this.ColStartDate.VisibleIndex = 4;
+            this.ColStartDate.VisibleIndex = 5;
             this.ColStartDate.Width = 100;
             //
             // ColExpiryDate
@@ -220,7 +235,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColExpiryDate.FieldName = "ServiceExpiryDate";
             this.ColExpiryDate.Name = "ColExpiryDate";
             this.ColExpiryDate.Visible = true;
-            this.ColExpiryDate.VisibleIndex = 5;
+            this.ColExpiryDate.VisibleIndex = 6;
             this.ColExpiryDate.Width = 100;
             //
             // ColValue
@@ -231,7 +246,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColValue.FieldName = "ContractValue";
             this.ColValue.Name = "ColValue";
             this.ColValue.Visible = true;
-            this.ColValue.VisibleIndex = 6;
+            this.ColValue.VisibleIndex = 7;
             this.ColValue.Width = 110;
             //
             // ColBillingDay
@@ -240,7 +255,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColBillingDay.FieldName = "BillingDay";
             this.ColBillingDay.Name = "ColBillingDay";
             this.ColBillingDay.Visible = true;
-            this.ColBillingDay.VisibleIndex = 7;
+            this.ColBillingDay.VisibleIndex = 8;
             this.ColBillingDay.Width = 80;
             //
             // ColBillingMode
@@ -249,7 +264,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColBillingMode.FieldName = "BillingMode";
             this.ColBillingMode.Name = "ColBillingMode";
             this.ColBillingMode.Visible = true;
-            this.ColBillingMode.VisibleIndex = 8;
+            this.ColBillingMode.VisibleIndex = 10;
             this.ColBillingMode.Width = 90;
             //
             // ColItemCount
@@ -258,7 +273,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColItemCount.FieldName = "ItemCount";
             this.ColItemCount.Name = "ColItemCount";
             this.ColItemCount.Visible = true;
-            this.ColItemCount.VisibleIndex = 9;
+            this.ColItemCount.VisibleIndex = 13;
             this.ColItemCount.Width = 90;
             //
             // ColInactive
@@ -267,8 +282,53 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColInactive.FieldName = "Inactive";
             this.ColInactive.Name = "ColInactive";
             this.ColInactive.Visible = true;
-            this.ColInactive.VisibleIndex = 10;
+            this.ColInactive.VisibleIndex = 15;
             this.ColInactive.Width = 60;
+            //
+            // ColContractType
+            //
+            this.ColContractType.Caption = "Contract Type";
+            this.ColContractType.FieldName = "ContractTypeCode";
+            this.ColContractType.Name = "ColContractType";
+            this.ColContractType.Visible = true;
+            this.ColContractType.VisibleIndex = 1;
+            this.ColContractType.Width = 100;
+            //
+            // ColMonthEnd
+            //
+            this.ColMonthEnd.Caption = "Month End";
+            this.ColMonthEnd.FieldName = "BillOnMonthEnd";
+            this.ColMonthEnd.Name = "ColMonthEnd";
+            this.ColMonthEnd.Visible = true;
+            this.ColMonthEnd.VisibleIndex = 9;
+            this.ColMonthEnd.Width = 70;
+            //
+            // ColAgent
+            //
+            this.ColAgent.Caption = "Agent";
+            this.ColAgent.FieldName = "Agent";
+            this.ColAgent.Name = "ColAgent";
+            this.ColAgent.Visible = true;
+            this.ColAgent.VisibleIndex = 11;
+            this.ColAgent.Width = 80;
+            //
+            // ColArea
+            //
+            this.ColArea.Caption = "Area";
+            this.ColArea.FieldName = "Area";
+            this.ColArea.Name = "ColArea";
+            this.ColArea.Visible = true;
+            this.ColArea.VisibleIndex = 12;
+            this.ColArea.Width = 80;
+            //
+            // ColDescription
+            //
+            this.ColDescription.Caption = "Description";
+            this.ColDescription.FieldName = "Description";
+            this.ColDescription.Name = "ColDescription";
+            this.ColDescription.Visible = true;
+            this.ColDescription.VisibleIndex = 14;
+            this.ColDescription.Width = 180;
             //
             // zSCP2_ContractLst_Form
             //

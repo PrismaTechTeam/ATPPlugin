@@ -69,9 +69,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             try
             {
                 Grid.DataSource = _dbSetting.GetDataTable(
-                    "SELECT ContractKey, ContractNo, DebtorCode, DebtorName, ContractDate, " +
-                    "ServiceStartDate, ServiceExpiryDate, ContractValue, BillingDay, BillingMode, " +
-                    "ItemCount, Inactive FROM [dbo].[zvSCP2_ContractList] ORDER BY ContractNo", false);
+                    "SELECT ContractKey, ContractNo, ContractTypeCode, DebtorCode, DebtorName, ContractDate, " +
+                    "ServiceStartDate, ServiceExpiryDate, ContractValue, BillingDay, BillOnMonthEnd, BillingMode, " +
+                    "Agent, Area, Description, ItemCount, Inactive FROM [dbo].[zvSCP2_ContractList] ORDER BY ContractNo", false);
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
         }
