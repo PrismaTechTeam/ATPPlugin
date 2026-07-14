@@ -100,6 +100,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v5_NullableContract.sql", asm);
             // "Bill on last day of month" contract option. Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v3_MonthEnd.sql", asm);
+            // Contract-level Department + Project (AutoCount native masters). Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v4_DeptProj.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent

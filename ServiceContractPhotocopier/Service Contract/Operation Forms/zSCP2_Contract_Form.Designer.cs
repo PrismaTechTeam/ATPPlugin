@@ -75,6 +75,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.TextEdit TxtDescription;
         private DevExpress.XtraEditors.CheckEdit ChkInactive;
         private DevExpress.XtraEditors.CheckEdit ChkMonthEnd;
+        private DevExpress.XtraEditors.LabelControl LblDept;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluDept;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluDeptView;
+        private DevExpress.XtraEditors.LabelControl LblProject;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluProject;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluProjectView;
 
         private DevExpress.XtraTab.XtraTabControl TabMain;
         private DevExpress.XtraTab.XtraTabPage PageItems;
@@ -175,6 +181,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TxtDescription = new DevExpress.XtraEditors.TextEdit();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
             this.ChkMonthEnd = new DevExpress.XtraEditors.CheckEdit();
+            this.LblDept = new DevExpress.XtraEditors.LabelControl();
+            this.SluDept = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluDeptView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.LblProject = new DevExpress.XtraEditors.LabelControl();
+            this.SluProject = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluProjectView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.TabMain = new DevExpress.XtraTab.XtraTabControl();
             this.PageItems = new DevExpress.XtraTab.XtraTabPage();
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
@@ -238,6 +250,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProjectView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TabMain)).BeginInit();
             this.TabMain.SuspendLayout();
             this.PageItems.SuspendLayout();
@@ -471,10 +487,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.TxtDescription);
             this.PanelHeaderFields.Controls.Add(this.ChkInactive);
             this.PanelHeaderFields.Controls.Add(this.ChkMonthEnd);
+            this.PanelHeaderFields.Controls.Add(this.LblDept);
+            this.PanelHeaderFields.Controls.Add(this.SluDept);
+            this.PanelHeaderFields.Controls.Add(this.LblProject);
+            this.PanelHeaderFields.Controls.Add(this.SluProject);
             this.PanelHeaderFields.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelHeaderFields.Location = new System.Drawing.Point(0, 143);
             this.PanelHeaderFields.Name = "PanelHeaderFields";
-            this.PanelHeaderFields.Size = new System.Drawing.Size(1180, 240);
+            this.PanelHeaderFields.Size = new System.Drawing.Size(1180, 268);
             this.PanelHeaderFields.TabIndex = 1;
             //
             // LblContractNo
@@ -821,6 +841,62 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChkMonthEnd.Size = new System.Drawing.Size(140, 20);
             this.ChkMonthEnd.TabIndex = 35;
             this.ChkMonthEnd.CheckedChanged += new System.EventHandler(this.ChkMonthEnd_CheckedChanged);
+            //
+            // LblDept
+            //
+            this.LblDept.Location = new System.Drawing.Point(12, 239);
+            this.LblDept.Name = "LblDept";
+            this.LblDept.Size = new System.Drawing.Size(56, 13);
+            this.LblDept.TabIndex = 36;
+            this.LblDept.Text = "Department";
+            //
+            // SluDept
+            //
+            this.SluDept.Location = new System.Drawing.Point(110, 236);
+            this.SluDept.Name = "SluDept";
+            this.SluDept.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            this.SluDept.Properties.NullText = "";
+            this.SluDept.Properties.PopupView = this.SluDeptView;
+            this.SluDept.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.SluDept_ButtonClick);
+            this.SluDept.Size = new System.Drawing.Size(234, 20);
+            this.SluDept.TabIndex = 37;
+            //
+            // SluDeptView
+            //
+            this.SluDeptView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluDeptView.Name = "SluDeptView";
+            this.SluDeptView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluDeptView.OptionsView.ShowGroupPanel = false;
+            //
+            // LblProject
+            //
+            this.LblProject.Location = new System.Drawing.Point(380, 239);
+            this.LblProject.Name = "LblProject";
+            this.LblProject.Size = new System.Drawing.Size(37, 13);
+            this.LblProject.TabIndex = 38;
+            this.LblProject.Text = "Project";
+            //
+            // SluProject
+            //
+            this.SluProject.Location = new System.Drawing.Point(452, 236);
+            this.SluProject.Name = "SluProject";
+            this.SluProject.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            this.SluProject.Properties.NullText = "";
+            this.SluProject.Properties.PopupView = this.SluProjectView;
+            this.SluProject.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.SluProject_ButtonClick);
+            this.SluProject.Size = new System.Drawing.Size(234, 20);
+            this.SluProject.TabIndex = 39;
+            //
+            // SluProjectView
+            //
+            this.SluProjectView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluProjectView.Name = "SluProjectView";
+            this.SluProjectView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluProjectView.OptionsView.ShowGroupPanel = false;
             //
             // TabMain
             //
@@ -1179,6 +1255,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluProjectView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelHeaderFields)).EndInit();
             this.PanelHeaderFields.ResumeLayout(false);
             this.PanelHeaderFields.PerformLayout();

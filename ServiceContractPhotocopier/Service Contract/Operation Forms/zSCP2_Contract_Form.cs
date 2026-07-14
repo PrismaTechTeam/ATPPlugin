@@ -80,6 +80,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LoadDebtorLookup();
             LoadContractTypeLookup();
             LoadAgentLookup();
+            LoadDeptProjectLookups();
             WireBillingModeRadios();
             LkDebtorCode.EditValueChanged += new EventHandler(OnDebtorChanged);
 
@@ -145,6 +146,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SpnContractValue.EditValueChanged += h;
             SpnBillingDay.EditValueChanged += h;
             SluAgent.EditValueChanged += h;
+            SluDept.EditValueChanged += h;
+            SluProject.EditValueChanged += h;
             TxtAddress.EditValueChanged += h;
             TxtAttention.EditValueChanged += h;
             TxtPhone.EditValueChanged += h;
@@ -237,6 +240,67 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SluAgent.Properties.ValueMember = "SalesAgent";
             SluAgent.Properties.DisplayMember = "SalesAgent";
             // Popup shows the 2 datasource columns (Agent + Description) auto-populated by the view.
+        }
+
+        // Department + Project dropdowns list AutoCount's own masters (Dept / Project tables).
+        private void LoadDeptProjectLookups()
+        {
+            try
+            {
+                SluDept.Properties.DataSource = _db.GetDataTable("SELECT DeptNo, Description FROM [dbo].[Dept] ORDER BY DeptNo", false);
+                SluDept.Properties.ValueMember = "DeptNo";
+                SluDept.Properties.DisplayMember = "DeptNo";
+            }
+            catch { }
+            try
+            {
+                SluProject.Properties.DataSource = _db.GetDataTable("SELECT ProjNo, Description FROM [dbo].[Project] ORDER BY ProjNo", false);
+                SluProject.Properties.ValueMember = "ProjNo";
+                SluProject.Properties.DisplayMember = "ProjNo";
+            }
+            catch { }
+        }
+
+        // "+" on the Department dropdown: open AutoCount's OWN new-Department form.
+        private void SluDept_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                AutoCount.Authentication.UserSession session = AutoCount.Authentication.UserSession.CurrentUserSession;
+                AutoCount.GeneralMaint.Project.ProjectDeptCommand cmd =
+                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(AutoCount.GeneralMaint.Project.ProjectType.Department, session);
+                AutoCount.GeneralMaint.Project.DepartmentEntity entity = cmd.NewDepartment(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+                using (AutoCount.GeneralMaint.Project.FormProjectEdit form =
+                    new AutoCount.GeneralMaint.Project.FormProjectEdit(entity, AutoCount.GeneralMaint.Project.ProjectType.Department))
+                    form.ShowDialog(this);
+                LoadDeptProjectLookups();
+                string code = entity.Row["DeptNo"] == null ? "" : entity.Row["DeptNo"].ToString().Trim();
+                if (code.Length > 0) SluDept.EditValue = code;
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create Department failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        // "+" on the Project dropdown: open AutoCount's OWN new-Project form.
+        private void SluProject_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                AutoCount.Authentication.UserSession session = AutoCount.Authentication.UserSession.CurrentUserSession;
+                AutoCount.GeneralMaint.Project.ProjectDeptCommand cmd =
+                    AutoCount.GeneralMaint.Project.ProjectDeptCommand.Create(AutoCount.GeneralMaint.Project.ProjectType.Project, session);
+                AutoCount.GeneralMaint.Project.ProjectEntity entity = cmd.NewProject(AutoCount.GeneralMaint.Project.ProjectLevel.Top, "");
+                using (AutoCount.GeneralMaint.Project.FormProjectEdit form =
+                    new AutoCount.GeneralMaint.Project.FormProjectEdit(entity, AutoCount.GeneralMaint.Project.ProjectType.Project))
+                    form.ShowDialog(this);
+                LoadDeptProjectLookups();
+                string code = entity.Row["ProjNo"] == null ? "" : entity.Row["ProjNo"].ToString().Trim();
+                if (code.Length > 0) SluProject.EditValue = code;
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create Project failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         // "+" on the Contract Type dropdown: open the Service Contract Type edit dialog to add a new
@@ -470,6 +534,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtTerm.Text = AsStr(r["TermCode"]);
             TxtArea.Text = AsStr(r["AreaCode"]);
             SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
+            SluDept.EditValue = r.Table.Columns.Contains("DeptNo") ? SetOrNull(AsStr(r["DeptNo"])) : null;
+            SluProject.EditValue = r.Table.Columns.Contains("ProjNo") ? SetOrNull(AsStr(r["ProjNo"])) : null;
             TxtDescription.Text = AsStr(r["Description"]);
             TxtRemark1.Text = AsStr(r["Remark1"]);
             TxtRemark2.Text = AsStr(r["Remark2"]);
@@ -1440,9 +1506,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " Description, Remark1, Remark2, Note, Inactive, Created, LastModified) " +
+                " Description, Remark1, Remark2, Note, DeptNo, ProjNo, Inactive, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@desc,@r1,@r2,@note,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@desc,@r1,@r2,@note,@dept,@proj,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -1458,7 +1524,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "ContractDate=@cdate, ServiceStartDate=@sdate, ServiceExpiryDate=@edate, ContractValue=@val, " +
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
-                "Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
+                "DeptNo=@dept, ProjNo=@proj, Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -1487,6 +1553,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@term", TxtTerm.Text.Trim());
             cmd.Parameters.AddWithValue("@area", TxtArea.Text.Trim());
             cmd.Parameters.AddWithValue("@staff", SluAgent.EditValue == null ? "" : SluAgent.EditValue.ToString().Trim());
+            cmd.Parameters.AddWithValue("@dept", SluDept.EditValue == null ? "" : SluDept.EditValue.ToString().Trim());
+            cmd.Parameters.AddWithValue("@proj", SluProject.EditValue == null ? "" : SluProject.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@desc", TxtDescription.Text.Trim());
             cmd.Parameters.AddWithValue("@r1", TxtRemark1.Text.Trim());
             cmd.Parameters.AddWithValue("@r2", TxtRemark2.Text.Trim());
