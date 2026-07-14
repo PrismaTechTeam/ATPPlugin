@@ -155,7 +155,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "SELECT AccNo, CompanyName, ISNULL(Address1,'') AS Address1, ISNULL(Address2,'') AS Address2, " +
                     "ISNULL(Address3,'') AS Address3, ISNULL(Address4,'') AS Address4, ISNULL(Attention,'') AS Attention, " +
                     "ISNULL(Phone1,'') AS Phone1, ISNULL(AreaCode,'') AS AreaCode, ISNULL(SalesAgent,'') AS SalesAgent, " +
-                    "ISNULL(DisplayTerm,'') AS DisplayTerm FROM dbo.Debtor ORDER BY AccNo", false);
+                    "ISNULL(DisplayTerm,'') AS DisplayTerm, ISNULL(PostCode,'') AS PostCode, ISNULL(Fax1,'') AS Fax1, " +
+                    "ISNULL(EmailAddress,'') AS EmailAddress, ISNULL(DeliverAddr1,'') AS DeliverAddr1, " +
+                    "ISNULL(DeliverAddr2,'') AS DeliverAddr2, ISNULL(DeliverAddr3,'') AS DeliverAddr3, " +
+                    "ISNULL(DeliverAddr4,'') AS DeliverAddr4, ISNULL(DeliverPostCode,'') AS DeliverPostCode " +
+                    "FROM dbo.Debtor ORDER BY AccNo", false);
             }
             catch { _debtorLookup = new DataTable(); }
             LkDebtorCode.Properties.DataSource = _debtorLookup;
@@ -256,6 +260,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtTerm.Text = AsStr(d["DisplayTerm"]);
             TxtArea.Text = AsStr(d["AreaCode"]);
             SluAgent.EditValue = SetOrNull(AsStr(d["SalesAgent"]));
+
+            // Map the debtor's info into the More Header tab too (only fields the Debtor master has —
+            // AutoCount stores address as freeform Address1-4, so City/State/Country aren't derived).
+            if (_mh != null && _mh.Count > 0)
+            {
+                MhSet("PostalCode", AsStr(d["PostCode"]));
+                MhSet("Fax", AsStr(d["Fax1"]));
+                // Delivery Address block from the debtor's delivery address.
+                if (_mhDelAddress != null)
+                    _mhDelAddress.Text = string.Join("\r\n", new string[] {
+                        AsStr(d["DeliverAddr1"]), AsStr(d["DeliverAddr2"]), AsStr(d["DeliverAddr3"]), AsStr(d["DeliverAddr4"]) })
+                        .Trim('\r', '\n');
+                MhSet("DelPostalCode", AsStr(d["DeliverPostCode"]));
+                MhSet("DelPhone", AsStr(d["Phone1"]));
+                MhSet("DelFax", AsStr(d["Fax1"]));
+                MhSet("DelEmail", AsStr(d["EmailAddress"]));
+                MhSet("DelContactPerson", AsStr(d["Attention"]));
+            }
         }
 
         // SearchLookUpEdit shows NullText when its value isn't in the list; empty string -> null so
@@ -355,6 +377,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 barCopySpreadsheet.ImageOptions.Image = img.GetSmallImage_CopyAsSpreadsheet();   // #7: the missing icon
                 barPasteWhole.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
                 barPasteItems.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
+                barDemoFill.ImageOptions.Image = img.GetLargeImage_Refresh();
             }
             catch { }   // icons are cosmetic — never block the form
         }
@@ -1556,6 +1579,123 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void barAddItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnAddItem_Click(sender, System.EventArgs.Empty); }
         private void barEditItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnEditItem_Click(sender, System.EventArgs.Empty); }
         private void barDelItem_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e) { BtnDelItem_Click(sender, System.EventArgs.Empty); }
+
+        // ===================== Demo Fill (random test data) =====================
+
+        private static readonly Random _rng = new Random();
+        private static readonly string[] _demoWords = {
+            "Alpha","Beta","Gamma","Delta","Prime","Nova","Metro","Summit","Vertex","Pioneer",
+            "Copier","Printer","MFP","Toner","Drum","Fuser","Roller","Panel","Sensor","Unit" };
+        private static readonly string[] _demoCities = { "Johor Bahru","Kuala Lumpur","Penang","Ipoh","Melaka","Shah Alam","Klang" };
+        private static readonly string[] _demoStates = { "Johor","Selangor","Penang","Perak","Melaka","Kedah","Pahang" };
+
+        private string DW() { return _demoWords[_rng.Next(_demoWords.Length)]; }
+        private string RandRef() { return DW() + "-" + _rng.Next(1000, 9999); }
+
+        // Fills EVERY field with random values (different each click) and adds random rows to both grids
+        // — a demo/testing helper.
+        private void barDemoFill_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            try { DemoFill(); }
+            catch (Exception ex) { XtraMessageBox.Show("Demo fill failed:\r\n" + ex.Message, "Demo"); }
+        }
+
+        private void DemoFill()
+        {
+            // --- header ---
+            SluContractType.EditValue = RandomLookupValue(SluContractType);
+            if (_debtorLookup != null && _debtorLookup.Rows.Count > 0)
+                LkDebtorCode.EditValue = _debtorLookup.Rows[_rng.Next(_debtorLookup.Rows.Count)]["AccNo"];   // triggers auto-fill
+            SluAgent.EditValue = RandomLookupValue(SluAgent);
+
+            DateTime cd = DateTime.Today.AddDays(-_rng.Next(0, 60));
+            DtContractDate.EditValue = cd;
+            DtStartDate.EditValue = cd;
+            DtExpiryDate.EditValue = cd.AddMonths(_rng.Next(6, 36));
+            SpnContractValue.Value = _rng.Next(500, 50000);
+            ChkMonthEnd.Checked = false;
+            SpnBillingDay.Value = _rng.Next(1, 28);
+            SetBillingMode(_rng.Next(2) == 0 ? "G" : "S");
+            TxtDescription.Text = "Demo contract " + DW() + " " + _rng.Next(100, 999);
+            TxtRemark1.Text = "Remark " + DW(); TxtRemark2.Text = "Remark " + DW();
+            TxtNote.Text = "Auto-generated demo note " + DW() + " " + _rng.Next(1000, 9999);
+
+            // --- More Header (over the debtor-mapped values) ---
+            MhSet("City", _demoCities[_rng.Next(_demoCities.Length)]);
+            MhSet("State", _demoStates[_rng.Next(_demoStates.Length)]);
+            MhSet("PostalCode", _rng.Next(10000, 99999).ToString());
+            MhSet("Country", "Malaysia");
+            MhSet("Ref1", RandRef()); MhSet("Ref2", RandRef()); MhSet("Ref3", RandRef()); MhSet("Ref4", RandRef());
+
+            // --- Service Items: add 1-3 random machines ---
+            int nItems = _rng.Next(1, 4);
+            DataTable meterTypes = SafeGet("SELECT TOP 20 MeterTypeCode, ISNULL(MinimumCharges,0) AS MinimumCharges, ISNULL(ChargesRate,0) AS ChargesRate FROM [dbo].[zSCP_MeterType] WHERE Inactive='N'");
+            for (int i = 0; i < nItems; i++)
+            {
+                ItemEditData d = new ItemEditData();
+                d.Meters = zSCP2_Item_Form.CreateMetersTable();
+                d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
+                d.SpareParts = CreateSparePartsTable();
+                d.ServiceItemNo = ServiceContractPhotocopier.Classes.ScpDocNo.Peek(_db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+                d.ServiceItemNoIsAuto = true;
+                d.SerialNumber = "SN" + _rng.Next(100000, 999999);
+                d.Description = DW() + " " + DW() + " " + _rng.Next(1000, 9999);
+                if (meterTypes != null && meterTypes.Rows.Count > 0)
+                {
+                    DataRow mt = meterTypes.Rows[_rng.Next(meterTypes.Rows.Count)];
+                    DataRow mr = d.Meters.NewRow();
+                    mr["MeterTypeCode"] = mt["MeterTypeCode"]; mr["MeterRole"] = "BK";
+                    mr["MinimumCharges"] = mt["MinimumCharges"]; mr["ChargesRate"] = mt["ChargesRate"];
+                    mr["MeterMultiPriceCode"] = ""; mr["RebateQtyInPercent"] = 0m; mr["FOCQty"] = 0m;
+                    mr["InitialReading"] = _rng.Next(0, 50000);
+                    d.Meters.Rows.Add(mr);
+                }
+                d.Meters.AcceptChanges();
+                _items.Add(d);
+            }
+
+            // --- Item Provided: add 1-3 random rows ---
+            int nSp = _rng.Next(1, 4);
+            for (int i = 0; i < nSp; i++)
+            {
+                DataRow r = _spareParts.NewRow();
+                r["SparePartKey"] = 0L; r["ItemKey"] = DBNull.Value; r["Bound"] = false;
+                string code = ""; string desc = DW() + " part";
+                if (_spItemLookup != null && _spItemLookup.Rows.Count > 0)
+                {
+                    DataRow it = _spItemLookup.Rows[_rng.Next(_spItemLookup.Rows.Count)];
+                    code = Convert.ToString(it["ItemCode"]); desc = Convert.ToString(it["Description"]);
+                    r["UOM"] = it["UOM"]; r["TaxType"] = it["TaxType"];
+                }
+                else { r["UOM"] = "UNIT"; r["TaxType"] = ""; }
+                r["ItemCode"] = code; r["Description"] = desc; r["Unlimited"] = false;
+                r["Quantity"] = _rng.Next(1, 20); r["Discount"] = ""; r["UnitPrice"] = _rng.Next(5, 500);
+                r["TaxInclusive"] = false; r["TaxRate"] = 0m; r["Pos"] = _spareParts.Rows.Count;
+                ComputeSpareRow(r);
+                _spareParts.Rows.Add(r);
+            }
+            RenumberSpareParts();
+            GridViewSpareParts.RefreshData();
+
+            _dirty = true;
+            RebuildItemsView();
+            TabMain.SelectedTabPage = PageItems;
+            XtraMessageBox.Show("Random demo data filled: " + nItems + " service item(s), " + nSp + " item-provided row(s).", "Demo Fill");
+        }
+
+        private object RandomLookupValue(DevExpress.XtraEditors.SearchLookUpEdit slu)
+        {
+            DataTable dt = slu.Properties.DataSource as DataTable;
+            if (dt == null || dt.Rows.Count == 0) return null;
+            string vm = slu.Properties.ValueMember;
+            if (string.IsNullOrEmpty(vm) || !dt.Columns.Contains(vm)) return null;
+            return dt.Rows[_rng.Next(dt.Rows.Count)][vm];
+        }
+
+        private DataTable SafeGet(string sql)
+        {
+            try { return _db.GetDataTable(sql, false); } catch { return null; }
+        }
 
         // ===================== Copy / Clipboard ribbon =====================
 

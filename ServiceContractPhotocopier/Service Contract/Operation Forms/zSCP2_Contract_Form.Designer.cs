@@ -19,6 +19,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpItem;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpCopy;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpClipboard;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpDemo;
+        private DevExpress.XtraBars.BarButtonItem barDemoFill;
         private DevExpress.XtraBars.BarButtonItem barSave;
         private DevExpress.XtraBars.BarButtonItem barClose;
         private DevExpress.XtraBars.BarButtonItem barAddItem;
@@ -122,6 +124,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpCopy = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpClipboard = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpDemo = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.barDemoFill = new DevExpress.XtraBars.BarButtonItem();
             this.barCopyFrom = new DevExpress.XtraBars.BarButtonItem();
             this.barCopyToNew = new DevExpress.XtraBars.BarButtonItem();
             this.barCopyWhole = new DevExpress.XtraBars.BarButtonItem();
@@ -258,9 +262,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] {
                 this.barSave, this.barClose, this.barAddItem, this.barEditItem, this.barDelItem,
                 this.barCopyFrom, this.barCopyToNew, this.barCopyWhole, this.barCopySelected,
-                this.barCopySpreadsheet, this.barPasteWhole, this.barPasteItems});
+                this.barCopySpreadsheet, this.barPasteWhole, this.barPasteItems, this.barDemoFill});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 13;
+            this.RibbonCtl.MaxItemId = 14;
             this.RibbonCtl.Name = "Ribbon";
             this.RibbonCtl.ShowApplicationButton = DevExpress.Utils.DefaultBoolean.False;
             this.RibbonCtl.ShowToolbarCustomizeItem = false;
@@ -376,7 +380,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // ribbonPageHome
             //
             this.ribbonPageHome.Groups.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPageGroup[] {
-                this.grpSave, this.grpItem, this.grpCopy, this.grpClipboard});
+                this.grpSave, this.grpItem, this.grpCopy, this.grpClipboard, this.grpDemo});
             this.ribbonPageHome.Name = "ribbonPageHome";
             this.ribbonPageHome.Text = "Home";
             //
@@ -410,6 +414,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.grpClipboard.ItemLinks.Add(this.barPasteItems);
             this.grpClipboard.Name = "grpClipboard";
             this.grpClipboard.Text = "Clipboard";
+            //
+            // barDemoFill
+            //
+            this.barDemoFill.Caption = "Demo Fill\r\n(Random)";
+            this.barDemoFill.Id = 13;
+            this.barDemoFill.ImageOptions.ImageUri.Uri = "Refresh;Size32x32";
+            this.barDemoFill.Name = "barDemoFill";
+            this.barDemoFill.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barDemoFill.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barDemoFill_ItemClick);
+            //
+            // grpDemo
+            //
+            this.grpDemo.ItemLinks.Add(this.barDemoFill);
+            this.grpDemo.Name = "grpDemo";
+            this.grpDemo.Text = "Demo";
             //
             // PanelHeaderFields
             //
