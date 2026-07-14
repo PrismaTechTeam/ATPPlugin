@@ -352,7 +352,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 barCopyToNew.ImageOptions.Image = img.GetLargeImage_New();
                 barCopyWhole.ImageOptions.Image = img.GetSmallImage_CopyToClipboard();
                 barCopySelected.ImageOptions.Image = img.GetSmallImage_CopySelectedToClipboard();
-                barCopySpreadsheet.ImageOptions.Image = img.GetLargeImage_ExportAttachmentInExcel();   // #7: the missing icon
+                barCopySpreadsheet.ImageOptions.Image = img.GetSmallImage_CopyAsSpreadsheet();   // #7: the missing icon
                 barPasteWhole.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
                 barPasteItems.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
             }
@@ -373,14 +373,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Show the AutoCount home/default currency symbol (e.g. "RM") behind the Contract Value box.
-        // The home currency is the one whose exchange rate is 1.0 (AutoCount convention).
+        // Authoritative source: AutoCount stores it in dbo.Settings (Name='General') as JSON
+        // (LocalCurrencySymbol / LocalCurrencyCode). Falls back to the rate=1.0 currency if unavailable.
         private void LoadCurrencyLabel()
         {
             try
             {
                 object o = _db.ExecuteScalar(
-                    "SELECT TOP 1 ISNULL(NULLIF(LTRIM(RTRIM(CurrencySymbol)),''), CurrencyCode) " +
-                    "FROM [dbo].[Currency] WHERE BankBuyRate = 1 ORDER BY CurrencyCode");
+                    "SELECT ISNULL(NULLIF(JSON_VALUE(Value,'$.LocalCurrencySymbol'),''), " +
+                    "JSON_VALUE(Value,'$.LocalCurrencyCode')) FROM [dbo].[Settings] WHERE Name = 'General'");
+                if (o == null || o == DBNull.Value || o.ToString().Trim().Length == 0)
+                    o = _db.ExecuteScalar(
+                        "SELECT TOP 1 ISNULL(NULLIF(LTRIM(RTRIM(CurrencySymbol)),''), CurrencyCode) " +
+                        "FROM [dbo].[Currency] WHERE BankBuyRate = 1 ORDER BY CurrencyCode");
                 LblCurrency.Text = (o == null || o == DBNull.Value) ? "" : o.ToString();
             }
             catch { LblCurrency.Text = ""; }
