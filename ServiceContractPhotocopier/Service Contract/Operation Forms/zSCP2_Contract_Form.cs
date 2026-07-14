@@ -110,6 +110,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             WireDirtyTracking();
             _dirty = false;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(OnFormClosing);
+
+            UpdateServiceItemButtons();
+        }
+
+        // Service items need a saved ContractKey to belong to, so Add / Edit / Attach / Remove are only
+        // enabled in EDIT mode (an existing contract). In NEW mode the user must Save the header first.
+        private void UpdateServiceItemButtons()
+        {
+            bool canEditItems = !_isNew;
+            barAddItem.Enabled = canEditItems;
+            barEditItem.Enabled = canEditItems;
+            barDelItem.Enabled = canEditItems;
+            if (BtnItemAttach != null) BtnItemAttach.Enabled = canEditItems;
+            if (BtnItemDetach != null) BtnItemDetach.Enabled = canEditItems;
+            DevExpress.XtraGrid.Columns.GridColumn col = GridViewItems.Columns.ColumnByFieldName("ServiceItemNo");
+            if (col != null) col.OptionsColumn.AllowEdit = canEditItems;   // inline attach only in edit mode
+            LblItemsHint.Text = canEditItems
+                ? ""
+                : "Save the contract first — service items can be added after the contract is saved.";
+            LblItemsHint.Visible = !canEditItems;
         }
 
         private void WireDirtyTracking()
@@ -1303,6 +1323,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void BtnSave_Click(object sender, EventArgs e)
         {
+            bool wasNew = _isNew;   // InsertContract flips _isNew during save; remember the entry state
             if (string.IsNullOrWhiteSpace(TxtContractNo.Text))
             { XtraMessageBox.Show("Contract No is required.", "Validation"); return; }
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
@@ -1383,11 +1404,28 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         tx.Commit();
                     }
                 }
-                XtraMessageBox.Show("Contract saved.", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 _dirty = false;
-                _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
-                this.DialogResult = DialogResult.OK;
-                this.Close();
+                if (wasNew)
+                {
+                    // The contract now exists (has a ContractKey) -> switch to EDIT mode and STAY OPEN so
+                    // the user can immediately add service items (Add/Attach are enabled only in edit mode).
+                    _detachedThisSession.Clear();
+                    LoadContract();          // reload header + (empty) items from the just-saved row
+                    RebuildItemsView();
+                    LoadSpareParts();
+                    LoadMoreHeader();
+                    _dirty = false;
+                    UpdateServiceItemButtons();
+                    XtraMessageBox.Show("Contract saved. You can now add service items.", "Saved",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    XtraMessageBox.Show("Contract saved.", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                }
             }
             catch (Exception ex)
             {

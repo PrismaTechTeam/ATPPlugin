@@ -81,6 +81,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.PanelControl PnlItemBar;
         private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
         private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
+        private DevExpress.XtraEditors.LabelControl LblItemsHint;
         private DevExpress.XtraTab.XtraTabPage PageSpareParts;
         private DevExpress.XtraEditors.PanelControl PnlSpBar;
         private DevExpress.XtraEditors.SimpleButton BtnSpInsert;
@@ -180,6 +181,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PnlItemBar = new DevExpress.XtraEditors.PanelControl();
             this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
+            this.LblItemsHint = new DevExpress.XtraEditors.LabelControl();
             this.PageSpareParts = new DevExpress.XtraTab.XtraTabPage();
             this.PnlSpBar = new DevExpress.XtraEditors.PanelControl();
             this.BtnSpInsert = new DevExpress.XtraEditors.SimpleButton();
@@ -841,6 +843,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // PnlItemBar
             //
+            this.PnlItemBar.Controls.Add(this.LblItemsHint);
             this.PnlItemBar.Controls.Add(this.BtnItemAttach);
             this.PnlItemBar.Controls.Add(this.BtnItemDetach);
             this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
@@ -868,6 +871,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.BtnItemDetach.TabIndex = 1;
             this.BtnItemDetach.Text = "Remove selected from contract";
             this.BtnItemDetach.Click += new System.EventHandler(this.BtnItemDetach_Click);
+            //
+            // LblItemsHint
+            //
+            this.LblItemsHint.Appearance.ForeColor = System.Drawing.Color.FromArgb(198, 40, 40);
+            this.LblItemsHint.Location = new System.Drawing.Point(440, 11);
+            this.LblItemsHint.Name = "LblItemsHint";
+            this.LblItemsHint.Size = new System.Drawing.Size(400, 13);
+            this.LblItemsHint.TabIndex = 2;
+            this.LblItemsHint.Text = "";
             //
             // GridItems
             //
