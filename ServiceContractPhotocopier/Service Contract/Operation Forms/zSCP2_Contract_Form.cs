@@ -126,6 +126,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (BtnItemDetach != null) BtnItemDetach.Enabled = canEditItems;
             DevExpress.XtraGrid.Columns.GridColumn col = GridViewItems.Columns.ColumnByFieldName("ServiceItemNo");
             if (col != null) col.OptionsColumn.AllowEdit = canEditItems;   // inline attach only in edit mode
+            barDemoFill.Enabled = _isNew;   // demo random-fill only for a NEW contract
             LblItemsHint.Text = canEditItems
                 ? ""
                 : "Save the contract first — service items can be added after the contract is saved.";
@@ -1665,32 +1666,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             MhSet("Country", "Malaysia");
             MhSet("Ref1", RandRef()); MhSet("Ref2", RandRef()); MhSet("Ref3", RandRef()); MhSet("Ref4", RandRef());
 
-            // --- Service Items: add 1-3 random machines ---
-            int nItems = _rng.Next(1, 4);
-            DataTable meterTypes = SafeGet("SELECT TOP 20 MeterTypeCode, ISNULL(MinimumCharges,0) AS MinimumCharges, ISNULL(ChargesRate,0) AS ChargesRate FROM [dbo].[zSCP_MeterType] WHERE Inactive='N'");
-            for (int i = 0; i < nItems; i++)
-            {
-                ItemEditData d = new ItemEditData();
-                d.Meters = zSCP2_Item_Form.CreateMetersTable();
-                d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
-                d.SpareParts = CreateSparePartsTable();
-                d.ServiceItemNo = ServiceContractPhotocopier.Classes.ScpDocNo.Peek(_db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
-                d.ServiceItemNoIsAuto = true;
-                d.SerialNumber = "SN" + _rng.Next(100000, 999999);
-                d.Description = DW() + " " + DW() + " " + _rng.Next(1000, 9999);
-                if (meterTypes != null && meterTypes.Rows.Count > 0)
-                {
-                    DataRow mt = meterTypes.Rows[_rng.Next(meterTypes.Rows.Count)];
-                    DataRow mr = d.Meters.NewRow();
-                    mr["MeterTypeCode"] = mt["MeterTypeCode"]; mr["MeterRole"] = "BK";
-                    mr["MinimumCharges"] = mt["MinimumCharges"]; mr["ChargesRate"] = mt["ChargesRate"];
-                    mr["MeterMultiPriceCode"] = ""; mr["RebateQtyInPercent"] = 0m; mr["FOCQty"] = 0m;
-                    mr["InitialReading"] = _rng.Next(0, 50000);
-                    d.Meters.Rows.Add(mr);
-                }
-                d.Meters.AcceptChanges();
-                _items.Add(d);
-            }
+            // NOTE: service items are NOT added here — they can only be added in edit mode (after the
+            // contract is saved), so the demo just fills the header + more-header + item-provided.
 
             // --- Item Provided: add 1-3 random rows ---
             int nSp = _rng.Next(1, 4);
@@ -1717,8 +1694,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             _dirty = true;
             RebuildItemsView();
-            TabMain.SelectedTabPage = PageItems;
-            XtraMessageBox.Show("Random demo data filled: " + nItems + " service item(s), " + nSp + " item-provided row(s).", "Demo Fill");
+            XtraMessageBox.Show("Random demo data filled (header + more header + " + nSp + " item-provided row(s)).\r\n" +
+                "Save the contract, then add service items in edit mode.", "Demo Fill");
         }
 
         private object RandomLookupValue(DevExpress.XtraEditors.SearchLookUpEdit slu)
