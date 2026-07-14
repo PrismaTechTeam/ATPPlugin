@@ -40,7 +40,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SearchLookUpEdit SluContractType;
         private DevExpress.XtraGrid.Views.Grid.GridView SluContractTypeView;
         private DevExpress.XtraEditors.LabelControl LblDebtor;
-        private DevExpress.XtraEditors.LookUpEdit LkDebtorCode;
+        private DevExpress.XtraEditors.SearchLookUpEdit LkDebtorCode;
+        private DevExpress.XtraGrid.Views.Grid.GridView LkDebtorView;
         private DevExpress.XtraEditors.LabelControl LblContractDate;
         private DevExpress.XtraEditors.DateEdit DtContractDate;
         private DevExpress.XtraEditors.LabelControl LblStartDate;
@@ -134,7 +135,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.SluContractType = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluContractTypeView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblDebtor = new DevExpress.XtraEditors.LabelControl();
-            this.LkDebtorCode = new DevExpress.XtraEditors.LookUpEdit();
+            this.LkDebtorCode = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.LkDebtorView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblContractDate = new DevExpress.XtraEditors.LabelControl();
             this.DtContractDate = new DevExpress.XtraEditors.DateEdit();
             this.LblStartDate = new DevExpress.XtraEditors.LabelControl();
@@ -205,6 +207,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.SluContractType.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluContractTypeView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.LkDebtorCode.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.LkDebtorView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties.CalendarTimeProperties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtStartDate.Properties)).BeginInit();
@@ -514,8 +517,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LkDebtorCode.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.LkDebtorCode.Properties.NullText = "";
+            this.LkDebtorCode.Properties.PopupView = this.LkDebtorView;
             this.LkDebtorCode.Size = new System.Drawing.Size(234, 20);
             this.LkDebtorCode.TabIndex = 8;
+            //
+            // LkDebtorView
+            //
+            this.LkDebtorView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.LkDebtorView.Name = "LkDebtorView";
+            this.LkDebtorView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.LkDebtorView.OptionsView.ShowGroupPanel = false;
             //
             // LblContractDate
             //
@@ -1085,6 +1096,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.SluContractType.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluContractTypeView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.LkDebtorCode.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.LkDebtorView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties.CalendarTimeProperties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtContractDate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtStartDate.Properties.CalendarTimeProperties)).EndInit();

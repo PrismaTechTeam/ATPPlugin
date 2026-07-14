@@ -20,6 +20,8 @@
 
 8. **Save / Close confirmation (mirror AutoCount entry behavior).** Every create/edit form (contract editor, service item editor, and any future entry form) MUST mirror AutoCount's create/edit UX: a `Save` action that persists + clears the dirty flag, and a `Close` that — if there are **unsaved changes** — prompts "You have unsaved changes. Discard them and close?" (Yes closes, No cancels). Implement with a `_dirty` flag set on any field/grid edit (wired AFTER the initial load so loading a record doesn't set it), a `_savedOk` flag set on a successful save, and a `FormClosing` handler that cancels the close when `_dirty && !_savedOk` and the user answers No. Never lose user input silently on close. Reference: `zSCP2_Contract_Form.cs` (`WireDirtyTracking` + `OnFormClosing`).
 
+9. **Lookup fields: use `SearchLookUpEdit`, never `LookUpEdit`.** Any field that picks from a master/list (Customer/Debtor, Contract Type, Agent, Meter Type, Department, Project, Item Code, etc.) MUST be a `DevExpress.XtraEditors.SearchLookUpEdit` (with a `GridView` popup + auto-filter row so the user can search), NOT a `LookUpEdit`. `LookUpEdit` gives only a cramped combo with no real search; `SearchLookUpEdit` gives a searchable grid popup. Each `SearchLookUpEdit` needs its own `GridView` field, `ISupportInitialize` BeginInit/EndInit on both the `.Properties` and the view, `Properties.PopupView = <view>`, and columns configured on the popup view (populate + hide all but the code/description columns). For a full modal "search everything" picker (large lists, multi-column search) use `Classes\CommonForms\AdvanceSearch_Form.Pick(...)` instead. Do NOT introduce new `LookUpEdit` controls; convert any existing ones when you touch them.
+
 
 ## 🚀 Daily workflow — TWO LOOPS
 

@@ -153,9 +153,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LkDebtorCode.Properties.DataSource = _debtorLookup;
             LkDebtorCode.Properties.DisplayMember = "AccNo";
             LkDebtorCode.Properties.ValueMember = "AccNo";
-            LkDebtorCode.Properties.Columns.Clear();
-            LkDebtorCode.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("AccNo", "Code", 90));
-            LkDebtorCode.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Name", 220));
+            // SearchLookUpEdit shows its columns through the popup GridView — show only Code + Name,
+            // and turn on the auto-filter row so the user can search (CLAUDE.md rule 9).
+            LkDebtorView.Columns.Clear();
+            LkDebtorView.PopulateColumns();
+            foreach (DevExpress.XtraGrid.Columns.GridColumn c in LkDebtorView.Columns) c.Visible = false;
+            ShowLkCol(LkDebtorView, "AccNo", "Code", 90, 0);
+            ShowLkCol(LkDebtorView, "CompanyName", "Company Name", 240, 1);
+            LkDebtorView.OptionsView.ShowAutoFilterRow = true;
+        }
+
+        private static void ShowLkCol(DevExpress.XtraGrid.Views.Grid.GridView v, string field, string caption, int width, int visibleIndex)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = v.Columns[field];
+            if (c == null) return;
+            c.Caption = caption; c.Width = width; c.Visible = true; c.VisibleIndex = visibleIndex;
         }
 
         // Contract Type dropdown: values come from Service Contract Type Maintenance
@@ -1068,6 +1080,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
             if (string.IsNullOrWhiteSpace(debtor))
             { XtraMessageBox.Show("Customer (Debtor) is required.", "Validation"); return; }
+
+            // Service Expiry (end) date cannot be earlier than the Service Start date.
+            if (DtStartDate.EditValue != null && DtStartDate.EditValue != DBNull.Value &&
+                DtExpiryDate.EditValue != null && DtExpiryDate.EditValue != DBNull.Value &&
+                Convert.ToDateTime(DtExpiryDate.EditValue).Date < Convert.ToDateTime(DtStartDate.EditValue).Date)
+            { XtraMessageBox.Show("Service Expiry (To) date cannot be earlier than the Service Start date.", "Validation"); return; }
 
             // Reserve the REAL contract number now (only if new & still showing the auto-preview) so
             // the counter is consumed on save, not on every Auto click.

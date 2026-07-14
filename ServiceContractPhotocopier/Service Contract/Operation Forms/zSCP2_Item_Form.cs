@@ -44,8 +44,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DataTable _serialLookup;
         private bool _standalone;                                   // opened from "Maintain Service Item" New
         private DevExpress.XtraEditors.LabelControl _lblCustomer;
-        private DevExpress.XtraEditors.LookUpEdit _lkCustomer;
-        private DevExpress.XtraEditors.LookUpEdit _lkContract;      // standalone: attach to an EXISTING contract
+        private DevExpress.XtraEditors.SearchLookUpEdit _lkCustomer;
+        private DevExpress.XtraEditors.SearchLookUpEdit _lkContract;   // standalone: attach to an EXISTING contract
         private string _parentContractNo;                          // embedded add: shows contract read-only
 
         public zSCP2_Item_Form()
@@ -164,17 +164,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 this.Controls.Add(lblContract);
                 lblContract.BringToFront();
 
-                _lkContract = new DevExpress.XtraEditors.LookUpEdit();
+                _lkContract = new DevExpress.XtraEditors.SearchLookUpEdit();
                 _lkContract.Location = new System.Drawing.Point(120, 261);
                 _lkContract.Size = new System.Drawing.Size(214, 20);
                 _lkContract.Properties.NullText = "(create new contract)";
                 _lkContract.Properties.ValueMember = "ContractKey";
                 _lkContract.Properties.DisplayMember = "ContractNo";
-                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("ContractNo", "Contract No", 90));
-                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("DebtorCode", "Customer", 80));
-                _lkContract.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 220));
-                _lkContract.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
-                _lkContract.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+                // SearchLookUpEdit: popup GridView auto-populates from the (already minimal) datasource.
                 try
                 {
                     // Only SAVED contracts appear here — an unsaved contract cannot take service items.
@@ -198,15 +194,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 this.Controls.Add(_lblCustomer);
                 _lblCustomer.BringToFront();
 
-                _lkCustomer = new DevExpress.XtraEditors.LookUpEdit();
+                _lkCustomer = new DevExpress.XtraEditors.SearchLookUpEdit();
                 _lkCustomer.Location = new System.Drawing.Point(600, 261);
                 _lkCustomer.Size = new System.Drawing.Size(210, 20);
                 _lkCustomer.Properties.NullText = "Select customer...";
                 _lkCustomer.Properties.ValueMember = "AccNo";
                 _lkCustomer.Properties.DisplayMember = "AccNo";
-                _lkCustomer.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("AccNo", "Code", 90));
-                _lkCustomer.Properties.Columns.Add(new DevExpress.XtraEditors.Controls.LookUpColumnInfo("CompanyName", "Company Name", 240));
-                _lkCustomer.Properties.SearchMode = DevExpress.XtraEditors.Controls.SearchMode.AutoFilter;
                 try
                 {
                     _lkCustomer.Properties.DataSource = _db.GetDataTable(
