@@ -71,6 +71,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.LabelControl LblDesc;
         private DevExpress.XtraEditors.TextEdit TxtDescription;
         private DevExpress.XtraEditors.CheckEdit ChkInactive;
+        private DevExpress.XtraEditors.CheckEdit ChkMonthEnd;
 
         private DevExpress.XtraTab.XtraTabControl TabMain;
         private DevExpress.XtraTab.XtraTabPage PageItems;
@@ -166,6 +167,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblDesc = new DevExpress.XtraEditors.LabelControl();
             this.TxtDescription = new DevExpress.XtraEditors.TextEdit();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
+            this.ChkMonthEnd = new DevExpress.XtraEditors.CheckEdit();
             this.TabMain = new DevExpress.XtraTab.XtraTabControl();
             this.PageItems = new DevExpress.XtraTab.XtraTabPage();
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
@@ -227,6 +229,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TabMain)).BeginInit();
             this.TabMain.SuspendLayout();
             this.PageItems.SuspendLayout();
@@ -443,6 +446,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.LblDesc);
             this.PanelHeaderFields.Controls.Add(this.TxtDescription);
             this.PanelHeaderFields.Controls.Add(this.ChkInactive);
+            this.PanelHeaderFields.Controls.Add(this.ChkMonthEnd);
             this.PanelHeaderFields.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelHeaderFields.Location = new System.Drawing.Point(0, 143);
             this.PanelHeaderFields.Name = "PanelHeaderFields";
@@ -720,17 +724,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             this.SpnBillingDay.EditValue = new decimal(new int[] { 1, 0, 0, 0 });
             this.SpnBillingDay.Location = new System.Drawing.Point(110, 181);
+            this.SpnBillingDay.MaximumSize = new System.Drawing.Size(46, 0);
             this.SpnBillingDay.Name = "SpnBillingDay";
             this.SpnBillingDay.Properties.IsFloatValue = false;
             this.SpnBillingDay.Properties.MaxValue = new decimal(new int[] { 31, 0, 0, 0 });
             this.SpnBillingDay.Properties.MinValue = new decimal(new int[] { 1, 0, 0, 0 });
-            this.SpnBillingDay.Size = new System.Drawing.Size(60, 20);
+            this.SpnBillingDay.Size = new System.Drawing.Size(46, 20);
             this.SpnBillingDay.TabIndex = 28;
             //
             // LblBillMode
             //
             this.LblBillMode.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
-            this.LblBillMode.Location = new System.Drawing.Point(200, 184);
+            this.LblBillMode.Location = new System.Drawing.Point(320, 184);
             this.LblBillMode.Name = "LblBillMode";
             this.LblBillMode.Size = new System.Drawing.Size(63, 13);
             this.LblBillMode.TabIndex = 29;
@@ -738,7 +743,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ChkBillGroup
             //
-            this.ChkBillGroup.Location = new System.Drawing.Point(285, 181);
+            this.ChkBillGroup.Location = new System.Drawing.Point(400, 181);
             this.ChkBillGroup.Name = "ChkBillGroup";
             this.ChkBillGroup.Properties.Caption = "One invoice (group whole contract)";
             this.ChkBillGroup.Size = new System.Drawing.Size(230, 20);
@@ -746,7 +751,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ChkBillSeparate
             //
-            this.ChkBillSeparate.Location = new System.Drawing.Point(600, 181);
+            this.ChkBillSeparate.Location = new System.Drawing.Point(625, 181);
             this.ChkBillSeparate.Name = "ChkBillSeparate";
             this.ChkBillSeparate.Properties.Caption = "Separate invoice per service item";
             this.ChkBillSeparate.Size = new System.Drawing.Size(230, 20);
@@ -774,6 +779,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChkInactive.Properties.Caption = "Inactive";
             this.ChkInactive.Size = new System.Drawing.Size(120, 20);
             this.ChkInactive.TabIndex = 34;
+            //
+            // ChkMonthEnd
+            //
+            this.ChkMonthEnd.Location = new System.Drawing.Point(162, 181);
+            this.ChkMonthEnd.Name = "ChkMonthEnd";
+            this.ChkMonthEnd.Properties.Caption = "Last day of month";
+            this.ChkMonthEnd.Size = new System.Drawing.Size(140, 20);
+            this.ChkMonthEnd.TabIndex = 35;
+            this.ChkMonthEnd.CheckedChanged += new System.EventHandler(this.ChkMonthEnd_CheckedChanged);
             //
             // TabMain
             //
@@ -1115,6 +1129,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelHeaderFields)).EndInit();
             this.PanelHeaderFields.ResumeLayout(false);
             this.PanelHeaderFields.PerformLayout();

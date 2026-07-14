@@ -98,6 +98,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v2_MoreHeader.sql", asm);
             // Allow contract-less service items (ContractKey NULL) for attach/detach. Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v5_NullableContract.sql", asm);
+            // "Bill on last day of month" contract option. Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v3_MonthEnd.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent

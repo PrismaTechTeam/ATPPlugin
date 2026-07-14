@@ -321,6 +321,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void BtnAutoNo_Click(object sender, EventArgs e) { AutoPickContractNo(); }
 
+        // "Last day of month": disable the day spin and use month-end (stored as day 31 -> the existing
+        // month-end clamp yields the true last day for every month).
+        private void ChkMonthEnd_CheckedChanged(object sender, EventArgs e)
+        {
+            SpnBillingDay.Enabled = !ChkMonthEnd.Checked;
+            if (ChkMonthEnd.Checked) SpnBillingDay.Value = 31;
+            if (!_loading) _dirty = true;
+        }
+
         private void LoadContract()
         {
             _loading = true;
@@ -338,6 +347,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DtExpiryDate.EditValue = AsDate(r["ServiceExpiryDate"]);
             SpnContractValue.Value = AsDec(r["ContractValue"]);
             SpnBillingDay.Value = AsInt(r["BillingDay"], 1);
+            ChkMonthEnd.Checked = r.Table.Columns.Contains("BillOnMonthEnd") && AsStr(r["BillOnMonthEnd"]) == "Y";
+            SpnBillingDay.Enabled = !ChkMonthEnd.Checked;
             SetBillingMode(AsStr(r["BillingMode"]));
             TxtAddress.Text = AsStr(r["Address1"]);
             TxtAttention.Text = AsStr(r["Attention"]);
@@ -1172,9 +1183,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
-                " ContractValue, BillingDay, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
+                " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
                 " Description, Remark1, Remark2, Note, Inactive, Created, LastModified) " +
-                "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
+                "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
                 "@desc,@r1,@r2,@note,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -1189,7 +1200,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "UPDATE [dbo].[zSCP2_Contract] SET ContractNo=@no, ContractTypeCode=@type, DebtorCode=@debtor, " +
                 "ContractDate=@cdate, ServiceStartDate=@sdate, ServiceExpiryDate=@edate, ContractValue=@val, " +
-                "BillingDay=@bday, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
+                "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
@@ -1209,7 +1220,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@sdate", DateParam(DtStartDate.EditValue));
             cmd.Parameters.AddWithValue("@edate", DateParam(DtExpiryDate.EditValue));
             cmd.Parameters.AddWithValue("@val", SpnContractValue.Value);
-            cmd.Parameters.AddWithValue("@bday", (byte)SpnBillingDay.Value);
+            // Bill-on-month-end: store day 31 so the existing month-end clamp bills the true last day
+            // of every month (31 -> 30/29/28 on short months, 31 on long ones).
+            cmd.Parameters.AddWithValue("@bday", (byte)(ChkMonthEnd.Checked ? 31 : (int)SpnBillingDay.Value));
+            cmd.Parameters.AddWithValue("@monthend", ChkMonthEnd.Checked ? "Y" : "N");
             cmd.Parameters.AddWithValue("@bmode", CurrentBillingMode());
             cmd.Parameters.AddWithValue("@addr", TxtAddress.Text.Trim());
             cmd.Parameters.AddWithValue("@attn", TxtAttention.Text.Trim());

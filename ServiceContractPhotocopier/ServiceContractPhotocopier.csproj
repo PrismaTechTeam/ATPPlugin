@@ -712,6 +712,7 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractSparePart.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v2_MoreHeader.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v5_NullableContract.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v3_MonthEnd.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterEntry.sql" />
