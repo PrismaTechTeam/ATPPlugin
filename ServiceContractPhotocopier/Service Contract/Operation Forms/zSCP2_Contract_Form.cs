@@ -24,6 +24,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private bool _dirty;       // unsaved-changes flag; drives the close confirmation (see CLAUDE.md rule 8)
         private bool _savedOk;     // set true after a successful save so closing skips the confirmation
         private readonly List<ItemEditData> _items = new List<ItemEditData>();
+        // Items detached from this contract THIS session (still ContractKey=this in DB until save) —
+        // made available again in the attach picker / inline lookup so "Remove then re-pick" works now.
+        private readonly List<long> _detachedThisSession = new List<long>();
+        private DataTable _orphanLookup;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _orphanRepo;
         private DataTable _debtorLookup;
         private DataTable _dtItemsView;
 
@@ -91,6 +96,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 LoadContract();
             }
 
+            SetupInlineOrphanLookup();
             RebuildItemsView();
             SetupSparePartsGrid();
             LoadSpareParts();
@@ -453,24 +459,45 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         // "+" Attach: pick a service item that has NO contract (ContractKey IS NULL) and pull it into
         // this contract. On save it is re-parented (its ItemKey + meter history are preserved).
-        private void BtnItemAttach_Click(object sender, EventArgs e)
+        // Orphan (contract-less) service items available to attach: DB orphans (ContractKey IS NULL)
+        // plus any detached in this session, minus the ones already in this contract.
+        private DataTable LoadOrphanItems()
         {
-            DataTable loose;
+            string extra = _detachedThisSession.Count > 0
+                ? " OR ItemKey IN (" + string.Join(",", _detachedThisSession) + ")" : "";
+            DataTable dt;
             try
             {
-                loose = _db.GetDataTable(
+                dt = _db.GetDataTable(
                     "SELECT ItemKey, ServiceItemNo, SerialNumber, ISNULL(Description,'') AS Description " +
-                    "FROM [dbo].[zSCP2_Item] WHERE ContractKey IS NULL ORDER BY ServiceItemNo", false);
+                    "FROM [dbo].[zSCP2_Item] WHERE ContractKey IS NULL" + extra + " ORDER BY ServiceItemNo", false);
             }
-            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            catch { dt = new DataTable(); }
+            // drop ones already attached in this contract
+            System.Collections.Generic.HashSet<long> here = new System.Collections.Generic.HashSet<long>();
+            foreach (ItemEditData d in _items) if (d.ItemKey > 0) here.Add(d.ItemKey);
+            for (int i = dt.Rows.Count - 1; i >= 0; i--)
+                if (here.Contains(Convert.ToInt64(dt.Rows[i]["ItemKey"]))) dt.Rows.RemoveAt(i);
+            return dt;
+        }
+
+        private void BtnItemAttach_Click(object sender, EventArgs e)
+        {
+            DataTable loose = LoadOrphanItems();
             if (loose.Rows.Count == 0)
             { XtraMessageBox.Show("There are no unattached service items (items with no contract) to attach.", "Nothing to attach"); return; }
 
             long key = PickLooseItem(loose);
             if (key == 0) return;
+            AttachOrphan(key);
+        }
+
+        private void AttachOrphan(long itemKey)
+        {
             foreach (ItemEditData ex2 in _items)
-                if (ex2.ItemKey == key) { XtraMessageBox.Show("That item is already in this contract.", "Already added"); return; }
-            _items.Add(LoadOneItem(key));
+                if (ex2.ItemKey == itemKey) { XtraMessageBox.Show("That item is already in this contract.", "Already added"); return; }
+            _items.Add(LoadOneItem(itemKey));
+            _detachedThisSession.Remove(itemKey);
             _dirty = true;
             RebuildItemsView();
         }
@@ -522,6 +549,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             GridItems.DataSource = _dtItemsView;
             GridViewItems.BestFitColumns();
+            RefreshOrphanLookup();   // keep the inline attach list current after add/detach/swap
         }
 
         private static string ItemCodesSummary(ItemEditData d)
@@ -586,12 +614,65 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (idx < 0 || idx >= _items.Count) return;
             if (XtraMessageBox.Show("Remove the selected service item from this contract?", "Confirm",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            long removedKey = _items[idx].ItemKey;
             _items.RemoveAt(idx);
+            // Existing item -> it becomes an orphan (contract-less) on save; make it re-pickable now.
+            if (removedKey > 0 && !_detachedThisSession.Contains(removedKey)) _detachedThisSession.Add(removedKey);
             _dirty = true;
             RebuildItemsView();
         }
 
         private void GridViewItems_DoubleClick(object sender, EventArgs e) { BtnEditItem_Click(null, null); }
+
+        // #5: the Service Item No column is an inline SearchLookUpEdit of ORPHAN items (contract-less +
+        // detached-this-session). Picking one on a row attaches/swaps it in place. Other columns stay
+        // read-only. Combined with the "+" attach button this lets a removed (orphaned) item be
+        // re-chosen or a different one attached without leaving the grid.
+        private void SetupInlineOrphanLookup()
+        {
+            _orphanLookup = LoadOrphanItems();
+            _orphanRepo = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            _orphanRepo.DataSource = _orphanLookup;
+            _orphanRepo.ValueMember = "ServiceItemNo";
+            _orphanRepo.DisplayMember = "ServiceItemNo";
+            _orphanRepo.NullText = "(pick an unattached item)";
+            GridItems.RepositoryItems.Add(_orphanRepo);
+
+            GridViewItems.OptionsBehavior.Editable = true;
+            foreach (DevExpress.XtraGrid.Columns.GridColumn c in GridViewItems.Columns)
+                c.OptionsColumn.AllowEdit = false;
+            DevExpress.XtraGrid.Columns.GridColumn col = GridViewItems.Columns.ColumnByFieldName("ServiceItemNo");
+            if (col != null) { col.OptionsColumn.AllowEdit = true; col.ColumnEdit = _orphanRepo; }
+            GridViewItems.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewItems_CellValueChanged);
+        }
+
+        private void RefreshOrphanLookup()
+        {
+            if (_orphanRepo == null) return;
+            _orphanLookup = LoadOrphanItems();
+            _orphanRepo.DataSource = _orphanLookup;
+        }
+
+        private void GridViewItems_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            if (e.Column.FieldName != "ServiceItemNo") return;
+            string picked = e.Value == null ? "" : e.Value.ToString().Trim();
+            if (picked.Length == 0) return;
+            object noVal = GridViewItems.GetRowCellValue(e.RowHandle, "No");
+            if (noVal == null || noVal == DBNull.Value) return;
+            int idx = Convert.ToInt32(noVal) - 1;
+            if (idx < 0 || idx >= _items.Count) return;
+            if (_items[idx].ServiceItemNo == picked) return;   // unchanged
+            DataRow[] f = _orphanLookup.Select("ServiceItemNo='" + picked.Replace("'", "''") + "'");
+            if (f.Length == 0) return;
+            long newKey = Convert.ToInt64(f[0]["ItemKey"]);
+            long oldKey = _items[idx].ItemKey;
+            _items[idx] = LoadOneItem(newKey);                 // swap the row's item
+            _detachedThisSession.Remove(newKey);
+            if (oldKey > 0 && !_detachedThisSession.Contains(oldKey)) _detachedThisSession.Add(oldKey);
+            _dirty = true;
+            BeginInvoke(new MethodInvoker(RebuildItemsView));  // rebuild after the edit commits
+        }
 
         // Expiry column: RED bold if expired (before today), GREEN bold if still active.
         // RowCellStyle fires per cell per repaint — cache the bold font instead of allocating one each time.
@@ -615,6 +696,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private DataTable _spareParts;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _spCheck;
+        private DataTable _spItemLookup;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _spItemRepo;
 
         internal static DataTable CreateSparePartsTable()
         {
@@ -644,6 +727,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             _spCheck = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             GridSpareParts.RepositoryItems.Add(_spCheck);
+            _spItemLookup = LoadItemLookup(_db);
+            _spItemRepo = MakeItemCodeRepo(_spItemLookup);
+            GridSpareParts.RepositoryItems.Add(_spItemRepo);
 
             GridViewSpareParts.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             GridViewSpareParts.OptionsBehavior.Editable = true;
@@ -653,13 +739,51 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _spareParts = CreateSparePartsTable();
             GridSpareParts.DataSource = _spareParts.DefaultView;
             _spareParts.DefaultView.Sort = "Pos";
-            ConfigureSpareView(GridViewSpareParts, _spCheck);
+            ConfigureSpareView(GridViewSpareParts, _spCheck, _spItemRepo);
+        }
+
+        // Item master lookup for the "Item Provided" grid's Item Code column (like invoice / stock
+        // issue): pick an item code and its Description + UOM + Tax auto-fill.
+        internal static DataTable LoadItemLookup(DBSetting db)
+        {
+            try
+            {
+                return db.GetDataTable(
+                    "SELECT ItemCode, ISNULL(Description,'') AS Description, ISNULL(SalesUOM,'') AS UOM, " +
+                    "ISNULL(TaxCode,'') AS TaxType FROM [dbo].[Item] ORDER BY ItemCode", false);
+            }
+            catch { return new DataTable(); }
+        }
+
+        internal static DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit MakeItemCodeRepo(DataTable itemLookup)
+        {
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit repo =
+                new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            repo.DataSource = itemLookup;
+            repo.ValueMember = "ItemCode";
+            repo.DisplayMember = "ItemCode";
+            repo.NullText = "";
+            return repo;   // popup grid auto-populates the 4 datasource columns
+        }
+
+        // After an Item Code is picked, fill Description / UOM / Tax from the item master.
+        internal static void FillFromItem(DataRow row, DataTable itemLookup)
+        {
+            if (row == null || itemLookup == null) return;
+            string c = row["ItemCode"] == DBNull.Value ? "" : Convert.ToString(row["ItemCode"]).Trim();
+            if (c.Length == 0) return;
+            DataRow[] f = itemLookup.Select("ItemCode='" + c.Replace("'", "''") + "'");
+            if (f.Length == 0) return;
+            row["Description"] = f[0]["Description"];
+            row["UOM"] = f[0]["UOM"];
+            row["TaxType"] = f[0]["TaxType"];
         }
 
         // Shared spare-parts column layout — used by BOTH the contract editor and the service item
         // editor so the two grids match exactly.
         internal static void ConfigureSpareView(DevExpress.XtraGrid.Views.Grid.GridView v,
-            DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit check)
+            DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit check,
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit itemRepo)
         {
             v.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             v.OptionsBehavior.Editable = true;
@@ -669,6 +793,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SpHide(v, "SparePartKey"); SpHide(v, "ItemKey"); SpHide(v, "Bound"); SpHide(v, "Pos");
             SpCol2(v, "No", "No", 40, 0, true);
             SpCol2(v, "ItemCode", "Item Code", 130, 1);
+            if (itemRepo != null && v.Columns["ItemCode"] != null) v.Columns["ItemCode"].ColumnEdit = itemRepo;
             SpCol2(v, "Description", "Description", 240, 2);
             SpBool2(v, check, "Unlimited", "Unlimited", 70, 3);
             SpCol2(v, "UOM", "UOM", 70, 4);
@@ -720,7 +845,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 e.Column.FieldName == "AmountAfterTax" || e.Column.FieldName == "No") return;
             GridViewSpareParts.PostEditor();
             DataRowView drv = GridViewSpareParts.GetRow(e.RowHandle) as DataRowView;
-            if (drv != null) ComputeSpareRow(drv.Row);
+            if (drv != null)
+            {
+                if (e.Column.FieldName == "ItemCode") FillFromItem(drv.Row, _spItemLookup);   // auto-fill Description/UOM/Tax
+                ComputeSpareRow(drv.Row);
+            }
             GridViewSpareParts.RefreshData();
         }
 

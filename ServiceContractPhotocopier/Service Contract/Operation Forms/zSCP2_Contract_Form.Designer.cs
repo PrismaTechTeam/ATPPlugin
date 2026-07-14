@@ -798,7 +798,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TabMain.Size = new System.Drawing.Size(1180, 417);
             this.TabMain.TabIndex = 2;
             this.TabMain.TabPages.AddRange(new DevExpress.XtraTab.XtraTabPage[] {
-                this.PageSpareParts, this.PageItems, this.PageMoreHeader, this.PageNote, this.PageRemark});
+                this.PageItems, this.PageSpareParts, this.PageMoreHeader, this.PageNote, this.PageRemark});
             //
             // PageItems
             //
@@ -820,20 +820,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnItemAttach
             //
+            this.BtnItemAttach.ImageOptions.ImageUri.Uri = "Add;Size16x16";
             this.BtnItemAttach.Location = new System.Drawing.Point(6, 5);
             this.BtnItemAttach.Name = "BtnItemAttach";
-            this.BtnItemAttach.Size = new System.Drawing.Size(190, 24);
+            this.BtnItemAttach.Size = new System.Drawing.Size(200, 24);
             this.BtnItemAttach.TabIndex = 0;
-            this.BtnItemAttach.Text = "+  Attach existing Service Item";
+            this.BtnItemAttach.Text = "Attach existing Service Item";
             this.BtnItemAttach.Click += new System.EventHandler(this.BtnItemAttach_Click);
             //
             // BtnItemDetach
             //
-            this.BtnItemDetach.Location = new System.Drawing.Point(200, 5);
+            this.BtnItemDetach.ImageOptions.ImageUri.Uri = "Remove;Size16x16";
+            this.BtnItemDetach.Location = new System.Drawing.Point(212, 5);
             this.BtnItemDetach.Name = "BtnItemDetach";
-            this.BtnItemDetach.Size = new System.Drawing.Size(190, 24);
+            this.BtnItemDetach.Size = new System.Drawing.Size(210, 24);
             this.BtnItemDetach.TabIndex = 1;
-            this.BtnItemDetach.Text = "–  Remove selected from contract";
+            this.BtnItemDetach.Text = "Remove selected from contract";
             this.BtnItemDetach.Click += new System.EventHandler(this.BtnItemDetach_Click);
             //
             // GridItems
@@ -957,7 +959,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageSpareParts.Controls.Add(this.PnlSpBar);
             this.PageSpareParts.Name = "PageSpareParts";
             this.PageSpareParts.Size = new System.Drawing.Size(1174, 389);
-            this.PageSpareParts.Text = "Spare Parts / Services Provided";
+            this.PageSpareParts.Text = "Item Provided";
             //
             // PnlSpBar
             //
@@ -973,38 +975,42 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // BtnSpInsert
             //
+            this.BtnSpInsert.ImageOptions.ImageUri.Uri = "Add;Size16x16";
             this.BtnSpInsert.Location = new System.Drawing.Point(6, 5);
             this.BtnSpInsert.Name = "BtnSpInsert";
-            this.BtnSpInsert.Size = new System.Drawing.Size(90, 24);
+            this.BtnSpInsert.Size = new System.Drawing.Size(30, 24);
             this.BtnSpInsert.TabIndex = 0;
-            this.BtnSpInsert.Text = "Insert Row";
+            this.BtnSpInsert.ToolTip = "Insert Row";
             this.BtnSpInsert.Click += new System.EventHandler(this.BtnSpInsert_Click);
             //
             // BtnSpRemove
             //
-            this.BtnSpRemove.Location = new System.Drawing.Point(100, 5);
+            this.BtnSpRemove.ImageOptions.ImageUri.Uri = "Remove;Size16x16";
+            this.BtnSpRemove.Location = new System.Drawing.Point(40, 5);
             this.BtnSpRemove.Name = "BtnSpRemove";
-            this.BtnSpRemove.Size = new System.Drawing.Size(90, 24);
+            this.BtnSpRemove.Size = new System.Drawing.Size(30, 24);
             this.BtnSpRemove.TabIndex = 1;
-            this.BtnSpRemove.Text = "Remove Row";
+            this.BtnSpRemove.ToolTip = "Remove Row";
             this.BtnSpRemove.Click += new System.EventHandler(this.BtnSpRemove_Click);
             //
             // BtnSpUp
             //
-            this.BtnSpUp.Location = new System.Drawing.Point(198, 5);
+            this.BtnSpUp.ImageOptions.ImageUri.Uri = "MoveUp;Size16x16";
+            this.BtnSpUp.Location = new System.Drawing.Point(78, 5);
             this.BtnSpUp.Name = "BtnSpUp";
-            this.BtnSpUp.Size = new System.Drawing.Size(80, 24);
+            this.BtnSpUp.Size = new System.Drawing.Size(30, 24);
             this.BtnSpUp.TabIndex = 2;
-            this.BtnSpUp.Text = "Move Up";
+            this.BtnSpUp.ToolTip = "Move Up";
             this.BtnSpUp.Click += new System.EventHandler(this.BtnSpUp_Click);
             //
             // BtnSpDown
             //
-            this.BtnSpDown.Location = new System.Drawing.Point(282, 5);
+            this.BtnSpDown.ImageOptions.ImageUri.Uri = "MoveDown;Size16x16";
+            this.BtnSpDown.Location = new System.Drawing.Point(112, 5);
             this.BtnSpDown.Name = "BtnSpDown";
-            this.BtnSpDown.Size = new System.Drawing.Size(80, 24);
+            this.BtnSpDown.Size = new System.Drawing.Size(30, 24);
             this.BtnSpDown.TabIndex = 3;
-            this.BtnSpDown.Text = "Move Down";
+            this.BtnSpDown.ToolTip = "Move Down";
             this.BtnSpDown.Click += new System.EventHandler(this.BtnSpDown_Click);
             //
             // GridSpareParts

@@ -634,6 +634,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private DataTable _itemSpareParts;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _itemSpCheck;
+        private DataTable _itemSpItemLookup;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _itemSpItemRepo;
         private DevExpress.XtraGrid.GridControl _gridItemSp;
         private DevExpress.XtraGrid.Views.Grid.GridView _viewItemSp;
 
@@ -644,7 +646,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (GrpMeters.Height > 220) GrpMeters.Height = 220;
 
             DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
-            grp.Text = "Spare Parts / Services Provided by this Service Item";
+            grp.Text = "Item Provided";
             grp.Location = new System.Drawing.Point(GrpMeters.Left, GrpMeters.Bottom + 8);
             grp.Size = new System.Drawing.Size(GrpMeters.Width, Math.Max(150, this.ClientSize.Height - GrpMeters.Bottom - 20));
             grp.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
@@ -652,16 +654,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             grp.BringToFront();
 
             DevExpress.XtraEditors.SimpleButton bIns = new DevExpress.XtraEditors.SimpleButton();
-            bIns.Text = "Insert Row"; bIns.Location = new System.Drawing.Point(8, 26); bIns.Size = new System.Drawing.Size(90, 24);
+            bIns.ImageOptions.ImageUri.Uri = "Add;Size16x16"; bIns.ToolTip = "Insert Row";
+            bIns.Location = new System.Drawing.Point(8, 26); bIns.Size = new System.Drawing.Size(30, 24);
             bIns.Click += new EventHandler(ItemSpInsert_Click); grp.Controls.Add(bIns);
             DevExpress.XtraEditors.SimpleButton bRem = new DevExpress.XtraEditors.SimpleButton();
-            bRem.Text = "Remove Row"; bRem.Location = new System.Drawing.Point(102, 26); bRem.Size = new System.Drawing.Size(90, 24);
+            bRem.ImageOptions.ImageUri.Uri = "Remove;Size16x16"; bRem.ToolTip = "Remove Row";
+            bRem.Location = new System.Drawing.Point(42, 26); bRem.Size = new System.Drawing.Size(30, 24);
             bRem.Click += new EventHandler(ItemSpRemove_Click); grp.Controls.Add(bRem);
             DevExpress.XtraEditors.SimpleButton bUp = new DevExpress.XtraEditors.SimpleButton();
-            bUp.Text = "Move Up"; bUp.Location = new System.Drawing.Point(200, 26); bUp.Size = new System.Drawing.Size(80, 24);
+            bUp.ImageOptions.ImageUri.Uri = "MoveUp;Size16x16"; bUp.ToolTip = "Move Up";
+            bUp.Location = new System.Drawing.Point(80, 26); bUp.Size = new System.Drawing.Size(30, 24);
             bUp.Click += delegate { ItemSpMove(-1); }; grp.Controls.Add(bUp);
             DevExpress.XtraEditors.SimpleButton bDn = new DevExpress.XtraEditors.SimpleButton();
-            bDn.Text = "Move Down"; bDn.Location = new System.Drawing.Point(284, 26); bDn.Size = new System.Drawing.Size(80, 24);
+            bDn.ImageOptions.ImageUri.Uri = "MoveDown;Size16x16"; bDn.ToolTip = "Move Down";
+            bDn.Location = new System.Drawing.Point(114, 26); bDn.Size = new System.Drawing.Size(30, 24);
             bDn.Click += delegate { ItemSpMove(1); }; grp.Controls.Add(bDn);
 
             _gridItemSp = new DevExpress.XtraGrid.GridControl();
@@ -675,11 +681,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             _itemSpCheck = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             _gridItemSp.RepositoryItems.Add(_itemSpCheck);
+            _itemSpItemLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
+            _itemSpItemRepo = zSCP2_Contract_Form.MakeItemCodeRepo(_itemSpItemLookup);
+            _gridItemSp.RepositoryItems.Add(_itemSpItemRepo);
 
             _itemSpareParts = _data.SpareParts != null ? _data.SpareParts.Copy() : zSCP2_Contract_Form.CreateSparePartsTable();
             _gridItemSp.DataSource = _itemSpareParts.DefaultView;
             _itemSpareParts.DefaultView.Sort = "Pos";
-            zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck);
+            zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck, _itemSpItemRepo);
             RenumberItemSp();
 
             _viewItemSp.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(ItemSp_CellValueChanged);
@@ -692,7 +701,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 e.Column.FieldName == "AmountAfterTax" || e.Column.FieldName == "No") return;
             _viewItemSp.PostEditor();
             DataRowView drv = _viewItemSp.GetRow(e.RowHandle) as DataRowView;
-            if (drv != null) zSCP2_Contract_Form.ComputeSpareRow(drv.Row);
+            if (drv != null)
+            {
+                if (e.Column.FieldName == "ItemCode") zSCP2_Contract_Form.FillFromItem(drv.Row, _itemSpItemLookup);
+                zSCP2_Contract_Form.ComputeSpareRow(drv.Row);
+            }
             _viewItemSp.RefreshData();
         }
 
