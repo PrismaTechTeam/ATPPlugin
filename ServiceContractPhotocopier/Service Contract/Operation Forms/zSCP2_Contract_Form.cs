@@ -75,6 +75,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void OnFormLoad(object sender, EventArgs e)
         {
             if (_db == null) return;
+            ApplyToolbarIcons();
+            LoadCurrencyLabel();
             LoadDebtorLookup();
             LoadContractTypeLookup();
             LoadAgentLookup();
@@ -326,6 +328,63 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         private void BtnAutoNo_Click(object sender, EventArgs e) { AutoPickContractNo(); }
+
+        // Real AutoCount toolbar icons (the exact ones AutoCount uses in its own detail grids), set in
+        // code because the DevExpress ImageUri names were unreliable (some rendered empty). Icon-only
+        // buttons are centered (MiddleCenter); icon+text buttons keep the icon on the left.
+        private void ApplyToolbarIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+
+                IconOnly(BtnSpInsert, img.GetSmallImage_Insert());
+                IconOnly(BtnSpRemove, img.GetSmallImage_Delete());
+                IconOnly(BtnSpUp, img.GetSmallImage_MoveUp());
+                IconOnly(BtnSpDown, img.GetSmallImage_MoveDown());
+                IconLeft(BtnItemAttach, img.GetSmallImage_Insert());
+                IconLeft(BtnItemDetach, img.GetSmallImage_Delete());
+
+                barCopyFrom.ImageOptions.Image = img.GetLargeImage_CopyFrom();
+                barCopyToNew.ImageOptions.Image = img.GetLargeImage_New();
+                barCopyWhole.ImageOptions.Image = img.GetSmallImage_CopyToClipboard();
+                barCopySelected.ImageOptions.Image = img.GetSmallImage_CopySelectedToClipboard();
+                barCopySpreadsheet.ImageOptions.Image = img.GetLargeImage_ExportAttachmentInExcel();   // #7: the missing icon
+                barPasteWhole.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
+                barPasteItems.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
+            }
+            catch { }   // icons are cosmetic — never block the form
+        }
+
+        private static void IconOnly(DevExpress.XtraEditors.SimpleButton b, System.Drawing.Image im)
+        {
+            b.Text = "";
+            b.ImageOptions.Image = im;
+            b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
+        }
+
+        private static void IconLeft(DevExpress.XtraEditors.SimpleButton b, System.Drawing.Image im)
+        {
+            b.ImageOptions.Image = im;
+            b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+        }
+
+        // Show the AutoCount home/default currency symbol (e.g. "RM") behind the Contract Value box.
+        // The home currency is the one whose exchange rate is 1.0 (AutoCount convention).
+        private void LoadCurrencyLabel()
+        {
+            try
+            {
+                object o = _db.ExecuteScalar(
+                    "SELECT TOP 1 ISNULL(NULLIF(LTRIM(RTRIM(CurrencySymbol)),''), CurrencyCode) " +
+                    "FROM [dbo].[Currency] WHERE BankBuyRate = 1 ORDER BY CurrencyCode");
+                LblCurrency.Text = (o == null || o == DBNull.Value) ? "" : o.ToString();
+            }
+            catch { LblCurrency.Text = ""; }
+        }
 
         // "Last day of month": disable the day spin and use month-end (stored as day 31 -> the existing
         // month-end clamp yields the true last day for every month).
@@ -740,6 +799,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridSpareParts.DataSource = _spareParts.DefaultView;
             _spareParts.DefaultView.Sort = "Pos";
             ConfigureSpareView(GridViewSpareParts, _spCheck, _spItemRepo);
+            GridViewSpareParts.RowHeight = 26;   // ~20% taller rows for easier editing
         }
 
         // Item master lookup for the "Item Provided" grid's Item Code column (like invoice / stock

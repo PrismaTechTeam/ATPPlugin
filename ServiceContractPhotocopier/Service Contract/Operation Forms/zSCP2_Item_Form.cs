@@ -639,6 +639,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.GridControl _gridItemSp;
         private DevExpress.XtraGrid.Views.Grid.GridView _viewItemSp;
 
+        private static void SetIcon(DevExpress.XtraEditors.SimpleButton b, System.Drawing.Image im)
+        {
+            b.ImageOptions.Image = im;
+            b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
+        }
+
         private void BuildItemSparePartsGrid()
         {
             // Make room: shrink the Meter group and dock a Spare Parts group beneath it.
@@ -653,22 +659,37 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Controls.Add(grp);
             grp.BringToFront();
 
+            AutoCount.Images.IAutoCountImage tbimg = null;
+            try
+            {
+                float dpi = 96f; try { dpi = this.DeviceDpi; } catch { }
+                tbimg = AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+            }
+            catch { }
+
             DevExpress.XtraEditors.SimpleButton bIns = new DevExpress.XtraEditors.SimpleButton();
-            bIns.ImageOptions.ImageUri.Uri = "Add;Size16x16"; bIns.ToolTip = "Insert Row";
+            bIns.ToolTip = "Insert Row";
             bIns.Location = new System.Drawing.Point(8, 26); bIns.Size = new System.Drawing.Size(30, 24);
             bIns.Click += new EventHandler(ItemSpInsert_Click); grp.Controls.Add(bIns);
             DevExpress.XtraEditors.SimpleButton bRem = new DevExpress.XtraEditors.SimpleButton();
-            bRem.ImageOptions.ImageUri.Uri = "Remove;Size16x16"; bRem.ToolTip = "Remove Row";
+            bRem.ToolTip = "Remove Row";
             bRem.Location = new System.Drawing.Point(42, 26); bRem.Size = new System.Drawing.Size(30, 24);
             bRem.Click += new EventHandler(ItemSpRemove_Click); grp.Controls.Add(bRem);
             DevExpress.XtraEditors.SimpleButton bUp = new DevExpress.XtraEditors.SimpleButton();
-            bUp.ImageOptions.ImageUri.Uri = "MoveUp;Size16x16"; bUp.ToolTip = "Move Up";
+            bUp.ToolTip = "Move Up";
             bUp.Location = new System.Drawing.Point(80, 26); bUp.Size = new System.Drawing.Size(30, 24);
             bUp.Click += delegate { ItemSpMove(-1); }; grp.Controls.Add(bUp);
             DevExpress.XtraEditors.SimpleButton bDn = new DevExpress.XtraEditors.SimpleButton();
-            bDn.ImageOptions.ImageUri.Uri = "MoveDown;Size16x16"; bDn.ToolTip = "Move Down";
+            bDn.ToolTip = "Move Down";
             bDn.Location = new System.Drawing.Point(114, 26); bDn.Size = new System.Drawing.Size(30, 24);
             bDn.Click += delegate { ItemSpMove(1); }; grp.Controls.Add(bDn);
+            if (tbimg != null)
+            {
+                SetIcon(bIns, tbimg.GetSmallImage_Insert());
+                SetIcon(bRem, tbimg.GetSmallImage_Delete());
+                SetIcon(bUp, tbimg.GetSmallImage_MoveUp());
+                SetIcon(bDn, tbimg.GetSmallImage_MoveDown());
+            }
 
             _gridItemSp = new DevExpress.XtraGrid.GridControl();
             _gridItemSp.Location = new System.Drawing.Point(2, 54);
@@ -689,6 +710,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _gridItemSp.DataSource = _itemSpareParts.DefaultView;
             _itemSpareParts.DefaultView.Sort = "Pos";
             zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck, _itemSpItemRepo);
+            _viewItemSp.RowHeight = 26;   // ~20% taller rows for easier editing
             RenumberItemSp();
 
             _viewItemSp.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(ItemSp_CellValueChanged);

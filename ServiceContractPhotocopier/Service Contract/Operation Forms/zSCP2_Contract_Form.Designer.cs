@@ -49,6 +49,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.LabelControl LblExpiryDate;
         private DevExpress.XtraEditors.DateEdit DtExpiryDate;
         private DevExpress.XtraEditors.LabelControl LblValue;
+        private DevExpress.XtraEditors.LabelControl LblCurrency;
         private DevExpress.XtraEditors.SpinEdit SpnContractValue;
         private DevExpress.XtraEditors.LabelControl LblAddress;
         private DevExpress.XtraEditors.MemoEdit TxtAddress;
@@ -145,6 +146,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblExpiryDate = new DevExpress.XtraEditors.LabelControl();
             this.DtExpiryDate = new DevExpress.XtraEditors.DateEdit();
             this.LblValue = new DevExpress.XtraEditors.LabelControl();
+            this.LblCurrency = new DevExpress.XtraEditors.LabelControl();
             this.SpnContractValue = new DevExpress.XtraEditors.SpinEdit();
             this.LblAddress = new DevExpress.XtraEditors.LabelControl();
             this.TxtAddress = new DevExpress.XtraEditors.MemoEdit();
@@ -425,6 +427,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.LblExpiryDate);
             this.PanelHeaderFields.Controls.Add(this.DtExpiryDate);
             this.PanelHeaderFields.Controls.Add(this.LblValue);
+            this.PanelHeaderFields.Controls.Add(this.LblCurrency);
             this.PanelHeaderFields.Controls.Add(this.SpnContractValue);
             this.PanelHeaderFields.Controls.Add(this.LblAddress);
             this.PanelHeaderFields.Controls.Add(this.TxtAddress);
@@ -609,6 +612,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.SpnContractValue.Size = new System.Drawing.Size(150, 20);
             this.SpnContractValue.TabIndex = 14;
+            //
+            // LblCurrency
+            //
+            this.LblCurrency.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
+            this.LblCurrency.Location = new System.Drawing.Point(266, 135);
+            this.LblCurrency.Name = "LblCurrency";
+            this.LblCurrency.Size = new System.Drawing.Size(40, 13);
+            this.LblCurrency.TabIndex = 15;
+            this.LblCurrency.Text = "";
             //
             // LblAddress
             //
@@ -1109,7 +1121,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Ribbon = this.RibbonCtl;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Service Contract";
-            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            this.WindowState = System.Windows.Forms.FormWindowState.Normal;
             ((System.ComponentModel.ISupportInitialize)(this.RibbonCtl)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtContractNo.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluContractType.Properties)).EndInit();
