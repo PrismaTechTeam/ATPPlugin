@@ -959,39 +959,45 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         // Auto-record a debtor-ownership-history row when the item's customer (its contract's debtor)
         // changes: close the previous open period and open a new one. No-op if unchanged.
+        // Writes to the v2 table zSCP2_ItemDebtorHistory (keyed to zSCP2_Item.ItemKey) — NOT the legacy
+        // zSCP_ServiceItemDebtorHistory, whose FK targets the v1 zSCP_ServiceItem.
         private static void RecordDebtorHistory(System.Data.SqlClient.SqlConnection conn,
             System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
         {
-            string debtor;
+            string debtor = "", contractNo = "";
             using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
-                "SELECT ISNULL(c.DebtorCode,'') FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c " +
-                "ON c.ContractKey=i.ContractKey WHERE i.ItemKey=@ik", conn, tx))
-            { q.Parameters.AddWithValue("@ik", itemKey); object o = q.ExecuteScalar(); debtor = o == null || o == DBNull.Value ? "" : o.ToString().Trim(); }
+                "SELECT ISNULL(c.DebtorCode,''), ISNULL(c.ContractNo,'') FROM [dbo].[zSCP2_Item] i " +
+                "LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey WHERE i.ItemKey=@ik", conn, tx))
+            {
+                q.Parameters.AddWithValue("@ik", itemKey);
+                using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { debtor = r.GetString(0).Trim(); contractNo = r.GetString(1).Trim(); } }
+            }
             if (debtor.Length == 0) return;
 
             long openKey = 0; string openDebtor = "";
             using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
-                "SELECT TOP 1 ServiceItemDebtorHistoryKey, ISNULL(DebtorCode,'') FROM [dbo].[zSCP_ServiceItemDebtorHistory] " +
-                "WHERE ServiceItemKey=@ik AND EndDate IS NULL ORDER BY StartDate DESC, ServiceItemDebtorHistoryKey DESC", conn, tx))
+                "SELECT TOP 1 HistoryKey, ISNULL(DebtorCode,'') FROM [dbo].[zSCP2_ItemDebtorHistory] " +
+                "WHERE ItemKey=@ik AND EndDate IS NULL ORDER BY StartDate DESC, HistoryKey DESC", conn, tx))
             {
                 q.Parameters.AddWithValue("@ik", itemKey);
-                using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { openKey = r.GetInt64(0); openDebtor = r.GetString(1); } }
+                using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { openKey = r.GetInt64(0); openDebtor = r.GetString(1).Trim(); } }
             }
             if (openDebtor == debtor) return;   // unchanged -> nothing to record
 
             if (openKey > 0)
                 using (System.Data.SqlClient.SqlCommand u = new System.Data.SqlClient.SqlCommand(
-                    "UPDATE [dbo].[zSCP_ServiceItemDebtorHistory] SET EndDate=CAST(GETDATE() AS DATE), LastModified=GETDATE() WHERE ServiceItemDebtorHistoryKey=@k", conn, tx))
+                    "UPDATE [dbo].[zSCP2_ItemDebtorHistory] SET EndDate=CAST(GETDATE() AS DATE), LastModified=GETDATE() WHERE HistoryKey=@k", conn, tx))
                 { u.Parameters.AddWithValue("@k", openKey); u.ExecuteNonQuery(); }
 
             using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
-                "INSERT INTO [dbo].[zSCP_ServiceItemDebtorHistory] (ServiceItemKey, ServiceItemCode, DebtorCode, StartDate, Remark, LastModified) " +
-                "VALUES (@ik, @code, @debtor, CAST(GETDATE() AS DATE), @remark, GETDATE())", conn, tx))
+                "INSERT INTO [dbo].[zSCP2_ItemDebtorHistory] (ItemKey, ServiceItemNo, DebtorCode, GradeCode, ContractNo, StartDate, LastModified) " +
+                "VALUES (@ik, @code, @debtor, @grade, @cno, CAST(GETDATE() AS DATE), GETDATE())", conn, tx))
             {
                 ins.Parameters.AddWithValue("@ik", itemKey);
                 ins.Parameters.AddWithValue("@code", d.ServiceItemNo ?? "");
                 ins.Parameters.AddWithValue("@debtor", debtor);
-                ins.Parameters.AddWithValue("@remark", string.IsNullOrEmpty(d.GradeCode) ? "" : "Grade: " + d.GradeCode);
+                ins.Parameters.AddWithValue("@grade", d.GradeCode ?? "");
+                ins.Parameters.AddWithValue("@cno", contractNo);
                 ins.ExecuteNonQuery();
             }
         }
@@ -1122,11 +1128,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DataTable dt = _db.GetDataTable(
                     "SELECT h.DebtorCode AS [Debtor Code], ISNULL(d.CompanyName,'') AS [Debtor Name], " +
-                    "ISNULL((SELECT GradeCode FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + _data.ItemKey + "),'') AS [Service Item Grade], " +
-                    "ISNULL((SELECT c.ContractNo FROM [dbo].[zSCP2_Item] i JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey WHERE i.ItemKey=" + _data.ItemKey + "),'') AS [Contract No], " +
+                    "h.GradeCode AS [Service Item Grade], h.ContractNo AS [Contract No], " +
                     "h.StartDate AS [Service Start Date], h.EndDate AS [End Date] " +
-                    "FROM [dbo].[zSCP_ServiceItemDebtorHistory] h LEFT JOIN [dbo].[Debtor] d ON d.AccNo=h.DebtorCode " +
-                    "WHERE h.ServiceItemKey=" + _data.ItemKey + " ORDER BY h.StartDate", false);
+                    "FROM [dbo].[zSCP2_ItemDebtorHistory] h LEFT JOIN [dbo].[Debtor] d ON d.AccNo=h.DebtorCode " +
+                    "WHERE h.ItemKey=" + _data.ItemKey + " ORDER BY h.StartDate", false);
                 grid.DataSource = dt;
                 view.PopulateColumns();
                 view.BestFitColumns();

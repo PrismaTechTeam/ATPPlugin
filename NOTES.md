@@ -288,3 +288,20 @@ Add to the contract editor ribbon, mirroring AutoCount's document entry:
   zSCP2_ContractSparePart with ItemKey set -> shows read-only on the contract's Spare Parts tab.
   Shared column layout + compute reused from the contract (ConfigureSpareView/CreateSparePartsTable/
   ComputeSpareRow made internal static). Contract save + standalone-item save both persist them. DONE.
+
+## 2026-07-15 — Service Item overhaul (3 phases) + validation-agent findings
+Rebuilt zSCP2_Item_Form entirely in code (no strict-designer surgery): header Item Code + Grade SLUs,
+removed Stock Location + Provided Items grid, 6-tab body (Item & Meter / Preventive / More Header /
+Debtors Ownership History / Note / Remarks), ribbon Clipboard group. ~35 new zSCP2_Item columns +
+PersistItemExtras (shared by both save paths). Preventive auto-computes Next Service Date; Debtor
+History auto-records on customer change.
+
+Validation agent (Explore) reviewed it: 5/6 checks PASS. One CRITICAL bug found and FIXED:
+- **C1**: RecordDebtorHistory/BuildDebtorHistoryTab used the legacy zSCP_ServiceItemDebtorHistory whose
+  FK targets the v1 zSCP_ServiceItem, but we passed a v2 zSCP2_Item.ItemKey -> on a fresh DB the FK is
+  unsatisfiable, so EVERY item save with a customer failed and rolled back. Fixed by creating a proper
+  v2 table zSCP2_ItemDebtorHistory (FK -> zSCP2_Item.ItemKey, ON DELETE CASCADE), capturing
+  Grade/ContractNo at record time, and repointing both read + write. Verified an ItemKey insert
+  succeeds (previously threw).
+- Minor (not fixed, cosmetic): same-day double debtor change yields a zero-length period; openDebtor
+  trim/case now symmetric after the fix.

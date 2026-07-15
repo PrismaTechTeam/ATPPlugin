@@ -86,6 +86,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v4.sql", asm);
             // Service Item overhaul: Item Code + Grade, More Header, Note/Remarks, Preventive. Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v6_Overhaul.sql", asm);
+            // v2 debtor ownership history (keyed to zSCP2_Item; legacy table FKs to v1 and can't hold v2 keys).
+            RunIfTableMissing(dbsetting, "zSCP2_ItemDebtorHistory",     "02_CreateTable_zSCP2_ItemDebtorHistory.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
             // Staging of current readings (manual key-ins + accepted API values) per billing period.
