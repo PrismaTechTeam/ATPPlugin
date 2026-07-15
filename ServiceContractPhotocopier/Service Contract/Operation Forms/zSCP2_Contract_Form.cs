@@ -1464,6 +1464,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             InsertMeters(conn, tx, d, itemKey);
                             InsertItemCodes(conn, tx, d, itemKey);
                             SaveItemSpareParts(conn, tx, d, itemKey);
+                            zSCP2_Item_Form.PersistItemExtras(conn, tx, d, itemKey);
                             pos++;
                         }
                         SaveSpareParts(conn, tx);

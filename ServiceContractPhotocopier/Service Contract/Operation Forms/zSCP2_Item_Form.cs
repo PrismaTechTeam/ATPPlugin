@@ -26,6 +26,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public DataTable Meters;          // schema = CreateMetersTable()
         public DataTable ItemCodes;       // schema = CreateItemCodesTable()
         public DataTable SpareParts;      // schema = zSCP2_Contract_Form.CreateSparePartsTable(); item-bound spare parts
+
+        // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
+        public string ItemCode = "";
+        public string GradeCode = "";
+        public string Note = "";
+        public string Remark1 = "";
+        public string Remark2 = "";
+        // More Header block keyed by zSCP2_Item column name (City/PostalCode/State/Country/Fax/Ref1-4 + Del*).
+        public System.Collections.Generic.Dictionary<string, string> MoreHeader
+            = new System.Collections.Generic.Dictionary<string, string>();
+        // --- Preventive Maintenance (Phase 2) ---
+        public bool PMActive;
+        public string PMIntervalType = "NONE";
+        public int PMIntervalValue;
+        public DateTime? PMStartDate;
+        public DateTime? PMLastServiceDate;
+        public DateTime? PMNextServiceDate;
+        public string PMDept = "";
+        public string PMJob = "";
+        public string PMLocation = "";
     }
 
     /// <summary>
@@ -43,6 +63,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DataTable _itemLookup;
         private DataTable _serialLookup;
         private bool _standalone;                                   // opened from "Maintain Service Item" New
+        // --- overhaul code-built controls ---
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluItemCode;   // header Item Code (Item master)
+        private DataTable _itemHdrLookup;
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluGrade;      // header Grade Code (+ create)
+        private DevExpress.XtraTab.XtraTabControl _tabMain;
+        private DevExpress.XtraTab.XtraTabPage _pgItemMeter, _pgPreventive, _pgMoreHeader, _pgDebtorHist, _pgNote, _pgRemark;
+        private readonly System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit> _imh
+            = new System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit>();   // item More Header fields
+        private DevExpress.XtraEditors.MemoEdit _imhDelAddress;
+        private DevExpress.XtraEditors.MemoEdit _txtNote;
+        private DevExpress.XtraEditors.TextEdit _txtRemark1, _txtRemark2;
         private DevExpress.XtraEditors.LabelControl _lblCustomer;
         private DevExpress.XtraEditors.SearchLookUpEdit _lkCustomer;
         private DevExpress.XtraEditors.SearchLookUpEdit _lkContract;   // standalone: attach to an EXISTING contract
@@ -137,11 +168,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DevExpress.XtraEditors.LabelControl lblC = new DevExpress.XtraEditors.LabelControl();
                 lblC.Text = "Contract No";
-                lblC.Location = new System.Drawing.Point(470, 264);
+                lblC.Location = new System.Drawing.Point(14, 290);
                 this.Controls.Add(lblC); lblC.BringToFront();
                 DevExpress.XtraEditors.TextEdit txtC = new DevExpress.XtraEditors.TextEdit();
-                txtC.Location = new System.Drawing.Point(600, 261);
-                txtC.Size = new System.Drawing.Size(160, 20);
+                txtC.Location = new System.Drawing.Point(120, 287);
+                txtC.Size = new System.Drawing.Size(214, 20);
                 txtC.Text = _parentContractNo;
                 txtC.Properties.ReadOnly = true;
                 txtC.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
@@ -154,18 +185,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Created in code — the strict designer file stays untouched.
             if (_standalone)
             {
-                GrpItemCodes.Top += 30;
-                GrpMeters.Top += 30;
-                GrpMeters.Height -= 30;
-
                 DevExpress.XtraEditors.LabelControl lblContract = new DevExpress.XtraEditors.LabelControl();
                 lblContract.Text = "Contract No";
-                lblContract.Location = new System.Drawing.Point(14, 264);
+                lblContract.Location = new System.Drawing.Point(14, 290);
                 this.Controls.Add(lblContract);
                 lblContract.BringToFront();
 
                 _lkContract = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkContract.Location = new System.Drawing.Point(120, 261);
+                _lkContract.Location = new System.Drawing.Point(120, 287);
                 _lkContract.Size = new System.Drawing.Size(214, 20);
                 _lkContract.Properties.NullText = "(create new contract)";
                 _lkContract.Properties.ValueMember = "ContractKey";
@@ -190,12 +217,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
                 _lblCustomer = new DevExpress.XtraEditors.LabelControl();
                 _lblCustomer.Text = "Customer *";
-                _lblCustomer.Location = new System.Drawing.Point(470, 264);   // align with the right column (Dept/Project)
+                _lblCustomer.Location = new System.Drawing.Point(470, 290);
                 this.Controls.Add(_lblCustomer);
                 _lblCustomer.BringToFront();
 
                 _lkCustomer = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkCustomer.Location = new System.Drawing.Point(600, 261);
+                _lkCustomer.Location = new System.Drawing.Point(600, 287);
                 _lkCustomer.Size = new System.Drawing.Size(210, 20);
                 _lkCustomer.Properties.NullText = "Select customer...";
                 _lkCustomer.Properties.ValueMember = "AccNo";
@@ -226,12 +253,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.Checked = _data.Inactive;
 
             _itemCodes = _data.ItemCodes != null ? _data.ItemCodes.Copy() : CreateItemCodesTable();
-            GridItemCodes.DataSource = _itemCodes;
+            GridItemCodes.DataSource = _itemCodes;   // Provided-Items grid is hidden in the overhaul; kept bound to avoid null refs
 
             _meters = _data.Meters != null ? _data.Meters.Copy() : CreateMetersTable();
             GridMeters.DataSource = _meters;
 
-            BuildItemSparePartsGrid();
+            BuildOverhaulUI();   // header Item Code/Grade, hide Stock Location + Provided Items, build the tab layout
 
             if (string.IsNullOrEmpty(_data.ServiceItemNo)) AutoPickServiceItemNo();
 
@@ -455,6 +482,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (_viewItemSp != null) _viewItemSp.PostEditor();
             if (_itemSpareParts != null) { _itemSpareParts.AcceptChanges(); _data.SpareParts = _itemSpareParts; }
 
+            // Extended fields (persisted by PersistItemExtras in the caller's transaction).
+            _data.ItemCode = _sluItemCode != null && _sluItemCode.EditValue != null ? _sluItemCode.EditValue.ToString().Trim() : "";
+            _data.GradeCode = _sluGrade != null && _sluGrade.EditValue != null ? _sluGrade.EditValue.ToString().Trim() : "";
+            foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
+                _data.MoreHeader[kv.Key] = (kv.Value.Text ?? "").Trim();
+            if (_imhDelAddress != null) _data.MoreHeader["DelAddress"] = _imhDelAddress.Text ?? "";
+            _data.Note = _txtNote != null ? _txtNote.Text : "";
+            _data.Remark1 = _txtRemark1 != null ? _txtRemark1.Text.Trim() : "";
+            _data.Remark2 = _txtRemark2 != null ? _txtRemark2.Text.Trim() : "";
+
             _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
             this.DialogResult = DialogResult.OK;
             this.Close();
@@ -645,19 +682,261 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
         }
 
-        private void BuildItemSparePartsGrid()
+        // ================= Overhaul UI (all code-built; no strict-designer surgery) =================
+        private void BuildOverhaulUI()
         {
-            // Make room: shrink the Meter group and dock a Spare Parts group beneath it.
-            GrpMeters.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
-            if (GrpMeters.Height > 220) GrpMeters.Height = 220;
+            // 1. Hide the removed pieces (kept in the designer to avoid risky deletion).
+            LblLocation.Visible = false; TxtLocation.Visible = false;   // Stock Location removed from UI
+            GrpItemCodes.Visible = false;                               // "Provided Items" grid removed
+            ChkInactive.Location = new System.Drawing.Point(600, 261);  // make room for Grade on the right column
+
+            // 2. Header: Item Code (SearchLookUpEdit over the Item master) where Stock Location was.
+            DevExpress.XtraEditors.LabelControl lblItemCode = new DevExpress.XtraEditors.LabelControl();
+            lblItemCode.Text = "Item Code"; lblItemCode.Location = new System.Drawing.Point(14, 238);
+            this.Controls.Add(lblItemCode); lblItemCode.BringToFront();
+            _itemHdrLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
+            _sluItemCode = new DevExpress.XtraEditors.SearchLookUpEdit();
+            _sluItemCode.Location = new System.Drawing.Point(120, 235);
+            _sluItemCode.Size = new System.Drawing.Size(214, 20);
+            _sluItemCode.Properties.NullText = "";
+            _sluItemCode.Properties.DataSource = _itemHdrLookup;
+            _sluItemCode.Properties.ValueMember = "ItemCode";
+            _sluItemCode.Properties.DisplayMember = "ItemCode";
+            _sluItemCode.EditValueChanged += new EventHandler(ItemCodeHeader_Changed);
+            this.Controls.Add(_sluItemCode); _sluItemCode.BringToFront();
+
+            // 3. Header: Grade Code (SearchLookUpEdit over zSCP_LK_ServiceItemGrade) + "+" create, right column.
+            DevExpress.XtraEditors.LabelControl lblGrade = new DevExpress.XtraEditors.LabelControl();
+            lblGrade.Text = "Grade Code"; lblGrade.Location = new System.Drawing.Point(470, 238);
+            this.Controls.Add(lblGrade); lblGrade.BringToFront();
+            _sluGrade = new DevExpress.XtraEditors.SearchLookUpEdit();
+            _sluGrade.Location = new System.Drawing.Point(600, 235);
+            _sluGrade.Size = new System.Drawing.Size(160, 20);
+            _sluGrade.Properties.NullText = "";
+            _sluGrade.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            _sluGrade.Properties.ValueMember = "ServiceItemGradeCode";
+            _sluGrade.Properties.DisplayMember = "ServiceItemGradeCode";
+            _sluGrade.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(SluGrade_ButtonClick);
+            LoadGradeLookup();
+            this.Controls.Add(_sluGrade); _sluGrade.BringToFront();
+
+            // 4. Tab control below the header.
+            _tabMain = new DevExpress.XtraTab.XtraTabControl();
+            _tabMain.Location = new System.Drawing.Point(5, 315);
+            _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - 320);
+            _tabMain.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            _pgItemMeter = new DevExpress.XtraTab.XtraTabPage(); _pgItemMeter.Text = "Item & Meter";
+            _pgPreventive = new DevExpress.XtraTab.XtraTabPage(); _pgPreventive.Text = "Preventive";
+            _pgMoreHeader = new DevExpress.XtraTab.XtraTabPage(); _pgMoreHeader.Text = "More Header";
+            _pgDebtorHist = new DevExpress.XtraTab.XtraTabPage(); _pgDebtorHist.Text = "Debtors Ownership History";
+            _pgNote = new DevExpress.XtraTab.XtraTabPage(); _pgNote.Text = "Note";
+            _pgRemark = new DevExpress.XtraTab.XtraTabPage(); _pgRemark.Text = "Remarks";
+            _tabMain.TabPages.AddRange(new DevExpress.XtraTab.XtraTabPage[] {
+                _pgItemMeter, _pgPreventive, _pgMoreHeader, _pgDebtorHist, _pgNote, _pgRemark });
+            this.Controls.Add(_tabMain);
+
+            // 5. Tab 1 "Item & Meter": Item Provided grid (Fill) + the Meter group reparented on top.
+            BuildItemSparePartsGrid(_pgItemMeter);
+            GrpMeters.Dock = System.Windows.Forms.DockStyle.Top;
+            GrpMeters.Height = 240;
+            _pgItemMeter.Controls.Add(GrpMeters);   // Top added after the Fill grid
+
+            // 6. Tab 3 "More Header" + Tab 5/6 Note/Remarks.
+            BuildItemMoreHeaderTab(_pgMoreHeader);
+            BuildNoteRemarkTabs();
+
+            // 7. Load the extended values. For an existing item read them straight from the DB (the
+            //    caller's LoadOneItem doesn't carry them); for a new/copied item use the _data defaults.
+            if (_data.ItemKey > 0) LoadExtrasFromDb(_data.ItemKey);
+            _sluItemCode.EditValue = string.IsNullOrEmpty(_data.ItemCode) ? null : (object)_data.ItemCode;
+            _sluGrade.EditValue = string.IsNullOrEmpty(_data.GradeCode) ? null : (object)_data.GradeCode;
+            foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
+                if (_data.MoreHeader.ContainsKey(kv.Key)) kv.Value.Text = _data.MoreHeader[kv.Key];
+            if (_imhDelAddress != null && _data.MoreHeader.ContainsKey("DelAddress")) _imhDelAddress.Text = _data.MoreHeader["DelAddress"];
+            _txtNote.Text = _data.Note ?? "";
+            _txtRemark1.Text = _data.Remark1 ?? "";
+            _txtRemark2.Text = _data.Remark2 ?? "";
+        }
+
+        private static readonly string[] _imhCols = {
+            "City","PostalCode","State","Country","Fax","Ref1","Ref2","Ref3","Ref4",
+            "DelBranchCode","DelBranchName","DelAddress","DelCity","DelPostalCode","DelState","DelCountry",
+            "DelPhone","DelFax","DelEmail","DelContactPerson" };
+
+        private void LoadExtrasFromDb(long itemKey)
+        {
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT ItemCode, GradeCode, Note, Remark1, Remark2, " + string.Join(", ", _imhCols) +
+                    " FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
+                if (dt.Rows.Count == 0) return;
+                DataRow r = dt.Rows[0];
+                _data.ItemCode = AsS(r["ItemCode"]); _data.GradeCode = AsS(r["GradeCode"]);
+                _data.Note = AsS(r["Note"]); _data.Remark1 = AsS(r["Remark1"]); _data.Remark2 = AsS(r["Remark2"]);
+                foreach (string c in _imhCols) _data.MoreHeader[c] = AsS(r[c]);
+            }
+            catch { }
+        }
+
+        private static string AsS(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
+
+        // Single source of truth for the item's EXTENDED columns (Item Code, Grade, More Header, Note,
+        // Remarks). Called by BOTH persistence paths (contract editor upsert loop + standalone
+        // InsertItemTree) right after the core item row + its ItemKey exist, inside their transaction.
+        internal static void PersistItemExtras(System.Data.SqlClient.SqlConnection conn,
+            System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("UPDATE [dbo].[zSCP2_Item] SET ItemCode=@ItemCode, GradeCode=@GradeCode, ")
+              .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2");
+            foreach (string c in _imhCols) sb.Append(", [").Append(c).Append("]=@").Append(c);
+            sb.Append(", LastModified=GETDATE() WHERE ItemKey=@ik");
+            using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(sb.ToString(), conn, tx))
+            {
+                cmd.Parameters.AddWithValue("@ItemCode", d.ItemCode ?? "");
+                cmd.Parameters.AddWithValue("@GradeCode", d.GradeCode ?? "");
+                cmd.Parameters.AddWithValue("@Note", (object)(d.Note ?? ""));
+                cmd.Parameters.AddWithValue("@Remark1", d.Remark1 ?? "");
+                cmd.Parameters.AddWithValue("@Remark2", d.Remark2 ?? "");
+                foreach (string c in _imhCols)
+                    cmd.Parameters.AddWithValue("@" + c, (d.MoreHeader != null && d.MoreHeader.ContainsKey(c)) ? (d.MoreHeader[c] ?? "") : "");
+                cmd.Parameters.AddWithValue("@ik", itemKey);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        private void ItemCodeHeader_Changed(object sender, EventArgs e)
+        {
+            _dirty = true;
+            if (_sluItemCode.EditValue == null || _itemHdrLookup == null) return;
+            string code = _sluItemCode.EditValue.ToString().Trim();
+            DataRow[] f = _itemHdrLookup.Select("ItemCode='" + code.Replace("'", "''") + "'");
+            if (f.Length > 0 && string.IsNullOrWhiteSpace(TxtDescription.Text)) TxtDescription.Text = f[0]["Description"].ToString();
+        }
+
+        private void LoadGradeLookup()
+        {
+            try
+            {
+                _sluGrade.Properties.DataSource = _db.GetDataTable(
+                    "SELECT ServiceItemGradeCode, Description FROM [dbo].[zSCP_LK_ServiceItemGrade] WHERE Inactive='N' ORDER BY ServiceItemGradeCode", false);
+            }
+            catch { }
+        }
+
+        // "+" on Grade: open the plugin's own Service Item Grade editor, then reselect (mirror SluContractType_ButtonClick).
+        private void SluGrade_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceItemGrade_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceItemGrade_Form(_db, null))
+                {
+                    if (f.ShowDialog(this) == DialogResult.OK)
+                    {
+                        LoadGradeLookup();
+                        if (!string.IsNullOrEmpty(f.SavedCode)) _sluGrade.EditValue = f.SavedCode;
+                    }
+                }
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Create Grade failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        // More Header tab for the item — mirrors the contract's _mh pattern, keyed by zSCP2_Item column names.
+        private void BuildItemMoreHeaderTab(System.Windows.Forms.Control page)
+        {
+            ImhField(page, "City", "City", 12, 14, 200);
+            ImhField(page, "PostalCode", "Postal Code", 430, 14, 200);
+            ImhField(page, "State", "State", 12, 40, 200);
+            ImhField(page, "Country", "Country", 430, 40, 200);
+            ImhField(page, "Fax", "Fax", 12, 66, 200);
+            ImhField(page, "Ref1", "Ref 1", 430, 66, 200);
+            ImhField(page, "Ref2", "Ref 2", 12, 92, 200);
+            ImhField(page, "Ref3", "Ref 3", 430, 92, 200);
+            ImhField(page, "Ref4", "Ref 4", 12, 118, 200);
 
             DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
+            grp.Text = "Delivery Address";
+            grp.Location = new System.Drawing.Point(12, 150);
+            grp.Size = new System.Drawing.Size(820, 210);
+            page.Controls.Add(grp);
+
+            ImhField(grp, "DelBranchCode", "Branch Code", 10, 28, 180);
+            ImhField(grp, "DelState", "State", 430, 28, 180);
+            ImhField(grp, "DelBranchName", "Branch Name", 10, 54, 180);
+            ImhField(grp, "DelCountry", "Country", 430, 54, 180);
+            DevExpress.XtraEditors.LabelControl lblAddr = new DevExpress.XtraEditors.LabelControl();
+            lblAddr.Text = "Address"; lblAddr.Location = new System.Drawing.Point(10, 83); grp.Controls.Add(lblAddr);
+            _imhDelAddress = new DevExpress.XtraEditors.MemoEdit();
+            _imhDelAddress.Location = new System.Drawing.Point(110, 80); _imhDelAddress.Size = new System.Drawing.Size(200, 60);
+            _imhDelAddress.EditValueChanged += delegate { _dirty = true; };
+            grp.Controls.Add(_imhDelAddress);
+            ImhField(grp, "DelPhone", "Phone", 430, 83, 180);
+            ImhField(grp, "DelFax", "Fax", 430, 109, 180);
+            ImhField(grp, "DelEmail", "Email", 430, 135, 180);
+            ImhField(grp, "DelContactPerson", "Contact Person", 430, 161, 180);
+            ImhField(grp, "DelCity", "City", 10, 150, 180);
+            ImhField(grp, "DelPostalCode", "Postal Code", 10, 176, 180);
+        }
+
+        private void ImhField(System.Windows.Forms.Control parent, string col, string caption, int x, int y, int width)
+        {
+            DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
+            lbl.Text = caption; lbl.Location = new System.Drawing.Point(x, y + 3);
+            parent.Controls.Add(lbl);
+            DevExpress.XtraEditors.TextEdit ed = new DevExpress.XtraEditors.TextEdit();
+            ed.Location = new System.Drawing.Point(x + 98, y);
+            ed.Size = new System.Drawing.Size(width, 20);
+            ed.EditValueChanged += delegate { _dirty = true; };
+            parent.Controls.Add(ed);
+            _imh[col] = ed;
+        }
+
+        private void BuildNoteRemarkTabs()
+        {
+            _txtNote = new DevExpress.XtraEditors.MemoEdit();
+            _txtNote.Location = new System.Drawing.Point(12, 12);
+            _txtNote.Size = new System.Drawing.Size(700, 300);
+            _txtNote.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            _txtNote.EditValueChanged += delegate { _dirty = true; };
+            _pgNote.Controls.Add(_txtNote);
+
+            DevExpress.XtraEditors.LabelControl l1 = new DevExpress.XtraEditors.LabelControl();
+            l1.Text = "Remark 1"; l1.Location = new System.Drawing.Point(12, 16); _pgRemark.Controls.Add(l1);
+            _txtRemark1 = new DevExpress.XtraEditors.TextEdit();
+            _txtRemark1.Location = new System.Drawing.Point(90, 13); _txtRemark1.Size = new System.Drawing.Size(500, 20);
+            _txtRemark1.EditValueChanged += delegate { _dirty = true; }; _pgRemark.Controls.Add(_txtRemark1);
+            DevExpress.XtraEditors.LabelControl l2 = new DevExpress.XtraEditors.LabelControl();
+            l2.Text = "Remark 2"; l2.Location = new System.Drawing.Point(12, 42); _pgRemark.Controls.Add(l2);
+            _txtRemark2 = new DevExpress.XtraEditors.TextEdit();
+            _txtRemark2.Location = new System.Drawing.Point(90, 39); _txtRemark2.Size = new System.Drawing.Size(500, 20);
+            _txtRemark2.EditValueChanged += delegate { _dirty = true; }; _pgRemark.Controls.Add(_txtRemark2);
+        }
+
+        // Builds the "Item Provided" group into the given container (the Item & Meter tab), docked to
+        // fill under the Meter grid. Toolbar (insert/remove/up/down icons) on a top bar, grid fills.
+        private void BuildItemSparePartsGrid(System.Windows.Forms.Control parent)
+        {
+            DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
             grp.Text = "Item Provided";
-            grp.Location = new System.Drawing.Point(GrpMeters.Left, GrpMeters.Bottom + 8);
-            grp.Size = new System.Drawing.Size(GrpMeters.Width, Math.Max(150, this.ClientSize.Height - GrpMeters.Bottom - 20));
-            grp.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
-            this.Controls.Add(grp);
-            grp.BringToFront();
+            grp.Dock = System.Windows.Forms.DockStyle.Fill;
+
+            _gridItemSp = new DevExpress.XtraGrid.GridControl();
+            _gridItemSp.Dock = System.Windows.Forms.DockStyle.Fill;
+            _viewItemSp = new DevExpress.XtraGrid.Views.Grid.GridView(_gridItemSp);
+            _gridItemSp.MainView = _viewItemSp;
+            _gridItemSp.ViewCollection.Add(_viewItemSp);
+            grp.Controls.Add(_gridItemSp);   // Fill added first
+
+            DevExpress.XtraEditors.PanelControl bar = new DevExpress.XtraEditors.PanelControl();
+            bar.Dock = System.Windows.Forms.DockStyle.Top;
+            bar.Height = 32;
+            grp.Controls.Add(bar);           // Top added after Fill
 
             AutoCount.Images.IAutoCountImage tbimg = null;
             try
@@ -669,20 +948,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             DevExpress.XtraEditors.SimpleButton bIns = new DevExpress.XtraEditors.SimpleButton();
             bIns.ToolTip = "Insert Row";
-            bIns.Location = new System.Drawing.Point(8, 26); bIns.Size = new System.Drawing.Size(30, 24);
-            bIns.Click += new EventHandler(ItemSpInsert_Click); grp.Controls.Add(bIns);
+            bIns.Location = new System.Drawing.Point(6, 4); bIns.Size = new System.Drawing.Size(30, 24);
+            bIns.Click += new EventHandler(ItemSpInsert_Click); bar.Controls.Add(bIns);
             DevExpress.XtraEditors.SimpleButton bRem = new DevExpress.XtraEditors.SimpleButton();
             bRem.ToolTip = "Remove Row";
-            bRem.Location = new System.Drawing.Point(42, 26); bRem.Size = new System.Drawing.Size(30, 24);
-            bRem.Click += new EventHandler(ItemSpRemove_Click); grp.Controls.Add(bRem);
+            bRem.Location = new System.Drawing.Point(40, 4); bRem.Size = new System.Drawing.Size(30, 24);
+            bRem.Click += new EventHandler(ItemSpRemove_Click); bar.Controls.Add(bRem);
             DevExpress.XtraEditors.SimpleButton bUp = new DevExpress.XtraEditors.SimpleButton();
             bUp.ToolTip = "Move Up";
-            bUp.Location = new System.Drawing.Point(80, 26); bUp.Size = new System.Drawing.Size(30, 24);
-            bUp.Click += delegate { ItemSpMove(-1); }; grp.Controls.Add(bUp);
+            bUp.Location = new System.Drawing.Point(78, 4); bUp.Size = new System.Drawing.Size(30, 24);
+            bUp.Click += delegate { ItemSpMove(-1); }; bar.Controls.Add(bUp);
             DevExpress.XtraEditors.SimpleButton bDn = new DevExpress.XtraEditors.SimpleButton();
             bDn.ToolTip = "Move Down";
-            bDn.Location = new System.Drawing.Point(114, 26); bDn.Size = new System.Drawing.Size(30, 24);
-            bDn.Click += delegate { ItemSpMove(1); }; grp.Controls.Add(bDn);
+            bDn.Location = new System.Drawing.Point(112, 4); bDn.Size = new System.Drawing.Size(30, 24);
+            bDn.Click += delegate { ItemSpMove(1); }; bar.Controls.Add(bDn);
             if (tbimg != null)
             {
                 SetIcon(bIns, tbimg.GetSmallImage_Insert());
@@ -691,14 +970,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SetIcon(bDn, tbimg.GetSmallImage_MoveDown());
             }
 
-            _gridItemSp = new DevExpress.XtraGrid.GridControl();
-            _gridItemSp.Location = new System.Drawing.Point(2, 54);
-            _gridItemSp.Size = new System.Drawing.Size(grp.Width - 6, grp.Height - 58);
-            _gridItemSp.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
-            _viewItemSp = new DevExpress.XtraGrid.Views.Grid.GridView(_gridItemSp);
-            _gridItemSp.MainView = _viewItemSp;
-            _gridItemSp.ViewCollection.Add(_viewItemSp);
-            grp.Controls.Add(_gridItemSp);
+            parent.Controls.Add(grp);
 
             _itemSpCheck = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             _gridItemSp.RepositoryItems.Add(_itemSpCheck);

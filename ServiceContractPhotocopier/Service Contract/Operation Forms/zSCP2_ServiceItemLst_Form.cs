@@ -305,6 +305,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                 }
             }
+
+            // Extended item columns (Item Code, Grade, More Header, Note, Remarks).
+            zSCP2_Item_Form.PersistItemExtras(cn, tx, d, itemKey);
         }
 
         private static decimal Dec(object v)
