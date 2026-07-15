@@ -33,6 +33,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public string Note = "";
         public string Remark1 = "";
         public string Remark2 = "";
+        // --- contract-mirrored header context (same as the contract, minus billing checkboxes + value) ---
+        public string ReferenceNo = "";
+        public string ContractTypeCode = "";
+        public string StaffCode = "";              // Agent
+        public DateTime? ServiceStartDate;
+        public string Address1 = "";
+        public string Attention = "";
+        public string Phone = "";
+        public string TermCode = "";
+        public string AreaCode = "";
         // More Header block keyed by zSCP2_Item column name (City/PostalCode/State/Country/Fax/Ref1-4 + Del*).
         public System.Collections.Generic.Dictionary<string, string> MoreHeader
             = new System.Collections.Generic.Dictionary<string, string>();
@@ -67,6 +77,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SearchLookUpEdit _sluItemCode;   // header Item Code (Item master)
         private DataTable _itemHdrLookup;
         private DevExpress.XtraEditors.SearchLookUpEdit _sluGrade;      // header Grade Code (+ create)
+        // --- contract-mirrored header controls (same as contract, minus billing checkboxes + value) ---
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluCType;      // Contract Type (+ create)
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluAgentI;     // Agent
+        private DevExpress.XtraEditors.TextEdit _txtRefNo;
+        private DevExpress.XtraEditors.DateEdit _dtStart, _dtExpiry;
+        private DevExpress.XtraEditors.MemoEdit _txtAddr;
+        private DevExpress.XtraEditors.TextEdit _txtAttn, _txtPhone, _txtTerm, _txtArea;
         private DevExpress.XtraTab.XtraTabControl _tabMain;
         private DevExpress.XtraTab.XtraTabPage _pgItemMeter, _pgPreventive, _pgMoreHeader, _pgDebtorHist, _pgNote, _pgRemark;
         private readonly System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit> _imh
@@ -175,10 +192,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DevExpress.XtraEditors.LabelControl lblC = new DevExpress.XtraEditors.LabelControl();
                 lblC.Text = "Contract No";
-                lblC.Location = new System.Drawing.Point(14, 290);
+                lblC.Location = new System.Drawing.Point(14, 420);
                 this.Controls.Add(lblC); lblC.BringToFront();
                 DevExpress.XtraEditors.TextEdit txtC = new DevExpress.XtraEditors.TextEdit();
-                txtC.Location = new System.Drawing.Point(120, 287);
+                txtC.Location = new System.Drawing.Point(120, 417);
                 txtC.Size = new System.Drawing.Size(214, 20);
                 txtC.Text = _parentContractNo;
                 txtC.Properties.ReadOnly = true;
@@ -194,12 +211,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DevExpress.XtraEditors.LabelControl lblContract = new DevExpress.XtraEditors.LabelControl();
                 lblContract.Text = "Contract No";
-                lblContract.Location = new System.Drawing.Point(14, 290);
+                lblContract.Location = new System.Drawing.Point(14, 420);
                 this.Controls.Add(lblContract);
                 lblContract.BringToFront();
 
                 _lkContract = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkContract.Location = new System.Drawing.Point(120, 287);
+                _lkContract.Location = new System.Drawing.Point(120, 417);
                 _lkContract.Size = new System.Drawing.Size(214, 20);
                 _lkContract.Properties.NullText = "(create new contract)";
                 _lkContract.Properties.ValueMember = "ContractKey";
@@ -224,12 +241,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
                 _lblCustomer = new DevExpress.XtraEditors.LabelControl();
                 _lblCustomer.Text = "Customer *";
-                _lblCustomer.Location = new System.Drawing.Point(470, 290);
+                _lblCustomer.Location = new System.Drawing.Point(470, 420);
                 this.Controls.Add(_lblCustomer);
                 _lblCustomer.BringToFront();
 
                 _lkCustomer = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkCustomer.Location = new System.Drawing.Point(600, 287);
+                _lkCustomer.Location = new System.Drawing.Point(600, 417);
                 _lkCustomer.Size = new System.Drawing.Size(210, 20);
                 _lkCustomer.Properties.NullText = "Select customer...";
                 _lkCustomer.Properties.ValueMember = "AccNo";
@@ -492,6 +509,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Extended fields (persisted by PersistItemExtras in the caller's transaction).
             _data.ItemCode = _sluItemCode != null && _sluItemCode.EditValue != null ? _sluItemCode.EditValue.ToString().Trim() : "";
             _data.GradeCode = _sluGrade != null && _sluGrade.EditValue != null ? _sluGrade.EditValue.ToString().Trim() : "";
+            // Contract-mirrored header context.
+            _data.ContractTypeCode = _sluCType != null && _sluCType.EditValue != null ? _sluCType.EditValue.ToString().Trim() : "";
+            _data.StaffCode = _sluAgentI != null && _sluAgentI.EditValue != null ? _sluAgentI.EditValue.ToString().Trim() : "";
+            _data.ReferenceNo = _txtRefNo != null ? _txtRefNo.Text.Trim() : "";
+            _data.Address1 = _txtAddr != null ? _txtAddr.Text.Trim() : "";
+            _data.Attention = _txtAttn != null ? _txtAttn.Text.Trim() : "";
+            _data.Phone = _txtPhone != null ? _txtPhone.Text.Trim() : "";
+            _data.TermCode = _txtTerm != null ? _txtTerm.Text.Trim() : "";
+            _data.AreaCode = _txtArea != null ? _txtArea.Text.Trim() : "";
+            if (_dtStart != null) _data.ServiceStartDate = _dtStart.EditValue == null || _dtStart.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_dtStart.EditValue);
+            if (_dtExpiry != null) _data.ServiceExpiryDate = _dtExpiry.EditValue == null || _dtExpiry.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_dtExpiry.EditValue);
+            if (_data.ServiceStartDate.HasValue && _data.ServiceExpiryDate.HasValue && _data.ServiceExpiryDate.Value < _data.ServiceStartDate.Value)
+            { XtraMessageBox.Show("Service expiry date cannot be earlier than the start date.", "Validation"); return; }
             foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
                 _data.MoreHeader[kv.Key] = (kv.Value.Text ?? "").Trim();
             if (_imhDelAddress != null) _data.MoreHeader["DelAddress"] = _imhDelAddress.Text ?? "";
@@ -714,30 +744,43 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // 1. Hide the removed pieces (kept in the designer to avoid risky deletion).
             LblLocation.Visible = false; TxtLocation.Visible = false;   // Stock Location removed from UI
             GrpItemCodes.Visible = false;                               // "Provided Items" grid removed
-            ChkInactive.Location = new System.Drawing.Point(600, 261);  // make room for Grade on the right column
 
-            // 2. Header: Item Code (SearchLookUpEdit over the Item master) where Stock Location was.
-            DevExpress.XtraEditors.LabelControl lblItemCode = new DevExpress.XtraEditors.LabelControl();
-            lblItemCode.Text = "Item Code"; lblItemCode.Location = new System.Drawing.Point(14, 238);
-            this.Controls.Add(lblItemCode); lblItemCode.BringToFront();
+            // 1b. Reposition the designer header controls into a dense, contract-like two-column layout.
+            LblServiceItemNo.Location = new System.Drawing.Point(14, 160);
+            TxtServiceItemNo.Location = new System.Drawing.Point(120, 157);
+            BtnAutoNo.Location = new System.Drawing.Point(274, 156);
+            LblSerial.Location = new System.Drawing.Point(14, 212);
+            TxtSerial.Location = new System.Drawing.Point(120, 209);
+            LblDesc.Location = new System.Drawing.Point(14, 238);
+            TxtDescription.Location = new System.Drawing.Point(120, 235);
+            LblBillDay.Location = new System.Drawing.Point(470, 342);
+            SpnBillingDayOverride.Location = new System.Drawing.Point(600, 339);
+            LblBillDayHint.Location = new System.Drawing.Point(786, 342);
+            LblDept.Location = new System.Drawing.Point(470, 368);
+            SluDept.Location = new System.Drawing.Point(600, 365);
+            LblJob.Location = new System.Drawing.Point(470, 394);
+            SluProject.Location = new System.Drawing.Point(600, 391);
+            ChkInactive.Location = new System.Drawing.Point(120, 393);
+
+            // 2. Header: Item Code (SearchLookUpEdit over the Item master) — left column, row 2.
+            MakeLbl("Item Code", 14, 186);
             _itemHdrLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
             _sluItemCode = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluItemCode.Location = new System.Drawing.Point(120, 235);
+            _sluItemCode.Location = new System.Drawing.Point(120, 183);
             _sluItemCode.Size = new System.Drawing.Size(214, 20);
             _sluItemCode.Properties.NullText = "";
             _sluItemCode.Properties.DataSource = _itemHdrLookup;
             _sluItemCode.Properties.ValueMember = "ItemCode";
             _sluItemCode.Properties.DisplayMember = "ItemCode";
             _sluItemCode.EditValueChanged += new EventHandler(ItemCodeHeader_Changed);
+            _sluItemCode.EditValueChanged += MarkDirty;
             this.Controls.Add(_sluItemCode); _sluItemCode.BringToFront();
 
-            // 3. Header: Grade Code (SearchLookUpEdit over zSCP_LK_ServiceItemGrade) + "+" create, right column.
-            DevExpress.XtraEditors.LabelControl lblGrade = new DevExpress.XtraEditors.LabelControl();
-            lblGrade.Text = "Grade Code"; lblGrade.Location = new System.Drawing.Point(470, 238);
-            this.Controls.Add(lblGrade); lblGrade.BringToFront();
+            // 3. Header: Grade Code (SearchLookUpEdit over zSCP_LK_ServiceItemGrade) + "+" create — left column, row 5.
+            MakeLbl("Grade Code", 14, 264);
             _sluGrade = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluGrade.Location = new System.Drawing.Point(600, 235);
-            _sluGrade.Size = new System.Drawing.Size(160, 20);
+            _sluGrade.Location = new System.Drawing.Point(120, 261);
+            _sluGrade.Size = new System.Drawing.Size(214, 20);
             _sluGrade.Properties.NullText = "";
             _sluGrade.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
@@ -745,13 +788,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _sluGrade.Properties.ValueMember = "ServiceItemGradeCode";
             _sluGrade.Properties.DisplayMember = "ServiceItemGradeCode";
             _sluGrade.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(SluGrade_ButtonClick);
+            _sluGrade.EditValueChanged += MarkDirty;
             LoadGradeLookup();
             this.Controls.Add(_sluGrade); _sluGrade.BringToFront();
 
+            // 3b. Contract-mirrored context fields (same as the contract, minus billing checkboxes + Contract Value).
+            BuildContractContextHeader();
+
             // 4. Tab control below the header.
             _tabMain = new DevExpress.XtraTab.XtraTabControl();
-            _tabMain.Location = new System.Drawing.Point(5, 315);
-            _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - 320);
+            _tabMain.Location = new System.Drawing.Point(5, 448);
+            _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - 453);
             _tabMain.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             _pgItemMeter = new DevExpress.XtraTab.XtraTabPage(); _pgItemMeter.Text = "Item & Meter";
             _pgPreventive = new DevExpress.XtraTab.XtraTabPage(); _pgPreventive.Text = "Preventive";
@@ -776,15 +823,187 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             BuildDebtorHistoryTab(_pgDebtorHist);
             ExtendItemRibbon();
 
+            // 6b. New item under a known contract: inherit that contract's context so the header isn't blank.
+            if (_data.ItemKey <= 0 && !string.IsNullOrEmpty(_parentContractNo)) PrefillContextFromContract(_parentContractNo);
+
             // 7. Populate the header + More Header + Note/Remarks controls from _data (loaded at step 0).
             _sluItemCode.EditValue = string.IsNullOrEmpty(_data.ItemCode) ? null : (object)_data.ItemCode;
             _sluGrade.EditValue = string.IsNullOrEmpty(_data.GradeCode) ? null : (object)_data.GradeCode;
+            _sluCType.EditValue = string.IsNullOrEmpty(_data.ContractTypeCode) ? null : (object)_data.ContractTypeCode;
+            _sluAgentI.EditValue = string.IsNullOrEmpty(_data.StaffCode) ? null : (object)_data.StaffCode;
+            _txtRefNo.Text = _data.ReferenceNo ?? "";
+            _txtAddr.Text = _data.Address1 ?? "";
+            _txtAttn.Text = _data.Attention ?? "";
+            _txtPhone.Text = _data.Phone ?? "";
+            _txtTerm.Text = _data.TermCode ?? "";
+            _txtArea.Text = _data.AreaCode ?? "";
+            _dtStart.EditValue = _data.ServiceStartDate.HasValue ? (object)_data.ServiceStartDate.Value : null;
+            _dtExpiry.EditValue = _data.ServiceExpiryDate.HasValue ? (object)_data.ServiceExpiryDate.Value : null;
             foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
                 if (_data.MoreHeader.ContainsKey(kv.Key)) kv.Value.Text = _data.MoreHeader[kv.Key];
             if (_imhDelAddress != null && _data.MoreHeader.ContainsKey("DelAddress")) _imhDelAddress.Text = _data.MoreHeader["DelAddress"];
             _txtNote.Text = _data.Note ?? "";
             _txtRemark1.Text = _data.Remark1 ?? "";
             _txtRemark2.Text = _data.Remark2 ?? "";
+            _dirty = false;   // programmatic population above must not look like a user edit
+        }
+
+        private void MarkDirty(object sender, EventArgs e) { _dirty = true; }
+
+        private DevExpress.XtraEditors.LabelControl MakeLbl(string text, int x, int y)
+        {
+            DevExpress.XtraEditors.LabelControl l = new DevExpress.XtraEditors.LabelControl();
+            l.Text = text; l.Location = new System.Drawing.Point(x, y);
+            this.Controls.Add(l); l.BringToFront();
+            return l;
+        }
+
+        private DevExpress.XtraEditors.TextEdit MakeTxt(int x, int y, int w, int maxLen)
+        {
+            DevExpress.XtraEditors.TextEdit t = new DevExpress.XtraEditors.TextEdit();
+            t.Location = new System.Drawing.Point(x, y);
+            t.Size = new System.Drawing.Size(w, 20);
+            if (maxLen > 0) t.Properties.MaxLength = maxLen;
+            t.EditValueChanged += MarkDirty;
+            this.Controls.Add(t); t.BringToFront();
+            return t;
+        }
+
+        private DevExpress.XtraEditors.DateEdit MakeDate(int x, int y, int w)
+        {
+            DevExpress.XtraEditors.DateEdit d = new DevExpress.XtraEditors.DateEdit();
+            d.Location = new System.Drawing.Point(x, y);
+            d.Size = new System.Drawing.Size(w, 20);
+            d.EditValue = null;
+            d.EditValueChanged += MarkDirty;
+            this.Controls.Add(d); d.BringToFront();
+            return d;
+        }
+
+        // Contract-mirrored header context: same fields as the contract, minus the billing checkboxes and
+        // Contract Value. Left column rows 6-9 (Contract Type / Reference No / Service Start..To / Agent),
+        // right column rows 1-5 (Address / Attention / Phone / Term / Area).
+        private void BuildContractContextHeader()
+        {
+            // Contract Type (SearchLookUpEdit + "+" create, mirroring the contract's SluContractType).
+            MakeLbl("Contract Type", 14, 290);
+            _sluCType = new DevExpress.XtraEditors.SearchLookUpEdit();
+            _sluCType.Location = new System.Drawing.Point(120, 287);
+            _sluCType.Size = new System.Drawing.Size(214, 20);
+            _sluCType.Properties.NullText = "";
+            _sluCType.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Plus)});
+            _sluCType.Properties.ValueMember = "ServiceContractTypeCode";
+            _sluCType.Properties.DisplayMember = "ServiceContractTypeCode";
+            _sluCType.Properties.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(SluCType_ButtonClick);
+            _sluCType.EditValueChanged += MarkDirty;
+            LoadContractTypeLookupI();
+            this.Controls.Add(_sluCType); _sluCType.BringToFront();
+
+            // Reference No.
+            MakeLbl("Reference No", 14, 316);
+            _txtRefNo = MakeTxt(120, 313, 214, 80);
+
+            // Service Start Date [ To ] Expiry.
+            MakeLbl("Service Start Date", 14, 342);
+            _dtStart = MakeDate(120, 339, 92);
+            MakeLbl("To", 220, 342);
+            _dtExpiry = MakeDate(242, 339, 92);
+
+            // Agent (SearchLookUpEdit over AutoCount SalesAgent, mirroring the contract's SluAgent).
+            MakeLbl("Agent", 14, 368);
+            _sluAgentI = new DevExpress.XtraEditors.SearchLookUpEdit();
+            _sluAgentI.Location = new System.Drawing.Point(120, 365);
+            _sluAgentI.Size = new System.Drawing.Size(214, 20);
+            _sluAgentI.Properties.NullText = "";
+            _sluAgentI.Properties.ValueMember = "SalesAgent";
+            _sluAgentI.Properties.DisplayMember = "SalesAgent";
+            _sluAgentI.EditValueChanged += MarkDirty;
+            LoadAgentLookupI();
+            this.Controls.Add(_sluAgentI); _sluAgentI.BringToFront();
+
+            // Right column: Address (memo) + Attention / Phone / Term / Area.
+            MakeLbl("Address", 470, 160);
+            _txtAddr = new DevExpress.XtraEditors.MemoEdit();
+            _txtAddr.Location = new System.Drawing.Point(600, 157);
+            _txtAddr.Size = new System.Drawing.Size(300, 62);
+            _txtAddr.EditValueChanged += MarkDirty;
+            this.Controls.Add(_txtAddr); _txtAddr.BringToFront();
+
+            MakeLbl("Attention", 470, 238); _txtAttn = MakeTxt(600, 235, 210, 100);
+            MakeLbl("Phone", 470, 264); _txtPhone = MakeTxt(600, 261, 210, 40);
+            MakeLbl("Term", 470, 290); _txtTerm = MakeTxt(600, 287, 210, 40);
+            MakeLbl("Area", 470, 316); _txtArea = MakeTxt(600, 313, 210, 40);
+        }
+
+        private void LoadContractTypeLookupI()
+        {
+            DataTable dt;
+            try
+            {
+                dt = _db.GetDataTable(
+                    "SELECT ServiceContractTypeCode, Description FROM [dbo].[zSCP_LK_ServiceContractType] " +
+                    "WHERE Inactive = 'N' ORDER BY ServiceContractTypeCode", false);
+            }
+            catch { dt = new DataTable(); }
+            _sluCType.Properties.DataSource = dt;
+        }
+
+        private void LoadAgentLookupI()
+        {
+            DataTable dt;
+            try
+            {
+                dt = _db.GetDataTable(
+                    "SELECT SalesAgent, ISNULL(Description,'') AS Description FROM [dbo].[SalesAgent] " +
+                    "WHERE IsActive = 'T' ORDER BY SalesAgent", false);
+            }
+            catch { dt = new DataTable(); }
+            _sluAgentI.Properties.DataSource = dt;
+        }
+
+        // "+" on Contract Type opens the master and reselects the freshly-created code (mirrors the contract form).
+        private void SluCType_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceContractType_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceContractType_Form(_db, null))
+                {
+                    if (f.ShowDialog(this) == System.Windows.Forms.DialogResult.OK)
+                    {
+                        LoadContractTypeLookupI();
+                        if (!string.IsNullOrEmpty(f.SavedCode)) _sluCType.EditValue = f.SavedCode;
+                    }
+                }
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Could not open Contract Type maintenance:\r\n" + ex.Message, "Error"); }
+        }
+
+        // New item under an existing contract: copy that contract's context into _data so the header shows it.
+        private void PrefillContextFromContract(string contractNo)
+        {
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT TOP 1 ContractTypeCode, StaffCode, ServiceStartDate, ServiceExpiryDate, " +
+                    "Address1, Attention, Phone, TermCode, AreaCode FROM [dbo].[zSCP2_Contract] WHERE ContractNo=" +
+                    "'" + contractNo.Replace("'", "''") + "'", false);
+                if (dt.Rows.Count == 0) return;
+                DataRow r = dt.Rows[0];
+                if (string.IsNullOrEmpty(_data.ContractTypeCode)) _data.ContractTypeCode = AsS(r["ContractTypeCode"]);
+                if (string.IsNullOrEmpty(_data.StaffCode)) _data.StaffCode = AsS(r["StaffCode"]);
+                if (string.IsNullOrEmpty(_data.Address1)) _data.Address1 = AsS(r["Address1"]);
+                if (string.IsNullOrEmpty(_data.Attention)) _data.Attention = AsS(r["Attention"]);
+                if (string.IsNullOrEmpty(_data.Phone)) _data.Phone = AsS(r["Phone"]);
+                if (string.IsNullOrEmpty(_data.TermCode)) _data.TermCode = AsS(r["TermCode"]);
+                if (string.IsNullOrEmpty(_data.AreaCode)) _data.AreaCode = AsS(r["AreaCode"]);
+                if (!_data.ServiceStartDate.HasValue && r["ServiceStartDate"] != DBNull.Value) _data.ServiceStartDate = Convert.ToDateTime(r["ServiceStartDate"]);
+                if (!_data.ServiceExpiryDate.HasValue && r["ServiceExpiryDate"] != DBNull.Value) _data.ServiceExpiryDate = Convert.ToDateTime(r["ServiceExpiryDate"]);
+            }
+            catch { }
         }
 
         private static readonly string[] _imhCols = {
@@ -796,15 +1015,36 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             try
             {
+                // Context fields (ContractType/Agent/dates/address/…) fall back to the parent contract when the
+                // item hasn't overridden them, so legacy items and items-under-a-contract show the contract's data.
+                // Reference No stays item-specific (a per-document reference), never inherited.
+                string iMh = "i.[" + string.Join("], i.[", _imhCols) + "]";
                 DataTable dt = _db.GetDataTable(
-                    "SELECT ItemCode, GradeCode, Note, Remark1, Remark2, " + string.Join(", ", _imhCols) +
-                    ", PMActive, PMIntervalType, PMIntervalValue, PMStartDate, PMLastServiceDate, PMNextServiceDate, PMDept, PMJob, PMLocation" +
-                    " FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
+                    "SELECT i.ItemCode, i.GradeCode, i.Note, i.Remark1, i.Remark2, " + iMh +
+                    ", i.ReferenceNo AS ReferenceNo" +
+                    ", COALESCE(NULLIF(i.ContractTypeCode,''), c.ContractTypeCode, '') AS ContractTypeCode" +
+                    ", COALESCE(NULLIF(i.StaffCode,''), c.StaffCode, '') AS StaffCode" +
+                    ", COALESCE(i.ServiceStartDate, c.ServiceStartDate) AS ServiceStartDate" +
+                    ", COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS ServiceExpiryDate" +
+                    ", COALESCE(NULLIF(i.Address1,''), c.Address1, '') AS Address1" +
+                    ", COALESCE(NULLIF(i.Attention,''), c.Attention, '') AS Attention" +
+                    ", COALESCE(NULLIF(i.Phone,''), c.Phone, '') AS Phone" +
+                    ", COALESCE(NULLIF(i.TermCode,''), c.TermCode, '') AS TermCode" +
+                    ", COALESCE(NULLIF(i.AreaCode,''), c.AreaCode, '') AS AreaCode" +
+                    ", i.PMActive, i.PMIntervalType, i.PMIntervalValue, i.PMStartDate, i.PMLastServiceDate, i.PMNextServiceDate, i.PMDept, i.PMJob, i.PMLocation" +
+                    " FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey" +
+                    " WHERE i.ItemKey=" + itemKey, false);
                 if (dt.Rows.Count == 0) return;
                 DataRow r = dt.Rows[0];
                 _data.ItemCode = AsS(r["ItemCode"]); _data.GradeCode = AsS(r["GradeCode"]);
                 _data.Note = AsS(r["Note"]); _data.Remark1 = AsS(r["Remark1"]); _data.Remark2 = AsS(r["Remark2"]);
                 foreach (string c in _imhCols) _data.MoreHeader[c] = AsS(r[c]);
+                _data.ReferenceNo = AsS(r["ReferenceNo"]); _data.ContractTypeCode = AsS(r["ContractTypeCode"]);
+                _data.StaffCode = AsS(r["StaffCode"]); _data.Address1 = AsS(r["Address1"]);
+                _data.Attention = AsS(r["Attention"]); _data.Phone = AsS(r["Phone"]);
+                _data.TermCode = AsS(r["TermCode"]); _data.AreaCode = AsS(r["AreaCode"]);
+                _data.ServiceStartDate = r["ServiceStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["ServiceStartDate"]);
+                if (_data.ServiceExpiryDate == null && r["ServiceExpiryDate"] != DBNull.Value) _data.ServiceExpiryDate = Convert.ToDateTime(r["ServiceExpiryDate"]);
                 _data.PMActive = AsS(r["PMActive"]) == "Y";
                 _data.PMIntervalType = AsS(r["PMIntervalType"]);
                 _data.PMIntervalValue = r["PMIntervalValue"] == DBNull.Value ? 0 : Convert.ToInt32(r["PMIntervalValue"]);
@@ -927,6 +1167,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.Append("UPDATE [dbo].[zSCP2_Item] SET ItemCode=@ItemCode, GradeCode=@GradeCode, ")
               .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2, ")
+              .Append("ReferenceNo=@ReferenceNo, ContractTypeCode=@ContractTypeCode, StaffCode=@StaffCode, ")
+              .Append("ServiceStartDate=@ServiceStartDate, ServiceExpiryDate=@ServiceExpiryDate, ")
+              .Append("Address1=@Address1, Attention=@Attention, Phone=@Phone, TermCode=@TermCode, AreaCode=@AreaCode, ")
               .Append("PMActive=@PMActive, PMIntervalType=@PMIntervalType, PMIntervalValue=@PMIntervalValue, ")
               .Append("PMStartDate=@PMStartDate, PMLastServiceDate=@PMLastServiceDate, PMNextServiceDate=@PMNextServiceDate, ")
               .Append("PMDept=@PMDept, PMJob=@PMJob, PMLocation=@PMLocation");
@@ -939,6 +1182,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@Note", (object)(d.Note ?? ""));
                 cmd.Parameters.AddWithValue("@Remark1", d.Remark1 ?? "");
                 cmd.Parameters.AddWithValue("@Remark2", d.Remark2 ?? "");
+                cmd.Parameters.AddWithValue("@ReferenceNo", d.ReferenceNo ?? "");
+                cmd.Parameters.AddWithValue("@ContractTypeCode", d.ContractTypeCode ?? "");
+                cmd.Parameters.AddWithValue("@StaffCode", d.StaffCode ?? "");
+                cmd.Parameters.AddWithValue("@ServiceStartDate", (object)d.ServiceStartDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@ServiceExpiryDate", (object)d.ServiceExpiryDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@Address1", d.Address1 ?? "");
+                cmd.Parameters.AddWithValue("@Attention", d.Attention ?? "");
+                cmd.Parameters.AddWithValue("@Phone", d.Phone ?? "");
+                cmd.Parameters.AddWithValue("@TermCode", d.TermCode ?? "");
+                cmd.Parameters.AddWithValue("@AreaCode", d.AreaCode ?? "");
                 cmd.Parameters.AddWithValue("@PMActive", d.PMActive ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@PMIntervalType", d.PMIntervalType ?? "NONE");
                 cmd.Parameters.AddWithValue("@PMIntervalValue", d.PMIntervalValue);

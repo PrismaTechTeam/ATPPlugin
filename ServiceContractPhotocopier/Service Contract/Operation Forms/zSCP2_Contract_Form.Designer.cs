@@ -75,6 +75,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.TextEdit TxtDescription;
         private DevExpress.XtraEditors.CheckEdit ChkInactive;
         private DevExpress.XtraEditors.CheckEdit ChkMonthEnd;
+        private DevExpress.XtraEditors.LabelControl LblRefNo;
+        private DevExpress.XtraEditors.TextEdit TxtRefNo;
         private DevExpress.XtraEditors.LabelControl LblDept;
         private DevExpress.XtraEditors.SearchLookUpEdit SluDept;
         private DevExpress.XtraGrid.Views.Grid.GridView SluDeptView;
@@ -181,6 +183,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TxtDescription = new DevExpress.XtraEditors.TextEdit();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
             this.ChkMonthEnd = new DevExpress.XtraEditors.CheckEdit();
+            this.LblRefNo = new DevExpress.XtraEditors.LabelControl();
+            this.TxtRefNo = new DevExpress.XtraEditors.TextEdit();
             this.LblDept = new DevExpress.XtraEditors.LabelControl();
             this.SluDept = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluDeptView = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -250,6 +254,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtRefNo.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).BeginInit();
@@ -487,6 +492,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Controls.Add(this.TxtDescription);
             this.PanelHeaderFields.Controls.Add(this.ChkInactive);
             this.PanelHeaderFields.Controls.Add(this.ChkMonthEnd);
+            this.PanelHeaderFields.Controls.Add(this.LblRefNo);
+            this.PanelHeaderFields.Controls.Add(this.TxtRefNo);
             this.PanelHeaderFields.Controls.Add(this.LblDept);
             this.PanelHeaderFields.Controls.Add(this.SluDept);
             this.PanelHeaderFields.Controls.Add(this.LblProject);
@@ -494,7 +501,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelHeaderFields.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelHeaderFields.Location = new System.Drawing.Point(0, 143);
             this.PanelHeaderFields.Name = "PanelHeaderFields";
-            this.PanelHeaderFields.Size = new System.Drawing.Size(1180, 268);
+            this.PanelHeaderFields.Size = new System.Drawing.Size(1180, 294);
             this.PanelHeaderFields.TabIndex = 1;
             //
             // LblContractNo
@@ -841,6 +848,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChkMonthEnd.Size = new System.Drawing.Size(140, 20);
             this.ChkMonthEnd.TabIndex = 35;
             this.ChkMonthEnd.CheckedChanged += new System.EventHandler(this.ChkMonthEnd_CheckedChanged);
+            //
+            // LblRefNo
+            //
+            this.LblRefNo.Location = new System.Drawing.Point(12, 268);
+            this.LblRefNo.Name = "LblRefNo";
+            this.LblRefNo.Size = new System.Drawing.Size(64, 13);
+            this.LblRefNo.TabIndex = 40;
+            this.LblRefNo.Text = "Reference No";
+            //
+            // TxtRefNo
+            //
+            this.TxtRefNo.Location = new System.Drawing.Point(110, 265);
+            this.TxtRefNo.Name = "TxtRefNo";
+            this.TxtRefNo.Properties.MaxLength = 80;
+            this.TxtRefNo.Size = new System.Drawing.Size(234, 20);
+            this.TxtRefNo.TabIndex = 41;
             //
             // LblDept
             //
@@ -1255,6 +1278,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMonthEnd.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtRefNo.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDeptView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluProject.Properties)).EndInit();

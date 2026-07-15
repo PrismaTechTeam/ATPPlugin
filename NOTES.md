@@ -305,3 +305,36 @@ Validation agent (Explore) reviewed it: 5/6 checks PASS. One CRITICAL bug found 
   succeeds (previously threw).
 - Minor (not fixed, cosmetic): same-day double debtor change yields a zero-length period; openDebtor
   trim/case now symmetric after the fix.
+
+---
+
+## 2026-07-15 — Reference No (both forms) + Service Item header now mirrors the Contract
+
+**Request:** Service Item header must have the SAME fields as the Contract, EXCEPT the billing
+checkboxes (Last-day-of-month, Billing Mode) and Contract Value; and BOTH forms were missing a
+**Reference No** field.
+
+**Delivered:**
+- Migration `SQL/02_Update_zSCP2_ItemContract_v7_RefAndContext.sql` (idempotent): `ReferenceNo` on
+  `zSCP2_Contract`; and on `zSCP2_Item`: `ReferenceNo, ContractTypeCode, StaffCode, ServiceStartDate,
+  Address1, Attention, Phone, TermCode, AreaCode` (ServiceExpiryDate already existed). Registered in
+  `ScpMigrations_Cls` (RunDDL) + embedded in csproj. Applied to AED_ATPTEST — all 10 cols verified.
+- **Contract** (`zSCP2_Contract_Form`): added Reference No (LblRefNo/TxtRefNo, left col y=265) wired
+  through Insert/Update/AddContractParams(@refno)/LoadContract.
+- **Service Item** (`zSCP2_Item_Form`): header rebuilt in code to a dense 2-column contract-like
+  layout. Added Contract Type (SLU + "+" create → ServiceContractType_Form), Reference No, Service
+  Start Date [To] Expiry (DateEdits), Agent (SLU over SalesAgent), Address (memo), Attention, Phone,
+  Term, Area. New `ItemEditData` fields + `PersistItemExtras`/`LoadExtrasFromDb` extended. Context
+  fields inherit from the parent contract via COALESCE JOIN (existing items) or `PrefillContextFromContract`
+  (new embedded items); Reference No stays item-specific. Standalone Contract/Customer row moved to
+  y=417; tab control moved to y=448. Expiry≥Start validation added.
+
+**Verification:** msbuild green; migration applied + columns present; plugin reinstalled into full
+AutoCount (OPTION A) with menu registered, no exceptions; both editors captured via the PREVIEW
+single-form path and render correctly (no overlaps, all fields present, 6 tabs, ribbon intact).
+
+**Validation agent (Explore):** no correctness bugs. Confirmed SQL↔param 1:1 in PersistItemExtras,
+unambiguous i./c. qualification + alias resolution in the LoadExtrasFromDb JOIN, all 10 new item
+controls read into `_data` in BtnOK_Click, header coordinates collision-free, and Reference No
+consistent across contract Insert/Update/Params/Load with correct param count. Behavioral note:
+opening+saving an item solidifies inherited contract context onto the item row (intended).

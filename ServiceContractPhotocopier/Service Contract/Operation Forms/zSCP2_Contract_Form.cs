@@ -533,6 +533,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtPhone.Text = AsStr(r["Phone"]);
             TxtTerm.Text = AsStr(r["TermCode"]);
             TxtArea.Text = AsStr(r["AreaCode"]);
+            if (r.Table.Columns.Contains("ReferenceNo")) TxtRefNo.Text = AsStr(r["ReferenceNo"]);
             SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
             SluDept.EditValue = r.Table.Columns.Contains("DeptNo") ? SetOrNull(AsStr(r["DeptNo"])) : null;
             SluProject.EditValue = r.Table.Columns.Contains("ProjNo") ? SetOrNull(AsStr(r["ProjNo"])) : null;
@@ -1507,9 +1508,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " Description, Remark1, Remark2, Note, DeptNo, ProjNo, Inactive, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, Inactive, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@desc,@r1,@r2,@note,@dept,@proj,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -1524,7 +1525,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "UPDATE [dbo].[zSCP2_Contract] SET ContractNo=@no, ContractTypeCode=@type, DebtorCode=@debtor, " +
                 "ContractDate=@cdate, ServiceStartDate=@sdate, ServiceExpiryDate=@edate, ContractValue=@val, " +
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
-                "AreaCode=@area, StaffCode=@staff, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
+                "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -1553,6 +1554,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@phone", TxtPhone.Text.Trim());
             cmd.Parameters.AddWithValue("@term", TxtTerm.Text.Trim());
             cmd.Parameters.AddWithValue("@area", TxtArea.Text.Trim());
+            cmd.Parameters.AddWithValue("@refno", TxtRefNo.Text.Trim());
             cmd.Parameters.AddWithValue("@staff", SluAgent.EditValue == null ? "" : SluAgent.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@dept", SluDept.EditValue == null ? "" : SluDept.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@proj", SluProject.EditValue == null ? "" : SluProject.EditValue.ToString().Trim());

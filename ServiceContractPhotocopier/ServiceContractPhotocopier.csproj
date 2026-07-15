@@ -714,6 +714,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v5_NullableContract.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v6_Overhaul.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemDebtorHistory.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemContract_v7_RefAndContext.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v3_MonthEnd.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v4_DeptProj.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
