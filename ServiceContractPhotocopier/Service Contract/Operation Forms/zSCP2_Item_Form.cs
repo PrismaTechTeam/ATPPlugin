@@ -746,6 +746,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // 6. Tab 3 "More Header" + Tab 5/6 Note/Remarks.
             BuildItemMoreHeaderTab(_pgMoreHeader);
             BuildNoteRemarkTabs();
+            ExtendItemRibbon();
 
             // 7. Load the extended values. For an existing item read them straight from the DB (the
             //    caller's LoadOneItem doesn't carry them); for a new/copied item use the _data defaults.
@@ -782,6 +783,106 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         private static string AsS(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
+
+        // Clipboard ribbon group on the Item Provided grid (mirrors the contract's Clipboard group).
+        private const string SI_CLIP = "ATP-SCP-SI-V1";
+        private void ExtendItemRibbon()
+        {
+            DevExpress.XtraBars.BarButtonItem bCW = MakeBar("Copy Whole Document", ItemClipCopyWhole);
+            DevExpress.XtraBars.BarButtonItem bCS = MakeBar("Copy Selected Details", ItemClipCopySelected);
+            DevExpress.XtraBars.BarButtonItem bCX = MakeBar("Copy as Spreadsheet", ItemClipCopySpreadsheet);
+            DevExpress.XtraBars.BarButtonItem bPW = MakeBar("Paste Whole Document", ItemClipPasteWhole);
+            DevExpress.XtraBars.BarButtonItem bPI = MakeBar("Paste Item Detail Only", ItemClipPasteItems);
+            RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] { bCW, bCS, bCX, bPW, bPI });
+            DevExpress.XtraBars.Ribbon.RibbonPageGroup grp = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            grp.Text = "Clipboard";
+            grp.ItemLinks.Add(bCW); grp.ItemLinks.Add(bCS); grp.ItemLinks.Add(bCX); grp.ItemLinks.Add(bPW); grp.ItemLinks.Add(bPI);
+            ribbonPageHome.Groups.Add(grp);
+            try
+            {
+                float dpi = 96f; try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img = AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                bCW.ImageOptions.Image = img.GetSmallImage_CopyToClipboard();
+                bCS.ImageOptions.Image = img.GetSmallImage_CopySelectedToClipboard();
+                bCX.ImageOptions.Image = img.GetSmallImage_CopyAsSpreadsheet();
+                bPW.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
+                bPI.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
+            }
+            catch { }
+        }
+
+        private DevExpress.XtraBars.BarButtonItem MakeBar(string caption, DevExpress.XtraBars.ItemClickEventHandler h)
+        {
+            DevExpress.XtraBars.BarButtonItem b = new DevExpress.XtraBars.BarButtonItem();
+            b.Caption = caption; b.Name = "bar_" + caption.Replace(" ", "");
+            b.ItemClick += h;
+            return b;
+        }
+
+        private string ItemProvidedTsv(bool selectedOnly)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.AppendLine("No\tItem Code\tDescription\tUnlimited\tUOM\tQuantity\tDiscount\tUnit Price\tAmount\tTax Type\tTax Inclusive\tTax %\tTax Amount\tAmount After Tax");
+            System.Collections.Generic.IEnumerable<int> handles;
+            if (selectedOnly) { handles = _viewItemSp.GetSelectedRows(); }
+            else { System.Collections.Generic.List<int> all = new System.Collections.Generic.List<int>(); for (int i = 0; i < _viewItemSp.RowCount; i++) all.Add(_viewItemSp.GetVisibleRowHandle(i)); handles = all; }
+            foreach (int rh in handles)
+            {
+                if (rh < 0) continue;
+                sb.Append(Cell(rh, "No")).Append('\t').Append(Cell(rh, "ItemCode")).Append('\t').Append(Cell(rh, "Description")).Append('\t')
+                  .Append(Cell(rh, "Unlimited")).Append('\t').Append(Cell(rh, "UOM")).Append('\t').Append(Cell(rh, "Quantity")).Append('\t')
+                  .Append(Cell(rh, "Discount")).Append('\t').Append(Cell(rh, "UnitPrice")).Append('\t').Append(Cell(rh, "Amount")).Append('\t')
+                  .Append(Cell(rh, "TaxType")).Append('\t').Append(Cell(rh, "TaxInclusive")).Append('\t').Append(Cell(rh, "TaxRate")).Append('\t')
+                  .Append(Cell(rh, "TaxAmount")).Append('\t').Append(Cell(rh, "AmountAfterTax")).AppendLine();
+            }
+            return sb.ToString();
+        }
+
+        private string Cell(int rh, string field)
+        {
+            object v = _viewItemSp.GetRowCellValue(rh, field);
+            return v == null || v == DBNull.Value ? "" : v.ToString().Replace("\t", " ").Replace("\r", " ").Replace("\n", " ");
+        }
+
+        private void SetClip(string text)
+        { try { System.Windows.Forms.Clipboard.SetText(text); XtraMessageBox.Show("Copied.", "Clipboard"); } catch (Exception ex) { XtraMessageBox.Show("Clipboard failed:\r\n" + ex.Message, "Error"); } }
+
+        private void ItemClipCopyWhole(object s, DevExpress.XtraBars.ItemClickEventArgs e) { _viewItemSp.PostEditor(); SetClip(SI_CLIP + "\r\n" + ItemProvidedTsv(false)); }
+        private void ItemClipCopySelected(object s, DevExpress.XtraBars.ItemClickEventArgs e)
+        { if (_viewItemSp.GetSelectedRows() == null || _viewItemSp.GetSelectedRows().Length == 0) { XtraMessageBox.Show("Select rows first.", "Copy Selected"); return; } _viewItemSp.PostEditor(); SetClip(ItemProvidedTsv(true)); }
+        private void ItemClipCopySpreadsheet(object s, DevExpress.XtraBars.ItemClickEventArgs e) { _viewItemSp.PostEditor(); SetClip(ItemProvidedTsv(false)); }
+        private void ItemClipPasteWhole(object s, DevExpress.XtraBars.ItemClickEventArgs e) { PasteItemRows(true); }
+        private void ItemClipPasteItems(object s, DevExpress.XtraBars.ItemClickEventArgs e) { PasteItemRows(false); }
+
+        private void PasteItemRows(bool requireTag)
+        {
+            string text = null;
+            try { text = System.Windows.Forms.Clipboard.ContainsText() ? System.Windows.Forms.Clipboard.GetText() : null; } catch { }
+            if (string.IsNullOrEmpty(text)) { XtraMessageBox.Show("Clipboard is empty.", "Paste"); return; }
+            if (requireTag && !text.StartsWith(SI_CLIP)) { XtraMessageBox.Show("The clipboard does not contain a copied Item-Provided document.", "Paste"); return; }
+            string[] lines = text.Replace("\r\n", "\n").Split('\n');
+            int added = 0;
+            foreach (string line in lines)
+            {
+                if (line.Trim().Length == 0 || line.StartsWith(SI_CLIP)) continue;
+                string[] p = line.Split('\t');
+                if (p.Length < 3 || p[0] == "No") continue;   // skip header row
+                DataRow r = _itemSpareParts.NewRow();
+                r["SparePartKey"] = 0L; r["ItemKey"] = DBNull.Value; r["Bound"] = false;
+                r["ItemCode"] = At(p, 1); r["Description"] = At(p, 2); r["Unlimited"] = At(p, 3) == "True" || At(p, 3) == "Y";
+                r["UOM"] = At(p, 4); r["Quantity"] = DecOr(At(p, 5)); r["Discount"] = At(p, 6); r["UnitPrice"] = DecOr(At(p, 7));
+                r["TaxType"] = At(p, 9); r["TaxInclusive"] = At(p, 10) == "True" || At(p, 10) == "Y"; r["TaxRate"] = DecOr(At(p, 11));
+                r["Pos"] = _itemSpareParts.Rows.Count;
+                zSCP2_Contract_Form.ComputeSpareRow(r);
+                _itemSpareParts.Rows.Add(r); added++;
+            }
+            if (added == 0) { XtraMessageBox.Show("No item rows found on the clipboard.", "Paste"); return; }
+            _dirty = true; RenumberItemSp(); _viewItemSp.RefreshData();
+            XtraMessageBox.Show(added + " row(s) pasted.", "Pasted");
+        }
+
+        private static string At(string[] a, int i) { return (i >= 0 && i < a.Length) ? a[i] : ""; }
+        private static decimal DecOr(string s) { decimal d; return decimal.TryParse(s, out d) ? d : 0m; }
 
         // Single source of truth for the item's EXTENDED columns (Item Code, Grade, More Header, Note,
         // Remarks). Called by BOTH persistence paths (contract editor upsert loop + standalone
