@@ -74,6 +74,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.MemoEdit _imhDelAddress;
         private DevExpress.XtraEditors.MemoEdit _txtNote;
         private DevExpress.XtraEditors.TextEdit _txtRemark1, _txtRemark2;
+        // --- Preventive Maintenance controls (Phase 2) ---
+        private DevExpress.XtraEditors.CheckEdit _pmActive;
+        private DevExpress.XtraEditors.ComboBoxEdit _pmIntervalType;
+        private DevExpress.XtraEditors.SpinEdit _pmIntervalValue;
+        private DevExpress.XtraEditors.DateEdit _pmStart, _pmLast, _pmNext;
+        private DevExpress.XtraEditors.SearchLookUpEdit _pmDept, _pmJob;
+        private DevExpress.XtraEditors.TextEdit _pmLocation;
         private DevExpress.XtraEditors.LabelControl _lblCustomer;
         private DevExpress.XtraEditors.SearchLookUpEdit _lkCustomer;
         private DevExpress.XtraEditors.SearchLookUpEdit _lkContract;   // standalone: attach to an EXISTING contract
@@ -492,6 +499,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data.Remark1 = _txtRemark1 != null ? _txtRemark1.Text.Trim() : "";
             _data.Remark2 = _txtRemark2 != null ? _txtRemark2.Text.Trim() : "";
 
+            // Preventive Maintenance + auto Next Service Date.
+            if (_pmActive != null)
+            {
+                _data.PMActive = _pmActive.Checked;
+                _data.PMIntervalType = _pmIntervalType.EditValue == null ? "NONE" : _pmIntervalType.EditValue.ToString();
+                _data.PMIntervalValue = (int)_pmIntervalValue.Value;
+                _data.PMStartDate = _pmStart.EditValue == null || _pmStart.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_pmStart.EditValue);
+                _data.PMLastServiceDate = _pmLast.EditValue == null || _pmLast.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_pmLast.EditValue);
+                _data.PMDept = _pmDept.EditValue == null ? "" : _pmDept.EditValue.ToString().Trim();
+                _data.PMJob = _pmJob.EditValue == null ? "" : _pmJob.EditValue.ToString().Trim();
+                _data.PMLocation = _pmLocation.Text.Trim();
+                _data.PMNextServiceDate = ComputeNextService(_data);
+                if (_pmNext != null) _pmNext.EditValue = (object)_data.PMNextServiceDate;
+            }
+
             _savedOk = true;   // skip the unsaved-changes prompt on the close that follows
             this.DialogResult = DialogResult.OK;
             this.Close();
@@ -685,6 +707,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // ================= Overhaul UI (all code-built; no strict-designer surgery) =================
         private void BuildOverhaulUI()
         {
+            // 0. For an existing item, load its extended columns into _data first so every tab builder
+            //    below populates from real values (the caller's LoadOneItem doesn't carry the extras).
+            if (_data.ItemKey > 0) LoadExtrasFromDb(_data.ItemKey);
+
             // 1. Hide the removed pieces (kept in the designer to avoid risky deletion).
             LblLocation.Visible = false; TxtLocation.Visible = false;   // Stock Location removed from UI
             GrpItemCodes.Visible = false;                               // "Provided Items" grid removed
@@ -743,14 +769,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GrpMeters.Height = 240;
             _pgItemMeter.Controls.Add(GrpMeters);   // Top added after the Fill grid
 
-            // 6. Tab 3 "More Header" + Tab 5/6 Note/Remarks.
+            // 6. Tab 3 "More Header" + Tab 5/6 Note/Remarks + Tab 2 Preventive.
             BuildItemMoreHeaderTab(_pgMoreHeader);
             BuildNoteRemarkTabs();
+            BuildPreventiveTab(_pgPreventive);
+            BuildDebtorHistoryTab(_pgDebtorHist);
             ExtendItemRibbon();
 
-            // 7. Load the extended values. For an existing item read them straight from the DB (the
-            //    caller's LoadOneItem doesn't carry them); for a new/copied item use the _data defaults.
-            if (_data.ItemKey > 0) LoadExtrasFromDb(_data.ItemKey);
+            // 7. Populate the header + More Header + Note/Remarks controls from _data (loaded at step 0).
             _sluItemCode.EditValue = string.IsNullOrEmpty(_data.ItemCode) ? null : (object)_data.ItemCode;
             _sluGrade.EditValue = string.IsNullOrEmpty(_data.GradeCode) ? null : (object)_data.GradeCode;
             foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
@@ -772,12 +798,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DataTable dt = _db.GetDataTable(
                     "SELECT ItemCode, GradeCode, Note, Remark1, Remark2, " + string.Join(", ", _imhCols) +
+                    ", PMActive, PMIntervalType, PMIntervalValue, PMStartDate, PMLastServiceDate, PMNextServiceDate, PMDept, PMJob, PMLocation" +
                     " FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
                 if (dt.Rows.Count == 0) return;
                 DataRow r = dt.Rows[0];
                 _data.ItemCode = AsS(r["ItemCode"]); _data.GradeCode = AsS(r["GradeCode"]);
                 _data.Note = AsS(r["Note"]); _data.Remark1 = AsS(r["Remark1"]); _data.Remark2 = AsS(r["Remark2"]);
                 foreach (string c in _imhCols) _data.MoreHeader[c] = AsS(r[c]);
+                _data.PMActive = AsS(r["PMActive"]) == "Y";
+                _data.PMIntervalType = AsS(r["PMIntervalType"]);
+                _data.PMIntervalValue = r["PMIntervalValue"] == DBNull.Value ? 0 : Convert.ToInt32(r["PMIntervalValue"]);
+                _data.PMStartDate = r["PMStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMStartDate"]);
+                _data.PMLastServiceDate = r["PMLastServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMLastServiceDate"]);
+                _data.PMNextServiceDate = r["PMNextServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMNextServiceDate"]);
+                _data.PMDept = AsS(r["PMDept"]); _data.PMJob = AsS(r["PMJob"]); _data.PMLocation = AsS(r["PMLocation"]);
             }
             catch { }
         }
@@ -892,7 +926,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.Append("UPDATE [dbo].[zSCP2_Item] SET ItemCode=@ItemCode, GradeCode=@GradeCode, ")
-              .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2");
+              .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2, ")
+              .Append("PMActive=@PMActive, PMIntervalType=@PMIntervalType, PMIntervalValue=@PMIntervalValue, ")
+              .Append("PMStartDate=@PMStartDate, PMLastServiceDate=@PMLastServiceDate, PMNextServiceDate=@PMNextServiceDate, ")
+              .Append("PMDept=@PMDept, PMJob=@PMJob, PMLocation=@PMLocation");
             foreach (string c in _imhCols) sb.Append(", [").Append(c).Append("]=@").Append(c);
             sb.Append(", LastModified=GETDATE() WHERE ItemKey=@ik");
             using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(sb.ToString(), conn, tx))
@@ -902,10 +939,60 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@Note", (object)(d.Note ?? ""));
                 cmd.Parameters.AddWithValue("@Remark1", d.Remark1 ?? "");
                 cmd.Parameters.AddWithValue("@Remark2", d.Remark2 ?? "");
+                cmd.Parameters.AddWithValue("@PMActive", d.PMActive ? "Y" : "N");
+                cmd.Parameters.AddWithValue("@PMIntervalType", d.PMIntervalType ?? "NONE");
+                cmd.Parameters.AddWithValue("@PMIntervalValue", d.PMIntervalValue);
+                cmd.Parameters.AddWithValue("@PMStartDate", (object)d.PMStartDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@PMLastServiceDate", (object)d.PMLastServiceDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@PMNextServiceDate", (object)d.PMNextServiceDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@PMDept", d.PMDept ?? "");
+                cmd.Parameters.AddWithValue("@PMJob", d.PMJob ?? "");
+                cmd.Parameters.AddWithValue("@PMLocation", d.PMLocation ?? "");
                 foreach (string c in _imhCols)
                     cmd.Parameters.AddWithValue("@" + c, (d.MoreHeader != null && d.MoreHeader.ContainsKey(c)) ? (d.MoreHeader[c] ?? "") : "");
                 cmd.Parameters.AddWithValue("@ik", itemKey);
                 cmd.ExecuteNonQuery();
+            }
+
+            RecordDebtorHistory(conn, tx, d, itemKey);
+        }
+
+        // Auto-record a debtor-ownership-history row when the item's customer (its contract's debtor)
+        // changes: close the previous open period and open a new one. No-op if unchanged.
+        private static void RecordDebtorHistory(System.Data.SqlClient.SqlConnection conn,
+            System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
+        {
+            string debtor;
+            using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
+                "SELECT ISNULL(c.DebtorCode,'') FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c " +
+                "ON c.ContractKey=i.ContractKey WHERE i.ItemKey=@ik", conn, tx))
+            { q.Parameters.AddWithValue("@ik", itemKey); object o = q.ExecuteScalar(); debtor = o == null || o == DBNull.Value ? "" : o.ToString().Trim(); }
+            if (debtor.Length == 0) return;
+
+            long openKey = 0; string openDebtor = "";
+            using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
+                "SELECT TOP 1 ServiceItemDebtorHistoryKey, ISNULL(DebtorCode,'') FROM [dbo].[zSCP_ServiceItemDebtorHistory] " +
+                "WHERE ServiceItemKey=@ik AND EndDate IS NULL ORDER BY StartDate DESC, ServiceItemDebtorHistoryKey DESC", conn, tx))
+            {
+                q.Parameters.AddWithValue("@ik", itemKey);
+                using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { openKey = r.GetInt64(0); openDebtor = r.GetString(1); } }
+            }
+            if (openDebtor == debtor) return;   // unchanged -> nothing to record
+
+            if (openKey > 0)
+                using (System.Data.SqlClient.SqlCommand u = new System.Data.SqlClient.SqlCommand(
+                    "UPDATE [dbo].[zSCP_ServiceItemDebtorHistory] SET EndDate=CAST(GETDATE() AS DATE), LastModified=GETDATE() WHERE ServiceItemDebtorHistoryKey=@k", conn, tx))
+                { u.Parameters.AddWithValue("@k", openKey); u.ExecuteNonQuery(); }
+
+            using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
+                "INSERT INTO [dbo].[zSCP_ServiceItemDebtorHistory] (ServiceItemKey, ServiceItemCode, DebtorCode, StartDate, Remark, LastModified) " +
+                "VALUES (@ik, @code, @debtor, CAST(GETDATE() AS DATE), @remark, GETDATE())", conn, tx))
+            {
+                ins.Parameters.AddWithValue("@ik", itemKey);
+                ins.Parameters.AddWithValue("@code", d.ServiceItemNo ?? "");
+                ins.Parameters.AddWithValue("@debtor", debtor);
+                ins.Parameters.AddWithValue("@remark", string.IsNullOrEmpty(d.GradeCode) ? "" : "Grade: " + d.GradeCode);
+                ins.ExecuteNonQuery();
             }
         }
 
@@ -1017,6 +1104,147 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _txtRemark2 = new DevExpress.XtraEditors.TextEdit();
             _txtRemark2.Location = new System.Drawing.Point(90, 39); _txtRemark2.Size = new System.Drawing.Size(500, 20);
             _txtRemark2.EditValueChanged += delegate { _dirty = true; }; _pgRemark.Controls.Add(_txtRemark2);
+        }
+
+        // Debtors Ownership History tab (Image #127): read-only grid of the item's customer-change history.
+        private void BuildDebtorHistoryTab(System.Windows.Forms.Control page)
+        {
+            DevExpress.XtraGrid.GridControl grid = new DevExpress.XtraGrid.GridControl();
+            grid.Dock = System.Windows.Forms.DockStyle.Fill;
+            DevExpress.XtraGrid.Views.Grid.GridView view = new DevExpress.XtraGrid.Views.Grid.GridView(grid);
+            grid.MainView = view; grid.ViewCollection.Add(view);
+            view.OptionsBehavior.Editable = false;
+            view.OptionsView.ShowGroupPanel = false;
+            page.Controls.Add(grid);
+
+            if (_data.ItemKey <= 0) return;   // a brand-new item has no history yet
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT h.DebtorCode AS [Debtor Code], ISNULL(d.CompanyName,'') AS [Debtor Name], " +
+                    "ISNULL((SELECT GradeCode FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + _data.ItemKey + "),'') AS [Service Item Grade], " +
+                    "ISNULL((SELECT c.ContractNo FROM [dbo].[zSCP2_Item] i JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey WHERE i.ItemKey=" + _data.ItemKey + "),'') AS [Contract No], " +
+                    "h.StartDate AS [Service Start Date], h.EndDate AS [End Date] " +
+                    "FROM [dbo].[zSCP_ServiceItemDebtorHistory] h LEFT JOIN [dbo].[Debtor] d ON d.AccNo=h.DebtorCode " +
+                    "WHERE h.ServiceItemKey=" + _data.ItemKey + " ORDER BY h.StartDate", false);
+                grid.DataSource = dt;
+                view.PopulateColumns();
+                view.BestFitColumns();
+            }
+            catch { }
+        }
+
+        // Preventive Maintenance tab (Image #126): Active gate + interval + service dates + Dept/Job/Location.
+        private void BuildPreventiveTab(System.Windows.Forms.Control page)
+        {
+            DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
+            grp.Text = "Preventive Maintenance";
+            grp.Location = new System.Drawing.Point(12, 12); grp.Size = new System.Drawing.Size(400, 210);
+            page.Controls.Add(grp);
+
+            _pmActive = new DevExpress.XtraEditors.CheckEdit();
+            _pmActive.Text = "Active Preventive Maintenance";
+            _pmActive.Location = new System.Drawing.Point(12, 26); _pmActive.Size = new System.Drawing.Size(240, 20);
+            _pmActive.CheckedChanged += new EventHandler(PMActive_Changed);
+            grp.Controls.Add(_pmActive);
+
+            PmLabel(grp, "Interval Type", 12, 56);
+            _pmIntervalType = new DevExpress.XtraEditors.ComboBoxEdit();
+            _pmIntervalType.Location = new System.Drawing.Point(120, 53); _pmIntervalType.Size = new System.Drawing.Size(120, 20);
+            _pmIntervalType.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            _pmIntervalType.Properties.Items.AddRange(new object[] { "NONE", "DAY", "WEEK", "MONTH", "YEAR" });
+            _pmIntervalType.EditValueChanged += delegate { _dirty = true; };
+            grp.Controls.Add(_pmIntervalType);
+
+            PmLabel(grp, "Interval Value", 12, 82);
+            _pmIntervalValue = new DevExpress.XtraEditors.SpinEdit();
+            _pmIntervalValue.Location = new System.Drawing.Point(120, 79); _pmIntervalValue.Size = new System.Drawing.Size(80, 20);
+            _pmIntervalValue.Properties.IsFloatValue = false; _pmIntervalValue.Properties.MinValue = 0; _pmIntervalValue.Properties.MaxValue = 999;
+            _pmIntervalValue.EditValueChanged += delegate { _dirty = true; };
+            grp.Controls.Add(_pmIntervalValue);
+
+            _pmStart = PmDate(grp, "Start Date", 12, 108);
+            _pmLast = PmDate(grp, "Last Service Date", 12, 134);
+            _pmNext = PmDate(grp, "Next Service Date", 12, 160);
+            _pmNext.Properties.ReadOnly = true; _pmNext.Enabled = false;   // auto-computed on save
+
+            // Right side: Department / Job / Location.
+            PmLabel(page, "Department", 430, 15);
+            _pmDept = PmLookup(page, 520, 12, "SELECT DeptNo, Description FROM [dbo].[Dept] ORDER BY DeptNo", "DeptNo");
+            PmLabel(page, "Job", 430, 41);
+            _pmJob = PmLookup(page, 520, 38, "SELECT ProjNo, Description FROM [dbo].[Project] ORDER BY ProjNo", "ProjNo");
+            PmLabel(page, "Location", 430, 67);
+            _pmLocation = new DevExpress.XtraEditors.TextEdit();
+            _pmLocation.Location = new System.Drawing.Point(520, 64); _pmLocation.Size = new System.Drawing.Size(180, 20);
+            _pmLocation.EditValueChanged += delegate { _dirty = true; };
+            page.Controls.Add(_pmLocation);
+
+            // populate from _data (loaded by LoadExtrasFromDb for existing items).
+            _pmActive.Checked = _data.PMActive;
+            _pmIntervalType.EditValue = string.IsNullOrEmpty(_data.PMIntervalType) ? "NONE" : _data.PMIntervalType;
+            _pmIntervalValue.Value = _data.PMIntervalValue;
+            _pmStart.EditValue = (object)_data.PMStartDate;
+            _pmLast.EditValue = (object)_data.PMLastServiceDate;
+            _pmNext.EditValue = (object)_data.PMNextServiceDate;
+            _pmDept.EditValue = string.IsNullOrEmpty(_data.PMDept) ? null : (object)_data.PMDept;
+            _pmJob.EditValue = string.IsNullOrEmpty(_data.PMJob) ? null : (object)_data.PMJob;
+            _pmLocation.Text = _data.PMLocation;
+            PMActive_Changed(null, null);
+        }
+
+        private void PmLabel(System.Windows.Forms.Control parent, string text, int x, int y)
+        {
+            DevExpress.XtraEditors.LabelControl l = new DevExpress.XtraEditors.LabelControl();
+            l.Text = text; l.Location = new System.Drawing.Point(x, y + 3); parent.Controls.Add(l);
+        }
+
+        private DevExpress.XtraEditors.DateEdit PmDate(System.Windows.Forms.Control parent, string caption, int x, int y)
+        {
+            PmLabel(parent, caption, x, y);
+            DevExpress.XtraEditors.DateEdit d = new DevExpress.XtraEditors.DateEdit();
+            d.Location = new System.Drawing.Point(120, y - 3); d.Size = new System.Drawing.Size(120, 20);
+            d.EditValue = null;
+            d.EditValueChanged += delegate { _dirty = true; };
+            parent.Controls.Add(d);
+            return d;
+        }
+
+        private DevExpress.XtraEditors.SearchLookUpEdit PmLookup(System.Windows.Forms.Control parent, int x, int y, string sql, string member)
+        {
+            DevExpress.XtraEditors.SearchLookUpEdit slu = new DevExpress.XtraEditors.SearchLookUpEdit();
+            slu.Location = new System.Drawing.Point(x, y); slu.Size = new System.Drawing.Size(180, 20);
+            slu.Properties.NullText = "";
+            slu.Properties.ValueMember = member; slu.Properties.DisplayMember = member;
+            try { slu.Properties.DataSource = _db.GetDataTable(sql, false); } catch { }
+            slu.EditValueChanged += delegate { _dirty = true; };
+            parent.Controls.Add(slu);
+            return slu;
+        }
+
+        private void PMActive_Changed(object sender, EventArgs e)
+        {
+            bool on = _pmActive.Checked;
+            _pmIntervalType.Enabled = on; _pmIntervalValue.Enabled = on;
+            _pmStart.Enabled = on; _pmLast.Enabled = on;
+            _pmDept.Enabled = on; _pmJob.Enabled = on; _pmLocation.Enabled = on;
+            if (sender != null) _dirty = true;
+        }
+
+        // Next Service Date = (Last Service Date, else Start Date) + IntervalValue * IntervalType.
+        private static DateTime? ComputeNextService(ItemEditData d)
+        {
+            if (!d.PMActive || d.PMIntervalValue <= 0 || string.IsNullOrEmpty(d.PMIntervalType) || d.PMIntervalType == "NONE") return null;
+            DateTime? baseDate = d.PMLastServiceDate ?? d.PMStartDate;
+            if (!baseDate.HasValue) return null;
+            DateTime b = baseDate.Value;
+            switch (d.PMIntervalType)
+            {
+                case "DAY": return b.AddDays(d.PMIntervalValue);
+                case "WEEK": return b.AddDays(7 * d.PMIntervalValue);
+                case "MONTH": return b.AddMonths(d.PMIntervalValue);
+                case "YEAR": return b.AddYears(d.PMIntervalValue);
+                default: return null;
+            }
         }
 
         // Builds the "Item Provided" group into the given container (the Item & Meter tab), docked to
