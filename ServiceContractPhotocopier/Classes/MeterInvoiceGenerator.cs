@@ -124,6 +124,11 @@ namespace ServiceContractPhotocopier.Classes
                             st.Parameters.AddWithValue("@dt2", (object)(ln.AuditDate ?? DateTime.Now));
                             st.Parameters.AddWithValue("@src", "INVOICE");
                             st.ExecuteNonQuery();
+
+                            // Immutable audit trail: the billed reading is appended to the log with its
+                            // invoice number so history survives even if the invoice is later deleted.
+                            ScpMeterReadingLog.Append(cn, tx, ln.ItemMeterKey, _periodYear, _periodMonth,
+                                ln.Current, ln.AuditDate ?? DateTime.Now, ScpMeterReadingLog.SOURCE_INVOICE, docNo ?? "");
                         }
                         tx.Commit();
                     }

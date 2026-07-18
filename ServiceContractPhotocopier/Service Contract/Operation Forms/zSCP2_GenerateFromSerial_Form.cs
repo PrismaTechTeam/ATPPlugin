@@ -1,0 +1,148 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Windows.Forms;
+using AutoCount.Data;
+using DevExpress.XtraEditors;
+
+namespace ServiceContractPhotocopier
+{
+    /// <summary>
+    /// "Generate From Serial No" picker: lists DO / IV detail lines that carry a serial number
+    /// (dbo.SerialNoTrans, single-serial rows) so the contract editor can auto-fill the customer
+    /// header and auto-create one service item per chosen machine (ItemCode + Machine Serial).
+    /// </summary>
+    public partial class zSCP2_GenerateFromSerial_Form : XtraForm
+    {
+        /// <summary>One chosen DO/IV serial line.</summary>
+        public class PickedSerial
+        {
+            public string DocType = "";
+            public string DocNo = "";
+            public DateTime? DocDate;
+            public string DebtorCode = "";
+            public string DebtorName = "";
+            public string ItemCode = "";
+            public string ItemDesc = "";
+            public string SerialNo = "";
+        }
+
+        private readonly DBSetting _db;
+        private DataTable _dt;
+
+        public List<PickedSerial> Picked = new List<PickedSerial>();
+
+        public zSCP2_GenerateFromSerial_Form()
+        {
+            InitializeComponent();
+        }
+
+        public zSCP2_GenerateFromSerial_Form(DBSetting db)
+        {
+            InitializeComponent();
+            _db = db;
+        }
+
+        private void OnFormLoad(object sender, EventArgs e)
+        {
+            this.CmbDocType.SelectedIndex = 0;
+            LoadData();
+            this.TxtSearch.EditValueChanged += new EventHandler(Filter_Changed);
+            this.CmbDocType.SelectedIndexChanged += new EventHandler(Filter_Changed);
+            this.GridViewSerial.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewSerial_CellValueChanged);
+            this.GridViewSerial.DoubleClick += new EventHandler(GridViewSerial_DoubleClick);
+        }
+
+        private void LoadData()
+        {
+            // Single-serial rows only (ToSerialNo empty = one serial per row — AutoCount range rows are
+            // for numeric serial runs, which photocopier machines never use).
+            string sql =
+                "SELECT CAST(0 AS bit) AS Sel, st.DocType, h.DocNo, h.DocDate, h.DebtorCode, " +
+                "ISNULL(d.CompanyName,'') AS DebtorName, st.ItemCode, ISNULL(i.Description,'') AS ItemDesc, " +
+                "st.FromSerialNo AS SerialNo " +
+                "FROM dbo.SerialNoTrans st " +
+                "JOIN (SELECT 'DO' AS DocType, DocKey, DocNo, DocDate, DebtorCode, Cancelled FROM dbo.DO " +
+                "      UNION ALL " +
+                "      SELECT 'IV', DocKey, DocNo, DocDate, DebtorCode, Cancelled FROM dbo.IV) h " +
+                "  ON h.DocType = st.DocType AND h.DocKey = st.DocKey " +
+                "LEFT JOIN dbo.Debtor d ON d.AccNo = h.DebtorCode " +
+                "LEFT JOIN dbo.Item i ON i.ItemCode = st.ItemCode " +
+                "WHERE st.DocType IN ('DO','IV') " +
+                "AND ISNULL(st.Cancelled,'F') <> 'T' AND ISNULL(h.Cancelled,'F') <> 'T' " +
+                "AND ISNULL(st.FromSerialNo,'') <> '' AND ISNULL(st.ToSerialNo,'') = '' " +
+                "ORDER BY h.DocDate DESC, h.DocNo, st.ItemCode";
+            _dt = _db.GetDataTable(sql, false);
+            _dt.Columns["Sel"].ReadOnly = false;
+            this.GridSerial.DataSource = _dt;
+        }
+
+        private void Filter_Changed(object sender, EventArgs e)
+        {
+            List<string> parts = new List<string>();
+            string docType = (this.CmbDocType.EditValue ?? "All").ToString();
+            if (docType == "DO" || docType == "IV")
+                parts.Add("[DocType] = '" + docType + "'");
+            string s = (this.TxtSearch.EditValue ?? "").ToString().Trim().Replace("'", "''");
+            if (s.Length > 0)
+                parts.Add("([DocNo] LIKE '%" + s + "%' OR [DebtorCode] LIKE '%" + s + "%' OR [DebtorName] LIKE '%" + s +
+                          "%' OR [ItemCode] LIKE '%" + s + "%' OR [SerialNo] LIKE '%" + s + "%')");
+            this.GridViewSerial.ActiveFilterString = string.Join(" AND ", parts.ToArray());
+        }
+
+        private void GridViewSerial_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            if (e.Column != null && e.Column.FieldName == "Sel") UpdateCount();
+        }
+
+        private void GridViewSerial_DoubleClick(object sender, EventArgs e)
+        {
+            int rh = this.GridViewSerial.FocusedRowHandle;
+            if (rh < 0) return;
+            bool cur = false;
+            object v = this.GridViewSerial.GetRowCellValue(rh, "Sel");
+            if (v != null && v != DBNull.Value) cur = Convert.ToBoolean(v);
+            this.GridViewSerial.SetRowCellValue(rh, "Sel", !cur);
+            UpdateCount();
+        }
+
+        private void UpdateCount()
+        {
+            this.GridViewSerial.PostEditor();
+            this.GridViewSerial.UpdateCurrentRow();
+            int n = 0;
+            foreach (DataRow r in _dt.Rows)
+                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"])) n++;
+            this.LblCount.Text = n + " serial(s) selected";
+        }
+
+        private void BtnOK_Click(object sender, EventArgs e)
+        {
+            this.GridViewSerial.PostEditor();
+            this.GridViewSerial.UpdateCurrentRow();
+            Picked.Clear();
+            foreach (DataRow r in _dt.Rows)
+            {
+                if (r["Sel"] == DBNull.Value || !Convert.ToBoolean(r["Sel"])) continue;
+                PickedSerial p = new PickedSerial();
+                p.DocType = r["DocType"].ToString();
+                p.DocNo = r["DocNo"].ToString();
+                p.DocDate = r["DocDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["DocDate"]);
+                p.DebtorCode = r["DebtorCode"].ToString();
+                p.DebtorName = r["DebtorName"].ToString();
+                p.ItemCode = r["ItemCode"].ToString();
+                p.ItemDesc = r["ItemDesc"].ToString();
+                p.SerialNo = r["SerialNo"].ToString();
+                Picked.Add(p);
+            }
+            if (Picked.Count == 0)
+            {
+                XtraMessageBox.Show("Tick at least one serial number to generate from.", "Generate From Serial No",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            this.DialogResult = DialogResult.OK;
+            this.Close();
+        }
+    }
+}

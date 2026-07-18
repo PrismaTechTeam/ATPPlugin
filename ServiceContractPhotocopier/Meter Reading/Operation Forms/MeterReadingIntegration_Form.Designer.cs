@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.MeterReading.OperationForms
+﻿namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     partial class MeterReadingIntegration_Form
     {
@@ -19,9 +19,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             base.Dispose(disposing);
         }
 
-        // ---- Title bar ----
-        private DevExpress.XtraEditors.PanelControl PanelTitle;
-        private DevExpress.XtraEditors.LabelControl LblTitle;
+        // ---- Title bar (native AutoCount green header; hint hidden in the ctor) ----
+        private AutoCount.Controls.PanelHeader PanelHeaderTop;
 
         // ---- Filter panel ----
         private DevExpress.XtraEditors.PanelControl PanelFilter;
@@ -62,8 +61,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void InitializeComponent()
         {
             this.components         = new System.ComponentModel.Container();
-            this.PanelTitle         = new DevExpress.XtraEditors.PanelControl();
-            this.LblTitle           = new DevExpress.XtraEditors.LabelControl();
+            this.PanelHeaderTop     = new AutoCount.Controls.PanelHeader();
             this.PanelFilter        = new DevExpress.XtraEditors.PanelControl();
             this.GrpFilter          = new DevExpress.XtraEditors.GroupControl();
             this.LblSearch          = new DevExpress.XtraEditors.LabelControl();
@@ -85,8 +83,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GridMeter          = new DevExpress.XtraGrid.GridControl();
             this.GridViewMeter      = new DevExpress.XtraGrid.Views.Grid.GridView();
 
-            ((System.ComponentModel.ISupportInitialize)(this.PanelTitle)).BeginInit();
-            this.PanelTitle.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelFilter)).BeginInit();
             this.PanelFilter.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpFilter)).BeginInit();
@@ -100,30 +96,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.SuspendLayout();
 
             // ================================================================
-            // PanelTitle  (green bar)
+            // PanelHeaderTop  (native AutoCount green header; hint hidden in the ctor)
             // ================================================================
-            this.PanelTitle.Appearance.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(94)))), ((int)(((byte)(32)))));
-            this.PanelTitle.Appearance.Options.UseBackColor = true;
-            this.PanelTitle.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-            this.PanelTitle.Controls.Add(this.LblTitle);
-            this.PanelTitle.Dock = System.Windows.Forms.DockStyle.Top;
-            this.PanelTitle.Location = new System.Drawing.Point(0, 0);
-            this.PanelTitle.Name = "PanelTitle";
-            this.PanelTitle.Size = new System.Drawing.Size(1280, 42);
-            this.PanelTitle.TabIndex = 0;
-            //
-            // LblTitle
-            //
-            this.LblTitle.Appearance.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
-            this.LblTitle.Appearance.ForeColor = System.Drawing.Color.White;
-            this.LblTitle.Appearance.Options.UseFont = true;
-            this.LblTitle.Appearance.Options.UseForeColor = true;
-            this.LblTitle.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            this.LblTitle.Location = new System.Drawing.Point(18, 10);
-            this.LblTitle.Name = "LblTitle";
-            this.LblTitle.Size = new System.Drawing.Size(600, 22);
-            this.LblTitle.TabIndex = 0;
-            this.LblTitle.Text = "Meter Reading Integration with Pump System";
+            this.PanelHeaderTop.Dock = System.Windows.Forms.DockStyle.Top;
+            this.PanelHeaderTop.Header = "Meter Reading Integration with Pump System";
+            this.PanelHeaderTop.Hint = "";
+            this.PanelHeaderTop.Location = new System.Drawing.Point(0, 0);
+            this.PanelHeaderTop.Name = "PanelHeaderTop";
+            this.PanelHeaderTop.Size = new System.Drawing.Size(1280, 34);
+            this.PanelHeaderTop.TabIndex = 0;
 
             // ================================================================
             // PanelFilter
@@ -191,7 +172,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ChkShowAll.Size = new System.Drawing.Size(175, 22);
             this.ChkShowAll.TabIndex = 2;
             //
-            // Row 2 — Day + lookup + Filter + Reset
+            // Row 2 — Day + Month side by side, Filter + Reset at the right
             //
             this.LblDay.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.LblDay.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
@@ -203,7 +184,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblDay.TabIndex = 3;
             this.LblDay.Text = "Day:";
             //
-            this.CmbDay.Location = new System.Drawing.Point(46, 58);
+            this.CmbDay.Location = new System.Drawing.Point(58, 58);
             this.CmbDay.Name = "CmbDay";
             this.CmbDay.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.CmbDay.Properties.Appearance.Options.UseFont = true;
@@ -211,40 +192,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbDay.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbDay.Properties.NullValuePrompt = "Select day...";
-            this.CmbDay.Size = new System.Drawing.Size(130, 22);
+            this.CmbDay.Size = new System.Drawing.Size(110, 22);
             this.CmbDay.TabIndex = 4;
-            //
-            this.BtnFilter.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.BtnFilter.Appearance.Options.UseFont = true;
-            this.BtnFilter.Location = new System.Drawing.Point(309, 56);
-            this.BtnFilter.Name = "BtnFilter";
-            this.BtnFilter.Size = new System.Drawing.Size(70, 28);
-            this.BtnFilter.TabIndex = 5;
-            this.BtnFilter.Text = "Filter";
-            this.BtnFilter.Click += new System.EventHandler(this.BtnFilter_Click);
-            //
-            this.BtnReset.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.BtnReset.Appearance.Options.UseFont = true;
-            this.BtnReset.Location = new System.Drawing.Point(385, 56);
-            this.BtnReset.Name = "BtnReset";
-            this.BtnReset.Size = new System.Drawing.Size(70, 28);
-            this.BtnReset.TabIndex = 6;
-            this.BtnReset.Text = "Reset";
-            this.BtnReset.Click += new System.EventHandler(this.BtnReset_Click);
-            //
-            // Row 3 — Month combobox
             //
             this.LblMonth.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.LblMonth.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
             this.LblMonth.Appearance.Options.UseFont = true;
             this.LblMonth.Appearance.Options.UseForeColor = true;
-            this.LblMonth.Location = new System.Drawing.Point(10, 96);
+            this.LblMonth.Location = new System.Drawing.Point(182, 62);
             this.LblMonth.Name = "LblMonth";
             this.LblMonth.Size = new System.Drawing.Size(42, 15);
-            this.LblMonth.TabIndex = 7;
+            this.LblMonth.TabIndex = 5;
             this.LblMonth.Text = "Month:";
             //
-            this.CmbMonth.Location = new System.Drawing.Point(58, 92);
+            this.CmbMonth.Location = new System.Drawing.Point(230, 58);
             this.CmbMonth.Name = "CmbMonth";
             this.CmbMonth.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.CmbMonth.Properties.Appearance.Options.UseFont = true;
@@ -252,8 +213,26 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbMonth.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbMonth.Properties.NullValuePrompt = "Select month...";
-            this.CmbMonth.Size = new System.Drawing.Size(130, 22);
-            this.CmbMonth.TabIndex = 8;
+            this.CmbMonth.Size = new System.Drawing.Size(110, 22);
+            this.CmbMonth.TabIndex = 6;
+            //
+            this.BtnFilter.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnFilter.Appearance.Options.UseFont = true;
+            this.BtnFilter.Location = new System.Drawing.Point(350, 55);
+            this.BtnFilter.Name = "BtnFilter";
+            this.BtnFilter.Size = new System.Drawing.Size(66, 28);
+            this.BtnFilter.TabIndex = 7;
+            this.BtnFilter.Text = "Filter";
+            this.BtnFilter.Click += new System.EventHandler(this.BtnFilter_Click);
+            //
+            this.BtnReset.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnReset.Appearance.Options.UseFont = true;
+            this.BtnReset.Location = new System.Drawing.Point(422, 55);
+            this.BtnReset.Name = "BtnReset";
+            this.BtnReset.Size = new System.Drawing.Size(66, 28);
+            this.BtnReset.TabIndex = 8;
+            this.BtnReset.Text = "Reset";
+            this.BtnReset.Click += new System.EventHandler(this.BtnReset_Click);
 
             // ================================================================
             // Action buttons  (right of GrpFilter, 52px tall, y=28)
@@ -295,7 +274,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnRefresh.Appearance.Options.UseFont = true;
             this.BtnRefresh.Location = new System.Drawing.Point(510, 46);
             this.BtnRefresh.Name = "BtnRefresh";
-            this.BtnRefresh.Size = new System.Drawing.Size(110, 52);
+            this.BtnRefresh.Size = new System.Drawing.Size(150, 50);
             this.BtnRefresh.TabIndex = 10;
             this.BtnRefresh.Text = "Refresh";
             this.BtnRefresh.Click += new System.EventHandler(this.BtnRefresh_Click);
@@ -305,9 +284,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnFetch.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnFetch.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnFetch.Appearance.Options.UseFont = true;
-            this.BtnFetch.Location = new System.Drawing.Point(628, 46);
+            this.BtnFetch.Location = new System.Drawing.Point(666, 46);
             this.BtnFetch.Name = "BtnFetch";
-            this.BtnFetch.Size = new System.Drawing.Size(95, 52);
+            this.BtnFetch.Size = new System.Drawing.Size(150, 50);
             this.BtnFetch.TabIndex = 11;
             this.BtnFetch.Text = "Fetch";
             this.BtnFetch.Click += new System.EventHandler(this.BtnFetch_Click);
@@ -317,9 +296,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnSelfManualKeyIn.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnSelfManualKeyIn.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnSelfManualKeyIn.Appearance.Options.UseFont = true;
-            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(731, 46);
+            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(822, 46);
             this.BtnSelfManualKeyIn.Name = "BtnSelfManualKeyIn";
-            this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(160, 52);
+            this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(150, 50);
             this.BtnSelfManualKeyIn.TabIndex = 12;
             this.BtnSelfManualKeyIn.Text = "Select All";
             this.BtnSelfManualKeyIn.Click += new System.EventHandler(this.BtnSelfManualKeyIn_Click);
@@ -327,13 +306,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // BtnGenerateInvoice  (red bold, same style as Generate SI/ST)
             //
             this.BtnGenerateInvoice.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnGenerateInvoice.Appearance.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold);
+            this.BtnGenerateInvoice.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             this.BtnGenerateInvoice.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnGenerateInvoice.Appearance.Options.UseFont = true;
             this.BtnGenerateInvoice.Appearance.Options.UseForeColor = true;
-            this.BtnGenerateInvoice.Location = new System.Drawing.Point(899, 46);
+            this.BtnGenerateInvoice.Location = new System.Drawing.Point(978, 46);
             this.BtnGenerateInvoice.Name = "BtnGenerateInvoice";
-            this.BtnGenerateInvoice.Size = new System.Drawing.Size(180, 52);
+            this.BtnGenerateInvoice.Size = new System.Drawing.Size(150, 50);
             this.BtnGenerateInvoice.TabIndex = 13;
             this.BtnGenerateInvoice.Text = "Generate Invoice";
             this.BtnGenerateInvoice.Click += new System.EventHandler(this.BtnGenerateInvoice_Click);
@@ -398,10 +377,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1280, 728);
-            // Grid first (Fill), then PanelFilter (Top, lower), then PanelTitle (Top, top).
+            // Grid first (Fill), then PanelFilter (Top, lower), then PanelHeaderTop (Top, top).
             this.Controls.Add(this.GridMeter);
             this.Controls.Add(this.PanelFilter);
-            this.Controls.Add(this.PanelTitle);
+            this.Controls.Add(this.PanelHeaderTop);
             this.Name = "MeterReadingIntegration_Form";
             this.Text = "Meter Reading Integration with Pump System";
 
@@ -417,9 +396,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelFilter.ResumeLayout(false);
             this.PanelFilter.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelFilter)).EndInit();
-            this.PanelTitle.ResumeLayout(false);
-            this.PanelTitle.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.PanelTitle)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }

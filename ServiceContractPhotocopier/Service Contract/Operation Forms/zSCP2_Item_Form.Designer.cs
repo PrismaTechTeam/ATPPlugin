@@ -17,7 +17,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.TextEdit TxtServiceItemNo;
         private DevExpress.XtraEditors.SimpleButton BtnAutoNo;
         private DevExpress.XtraEditors.LabelControl LblSerial;
-        private DevExpress.XtraEditors.TextEdit TxtSerial;
+        private DevExpress.XtraEditors.ComboBoxEdit TxtSerial;
         private DevExpress.XtraEditors.LabelControl LblDesc;
         private DevExpress.XtraEditors.TextEdit TxtDescription;
         private DevExpress.XtraEditors.LabelControl LblBillDay;
@@ -72,7 +72,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.TxtServiceItemNo = new DevExpress.XtraEditors.TextEdit();
             this.BtnAutoNo = new DevExpress.XtraEditors.SimpleButton();
             this.LblSerial = new DevExpress.XtraEditors.LabelControl();
-            this.TxtSerial = new DevExpress.XtraEditors.TextEdit();
+            this.TxtSerial = new DevExpress.XtraEditors.ComboBoxEdit();
             this.LblDesc = new DevExpress.XtraEditors.LabelControl();
             this.TxtDescription = new DevExpress.XtraEditors.TextEdit();
             this.LblBillDay = new DevExpress.XtraEditors.LabelControl();
@@ -175,7 +175,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblSerial.Name = "LblSerial";
             this.LblSerial.Size = new System.Drawing.Size(95, 13);
             this.LblSerial.TabIndex = 3;
-            this.LblSerial.Text = "Serial Number *";
+            this.LblSerial.Text = "Machine Serial No *";
             //
             // TxtSerial
             //

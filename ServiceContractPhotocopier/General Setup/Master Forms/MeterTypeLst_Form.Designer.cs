@@ -12,8 +12,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private System.ComponentModel.IContainer components = null;
         protected override void Dispose(bool disposing) { if (disposing && (components != null)) components.Dispose(); base.Dispose(disposing); }
 
-        private LabelControl LblTitle;
-        private SimpleButton BtnNew, BtnRefresh, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnExit;
+        private AutoCount.Controls.PanelHeader PanelHeaderTop;
+        private PanelControl PanelToolbar;
+        private SimpleButton BtnNew, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
         private GridControl GridMT; private GridView GridViewMT;
         private GroupControl GrpDetail;
         private LabelControl LblCode, LblDesc, LblStock, LblMultiPrice, LblMinCharges, LblChargesRate, LblRebateQty, LblFOCQty;
@@ -22,9 +23,11 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private void InitializeComponent()
         {
-            this.LblTitle = new LabelControl();
-            this.BtnNew = new SimpleButton(); this.BtnRefresh = new SimpleButton(); this.BtnEdit = new SimpleButton(); this.BtnSave = new SimpleButton();
-            this.BtnCancel = new SimpleButton(); this.BtnDelete = new SimpleButton(); this.BtnExit = new SimpleButton();
+            this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
+            this.PanelToolbar = new PanelControl();
+            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton(); this.BtnSave = new SimpleButton();
+            this.BtnCancel = new SimpleButton(); this.BtnDelete = new SimpleButton();
+            this.BtnRefresh = new SimpleButton(); this.BtnExit = new SimpleButton();
             this.GridMT = new GridControl(); this.GridViewMT = new GridView();
             this.GrpDetail = new GroupControl();
             this.LblCode = new LabelControl(); this.TxtCode = new TextEdit();
@@ -38,19 +41,33 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.ChkInactive = new CheckEdit();
 
             this.SuspendLayout();
-            this.Text = "Meter Type"; this.ClientSize = new Size(1050, 650);
-            this.StartPosition = FormStartPosition.CenterParent; this.MinimumSize = new Size(900, 580);
+            this.Text = "Meter Type"; this.ClientSize = new Size(1050, 720);
+            this.StartPosition = FormStartPosition.CenterParent; this.MinimumSize = new Size(900, 620);
 
-            this.LblTitle.Text = "Meter Type";
-            this.LblTitle.Appearance.Font = new Font("Tahoma", 14F, FontStyle.Bold);
-            this.LblTitle.Appearance.ForeColor = Color.FromArgb(180, 20, 40);
-            this.LblTitle.Location = new Point(14, 8);
+            // Native AutoCount green header (same as Maintain Service Contract / Item; hint hidden).
+            this.PanelHeaderTop.Dock = DockStyle.Top;
+            this.PanelHeaderTop.Header = "Meter Type";
+            this.PanelHeaderTop.Hint = "";
+            this.PanelHeaderTop.Location = new Point(0, 0);
+            this.PanelHeaderTop.Size = new Size(1050, 56);
 
-            Tb(this.BtnNew, "New", 780, 10, 60); this.BtnNew.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnNew.Click += new System.EventHandler(this.OnNew);
-            Tb(this.BtnRefresh, "Refresh", 845, 10, 75); this.BtnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
-            Tb(this.BtnExit, "Exit", 980, 10, 60); this.BtnExit.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            // Toolbar row — 86x50 icon buttons, identical to the Maintain Service Contract list.
+            this.PanelToolbar.Dock = DockStyle.Top;
+            this.PanelToolbar.Location = new Point(0, 56);
+            this.PanelToolbar.Size = new Size(1050, 62);
+            Tb(this.BtnNew, "New", 8, 6, 86); this.BtnNew.Click += new System.EventHandler(this.OnNew);
+            Tb(this.BtnEdit, "Edit", 98, 6, 86); this.BtnEdit.Click += new System.EventHandler(this.OnEdit);
+            Tb(this.BtnSave, "Save", 188, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
+            Tb(this.BtnCancel, "Cancel", 278, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
+            Tb(this.BtnDelete, "Delete", 368, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
+            Tb(this.BtnRefresh, "Refresh", 458, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
+            Tb(this.BtnExit, "Exit (F2)", 556, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            this.PanelToolbar.Controls.Add(this.BtnNew); this.PanelToolbar.Controls.Add(this.BtnEdit);
+            this.PanelToolbar.Controls.Add(this.BtnSave); this.PanelToolbar.Controls.Add(this.BtnCancel);
+            this.PanelToolbar.Controls.Add(this.BtnDelete); this.PanelToolbar.Controls.Add(this.BtnRefresh);
+            this.PanelToolbar.Controls.Add(this.BtnExit);
 
-            this.GridMT.Location = new Point(14, 44); this.GridMT.Size = new Size(1020, 260);
+            this.GridMT.Location = new Point(14, 128); this.GridMT.Size = new Size(1020, 260);
             this.GridMT.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             this.GridViewMT.GridControl = this.GridMT; this.GridViewMT.OptionsView.ShowGroupPanel = false; this.GridViewMT.OptionsBehavior.Editable = false;
             this.GridMT.MainView = this.GridViewMT; this.GridMT.ViewCollection.Add(this.GridViewMT);
@@ -60,7 +77,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(this.GridViewMT, "RebateQtyInPercent", "Rebate Qty (%)", 100); AddCol(this.GridViewMT, "FOCQty", "FOC (Qty)", 80);
             AddCol(this.GridViewMT, "Inactive", "Inactive", 60);
 
-            this.GrpDetail.Text = "Detail"; this.GrpDetail.Location = new Point(14, 312); this.GrpDetail.Size = new Size(1020, 330);
+            this.GrpDetail.Text = "Detail"; this.GrpDetail.Location = new Point(14, 396); this.GrpDetail.Size = new Size(1020, 310);
             this.GrpDetail.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
             int lX = 14, eX = 170, eW = 300; int y = 28, gap = 26;
@@ -81,12 +98,6 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             Lbl(this.LblRebateQty, "Rebate Qty (%)", lX, y); this.TxtRebateQty.Location = new Point(eX, y); this.TxtRebateQty.Width = 150; y += gap + 8;
 
-            int bX = 14, bY = y, bW = 90;
-            Tb(this.BtnSave,   "Save (F7)",   bX + bW * 0 + 0,  bY, bW); this.BtnSave.Click   += new System.EventHandler(this.OnSave);
-            Tb(this.BtnCancel, "Cancel (F8)", bX + bW * 1 + 6,  bY, bW); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
-            Tb(this.BtnEdit,   "Edit (F6)",   bX + bW * 2 + 12, bY, bW); this.BtnEdit.Click   += new System.EventHandler(this.OnEdit);
-            Tb(this.BtnDelete, "Delete (F9)", bX + bW * 3 + 18, bY, bW); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
-
             this.GrpDetail.Controls.Add(this.LblCode); this.GrpDetail.Controls.Add(this.TxtCode); this.GrpDetail.Controls.Add(this.ChkInactive);
             this.GrpDetail.Controls.Add(this.LblDesc); this.GrpDetail.Controls.Add(this.TxtDesc);
             this.GrpDetail.Controls.Add(this.LblStock); this.GrpDetail.Controls.Add(this.TxtStockCode);
@@ -95,15 +106,16 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GrpDetail.Controls.Add(this.LblMinCharges); this.GrpDetail.Controls.Add(this.TxtMinCharges);
             this.GrpDetail.Controls.Add(this.LblFOCQty); this.GrpDetail.Controls.Add(this.TxtFOCQty);
             this.GrpDetail.Controls.Add(this.LblRebateQty); this.GrpDetail.Controls.Add(this.TxtRebateQty);
-            this.GrpDetail.Controls.Add(this.BtnSave); this.GrpDetail.Controls.Add(this.BtnCancel);
-            this.GrpDetail.Controls.Add(this.BtnEdit); this.GrpDetail.Controls.Add(this.BtnDelete);
 
-            this.Controls.Add(this.LblTitle); this.Controls.Add(this.BtnNew); this.Controls.Add(this.BtnRefresh); this.Controls.Add(this.BtnExit);
             this.Controls.Add(this.GridMT); this.Controls.Add(this.GrpDetail);
+            this.Controls.Add(this.PanelToolbar);
+            this.Controls.Add(this.PanelHeaderTop);
             this.ResumeLayout(false);
         }
 
-        private static void Tb(SimpleButton b, string t, int x, int y, int w) { b.Text=t; b.Location=new Point(x,y); b.Width=w; b.Height=28; }
+        // Toolbar button: 50px tall with the icon on the left (icons assigned at runtime).
+        private static void Tb(SimpleButton b, string t, int x, int y, int w)
+        { b.Text=t; b.Location=new Point(x,y); b.Width=w; b.Height=50; b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft; }
         private static void Lbl(LabelControl l, string t, int x, int y) { l.Text=t; l.Location=new Point(x,y+3); }
         private static void AddCol(GridView gv, string f, string c, int w)
         { var col=new GridColumn(); col.FieldName=f; col.Caption=c; col.Visible=true; col.Width=w; col.VisibleIndex=gv.Columns.Count; gv.Columns.Add(col); }

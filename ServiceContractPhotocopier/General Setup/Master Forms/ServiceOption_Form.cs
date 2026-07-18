@@ -9,18 +9,34 @@ using static VTACPluginBase.Classes.Helpers.GeneralHelper;
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
     /// <summary>
-    /// Service Option — tabbed global configuration. Persists to z_SysConfig table.
+    /// Plugin Option — the plugin's own settings centre (tab per area; "Service Option" is one tab,
+    /// carrying the service checkboxes, defaults and the Meter Invoice No. Format).
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Service Option...",
+    [AutoCount.PlugIn.MenuItem("Plugin Option...",
     MenuOrder = 900,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_OPTION,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_OPTION)]
-    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
+    [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Normal, false)]
     public partial class ServiceOption_Form : XtraForm
     {
         private DBSetting _dbSetting;
 
-        public ServiceOption_Form() { InitializeComponent(); }
+        public ServiceOption_Form() { InitializeComponent(); ApplyButtonIcons(); }
+
+        // Same AutoCount large icons as the other maintenance modules.
+        private void ApplyButtonIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
+                BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
+            }
+            catch { }   // icons are cosmetic — never block the form
+        }
         public ServiceOption_Form(UserSession userSession) : this() { if (userSession != null) _dbSetting = userSession.DBSetting; this.Load += new EventHandler(OnFormLoad); }
         public ServiceOption_Form(DBSetting dbSetting) : this() { _dbSetting = dbSetting; this.Load += new EventHandler(OnFormLoad); }
 
@@ -37,8 +53,179 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ChkAllowEditClosed.Checked = GetBool("SCP.AllowEditClosedNote", false);
                 TxtDefaultServiceStatus.Text = GetStr("SCP.DefaultServiceStatus", "OPEN");
                 TxtDefaultAppointmentPriority.Text = GetStr("SCP.DefaultAppointmentPriority", "NORMAL");
+
+                // Meter invoice numbering: pick one of the book's native IV Document Numbering Formats.
+                try
+                {
+                    CmbMeterInvFormat.Properties.Items.Clear();
+                    System.Data.DataTable fmts = _dbSetting.GetDataTable(
+                        "SELECT Name FROM dbo.DocNoFormat WHERE DocType='IV' ORDER BY Name", false);
+                    foreach (System.Data.DataRow r in fmts.Rows)
+                        CmbMeterInvFormat.Properties.Items.Add(r["Name"] as string ?? "");
+                }
+                catch { }
+                CmbMeterInvFormat.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_INVOICE_DOCNO_FORMAT);
+
+                LoadApiTab();
             }
             catch { }
+        }
+
+        // ===== API tab: connection profiles (dbo.zSCP2_ApiProfile) =====
+
+        private bool _apiLoading;
+
+        private void LoadApiTab()
+        {
+            try
+            {
+                CmbApiProfile.Properties.Items.Clear();
+                System.Data.DataTable dt = _dbSetting.GetDataTable(
+                    "SELECT ProfileName FROM [dbo].[zSCP2_ApiProfile] ORDER BY ProfileName", false);
+                foreach (System.Data.DataRow r in dt.Rows)
+                    CmbApiProfile.Properties.Items.Add(r["ProfileName"].ToString());
+            }
+            catch { }
+            CmbApiProfile.SelectedIndexChanged += new EventHandler(CmbApiProfile_Changed);
+
+            // Start on the ACTIVE profile; when none is recorded yet, show the raw live config values.
+            string active = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_ACTIVE_PROFILE, "");
+            _apiLoading = true;
+            CmbApiProfile.Text = active;
+            _apiLoading = false;
+            if (active.Length > 0 && LoadApiProfileFields(active)) return;
+            TxtApiBaseUrl.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_BASE_URL,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_API_BASE_URL);
+            TxtApiToken.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_KEY, "");
+            CmbApiMode.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_MODE,
+                ServiceContractPhotocopier.Data.PumsConfig.METER_API_MODE_MOCK);
+            SpnApiTimeout.Value = ServiceContractPhotocopier.Data.PumsConfig.GetInt(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_TIMEOUT_MS,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_API_TIMEOUT_MS);
+        }
+
+        private void CmbApiProfile_Changed(object sender, EventArgs e)
+        {
+            if (_apiLoading) return;
+            LoadApiProfileFields((CmbApiProfile.Text ?? "").Trim());
+        }
+
+        private bool LoadApiProfileFields(string profileName)
+        {
+            if (string.IsNullOrEmpty(profileName)) return false;
+            try
+            {
+                System.Data.DataTable dt = _dbSetting.GetDataTable(
+                    "SELECT BaseUrl, Token, Mode, TimeoutMs FROM [dbo].[zSCP2_ApiProfile] WHERE ProfileName = N'" +
+                    SQLString(profileName) + "'", false);
+                if (dt.Rows.Count == 0) return false;
+                System.Data.DataRow r = dt.Rows[0];
+                TxtApiBaseUrl.Text = r["BaseUrl"].ToString();
+                TxtApiToken.Text = r["Token"].ToString();
+                CmbApiMode.Text = r["Mode"].ToString();
+                int t; int.TryParse(r["TimeoutMs"].ToString(), out t);
+                SpnApiTimeout.Value = t >= 1000 ? t : 15000;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Upsert the profile row AND copy its values into the live METER_API_* config keys so the
+        // API client (LiveMeterReadingApiClient etc.) keeps reading config exactly as before.
+        private void SaveApiTab()
+        {
+            string prof = (CmbApiProfile.Text ?? "").Trim();
+            string url = (TxtApiBaseUrl.Text ?? "").Trim().TrimEnd('/');
+            string token = (TxtApiToken.Text ?? "").Trim();
+            string mode = (CmbApiMode.Text ?? "").Trim().ToUpperInvariant();
+            if (mode != ServiceContractPhotocopier.Data.PumsConfig.METER_API_MODE_LIVE)
+                mode = ServiceContractPhotocopier.Data.PumsConfig.METER_API_MODE_MOCK;
+            int timeout = (int)SpnApiTimeout.Value;
+
+            if (prof.Length > 0) UpsertApiProfile(prof);
+
+            ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_BASE_URL, url);
+            ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_KEY, token);
+            ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_MODE, mode);
+            ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_TIMEOUT_MS, timeout.ToString());
+            ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_API_ACTIVE_PROFILE, prof);
+        }
+
+        // "New" — ask for a name, create the profile from the CURRENT field values, select it.
+        private void OnApiNewProfile(object sender, EventArgs e)
+        {
+            string name = XtraInputBox.Show("New API profile name:", "New Profile", "");
+            if (name == null) return;
+            name = name.Trim();
+            if (name.Length == 0) return;
+            _apiLoading = true;
+            CmbApiProfile.Text = name;
+            _apiLoading = false;
+            UpsertApiProfile(name);
+            if (!CmbApiProfile.Properties.Items.Contains(name)) CmbApiProfile.Properties.Items.Add(name);
+            XtraMessageBox.Show("Profile '" + name + "' created. Adjust the fields and press Save Profile,\r\n" +
+                "or press the toolbar Save to also make it the active connection.",
+                "New Profile", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // "Save Profile" — store the current fields under the selected profile (does NOT activate it).
+        private void OnApiSaveProfile(object sender, EventArgs e)
+        {
+            string prof = (CmbApiProfile.Text ?? "").Trim();
+            if (prof.Length == 0)
+            { XtraMessageBox.Show("Pick or create a profile first.", "Save Profile", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            try
+            {
+                UpsertApiProfile(prof);
+                if (!CmbApiProfile.Properties.Items.Contains(prof)) CmbApiProfile.Properties.Items.Add(prof);
+                XtraMessageBox.Show("Profile '" + prof + "' saved.", "Save Profile", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Save profile failed:\r\n" + ex.Message, "Error"); }
+        }
+
+        private void UpsertApiProfile(string prof)
+        {
+            string url = (TxtApiBaseUrl.Text ?? "").Trim().TrimEnd('/');
+            string token = (TxtApiToken.Text ?? "").Trim();
+            string mode = (CmbApiMode.Text ?? "").Trim().ToUpperInvariant();
+            if (mode != ServiceContractPhotocopier.Data.PumsConfig.METER_API_MODE_LIVE)
+                mode = ServiceContractPhotocopier.Data.PumsConfig.METER_API_MODE_MOCK;
+            int timeout = (int)SpnApiTimeout.Value;
+            _dbSetting.ExecuteNonQuery(
+                "MERGE [dbo].[zSCP2_ApiProfile] AS t USING (SELECT N'" + SQLString(prof) + "' AS ProfileName) AS s " +
+                "ON t.ProfileName = s.ProfileName " +
+                "WHEN MATCHED THEN UPDATE SET BaseUrl=N'" + SQLString(url) + "', Token=N'" + SQLString(token) +
+                "', Mode=N'" + SQLString(mode) + "', TimeoutMs=" + timeout + ", LastModified=GETDATE() " +
+                "WHEN NOT MATCHED THEN INSERT (ProfileName, BaseUrl, Token, Mode, TimeoutMs) VALUES " +
+                "(N'" + SQLString(prof) + "', N'" + SQLString(url) + "', N'" + SQLString(token) + "', N'" +
+                SQLString(mode) + "', " + timeout + ");");
+        }
+
+        private void OnApiDeleteProfile(object sender, EventArgs e)
+        {
+            string prof = (CmbApiProfile.Text ?? "").Trim();
+            if (prof.Length == 0) return;
+            if (XtraMessageBox.Show("Delete API profile '" + prof + "'?", "Confirm",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            try
+            {
+                _dbSetting.ExecuteNonQuery(
+                    "DELETE FROM [dbo].[zSCP2_ApiProfile] WHERE ProfileName = N'" + SQLString(prof) + "'");
+                CmbApiProfile.Properties.Items.Remove(prof);
+                CmbApiProfile.Text = "";
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error"); }
         }
 
         private bool GetBool(string key, bool def)
@@ -89,8 +276,15 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 SetConfig("SCP.AllowEditClosedNote",      ChkAllowEditClosed.Checked ? "True" : "False", "Allow editing of closed service notes", "BOOL");
                 SetConfig("SCP.DefaultServiceStatus",     TxtDefaultServiceStatus.Text ?? "OPEN", "Default service note status code", "STRING");
                 SetConfig("SCP.DefaultAppointmentPriority", TxtDefaultAppointmentPriority.Text ?? "NORMAL", "Default appointment priority code", "STRING");
+                // Meter invoice numbering lives in PumsConfig (the meter subsystem's config store).
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
+                    (CmbMeterInvFormat.Text ?? "").Trim());
 
-                XtraMessageBox.Show("Service options saved.", "Service Option", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // API tab: upsert the selected profile and make it the active connection.
+                SaveApiTab();
+
+                XtraMessageBox.Show("Plugin options saved.", "Plugin Option", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }

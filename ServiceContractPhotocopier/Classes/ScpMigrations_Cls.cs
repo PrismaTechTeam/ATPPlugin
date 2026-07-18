@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using AutoCount.Data;
 
@@ -90,10 +90,23 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_ItemDebtorHistory",     "02_CreateTable_zSCP2_ItemDebtorHistory.sql", asm);
             // Reference No (contract + item) + contract-context fields on the item. Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_ItemContract_v7_RefAndContext.sql", asm);
+            // Seed opening debtor-ownership rows so the history tab isn't blank for existing items.
+            RunDDL(dbsetting, "05_Backfill_zSCP2_ItemDebtorHistory.sql", asm);
+            // Serial No column on provided items. Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_ContractSparePart_v2_SerialNo.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
+            // Multi-machine CSSI: per-unit meters (MachineSerialNo) + MultiMachine flag + widened unique
+            // keys. MUST run AFTER the ItemMeter create — a fresh book has no table to ALTER yet.
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v2_MachineSerial.sql", asm);
+            // Ownership: contract-less items are owned by a debtor directly (OwnerDebtorCode).
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_OwnerDebtor.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
             // Staging of current readings (manual key-ins + accepted API values) per billing period.
             RunIfTableMissing(dbsetting, "zSCP2_MeterEntry",            "02_CreateTable_zSCP2_MeterEntry.sql", asm);
+            // Append-only meter reading audit log (immutable history of every reading event).
+            RunIfTableMissing(dbsetting, "zSCP2_MeterReadingLog",       "02_CreateTable_zSCP2_MeterReadingLog.sql", asm);
+            // API connection profiles (Plugin Option > API tab), seeded Production + Local Mock.
+            RunIfTableMissing(dbsetting, "zSCP2_ApiProfile",            "02_CreateTable_zSCP2_ApiProfile.sql", asm);
             // Add Invoiced stamp columns (billing-period duplicate guard). Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v2.sql", asm);
             // Plugin document numbering (SC / SI formats + running numbers), seeded past legacy max.

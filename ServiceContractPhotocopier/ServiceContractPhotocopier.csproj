@@ -141,6 +141,7 @@
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
+    <Compile Include="Classes\ScpMeterReadingLog.cs" />
     <Compile Include="Classes\ScpDocNo.cs" />
     <Compile Include="Classes\CommonForms\AdvanceSearch_Form.cs">
       <SubType>Form</SubType>
@@ -178,6 +179,18 @@
     </Compile>
     <Compile Include="Service Contract\Operation Forms\zSCP2_Item_Form.Designer.cs">
       <DependentUpon>zSCP2_Item_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_ChangeOwnership_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_ChangeOwnership_Form.Designer.cs">
+      <DependentUpon>zSCP2_ChangeOwnership_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_GenerateFromSerial_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_GenerateFromSerial_Form.Designer.cs">
+      <DependentUpon>zSCP2_GenerateFromSerial_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="General Setup\Master Forms\AppointmentPriorityLst_Form.cs">
@@ -715,6 +728,12 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v6_Overhaul.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemDebtorHistory.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemContract_v7_RefAndContext.sql" />
+    <EmbeddedResource Include="SQL\05_Backfill_zSCP2_ItemDebtorHistory.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ContractSparePart_v2_SerialNo.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v2_MachineSerial.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_OwnerDebtor.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterReadingLog.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ApiProfile.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v3_MonthEnd.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v4_DeptProj.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
@@ -890,6 +909,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_Item_Form.resx">
       <DependentUpon>zSCP2_Item_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_GenerateFromSerial_Form.resx">
+      <DependentUpon>zSCP2_GenerateFromSerial_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_ChangeOwnership_Form.resx">
+      <DependentUpon>zSCP2_ChangeOwnership_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\ServiceContract_Form.resx">
       <DependentUpon>ServiceContract_Form.cs</DependentUpon>

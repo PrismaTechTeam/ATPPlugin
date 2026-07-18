@@ -13,10 +13,9 @@ namespace ServiceContractPhotocopier.ServiceItem.MasterForms
     /// Reset Service Item Debtor Ownership — bulk-transfer machines from one debtor to another.
     /// Writes history row to zSCP_ServiceItemDebtorHistory before updating zSCP_ServiceItem.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Reset Service Item Debtor Ownership",
-    MenuOrder = 420,
-    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_RESET_ITEM_DEBTOR,
-    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_RESET_ITEM_DEBTOR)]
+    // Menu registration removed: superseded by the Service Item editor's "Change Ownership" action
+    // (per-item transfer with same-customer no-op rule + v2 history). This legacy form still targets
+    // the v1 zSCP_ServiceItem tables — kept compiled for reference, not reachable from the menu.
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ResetServiceItemDebtorOwnership_Form : XtraForm
     {

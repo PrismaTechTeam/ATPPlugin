@@ -20,9 +20,8 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             base.Dispose(disposing);
         }
 
-        // ---- Title bar ----
-        private DevExpress.XtraEditors.PanelControl PanelTitle;
-        private DevExpress.XtraEditors.LabelControl LblTitle;
+        // ---- Title bar (native AutoCount green header; hint hidden in the ctor) ----
+        private AutoCount.Controls.PanelHeader PanelHeaderTop;
 
         // ---- Outer filter panel ----
         private DevExpress.XtraEditors.PanelControl PanelFilter;
@@ -92,8 +91,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            this.PanelTitle = new DevExpress.XtraEditors.PanelControl();
-            this.LblTitle = new DevExpress.XtraEditors.LabelControl();
+            this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
             this.PanelFilter = new DevExpress.XtraEditors.PanelControl();
             this.GrpFilter = new DevExpress.XtraEditors.GroupControl();
             this.LblSearch = new DevExpress.XtraEditors.LabelControl();
@@ -139,8 +137,6 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.GridTransfer = new DevExpress.XtraGrid.GridControl();
             this.GridViewTransfer = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.labelControl1 = new DevExpress.XtraEditors.LabelControl();
-            ((System.ComponentModel.ISupportInitialize)(this.PanelTitle)).BeginInit();
-            this.PanelTitle.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelFilter)).BeginInit();
             this.PanelFilter.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpFilter)).BeginInit();
@@ -168,31 +164,16 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridTransfer)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewTransfer)).BeginInit();
             this.SuspendLayout();
-            // 
-            // PanelTitle
-            // 
-            this.PanelTitle.Appearance.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(27)))), ((int)(((byte)(94)))), ((int)(((byte)(32)))));
-            this.PanelTitle.Appearance.Options.UseBackColor = true;
-            this.PanelTitle.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-            this.PanelTitle.Controls.Add(this.LblTitle);
-            this.PanelTitle.Dock = System.Windows.Forms.DockStyle.Top;
-            this.PanelTitle.Location = new System.Drawing.Point(0, 0);
-            this.PanelTitle.Name = "PanelTitle";
-            this.PanelTitle.Size = new System.Drawing.Size(1820, 42);
-            this.PanelTitle.TabIndex = 0;
-            // 
-            // LblTitle
-            // 
-            this.LblTitle.Appearance.Font = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
-            this.LblTitle.Appearance.ForeColor = System.Drawing.Color.White;
-            this.LblTitle.Appearance.Options.UseFont = true;
-            this.LblTitle.Appearance.Options.UseForeColor = true;
-            this.LblTitle.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            this.LblTitle.Location = new System.Drawing.Point(18, 10);
-            this.LblTitle.Name = "LblTitle";
-            this.LblTitle.Size = new System.Drawing.Size(400, 22);
-            this.LblTitle.TabIndex = 0;
-            this.LblTitle.Text = "Stock Request Task";
+            //
+            // PanelHeaderTop  (native AutoCount green header; hint hidden in the ctor)
+            //
+            this.PanelHeaderTop.Dock = System.Windows.Forms.DockStyle.Top;
+            this.PanelHeaderTop.Header = "Stock Request Task";
+            this.PanelHeaderTop.Hint = "";
+            this.PanelHeaderTop.Location = new System.Drawing.Point(0, 0);
+            this.PanelHeaderTop.Name = "PanelHeaderTop";
+            this.PanelHeaderTop.Size = new System.Drawing.Size(1820, 34);
+            this.PanelHeaderTop.TabIndex = 0;
             // 
             // PanelFilter
             // 
@@ -776,13 +757,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.ClientSize = new System.Drawing.Size(1820, 700);
             this.Controls.Add(this.SplitContainer);
             this.Controls.Add(this.PanelFilter);
-            this.Controls.Add(this.PanelTitle);
+            this.Controls.Add(this.PanelHeaderTop);
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.Name = "StockRequestTask_Form";
             this.Text = "Stock Request Task";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
-            ((System.ComponentModel.ISupportInitialize)(this.PanelTitle)).EndInit();
-            this.PanelTitle.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.PanelFilter)).EndInit();
             this.PanelFilter.ResumeLayout(false);
             this.PanelFilter.PerformLayout();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -112,26 +112,170 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dirty = false;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(OnFormClosing);
 
+            ExtendContractRibbon();
+            HideServiceStartDate();
             UpdateServiceItemButtons();
         }
 
-        // Service items need a saved ContractKey to belong to, so Add / Edit / Attach / Remove are only
-        // enabled in EDIT mode (an existing contract). In NEW mode the user must Save the header first.
+        // Service items live in the in-memory _items list until Save, so Create / Edit / Delete work in
+        // BOTH new and edit mode (the save loop inserts the contract header first, then the items).
+        // Attach/inline-attach still need existing rows to look up, so they stay edit-mode-only.
         private void UpdateServiceItemButtons()
         {
-            bool canEditItems = !_isNew;
-            barAddItem.Enabled = canEditItems;
-            barEditItem.Enabled = canEditItems;
-            barDelItem.Enabled = canEditItems;
-            if (BtnItemAttach != null) BtnItemAttach.Enabled = canEditItems;
-            if (BtnItemDetach != null) BtnItemDetach.Enabled = canEditItems;
+            bool canAttach = !_isNew;
+            barAddItem.Enabled = true;
+            barEditItem.Enabled = true;
+            barDelItem.Enabled = true;
+            if (BtnItemCreate != null) BtnItemCreate.Enabled = true;
+            if (BtnItemEdit != null) BtnItemEdit.Enabled = true;
+            if (BtnItemDelete != null) BtnItemDelete.Enabled = true;
+            if (BtnItemAttach != null) BtnItemAttach.Enabled = canAttach;
+            if (BtnItemDetach != null) BtnItemDetach.Enabled = canAttach;
             DevExpress.XtraGrid.Columns.GridColumn col = GridViewItems.Columns.ColumnByFieldName("ServiceItemNo");
-            if (col != null) col.OptionsColumn.AllowEdit = canEditItems;   // inline attach only in edit mode
+            if (col != null) col.OptionsColumn.AllowEdit = canAttach;   // inline attach only in edit mode
+            // The bottom NEW row is the only place the attach dropdown opens; existing rows stay locked.
+            GridViewItems.OptionsView.NewItemRowPosition = canAttach
+                ? DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.Bottom
+                : DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             barDemoFill.Enabled = _isNew;   // demo random-fill only for a NEW contract
-            LblItemsHint.Text = canEditItems
-                ? ""
-                : "Save the contract first — service items can be added after the contract is saved.";
-            LblItemsHint.Visible = !canEditItems;
+            LblItemsHint.Text = "";
+            LblItemsHint.Visible = false;
+        }
+
+        // The contract no longer maintains ANY service dates — each service item carries its own
+        // start/expiry. The hidden editors keep whatever values were loaded so old rows keep their
+        // dates on re-save.
+        private void HideServiceStartDate()
+        {
+            LblStartDate.Visible = false;
+            DtStartDate.Visible = false;
+            LblExpiryDate.Visible = false;
+            DtExpiryDate.Visible = false;
+        }
+
+        // "Generate From Serial No" — pick DO/IV lines that carry machine serials; auto-fill the
+        // customer header (NEW mode) and auto-create one service item per machine.
+        private DevExpress.XtraBars.BarButtonItem _barGenSerial;
+
+        private void ExtendContractRibbon()
+        {
+            try
+            {
+                _barGenSerial = new DevExpress.XtraBars.BarButtonItem();
+                _barGenSerial.Caption = "Generate From\r\nSerial No";
+                _barGenSerial.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+                _barGenSerial.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(BarGenSerial_ItemClick);
+                RibbonCtl.Items.Add(_barGenSerial);
+                grpItem.ItemLinks.Add(_barGenSerial);
+                try
+                {
+                    float dpi = 96f;
+                    try { dpi = this.DeviceDpi; } catch { }
+                    AutoCount.Images.IAutoCountImage img =
+                        AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                    _barGenSerial.ImageOptions.Image = img.GetLargeImage_Inquiry();
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        private void BarGenSerial_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            using (zSCP2_GenerateFromSerial_Form f = new zSCP2_GenerateFromSerial_Form(_db))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK || f.Picked.Count == 0) return;
+
+                zSCP2_GenerateFromSerial_Form.PickedSerial first = f.Picked[0];
+
+                // NEW mode: the picked document drives the whole header — customer (which cascades into
+                // address/attention/phone/term/area/agent + More Header via OnDebtorChanged) + Reference No.
+                if (_isNew)
+                {
+                    LkDebtorCode.EditValue = first.DebtorCode;
+                    TxtRefNo.Text = first.DocNo;
+                }
+
+                bool multiDebtor = false;
+                foreach (zSCP2_GenerateFromSerial_Form.PickedSerial p in f.Picked)
+                    if (!string.Equals(p.DebtorCode, first.DebtorCode, StringComparison.OrdinalIgnoreCase))
+                        multiDebtor = true;
+
+                // EDIT mode: the header keeps its customer — flag picked serials sold to someone else.
+                bool debtorMismatch = false;
+                if (!_isNew)
+                {
+                    string curDebtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
+                    foreach (zSCP2_GenerateFromSerial_Form.PickedSerial p in f.Picked)
+                        if (!string.Equals(p.DebtorCode, curDebtor, StringComparison.OrdinalIgnoreCase))
+                            debtorMismatch = true;
+                }
+
+                // Serials already registered on ANY service item are skipped — the machine serial is the
+                // key Meter Reading matches on, so silently duplicating it would corrupt billing.
+                System.Collections.Generic.HashSet<string> dbSerials =
+                    new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    DataTable ex1 = _db.GetDataTable("SELECT SerialNumber FROM [dbo].[zSCP2_Item] WHERE ISNULL(SerialNumber,'') <> ''", false);
+                    foreach (DataRow r1 in ex1.Rows) dbSerials.Add(r1["SerialNumber"].ToString().Trim());
+                }
+                catch { }
+                foreach (ItemEditData ex in _items)
+                    if (!string.IsNullOrEmpty(ex.SerialNumber)) dbSerials.Remove(ex.SerialNumber.Trim());   // in-list items get the finer ItemCode+Serial check below
+
+                // Preview numbering: show each generated item its upcoming CSSI number immediately
+                // (same UX as the Auto button). The REAL numbers are drawn by ScpDocNo.Next() at save,
+                // so previews are never persisted and can't collide across users.
+                string fmtSI = null; int nextSI = 0;
+                try
+                {
+                    DataTable fdt = _db.GetDataTable(
+                        "SELECT FormatString, NextNumber FROM [dbo].[zSCP2_DocNoFormat] WHERE DocType='" +
+                        ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM + "'", false);
+                    if (fdt.Rows.Count > 0)
+                    {
+                        fmtSI = fdt.Rows[0]["FormatString"].ToString();
+                        nextSI = Convert.ToInt32(fdt.Rows[0]["NextNumber"]);
+                    }
+                }
+                catch { }
+                int autosAhead = 0;   // items already queued with an auto number consume earlier previews
+                foreach (ItemEditData ex in _items) if (ex.ServiceItemNoIsAuto) autosAhead++;
+
+                int added = 0, skipped = 0, inDb = 0;
+                foreach (zSCP2_GenerateFromSerial_Form.PickedSerial p in f.Picked)
+                {
+                    bool dup = false;
+                    foreach (ItemEditData ex in _items)
+                        if (string.Equals(ex.SerialNumber ?? "", p.SerialNo, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(ex.ItemCode ?? "", p.ItemCode, StringComparison.OrdinalIgnoreCase))
+                            dup = true;
+                    if (dup) { skipped++; continue; }
+                    if (dbSerials.Contains(p.SerialNo.Trim())) { inDb++; continue; }
+
+                    ItemEditData d = new ItemEditData();
+                    d.Meters = zSCP2_Item_Form.CreateMetersTable();
+                    d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
+                    d.ServiceItemNo = fmtSI == null ? "" :
+                        ServiceContractPhotocopier.Classes.ScpDocNo.Format(fmtSI, nextSI + autosAhead + added);
+                    d.ServiceItemNoIsAuto = true;    // real number reserved by ScpDocNo.Next() at save time
+                    d.ItemCode = p.ItemCode;
+                    d.SerialNumber = p.SerialNo;
+                    d.Description = p.ItemDesc;
+                    _items.Add(d);
+                    added++;
+                }
+                RebuildItemsView();
+                _dirty = true;
+
+                string msg = added + " service item(s) generated from the selected serial numbers.";
+                if (skipped > 0) msg += "\r\n" + skipped + " skipped (same Item Code + Serial already in the list).";
+                if (inDb > 0) msg += "\r\n" + inDb + " skipped (serial already registered on another service item).";
+                if (multiDebtor) msg += "\r\nNote: the selection spans multiple customers — the header was filled from " + first.DebtorCode + ".";
+                if (debtorMismatch) msg += "\r\nWarning: some picked serials were sold to a DIFFERENT customer than this contract's.";
+                XtraMessageBox.Show(msg, "Generate From Serial No", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
 
         private void WireDirtyTracking()
@@ -554,15 +698,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataTable it = _db.GetDataTable(
                 "SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + _contractKey + " ORDER BY Pos, ItemKey", false);
             foreach (DataRow r in it.Rows)
-                _items.Add(LoadOneItem(Convert.ToInt64(r["ItemKey"])));
+                _items.Add(LoadOneItem(_db, Convert.ToInt64(r["ItemKey"])));
         }
 
         // Load a single service item (+ its meters + item codes) into an ItemEditData. Reused by the
         // "+" attach picker so an existing contract-less item can be pulled into this contract.
-        private ItemEditData LoadOneItem(long itemKey)
+        /// <summary>Full load of one service item (core + meters + item codes + spare parts).
+        /// internal static so the item list's Edit can reuse it instead of duplicating the loader.</summary>
+        internal static ItemEditData LoadOneItem(DBSetting db, long itemKey)
         {
             ItemEditData d = new ItemEditData();
-            DataTable it = _db.GetDataTable("SELECT * FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
+            DataTable it = db.GetDataTable("SELECT * FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey, false);
             if (it.Rows.Count == 0) return d;
             DataRow r = it.Rows[0];
             d.ItemKey = itemKey;
@@ -580,13 +726,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
-            DataTable m = _db.GetDataTable(
+            DataTable m = db.GetDataTable(
                 "SELECT * FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + itemKey + " ORDER BY ItemMeterKey", false);
             foreach (DataRow mr in m.Rows)
             {
                 DataRow nr = d.Meters.NewRow();
                 nr["MeterTypeCode"] = AsStr(mr["MeterTypeCode"]);
                 nr["MeterRole"] = AsStr(mr["MeterRole"]);
+                nr["MachineSerialNo"] = mr.Table.Columns.Contains("MachineSerialNo") ? AsStr(mr["MachineSerialNo"]) : "";
                 nr["MinimumCharges"] = AsDec(mr["MinimumCharges"]);
                 nr["ChargesRate"] = AsDec(mr["ChargesRate"]);
                 nr["MeterMultiPriceCode"] = AsStr(mr["MeterMultiPriceCode"]);
@@ -597,7 +744,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             d.Meters.AcceptChanges();
 
-            DataTable ics = _db.GetDataTable(
+            DataTable ics = db.GetDataTable(
                 "SELECT * FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=" + itemKey + " ORDER BY Pos, ItemCodeKey", false);
             foreach (DataRow ir in ics.Rows)
             {
@@ -611,7 +758,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             d.ItemCodes.AcceptChanges();
 
             d.SpareParts = CreateSparePartsTable();
-            DataTable sp = _db.GetDataTable(
+            DataTable sp = db.GetDataTable(
                 "SELECT * FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=" + itemKey + " ORDER BY Pos", false);
             int spPos = 0;
             foreach (DataRow s in sp.Rows)
@@ -620,6 +767,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 nr["SparePartKey"] = s["SparePartKey"]; nr["ItemKey"] = itemKey; nr["Bound"] = false;
                 nr["No"] = ++spPos;
                 nr["ItemCode"] = AsStr(s["ItemCode"]); nr["Description"] = AsStr(s["Description"]);
+                nr["SerialNumber"] = s.Table.Columns.Contains("SerialNumber") ? AsStr(s["SerialNumber"]) : "";
                 nr["Unlimited"] = AsStr(s["Unlimited"]) == "Y"; nr["UOM"] = AsStr(s["UOM"]);
                 nr["Quantity"] = AsDec(s["Quantity"]); nr["Discount"] = AsStr(s["Discount"]);
                 nr["UnitPrice"] = AsDec(s["UnitPrice"]); nr["TaxType"] = AsStr(s["TaxType"]);
@@ -629,6 +777,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 d.SpareParts.Rows.Add(nr);
             }
             d.SpareParts.AcceptChanges();
+
+            // Hydrate the extended columns + LoadedCtx snapshot. Without this, the contract save
+            // loop (which persists EVERY item) would overwrite unopened items' Grade/Note/PM/context
+            // overrides with empty defaults.
+            zSCP2_Item_Form.LoadExtras(db, d, itemKey);
             return d;
         }
 
@@ -671,7 +824,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             foreach (ItemEditData ex2 in _items)
                 if (ex2.ItemKey == itemKey) { XtraMessageBox.Show("That item is already in this contract.", "Already added"); return; }
-            _items.Add(LoadOneItem(itemKey));
+            _items.Add(LoadOneItem(_db, itemKey));
             _detachedThisSession.Remove(itemKey);
             _dirty = true;
             RebuildItemsView();
@@ -682,7 +835,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             object k = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
                 this, "Attach Service Item (no contract)", loose, "ItemKey",
                 new string[] { "ServiceItemNo", "SerialNumber", "Description" },
-                new string[] { "Service Item No", "Serial Number", "Description" },
+                new string[] { "Service Item No", "Machine Serial", "Description" },
                 new int[] { 130, 110, 220 });
             long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
@@ -775,7 +928,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (rh < 0) return;
             int idx = Convert.ToInt32(GridViewItems.GetRowCellValue(rh, "No")) - 1;
             if (idx < 0 || idx >= _items.Count) return;
-            using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, _items[idx], (int)SpnBillingDay.Value))
+            // Embedded mode (4-arg): shows Contract No + Customer read-only and locks Contract Type —
+            // the same experience as Add-from-contract and Edit-from-the-item-list.
+            using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, _items[idx], (int)SpnBillingDay.Value, TxtContractNo.Text.Trim()))
             {
                 if (dlg.ShowDialog(this) == DialogResult.OK) { _dirty = true; RebuildItemsView(); }
             }
@@ -817,8 +972,32 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             foreach (DevExpress.XtraGrid.Columns.GridColumn c in GridViewItems.Columns)
                 c.OptionsColumn.AllowEdit = false;
             DevExpress.XtraGrid.Columns.GridColumn col = GridViewItems.Columns.ColumnByFieldName("ServiceItemNo");
-            if (col != null) { col.OptionsColumn.AllowEdit = true; col.ColumnEdit = _orphanRepo; }
+            // NO ColumnEdit for display — the orphan lookup only knows UNATTACHED items, so a bound
+            // item's number would render BLANK. The lookup is supplied at EDIT time only (same fix as
+            // the spare-part Serial No column).
+            if (col != null) col.OptionsColumn.AllowEdit = true;
+            GridViewItems.CustomRowCellEditForEditing += new DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventHandler(GridViewItems_ItemNoEditor);
+            GridViewItems.ShowingEditor += new System.ComponentModel.CancelEventHandler(GridViewItems_ShowingEditor);
             GridViewItems.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewItems_CellValueChanged);
+        }
+
+        // Edit-time editor for the Service Item No column: the inline-attach orphan picker.
+        private void GridViewItems_ItemNoEditor(object sender, DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventArgs e)
+        {
+            if (e.Column != null && e.Column.FieldName == "ServiceItemNo" && _orphanRepo != null)
+                e.RepositoryItem = _orphanRepo;
+        }
+
+        // Only the NEW row (bottom "add" row, or a still-blank row) may open the attach dropdown —
+        // rows that already hold a service item are locked (swap/detach goes through the buttons).
+        private void GridViewItems_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "ServiceItemNo") return;
+            int rh = GridViewItems.FocusedRowHandle;
+            if (rh == DevExpress.XtraGrid.GridControl.NewItemRowHandle) return;
+            object cur = GridViewItems.GetRowCellValue(rh, "ServiceItemNo");
+            bool blank = cur == null || cur == DBNull.Value || cur.ToString().Trim().Length == 0;
+            if (!blank) e.Cancel = true;
         }
 
         private void RefreshOrphanLookup()
@@ -833,8 +1012,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (e.Column.FieldName != "ServiceItemNo") return;
             string picked = e.Value == null ? "" : e.Value.ToString().Trim();
             if (picked.Length == 0) return;
-            object noVal = GridViewItems.GetRowCellValue(e.RowHandle, "No");
-            if (noVal == null || noVal == DBNull.Value) return;
+            object noVal = e.RowHandle == DevExpress.XtraGrid.GridControl.NewItemRowHandle
+                ? null : GridViewItems.GetRowCellValue(e.RowHandle, "No");
+            if (noVal == null || noVal == DBNull.Value)
+            {
+                // NEW row: picking an orphan ATTACHES it as an additional service item.
+                DataRow[] nf = _orphanLookup.Select("ServiceItemNo='" + picked.Replace("'", "''") + "'");
+                if (nf.Length == 0) return;
+                long nk = Convert.ToInt64(nf[0]["ItemKey"]);
+                foreach (ItemEditData ex2 in _items)
+                    if (ex2.ItemKey == nk) { BeginInvoke(new MethodInvoker(RebuildItemsView)); return; }
+                _items.Add(LoadOneItem(_db, nk));
+                _detachedThisSession.Remove(nk);
+                _dirty = true;
+                BeginInvoke(new MethodInvoker(delegate
+                {
+                    try { GridViewItems.CancelUpdateCurrentRow(); } catch { }
+                    RebuildItemsView();
+                }));
+                return;
+            }
             int idx = Convert.ToInt32(noVal) - 1;
             if (idx < 0 || idx >= _items.Count) return;
             if (_items[idx].ServiceItemNo == picked) return;   // unchanged
@@ -842,7 +1039,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (f.Length == 0) return;
             long newKey = Convert.ToInt64(f[0]["ItemKey"]);
             long oldKey = _items[idx].ItemKey;
-            _items[idx] = LoadOneItem(newKey);                 // swap the row's item
+            _items[idx] = LoadOneItem(_db, newKey);                 // swap the row's item
             _detachedThisSession.Remove(newKey);
             if (oldKey > 0 && !_detachedThisSession.Contains(oldKey)) _detachedThisSession.Add(oldKey);
             _dirty = true;
@@ -873,6 +1070,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _spCheck;
         private DataTable _spItemLookup;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _spItemRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _spSerialRepo;
+        private DataTable _spSerialLookup;   // full ItemSerialNo list; filtered per row by ItemCode
 
         internal static DataTable CreateSparePartsTable()
         {
@@ -883,6 +1082,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             dt.Columns.Add("No", typeof(int));
             dt.Columns.Add("ItemCode", typeof(string));
             dt.Columns.Add("Description", typeof(string));
+            dt.Columns.Add("SerialNumber", typeof(string));
             dt.Columns.Add("Unlimited", typeof(bool));
             dt.Columns.Add("UOM", typeof(string));
             dt.Columns.Add("Quantity", typeof(decimal));
@@ -905,16 +1105,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _spItemLookup = LoadItemLookup(_db);
             _spItemRepo = MakeItemCodeRepo(_spItemLookup);
             GridSpareParts.RepositoryItems.Add(_spItemRepo);
+            _spSerialLookup = LoadSerialLookup(_db);
+            _spSerialRepo = MakeSerialRepo(_spSerialLookup);
+            GridSpareParts.RepositoryItems.Add(_spSerialRepo);
 
             GridViewSpareParts.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             GridViewSpareParts.OptionsBehavior.Editable = true;
             GridViewSpareParts.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(SpareParts_CellValueChanged);
             GridViewSpareParts.ShowingEditor += new System.ComponentModel.CancelEventHandler(SpareParts_ShowingEditor);
+            GridViewSpareParts.CustomRowCellEditForEditing += new DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventHandler(SpareParts_SerialEditor);
 
             _spareParts = CreateSparePartsTable();
             GridSpareParts.DataSource = _spareParts.DefaultView;
             _spareParts.DefaultView.Sort = "Pos";
-            ConfigureSpareView(GridViewSpareParts, _spCheck, _spItemRepo);
+            ConfigureSpareView(GridViewSpareParts, _spCheck, _spItemRepo, _spSerialRepo);
             GridViewSpareParts.RowHeight = 26;   // ~20% taller rows for easier editing
         }
 
@@ -942,6 +1146,30 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return repo;   // popup grid auto-populates the 4 datasource columns
         }
 
+        // Serial numbers from AutoCount's serial tracking (ItemSerialNo): the provided-item grid's
+        // Serial No column picks from these (searchable popup shows ItemCode + SerialNumber).
+        internal static DataTable LoadSerialLookup(DBSetting db)
+        {
+            try
+            {
+                return db.GetDataTable(
+                    "SELECT SerialNumber, ItemCode FROM [dbo].[ItemSerialNo] ORDER BY ItemCode, SerialNumber", false);
+            }
+            catch { return new DataTable(); }
+        }
+
+        internal static DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit MakeSerialRepo(DataTable serialLookup)
+        {
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit repo =
+                new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            repo.DataSource = serialLookup;
+            repo.ValueMember = "SerialNumber";
+            repo.DisplayMember = "SerialNumber";
+            repo.NullText = "";
+            repo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;   // free-typing still allowed
+            return repo;
+        }
+
         // After an Item Code is picked, fill Description / UOM / Tax from the item master.
         internal static void FillFromItem(DataRow row, DataTable itemLookup)
         {
@@ -959,7 +1187,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // editor so the two grids match exactly.
         internal static void ConfigureSpareView(DevExpress.XtraGrid.Views.Grid.GridView v,
             DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit check,
-            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit itemRepo)
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit itemRepo,
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit serialRepo = null)
         {
             v.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             v.OptionsBehavior.Editable = true;
@@ -970,18 +1199,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SpCol2(v, "No", "No", 40, 0, true);
             SpCol2(v, "ItemCode", "Item Code", 130, 1);
             if (itemRepo != null && v.Columns["ItemCode"] != null) v.Columns["ItemCode"].ColumnEdit = itemRepo;
-            SpCol2(v, "Description", "Description", 240, 2);
-            SpBool2(v, check, "Unlimited", "Unlimited", 70, 3);
-            SpCol2(v, "UOM", "UOM", 70, 4);
-            SpCol2(v, "Quantity", "Quantity", 80, 5);
-            SpCol2(v, "Discount", "Discount", 80, 6);
-            SpCol2(v, "UnitPrice", "Unit Price", 90, 7);
-            SpCol2(v, "Amount", "Amount", 90, 8, true);
-            SpCol2(v, "TaxType", "Tax Type", 80, 9);
-            SpBool2(v, check, "TaxInclusive", "Tax Inclusive", 90, 10);
-            SpCol2(v, "TaxRate", "Tax (%)", 70, 11);
-            SpCol2(v, "TaxAmount", "Tax Amount", 90, 12, true);
-            SpCol2(v, "AmountAfterTax", "Amount After Tax", 110, 13, true);
+            SpCol2(v, "Description", "Description", 220, 2);
+            // Serial No has NO ColumnEdit: cells display their raw value (a filtered lookup as ColumnEdit
+            // would blank out every serial that isn't in the current filter). The searchable, per-row
+            // filtered picker is supplied at EDIT time via CustomRowCellEditForEditing in each form.
+            SpCol2(v, "SerialNumber", "Serial No", 120, 3);
+            SpBool2(v, check, "Unlimited", "Unlimited", 70, 4);
+            SpCol2(v, "UOM", "UOM", 70, 5);
+            SpCol2(v, "Quantity", "Quantity", 80, 6);
+            SpCol2(v, "Discount", "Discount", 80, 7);
+            SpCol2(v, "UnitPrice", "Unit Price", 90, 8);
+            SpCol2(v, "Amount", "Amount", 90, 9, true);
+            SpCol2(v, "TaxType", "Tax Type", 80, 10);
+            SpBool2(v, check, "TaxInclusive", "Tax Inclusive", 90, 11);
+            SpCol2(v, "TaxRate", "Tax (%)", 70, 12);
+            SpCol2(v, "TaxAmount", "Tax Amount", 90, 13, true);
+            SpCol2(v, "AmountAfterTax", "Amount After Tax", 110, 14, true);
         }
 
         private static void SpHide(DevExpress.XtraGrid.Views.Grid.GridView v, string field)
@@ -1012,6 +1245,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (rh < 0) return;
             object bound = GridViewSpareParts.GetRowCellValue(rh, "Bound");
             if (bound != null && bound != DBNull.Value && Convert.ToBoolean(bound)) e.Cancel = true;
+        }
+
+        // Serial No edit-time picker: the dropdown lists only the row's Item Code serials (empty until
+        // one is picked). Display stays raw text, so other rows' serials are never blanked by the filter.
+        private void SpareParts_SerialEditor(object sender, DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "SerialNumber") return;
+            string code = Convert.ToString(GridViewSpareParts.GetRowCellValue(e.RowHandle, "ItemCode") ?? "").Trim();
+            DataView dv = new DataView(_spSerialLookup);
+            dv.RowFilter = code.Length == 0 ? "1=0" : "ItemCode='" + code.Replace("'", "''") + "'";
+            _spSerialRepo.DataSource = dv;
+            e.RepositoryItem = _spSerialRepo;
         }
 
         private void SpareParts_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
@@ -1061,7 +1306,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             try
             {
                 DataTable dt = _db.GetDataTable(
-                    "SELECT SparePartKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, " +
+                    "SELECT SparePartKey, ItemKey, ItemCode, Description, ISNULL(SerialNumber,'') AS SerialNumber, " +
+                    "Unlimited, UOM, Quantity, Discount, " +
                     "UnitPrice, TaxType, TaxInclusive, TaxRate, Pos FROM [dbo].[zSCP2_ContractSparePart] " +
                     "WHERE ContractKey=" + _contractKey + " ORDER BY Pos", false);
                 foreach (DataRow s in dt.Rows)
@@ -1071,6 +1317,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     r["ItemKey"] = s["ItemKey"];
                     r["Bound"] = s["ItemKey"] != DBNull.Value;
                     r["ItemCode"] = s["ItemCode"]; r["Description"] = s["Description"];
+                    r["SerialNumber"] = s["SerialNumber"];
                     r["Unlimited"] = Convert.ToString(s["Unlimited"]) == "Y";
                     r["UOM"] = s["UOM"]; r["Quantity"] = s["Quantity"]; r["Discount"] = s["Discount"];
                     r["UnitPrice"] = s["UnitPrice"]; r["TaxType"] = s["TaxType"];
@@ -1145,7 +1392,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Persist a service item's own (item-bound) spare parts. These show read-only on the contract.
-        private void SaveItemSpareParts(SqlConnection conn, SqlTransaction tx, ItemEditData d, long itemKey)
+        internal static void SaveItemSpareParts(SqlConnection conn, SqlTransaction tx, ItemEditData d, long itemKey, long contractKey)
         {
             ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=@ik", P("@ik", itemKey));
             if (d.SpareParts == null) return;
@@ -1157,11 +1404,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
                 ExecNonQuery(conn, tx,
                     "INSERT INTO [dbo].[zSCP2_ContractSparePart] " +
-                    "(ContractKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
+                    "(ContractKey, ItemKey, ItemCode, Description, SerialNumber, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
                     " TaxType, TaxInclusive, TaxRate, Pos, LastModified) " +
-                    "VALUES (@ck, @ik, @code, @desc, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
-                    P("@ck", _contractKey), P("@ik", itemKey), P("@code", code),
+                    "VALUES (@ck, @ik, @code, @desc, @serial, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
+                    P("@ck", contractKey), P("@ik", itemKey), P("@code", code),
                     P("@desc", AsStr(r["Description"])),
+                    P("@serial", AsStr(r["SerialNumber"])),
                     P("@unl", Convert.ToBoolean(r["Unlimited"]) ? "Y" : "N"),
                     P("@uom", AsStr(r["UOM"])), P("@qty", AsDec(r["Quantity"])),
                     P("@disc", AsStr(r["Discount"])), P("@price", AsDec(r["UnitPrice"])),
@@ -1188,11 +1436,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
                 ExecNonQuery(conn, tx,
                     "INSERT INTO [dbo].[zSCP2_ContractSparePart] " +
-                    "(ContractKey, ItemKey, ItemCode, Description, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
+                    "(ContractKey, ItemKey, ItemCode, Description, SerialNumber, Unlimited, UOM, Quantity, Discount, UnitPrice, " +
                     " TaxType, TaxInclusive, TaxRate, Pos, LastModified) " +
-                    "VALUES (@ck, NULL, @code, @desc, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
+                    "VALUES (@ck, NULL, @code, @desc, @serial, @unl, @uom, @qty, @disc, @price, @ttype, @tinc, @trate, @pos, GETDATE())",
                     P("@ck", _contractKey), P("@code", code),
                     P("@desc", AsStr(r["Description"])),
+                    P("@serial", AsStr(r["SerialNumber"])),
                     P("@unl", Convert.ToBoolean(r["Unlimited"]) ? "Y" : "N"),
                     P("@uom", AsStr(r["UOM"])), P("@qty", AsDec(r["Quantity"])),
                     P("@disc", AsStr(r["Discount"])), P("@price", AsDec(r["UnitPrice"])),
@@ -1410,10 +1659,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 TxtContractNo.Text = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
                     _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_CONTRACT);
 
-            // Embedded items showing an auto-preview number: reserve a real one each at save.
+            // Embedded items showing an auto-preview number: reserve a real one each at save. The
+            // blank-number check is a safety net — NO item may ever be inserted without a number.
             foreach (ItemEditData d in _items)
             {
-                if (d.ServiceItemNoIsAuto)
+                if (d.ServiceItemNoIsAuto || string.IsNullOrWhiteSpace(d.ServiceItemNo))
                 {
                     d.ServiceItemNo = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
                         _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
@@ -1443,7 +1693,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             using (SqlDataReader rd = ex.ExecuteReader()) { while (rd.Read()) present.Add(rd.GetInt64(0)); }
                             foreach (long k in present)
                                 if (!kept.Contains(k))
+                                {
                                     ExecNonQuery(conn, tx, "UPDATE [dbo].[zSCP2_Item] SET ContractKey=NULL, LastModified=GETDATE() WHERE ItemKey=@ik", P("@ik", k));
+                                    // The detached item no longer has an owner — close its open
+                                    // ownership period so the history doesn't show it still owned.
+                                    ExecNonQuery(conn, tx,
+                                        "UPDATE [dbo].[zSCP2_ItemDebtorHistory] SET EndDate=CAST(GETDATE() AS DATE), LastModified=GETDATE() " +
+                                        "WHERE ItemKey=@ik AND EndDate IS NULL", P("@ik", k));
+                                }
                         }
 
                         int pos = 0;
@@ -1454,17 +1711,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             {
                                 UpdateItem(conn, tx, d, pos);
                                 itemKey = d.ItemKey;
-                                // children are rebuilt each save; wipe this item's rows first
-                                ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=@ik", P("@ik", itemKey));
+                                // Item codes carry no history -> safe to rebuild. METERS ARE NEVER WIPED:
+                                // zSCP_MeterTrans + zSCP2_MeterEntry cascade-delete on zSCP2_ItemMeter, so a
+                                // delete-and-rebuild would destroy the machine's whole reading history. They
+                                // are diffed in place instead (update/insert; delete only removed meters).
                                 ExecNonQuery(conn, tx, "DELETE FROM [dbo].[zSCP2_ItemCode] WHERE ItemKey=@ik", P("@ik", itemKey));
+                                zSCP2_Item_Form.SaveMetersPreservingReadings(conn, tx, d, itemKey);
                             }
                             else
                             {
                                 itemKey = InsertItem(conn, tx, d, pos);
+                                d.ItemKey = itemKey;   // keep the in-memory item in sync with its new row
+                                InsertMeters(conn, tx, d, itemKey);   // brand-new item: no readings exist yet
                             }
-                            InsertMeters(conn, tx, d, itemKey);
                             InsertItemCodes(conn, tx, d, itemKey);
-                            SaveItemSpareParts(conn, tx, d, itemKey);
+                            SaveItemSpareParts(conn, tx, d, itemKey, _contractKey);
                             zSCP2_Item_Form.PersistItemExtras(conn, tx, d, itemKey);
                             pos++;
                         }
@@ -1594,7 +1855,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void UpdateItem(SqlConnection conn, SqlTransaction tx, ItemEditData d, int pos)
         {
             string sql =
-                "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, ServiceItemNo=@no, SerialNumber=@serial, " +
+                // OwnerDebtorCode is cleared: attached to a contract, the CONTRACT owns the item — a
+                // stale direct-owner would mis-resolve the COALESCE if the contract's debtor were blank.
+                "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', ServiceItemNo=@no, SerialNumber=@serial, " +
                 "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
                 "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, LastModified=GETDATE() WHERE ItemKey=@ik";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
@@ -1649,9 +1912,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (string.IsNullOrEmpty(code)) continue;
                 string sql =
                     "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
-                    "(ItemKey, MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
+                    "(ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
                     " RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                    "VALUES (@ik,@code,@role,@min,@rate,@multi,@rebate,@foc,@init,GETDATE());";
+                    "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE());";
                 using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
                 {
                     cmd.Parameters.AddWithValue("@ik", itemKey);
@@ -1659,6 +1922,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     string role = r["MeterRole"] == null ? "NA" : r["MeterRole"].ToString().Trim().ToUpperInvariant();
                     if (role != "BK" && role != "CL") role = "NA";
                     cmd.Parameters.AddWithValue("@role", role);
+                    cmd.Parameters.AddWithValue("@mser", r.Table.Columns.Contains("MachineSerialNo") && r["MachineSerialNo"] != DBNull.Value
+                        ? ((string)r["MachineSerialNo"]).Trim() : "");
                     cmd.Parameters.AddWithValue("@min", AsDec(r["MinimumCharges"]));
                     cmd.Parameters.AddWithValue("@rate", AsDec(r["ChargesRate"]));
                     cmd.Parameters.AddWithValue("@multi", r["MeterMultiPriceCode"] == null ? "" : r["MeterMultiPriceCode"].ToString());
@@ -1973,7 +2238,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 DataTable it = _db.GetDataTable("SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + sourceKey + " ORDER BY Pos, ItemKey", false);
                 foreach (DataRow ir in it.Rows)
                 {
-                    ItemEditData d = LoadOneItem(Convert.ToInt64(ir["ItemKey"]));
+                    ItemEditData d = LoadOneItem(_db, Convert.ToInt64(ir["ItemKey"]));
                     d.ItemKey = 0;                 // fresh copy -> inserted as a new item
                     d.ServiceItemNoIsAuto = true;  // draw a new number on save
                     _items.Add(d);

@@ -30,7 +30,27 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         { _dbSetting = dbSetting; this.Load += new EventHandler(OnFormLoad); }
 
         private void OnFormLoad(object sender, EventArgs e)
-        { if (_dbSetting == null) return; LoadGrid(); GridViewMT.FocusedRowChanged += delegate { PopulateDetail(); }; SetReadOnly(true); }
+        { if (_dbSetting == null) return; ApplyButtonIcons(); LoadGrid(); GridViewMT.FocusedRowChanged += delegate { PopulateDetail(); }; SetReadOnly(true); }
+
+        // Same AutoCount large icons as the Maintain Service Contract / Item toolbars.
+        private void ApplyButtonIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                BtnNew.ImageOptions.Image = img.GetLargeImage_New();
+                BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
+                BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
+                BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
+                BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
+                BtnExit.ImageOptions.Image = img.GetLargeImage_Close();
+            }
+            catch { }   // icons are cosmetic — never block the form
+        }
 
         private void SetReadOnly(bool ro)
         {

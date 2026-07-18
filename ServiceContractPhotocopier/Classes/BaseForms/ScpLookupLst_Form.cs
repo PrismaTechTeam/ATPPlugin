@@ -12,22 +12,21 @@ using static VTACPluginBase.Classes.Helpers.GeneralHelper;
 namespace ServiceContractPhotocopier.Classes.BaseForms
 {
     /// <summary>
-    /// Standardized list+inline-edit form for all zSCP_LK_* lookup tables.
-    /// Matches the real AutoCount UI pattern from screenshots:
-    ///   - Red title at top left
-    ///   - Refresh + Exit (F2) buttons at top right
+    /// Standardized list+inline-edit form for all zSCP_LK_* lookup tables — the SAME family look as
+    /// Maintain Service Contract / Meter Type / Meter Multi Pricing:
+    ///   - Native AutoCount green PanelHeader (hint hidden)
+    ///   - Top toolbar of 86x50 icon buttons: New | Edit | Save | Cancel | Delete | Refresh | Exit (F2)
     ///   - Grid filling most of the form (columns: Code | Description | Inactive)
     ///   - Bottom edit panel (Code + Inactive checkbox on line 1, Description on line 2)
-    ///   - Bottom toolbar: Add (F5) | Edit (F6) | Save (F7) | Cancel (F8) | Delete (F9)
     ///   - Status bar at very bottom
-    /// No separate popup editor dialog — editing is inline.
+    /// No separate popup editor dialog — editing is inline. F-keys still work (F5..F9, F2).
     /// </summary>
     public class ScpLookupLst_Form : XtraForm
     {
         protected GridControl GridCtl;
         protected GridView GridVw;
         protected SimpleButton BtnAdd, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
-        protected LabelControl LblTitle;
+        protected AutoCount.Controls.PanelHeader PanelHeaderTop;
         protected PanelControl PanelEdit;
         protected PanelControl PanelToolbar;
         protected PanelControl PanelStatus;
@@ -58,38 +57,44 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
         private void InitBaseLayout()
         {
             this.Text = FormCaption;
-            this.ClientSize = new Size(920, 580);
+            this.ClientSize = new Size(920, 620);
             this.StartPosition = FormStartPosition.CenterParent;
-            this.MinimumSize = new Size(750, 500);
+            this.MinimumSize = new Size(750, 540);
 
-            // Title
-            LblTitle = new LabelControl();
-            LblTitle.Text = FormCaption;
-            LblTitle.Appearance.Font = new Font("Tahoma", 14F, FontStyle.Bold);
-            LblTitle.Appearance.ForeColor = Color.FromArgb(180, 20, 40);
-            LblTitle.Location = new Point(14, 10);
+            // Native AutoCount green header (hint hidden), same as every other maintenance module.
+            PanelHeaderTop = new AutoCount.Controls.PanelHeader();
+            PanelHeaderTop.Dock = DockStyle.Top;
+            PanelHeaderTop.Header = FormCaption;
+            PanelHeaderTop.Hint = "";
+            PanelHeaderTop.Size = new Size(920, 56);
 
-            // Refresh + Exit buttons
-            BtnRefresh = new SimpleButton();
-            BtnRefresh.Text = "Refresh";
-            BtnRefresh.Location = new Point(770, 10);
-            BtnRefresh.Width = 65;
-            BtnRefresh.Height = 26;
-            BtnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            BtnRefresh.Click += delegate { LoadData(); };
+            // Top toolbar — 86x50 icon buttons, identical to the Maintain Service Contract list.
+            PanelToolbar = new PanelControl();
+            PanelToolbar.Dock = DockStyle.Top;
+            PanelToolbar.Size = new Size(920, 62);
 
-            BtnExit = new SimpleButton();
-            BtnExit.Text = "Exit (F2)";
-            BtnExit.Location = new Point(845, 10);
-            BtnExit.Width = 65;
-            BtnExit.Height = 26;
-            BtnExit.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            BtnExit.Click += delegate { this.Close(); };
+            BtnAdd     = MakeToolBtn("New",       8, delegate { OnAdd(); });
+            BtnEdit    = MakeToolBtn("Edit",     98, delegate { OnEditBtn(); });
+            BtnSave    = MakeToolBtn("Save",    188, delegate { OnSave(); });
+            BtnCancel  = MakeToolBtn("Cancel",  278, delegate { OnCancelEdit(); });
+            BtnDelete  = MakeToolBtn("Delete",  368, delegate { OnDelete(); });
+            BtnRefresh = MakeToolBtn("Refresh", 458, delegate { LoadData(); });
+            BtnRefresh.Width = 92;
+            BtnExit    = MakeToolBtn("Exit (F2)", 556, delegate { this.Close(); });
+            BtnExit.Width = 92;
+            PanelToolbar.Controls.Add(BtnAdd);
+            PanelToolbar.Controls.Add(BtnEdit);
+            PanelToolbar.Controls.Add(BtnSave);
+            PanelToolbar.Controls.Add(BtnCancel);
+            PanelToolbar.Controls.Add(BtnDelete);
+            PanelToolbar.Controls.Add(BtnRefresh);
+            PanelToolbar.Controls.Add(BtnExit);
+            ApplyToolbarIcons();
 
             // Grid — fills center
             GridCtl = new GridControl();
-            GridCtl.Location = new Point(14, 44);
-            GridCtl.Size = new Size(892, 380);
+            GridCtl.Location = new Point(14, 128);
+            GridCtl.Size = new Size(892, 366);
             GridCtl.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             GridVw = new GridView(GridCtl);
             GridVw.OptionsBehavior.Editable = false;
@@ -108,7 +113,7 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
 
             // Bottom edit panel
             PanelEdit = new PanelControl();
-            PanelEdit.Location = new Point(14, 430);
+            PanelEdit.Location = new Point(14, 502);
             PanelEdit.Size = new Size(892, 65);
             PanelEdit.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             PanelEdit.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
@@ -140,25 +145,6 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
             PanelEdit.Controls.Add(LblDesc);
             PanelEdit.Controls.Add(TxtDesc);
 
-            // Bottom toolbar
-            PanelToolbar = new PanelControl();
-            PanelToolbar.Location = new Point(14, 500);
-            PanelToolbar.Size = new Size(892, 38);
-            PanelToolbar.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            PanelToolbar.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
-
-            BtnAdd    = MakeToolBtn("Add (F5)",    6,   delegate { OnAdd(); });
-            BtnEdit   = MakeToolBtn("Edit (F6)",   96,  delegate { OnEditBtn(); });
-            BtnSave   = MakeToolBtn("Save (F7)",   186, delegate { OnSave(); });
-            BtnCancel = MakeToolBtn("Cancel (F8)", 276, delegate { OnCancelEdit(); });
-            BtnDelete = MakeToolBtn("Delete (F9)", 366, delegate { OnDelete(); });
-
-            PanelToolbar.Controls.Add(BtnAdd);
-            PanelToolbar.Controls.Add(BtnEdit);
-            PanelToolbar.Controls.Add(BtnSave);
-            PanelToolbar.Controls.Add(BtnCancel);
-            PanelToolbar.Controls.Add(BtnDelete);
-
             // Status bar
             PanelStatus = new PanelControl();
             PanelStatus.Dock = DockStyle.Bottom;
@@ -168,12 +154,10 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
             LblStatus.Location = new Point(6, 5);
             PanelStatus.Controls.Add(LblStatus);
 
-            this.Controls.Add(LblTitle);
-            this.Controls.Add(BtnRefresh);
-            this.Controls.Add(BtnExit);
             this.Controls.Add(GridCtl);
             this.Controls.Add(PanelEdit);
             this.Controls.Add(PanelToolbar);
+            this.Controls.Add(PanelHeaderTop);
             this.Controls.Add(PanelStatus);
 
             // F-key shortcuts
@@ -185,11 +169,32 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
         {
             var b = new SimpleButton();
             b.Text = text;
-            b.Location = new Point(x, 4);
-            b.Width = 85;
-            b.Height = 28;
+            b.Location = new Point(x, 6);
+            b.Width = 86;
+            b.Height = 50;
+            b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
             b.Click += onClick;
             return b;
+        }
+
+        // Same AutoCount large icons as the Maintain Service Contract / Meter Type toolbars.
+        private void ApplyToolbarIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new SizeF(dpi, dpi));
+                BtnAdd.ImageOptions.Image = img.GetLargeImage_New();
+                BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
+                BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
+                BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
+                BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
+                BtnExit.ImageOptions.Image = img.GetLargeImage_Close();
+            }
+            catch { }   // icons are cosmetic — never block the form
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)

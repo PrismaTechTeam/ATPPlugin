@@ -17,6 +17,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
     public partial class MeterReadingDetail_Form : XtraForm
     {
         private DataTable _dt;
+        private AutoCount.Data.DBSetting _db;
+        private long _contractKey;
+        // GENERATED INVOICE section (code-built, docked bottom)
+        private DevExpress.XtraEditors.GroupControl _grpInv;
+        private DevExpress.XtraGrid.GridControl _gridInv;
+        private DevExpress.XtraGrid.Views.Grid.GridView _viewInv;
 
         public MeterReadingDetail_Form()
         {
@@ -29,6 +35,105 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblTitle.Text = "Contract  " + contractNo + "      " + customer;
             this.GridDetail.DataSource = _dt;
             ConfigureGrid();
+        }
+
+        /// <summary>Full version: also shows the GENERATED INVOICE grid for this contract —
+        /// double-click a row to open that invoice in AutoCount's Invoice module.</summary>
+        public MeterReadingDetail_Form(string contractNo, string customer, DataTable dt,
+            AutoCount.Data.DBSetting db, long contractKey)
+            : this(contractNo, customer, dt)
+        {
+            _db = db;
+            _contractKey = contractKey;
+            BuildGeneratedInvoiceSection();
+            LoadGeneratedInvoices();
+        }
+
+        private void BuildGeneratedInvoiceSection()
+        {
+            _grpInv = new DevExpress.XtraEditors.GroupControl();
+            _grpInv.Text = "Generated Invoice   (double-click to open in AutoCount)";
+            _grpInv.Dock = DockStyle.Bottom;
+            _grpInv.Height = 220;
+
+            _gridInv = new DevExpress.XtraGrid.GridControl();
+            _gridInv.Dock = DockStyle.Fill;
+            _viewInv = new DevExpress.XtraGrid.Views.Grid.GridView(_gridInv);
+            _gridInv.MainView = _viewInv;
+            _gridInv.ViewCollection.Add(_viewInv);
+            _viewInv.OptionsBehavior.Editable = false;
+            _viewInv.OptionsView.ShowGroupPanel = false;
+            _viewInv.DoubleClick += new EventHandler(ViewInv_DoubleClick);
+            _grpInv.Controls.Add(_gridInv);
+
+            this.Controls.Add(_grpInv);
+            // Dock order: the invoice group must sit ABOVE the OK/Cancel bar, and the Fill grid must
+            // lay out last — bring both forward in that order.
+            _grpInv.BringToFront();
+            this.GridDetail.BringToFront();
+        }
+
+        private void LoadGeneratedInvoices()
+        {
+            if (_db == null || _contractKey <= 0 || _gridInv == null) return;
+            try
+            {
+                DataTable inv = _db.GetDataTable(
+                    "SELECT iv.DocKey, iv.DocNo AS [Invoice No], iv.DocDate AS [Date], " +
+                    "ISNULL(iv.NetTotal,0) AS [Total], " +
+                    "CASE WHEN ISNULL(iv.Cancelled,'F')='T' THEN 'YES' ELSE '' END AS [Cancelled], " +
+                    "COUNT(t.MeterTransKey) AS [Meters] " +
+                    "FROM dbo.IV iv " +
+                    "JOIN dbo.zSCP_MeterTrans t ON t.SalesInvoiceDocKey = iv.DocKey " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = t.ServiceItemKey " +
+                    "WHERE i.ContractKey = " + _contractKey + " " +
+                    "GROUP BY iv.DocKey, iv.DocNo, iv.DocDate, iv.NetTotal, iv.Cancelled " +
+                    "ORDER BY iv.DocDate DESC, iv.DocNo DESC", false);
+                _gridInv.DataSource = inv;
+                _viewInv.PopulateColumns();
+                if (_viewInv.Columns["DocKey"] != null) _viewInv.Columns["DocKey"].Visible = false;
+                GridColumn cDate = _viewInv.Columns["Date"];
+                if (cDate != null)
+                {
+                    cDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                    cDate.DisplayFormat.FormatString = "dd/MM/yyyy";
+                }
+                GridColumn cTot = _viewInv.Columns["Total"];
+                if (cTot != null)
+                {
+                    cTot.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+                    cTot.DisplayFormat.FormatString = "n2";
+                }
+                _viewInv.BestFitColumns();
+            }
+            catch { }
+        }
+
+        // Double-click an invoice row -> open that document in AutoCount's Invoice Entry.
+        private void ViewInv_DoubleClick(object sender, EventArgs e)
+        {
+            int rh = _viewInv.FocusedRowHandle;
+            if (rh < 0) return;
+            object k = _viewInv.GetRowCellValue(rh, "DocKey");
+            if (k == null || k == DBNull.Value) return;
+            long docKey = Convert.ToInt64(k);
+            try
+            {
+                AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
+                    AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
+                        AutoCount.Authentication.UserSession.CurrentUserSession, _db);
+                AutoCount.Invoicing.Sales.Invoice.Invoice doc = cmd.Edit(docKey);
+                if (doc == null)
+                { XtraMessageBox.Show("Invoice not found — it may have been deleted.", "Open Invoice"); LoadGeneratedInvoices(); return; }
+                using (AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry f =
+                    new AutoCount.Invoicing.Sales.Invoice.FormInvoiceEntry(doc))
+                {
+                    f.ShowDialog(this);
+                }
+                LoadGeneratedInvoices();   // reflect edits/cancellations made inside the entry form
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Could not open the invoice:\r\n" + ex.Message, "Open Invoice"); }
         }
 
         private void ConfigureGrid()

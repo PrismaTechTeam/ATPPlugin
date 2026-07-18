@@ -15,10 +15,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     /// SI = Service Item): edit the format string ('SC-&lt;000000&gt;') and the next running number.
     /// The Auto buttons on the Contract / Service Item editors draw from here via ScpDocNo.Next().
     /// </summary>
-    // SingleInstanceThreadForm(..., mergeMainMenu: true) merges AutoCount's main menu bar (File,
-    // G/L, A/R, ... Service & Contract) into this window - the native "navbar" look.
+    // Plain single-instance window: NO merged AutoCount menu bar, opens at normal size.
     [AutoCount.PlugIn.MenuItem("Document Numbering Format", MenuOrder = 890, ShowAsDialog = false)]
-    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Maximized, true)]
+    [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Normal, false)]
     public partial class DocNoFormat_Form : XtraForm
     {
         private DBSetting _dbSetting;

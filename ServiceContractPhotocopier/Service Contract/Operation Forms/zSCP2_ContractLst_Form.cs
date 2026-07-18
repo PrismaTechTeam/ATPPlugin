@@ -89,7 +89,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { f.ShowDialog(this); LoadGrid(); }
         }
 
-        private void OnEdit(object sender, EventArgs e)
+        // Virtual so the "Maintain Service Item" alias can open the Service Item editor instead of the
+        // contract editor (the list is item-level; editing a row must edit THAT item).
+        protected virtual void OnEdit(object sender, EventArgs e)
         {
             DataRow row = GetSelectedRow();
             if (row == null) return;
@@ -98,13 +100,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { f.ShowDialog(this); LoadGrid(); }
         }
 
-        private void OnDelete(object sender, EventArgs e)
+        // Virtual for the same reason: on the item list, Delete must remove only the selected ITEM,
+        // not its whole contract and every sibling item.
+        protected virtual void OnDelete(object sender, EventArgs e)
         {
             DataRow row = GetSelectedRow();
             if (row == null) return;
             long key = Convert.ToInt64(row["ContractKey"]);
             string code = row["ContractNo"].ToString();
-            if (XtraMessageBox.Show("Delete contract '" + code + "' and all its machines / meter config?",
+            if (XtraMessageBox.Show("Delete contract '" + code + "' and all its machines / meter config?\r\n" +
+                "ALL meter reading history of its machines is permanently deleted too.",
                 "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             try
             {

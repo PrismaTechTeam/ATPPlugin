@@ -57,7 +57,115 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         public MeterReadingIntegration_Form()
         {
             InitializeComponent();
+            // Native AutoCount header (same as Maintain Service Contract) with the hint line hidden.
+            try { this.PanelHeaderTop.HintCtrl.Visible = false; } catch { }
+            ApplyButtonIcons();
             InitDefaults();
+            // DEV/TEST hidden shortcut: Ctrl+Shift+3 wipes every meter-generated invoice (confirmed)
+            // so billing runs can be repeated. No button on purpose — key combo only.
+            this.KeyPreview = true;
+            this.KeyDown += new KeyEventHandler(DevShortcut_KeyDown);
+        }
+
+        private void DevShortcut_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.Shift && e.KeyCode == Keys.D3)
+            {
+                e.Handled = true;
+                DevWipeGeneratedInvoices();
+            }
+        }
+
+        // TESTING ONLY: deletes ALL invoices this module generated (proper AutoCount delete, so GL /
+        // stock postings reverse correctly), then reconciles the meter stamps and reloads — the whole
+        // book is back to "nothing billed" and a test run can repeat.
+        private void DevWipeGeneratedInvoices()
+        {
+            if (_dbSetting == null) return;
+            DataTable keys;
+            try
+            {
+                keys = _dbSetting.GetDataTable(
+                    "SELECT DISTINCT iv.DocKey, iv.DocNo FROM dbo.IV iv WHERE iv.DocKey IN (" +
+                    "SELECT InvoicedDocKey FROM dbo.zSCP2_MeterEntry WHERE InvoicedDocKey IS NOT NULL " +
+                    "UNION SELECT SalesInvoiceDocKey FROM dbo.zSCP_MeterTrans WHERE SalesInvoiceDocKey IS NOT NULL)", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Lookup failed:\r\n" + ex.Message, "Dev Wipe"); return; }
+
+            if (keys.Rows.Count == 0)
+            {
+                XtraMessageBox.Show("No meter-generated invoices found — nothing to delete.", "Dev Wipe");
+                return;
+            }
+            if (XtraMessageBox.Show(
+                    "TESTING SHORTCUT\r\n\r\nDelete ALL " + keys.Rows.Count + " meter-generated invoice(s) from AutoCount?\r\n" +
+                    "Meter stamps are released so billing can be repeated. This cannot be undone.",
+                    "Dev Wipe — Generated Invoices", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+
+            int deleted = 0, failed = 0;
+            System.Text.StringBuilder errs = new System.Text.StringBuilder();
+            AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
+                AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
+                    AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
+            foreach (DataRow r in keys.Rows)
+            {
+                try { cmd.Delete(Convert.ToInt64(r["DocKey"])); deleted++; }
+                catch (Exception ex)
+                {
+                    failed++;
+                    if (errs.Length < 600) errs.AppendLine(r["DocNo"] + ": " + ex.Message);
+                }
+            }
+
+            ReconcileDeletedInvoices();   // clears stamps + billed readings of the now-deleted docs
+            LoadData();
+            XtraMessageBox.Show(
+                "Deleted " + deleted + " invoice(s)." + (failed > 0 ? "\r\nFailed: " + failed + "\r\n" + errs : "") +
+                "\r\nMeter stamps released — you can generate again.",
+                "Dev Wipe", MessageBoxButtons.OK, failed > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        // Native AutoCount toolbar icons — the SAME family and size the "Maintain Service Contract"
+        // list and Stock Request Task use (GetLargeImage_*, MiddleLeft).
+        private void ApplyButtonIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                SetBtnAcIcon(this.BtnRefresh, img.GetLargeImage_Refresh());
+                SetBtnAcIcon(this.BtnFetch, img.GetLargeImage_Inquiry());
+                SetBtnAcIcon(this.BtnSelfManualKeyIn, img.GetLargeImage_Approve());
+                SetBtnAcIcon(this.BtnGenerateInvoice, img.GetLargeImage_New());
+            }
+            catch { }   // icons are cosmetic — never block the form over an image lookup
+            // Filter/Reset are the small 28px buttons inside Filter Options — compact SVGs fit there.
+            SetBtnSvgIcon(this.BtnFilter, "svgimages/xaf/action_filter.svg");
+            SetBtnSvgIcon(this.BtnReset, "svgimages/xaf/action_reload.svg");
+        }
+
+        private static void SetBtnAcIcon(DevExpress.XtraEditors.SimpleButton btn, System.Drawing.Image image)
+        {
+            if (btn == null || image == null) return;
+            btn.ImageOptions.Image = image;
+            btn.ImageOptions.ImageToTextIndent = 6;
+            btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+        }
+
+        private static void SetBtnSvgIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)
+        {
+            if (btn == null) return;
+            DevExpress.Utils.Svg.SvgImage img = DevExpress.Images.ImageResourceCache.Default.GetSvgImage(svgName);
+            if (img == null) return;
+            btn.ImageOptions.SvgImage = img;
+            btn.ImageOptions.SvgImageSize = new System.Drawing.Size(20, 20);
+            btn.ImageOptions.ImageToTextIndent = 6;
+            btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            btn.ImageOptions.SvgImageColorizationMode = DevExpress.Utils.SvgImageColorizationMode.None;
         }
 
         public MeterReadingIntegration_Form(UserSession userSession) : this()
@@ -79,7 +187,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void InitDefaults()
         {
-            this.LblToday.Text = DateTime.Today.ToString("dd/MM/yyyy (ddd)");
+            // "Edit:" caption + big date removed on request — the billing period already shows in the
+            // Filter Options title.
+            this.LblEditCaption.Visible = false;
+            this.LblToday.Visible = false;
             this.ChkShowAll.Checked = false;   // default: filter by the selected billing Day (not show all)
 
             this.CmbMonth.Properties.Items.Clear();
@@ -97,6 +208,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             this.GridViewMeter.CellValueChanged +=
                 new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewMeter_CellValueChanged);
+            // MERGED cells never activate their in-place editor, so the merged Select checkbox is
+            // toggled by hand on mouse-down (SetRowCellValue fires CellValueChanged -> the existing
+            // whole-CSSI propagation runs exactly as if the editor had been used).
+            this.GridViewMeter.MouseDown += new System.Windows.Forms.MouseEventHandler(GridViewMeter_MouseDown);
             this.GridViewMeter.CellMerge +=
                 new DevExpress.XtraGrid.Views.Grid.CellMergeEventHandler(GridViewMeter_CellMerge);
 
@@ -140,42 +255,43 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Double-click a contract → open its detail / override form.
             this.GridViewMeter.DoubleClick += new EventHandler(GridViewMeter_DoubleClick);
 
-            // Setting button (created in code to avoid touching the strict designer).
+            // Setting button (created in code to avoid touching the strict designer). Same 150x50 /
+            // 156px rhythm as the rest of the toolbar row (510/666/822/978/1134).
             _btnSetting = new SimpleButton();
             _btnSetting.Text = "Setting";
-            _btnSetting.Location = new Point(1085, 46);
-            _btnSetting.Size = new Size(120, 52);
+            _btnSetting.Location = new Point(1134, 46);
+            _btnSetting.Size = new Size(150, 50);
             _btnSetting.Click += new EventHandler(BtnSetting_Click);
             this.PanelFilter.Controls.Add(_btnSetting);
             _btnSetting.BringToFront();
+            try
+            {
+                float dpi2 = 96f;
+                try { dpi2 = this.DeviceDpi; } catch { }
+                SetBtnAcIcon(_btnSetting,
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi2, dpi2)).GetLargeImage_Options());
+            }
+            catch { }
 
             // Invoice grouping choice (overrides each contract's stored BillingMode when generating):
             //   ticked  = one invoice per CSSI (service item)
             //   unticked= one invoice per whole contract
+            // Grouping choice: CHECKED (default) = one invoice per debtor/contract; unchecked = one
+            // invoice per CSSI. Sits left-aligned under the action buttons.
             _chkPerCssi = new DevExpress.XtraEditors.CheckEdit();
-            _chkPerCssi.Properties.Caption = "Separate invoice per CSSI (else whole contract)";
+            _chkPerCssi.Properties.Caption = "Group same debtor into one invoice";
             _chkPerCssi.Properties.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             _chkPerCssi.Properties.Appearance.Options.UseFont = true;
             _chkPerCssi.Properties.Appearance.ForeColor = Color.FromArgb(27, 94, 32);
             _chkPerCssi.Properties.Appearance.Options.UseForeColor = true;
-            _chkPerCssi.Location = new Point(899, 102);
-            _chkPerCssi.Size = new Size(310, 22);
-            _chkPerCssi.Checked = false;
+            _chkPerCssi.Location = new Point(510, 102);
+            _chkPerCssi.Size = new Size(300, 22);
+            _chkPerCssi.Checked = true;
             this.PanelFilter.Controls.Add(_chkPerCssi);
             _chkPerCssi.BringToFront();
 
-            // Summary label sitting to the right of the action buttons.
-            _lblSummary = new LabelControl();
-            _lblSummary.Name = "LblSummary";
-            _lblSummary.AutoSizeMode = LabelAutoSizeMode.None;
-            _lblSummary.Appearance.Font = new Font("Segoe UI", 9F);
-            _lblSummary.Appearance.Options.UseFont = true;
-            _lblSummary.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
-            _lblSummary.Location = new Point(1360, 14);
-            _lblSummary.Size = new Size(470, 118);
-            _lblSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-            this.PanelFilter.Controls.Add(_lblSummary);
-            _lblSummary.BringToFront();
+            // (The Contracts/Meters statistics block was removed on request — the tab captions and
+            // the grid footer already carry the counts/totals.)
 
             // Footer: shows the meter-API URL + reachability (green = reachable, red = unreachable).
             _pnlFooter = new DevExpress.XtraEditors.PanelControl();
@@ -226,9 +342,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Include 0 Meter Usage" filter (in the Filter Options group). Unticked = hide 0-usage rows.
             _chkInclude0Usage = new DevExpress.XtraEditors.CheckEdit();
-            _chkInclude0Usage.Properties.Caption = "Include 0 Meter Usage";
-            _chkInclude0Usage.Location = new Point(272, 92);
-            _chkInclude0Usage.Size = new Size(200, 20);
+            _chkInclude0Usage.Properties.Caption = "Include 0 Meter Usage   (invoiced-this-month rows always stay visible)";
+            _chkInclude0Usage.Location = new Point(10, 92);
+            _chkInclude0Usage.Size = new Size(478, 20);
             _chkInclude0Usage.Checked = false;   // default: hide 0-usage rows
             _chkInclude0Usage.CheckedChanged += new EventHandler(ChkInclude0Usage_CheckedChanged);
             this.GrpFilter.Controls.Add(_chkInclude0Usage);
@@ -243,8 +359,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             OpenContractDetail(D64(r["ContractKey"]), S(r["ContractNo"]), S(r["Customer"]));
         }
 
-        // Each service item gets one of two background shades (white / super-light-blue), alternating
-        // per item (NOT per physical row), so a meter pair stays the same colour.
+        // Plain white rows (the per-item blue/white zebra shading was removed on request) — only
+        // unresolved fetch conflicts still tint their row light red.
         private void GridViewMeter_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;   // group rows
@@ -253,14 +369,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 Color rc = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
                 e.Appearance.BackColor = rc; e.Appearance.BackColor2 = rc;  // flat (no gradient)
-                e.Appearance.Options.UseBackColor = true;
-                return;
-            }
-            object v = GridViewMeter.GetRowCellValue(e.RowHandle, "Shade");
-            if (v != null && v != DBNull.Value && Convert.ToInt32(v) == 1)
-            {
-                Color bc = Color.FromArgb(228, 241, 252);   // super light blue
-                e.Appearance.BackColor = bc; e.Appearance.BackColor2 = bc;  // flat (no gradient)
                 e.Appearance.Options.UseBackColor = true;
             }
         }
@@ -283,12 +391,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             else if (_tabView.SelectedTabPage == _pageNo) f = "[Status] = 'No API data'";
             else if (_tabView.SelectedTabPage == _pageConflict) f = "[HasConflict] = True";
 
-            // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked. Rows that still BILL
-            // (minimum charges -> TotalCharges > 0) are never hidden, or they would be missed at
-            // Generate (which only sees the current tab).
+            // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked. Two exceptions never
+            // hide: rows that still BILL (minimum charges -> TotalCharges > 0, or Generate would miss
+            // them), and rows ALREADY INVOICED for the selected month (their usage reset to 0 on
+            // billing — hiding them would look like the machine vanished instead of "done").
             if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked)
             {
-                string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0)";
+                string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0 OR [InvoicedDocNo] <> '')";
                 f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
             }
             GridViewMeter.ActiveFilterString = f;
@@ -357,6 +466,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             object k1 = GridViewMeter.GetRowCellValue(e.RowHandle1, keyField);
             object k2 = GridViewMeter.GetRowCellValue(e.RowHandle2, keyField);
             e.Merge = (k1 != null && k2 != null && k1.ToString() == k2.ToString());
+            // Serial + status are per MACHINE: a multi-machine item's rows only merge within the same
+            // machine serial (SelCssi stays per item — selection is per CSSI by design).
+            if (e.Merge && (f == "SerialNo" || f == "MachineStatus"))
+            {
+                string s1 = S(GridViewMeter.GetRowCellValue(e.RowHandle1, "SerialNo"));
+                string s2 = S(GridViewMeter.GetRowCellValue(e.RowHandle2, "SerialNo"));
+                e.Merge = string.Equals(s1.Trim(), s2.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
             e.Handled = true;
         }
 
@@ -413,9 +530,44 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // ───────────────────── Load (one row per meter) ─────────────────────
 
+        // An invoice DELETED (or cancelled) in AutoCount must release its meters for re-billing:
+        // remove the billed readings it wrote (they would freeze Last Reading at the billed value)
+        // and clear the billing-period guard stamps, so Generate no longer says "already invoiced".
+        // Scope safety: only rows whose DocKey came from OUR generator (stamped in zSCP2_MeterEntry)
+        // are touched — the 145k migrated legacy readings carry no DocKey and are never affected.
+        private void ReconcileDeletedInvoices()
+        {
+            try
+            {
+                // Audit BEFORE the delete: the billed readings about to be un-billed are appended to the
+                // immutable log as INVOICE-DELETED, so even a deleted invoice leaves its reading history.
+                _dbSetting.ExecuteNonQuery(
+                    "INSERT INTO dbo.zSCP2_MeterReadingLog (ItemMeterKey, PeriodYear, PeriodMonth, Reading, ReadingDate, Source, DocNo) " +
+                    "SELECT t.ServiceItemMeterTypeKey, ISNULL(me.PeriodYear,0), ISNULL(me.PeriodMonth,0), " +
+                    "t.MeterTransReading, t.MeterTransDate, 'INVOICE-DELETED', ISNULL(me.InvoicedDocNo,'') " +
+                    "FROM dbo.zSCP_MeterTrans t " +
+                    "LEFT JOIN dbo.zSCP2_MeterEntry me ON me.InvoicedDocKey = t.SalesInvoiceDocKey AND me.ItemMeterKey = t.ServiceItemMeterTypeKey " +
+                    "WHERE t.SalesInvoiceDocKey IS NOT NULL " +
+                    "AND t.SalesInvoiceDocKey IN (SELECT me2.InvoicedDocKey FROM dbo.zSCP2_MeterEntry me2 WHERE me2.InvoicedDocKey IS NOT NULL) " +
+                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = t.SalesInvoiceDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
+                _dbSetting.ExecuteNonQuery(
+                    "DELETE t FROM dbo.zSCP_MeterTrans t " +
+                    "WHERE t.SalesInvoiceDocKey IS NOT NULL " +
+                    "AND t.SalesInvoiceDocKey IN (SELECT me.InvoicedDocKey FROM dbo.zSCP2_MeterEntry me WHERE me.InvoicedDocKey IS NOT NULL) " +
+                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = t.SalesInvoiceDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
+                _dbSetting.ExecuteNonQuery(
+                    "UPDATE me SET InvoicedDocKey=NULL, InvoicedDocNo='', InvoicedAt=NULL " +
+                    "FROM dbo.zSCP2_MeterEntry me " +
+                    "WHERE me.InvoicedDocKey IS NOT NULL " +
+                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = me.InvoicedDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
+            }
+            catch { }   // reconciliation is best-effort; the load itself must never be blocked
+        }
+
         private void LoadData()
         {
             if (_dbSetting == null) return;
+            ReconcileDeletedInvoices();
             try
             {
                 int month = SelectedMonth();
@@ -434,6 +586,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 {
                     string s = search.Replace("'", "''");
                     searchFilter = " AND (i.ServiceItemNo LIKE '%" + s + "%' OR i.SerialNumber LIKE '%" + s +
+                        "%' OR m.MachineSerialNo LIKE '%" + s +
                         "%' OR c.ContractNo LIKE '%" + s + "%' OR ISNULL(d.CompanyName,'') LIKE '%" + s + "%') ";
                 }
 
@@ -441,22 +594,32 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 bool includeExpired = ServiceContractPhotocopier.Data.PumsConfig.GetBool(
                     _dbSetting, ServiceContractPhotocopier.Data.PumsConfig.KEY_INCLUDE_EXPIRED_ITEMS,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INCLUDE_EXPIRED_ITEMS);
+                // A bound item stores its expiry as an OVERRIDE only (inherited dates are NULL on the
+                // item row), so the effective expiry is COALESCE(item, contract).
                 string expiryFilter = includeExpired ? "" :
-                    " AND (i.ServiceExpiryDate IS NULL OR i.ServiceExpiryDate >= DATEFROMPARTS(" + year + "," + month + ",1)) ";
+                    " AND (COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) IS NULL " +
+                    "OR COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) >= DATEFROMPARTS(" + year + "," + month + ",1)) ";
 
                 // Show the resolved billing period so cross-year runs are unambiguous (e.g. Dec = last Dec).
                 this.GrpFilter.Text = "Filter Options   —   billing period: " +
                     new CultureInfo("en-US").DateTimeFormat.GetAbbreviatedMonthName(month) + " " + year;
 
                 string sql =
-                    "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, i.SerialNumber, " +
+                    // Per-meter machine serial: a multi-machine CSSI assigns meters to provided units
+                    // (m.MachineSerialNo); '' falls back to the CSSI's own header machine serial.
+                    "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, " +
+                    "ISNULL(i.Description,'') AS ItemDesc, " +
+                    "COALESCE(NULLIF(m.MachineSerialNo,''), i.SerialNumber) AS SerialNumber, " +
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
-                    "ISNULL(mt.ACItemCode,'') AS ACItemCode, ISNULL(m.MinimumCharges,0) AS MinCharges, " +
+                    // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
+                    // goes on the charge row); ACItemCode is an explicit override when set.
+                    "ISNULL(NULLIF(mt.ACItemCode,''), ISNULL(mt.StockCode,'')) AS ACItemCode, ISNULL(m.MinimumCharges,0) AS MinCharges, " +
                     "ISNULL(m.ChargesRate,0) AS UnitPrice, ISNULL(m.FOCQty,0) AS FOCQty, " +
                     "ISNULL(m.RebateQtyInPercent,0) AS RebatePct, ISNULL(m.InitialReading,0) AS InitReading, " +
-                    "lr.LastReading, lr.LastDate " +
+                    "lr.LastReading, lr.LastDate, " +
+                    "ISNULL(li.LastInvNo,'') AS LastInvNo, li.LastInvAt " +
                     "FROM dbo.zSCP2_ItemMeter m " +
                     "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                     "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
@@ -467,9 +630,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "LEFT JOIN (SELECT z.ServiceItemMeterTypeKey, z.MeterTransReading AS LastReading, z.MeterTransDate AS LastDate " +
                     "  FROM (SELECT t.ServiceItemMeterTypeKey, t.MeterTransReading, t.MeterTransDate, " +
                     "        ROW_NUMBER() OVER (PARTITION BY t.ServiceItemMeterTypeKey ORDER BY t.MeterTransDate DESC, t.MeterTransKey DESC) AS rn " +
-                    // Last reading = latest MeterTrans STRICTLY BEFORE the selected billing month, so
-                    // the baseline is the previous period's reading (never the current/future month).
-                    "        FROM dbo.zSCP_MeterTrans t WHERE t.MeterTransDate < DATEFROMPARTS(" + year + "," + month + ",1)) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
+                    // Last reading baseline = latest MeterTrans STRICTLY BEFORE the selected billing
+                    // month, PLUS any BILLED reading inside the month (SalesInvoiceDocKey set): once a
+                    // meter is invoiced, its Last Reading moves to the billed value so the remaining
+                    // usage shows 0 — and reverts automatically if that invoice is later deleted
+                    // (ReconcileDeletedInvoices removes the billed row).
+                    "        FROM dbo.zSCP_MeterTrans t WHERE t.MeterTransDate < DATEFROMPARTS(" + year + "," + month + ",1) " +
+                    "           OR (t.SalesInvoiceDocKey IS NOT NULL AND t.MeterTransDate < DATEADD(MONTH, 1, DATEFROMPARTS(" + year + "," + month + ",1)))) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
+                    // Last invoice ever generated for this meter (from the zSCP2_MeterEntry stamps) —
+                    // lets the operator tell "0 usage because ALREADY INVOICED" apart from "no reading".
+                    "LEFT JOIN (SELECT z2.ItemMeterKey, z2.InvoicedDocNo AS LastInvNo, z2.InvoicedAt AS LastInvAt " +
+                    "  FROM (SELECT me.ItemMeterKey, me.InvoicedDocNo, me.InvoicedAt, " +
+                    "        ROW_NUMBER() OVER (PARTITION BY me.ItemMeterKey ORDER BY me.InvoicedAt DESC) AS rn " +
+                    "        FROM dbo.zSCP2_MeterEntry me WHERE me.InvoicedDocKey IS NOT NULL) z2 WHERE z2.rn = 1) li " +
+                    "ON li.ItemMeterKey = m.ItemMeterKey " +
                     "WHERE m.MeterRole IN ('BK','CL') AND i.Inactive='N' AND c.Inactive='N' " + dayFilter + searchFilter + expiryFilter +
                     "ORDER BY c.ContractNo, i.ServiceItemNo, m.MeterRole";
                 DataTable src = QueryWithTimeout(sql, 180);
@@ -491,6 +665,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["ContractNo"] = S(r["ContractNo"]);
                     g["ServiceItemNo"] = S(r["ServiceItemNo"]);
                     g["SerialNo"] = S(r["SerialNumber"]);
+                    g["ItemDesc"] = S(r["ItemDesc"]);
                     g["Customer"] = S(r["DebtorCode"]) + " - " + S(r["DebtorName"]);
                     g["Mode"] = S(r["BillingMode"]) == "S" ? "Separate" : "Group";
                     if (r["EffBillingDay"] != DBNull.Value) g["BillingDay"] = Convert.ToInt32(r["EffBillingDay"]);
@@ -506,6 +681,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["MeterUsage"] = 0m;
                     g["TotalCharges"] = 0m;
                     g["UseMin"] = (Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m);
+                    g["LastInvNo"] = S(r["LastInvNo"]);
+                    if (r["LastInvAt"] != DBNull.Value) g["LastInvDate"] = Convert.ToDateTime(r["LastInvAt"]);
                     g["Sel"] = false;
                     g["Status"] = "";
                     g["ItemKey"] = D64(r["ItemKey"]);
@@ -542,6 +719,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("ContractNo", typeof(string));
             dt.Columns.Add("ServiceItemNo", typeof(string));
             dt.Columns.Add("SerialNo", typeof(string));
+            dt.Columns.Add("ItemDesc", typeof(string));        // item description (invoice line text; hidden)
             dt.Columns.Add("MachineStatus", typeof(string));   // ONLINE / OFFLINE (set on fetch, per item)
             dt.Columns.Add("Customer", typeof(string));
             dt.Columns.Add("Mode", typeof(string));
@@ -558,6 +736,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("CurrentReading", typeof(decimal));
             dt.Columns.Add("MeterUsage", typeof(decimal));
             dt.Columns.Add("TotalCharges", typeof(decimal));
+            dt.Columns.Add("LastInvNo", typeof(string));      // last invoice generated for this meter (any period)
+            dt.Columns.Add("LastInvDate", typeof(DateTime));  // its date — GREEN when it falls in the selected billing period (= already invoiced now)
             dt.Columns.Add("UseMin", typeof(bool));
             dt.Columns.Add("Sel", typeof(bool));
             dt.Columns.Add("Status", typeof(string));
@@ -580,6 +760,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void ConfigureGrid()
         {
             GridViewMeter.OptionsBehavior.Editable = true;
+            // Open the in-place editor on MOUSE DOWN: without this, the first click on a (merged)
+            // Select cell only focuses it and the checkbox never toggles on a single click.
+            GridViewMeter.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
             GridViewMeter.OptionsView.AllowCellMerge = true;   // merge contract/item columns (no expand). NOTE: incompatible with real grouping.
             GridViewMeter.OptionsView.ShowGroupPanel = false;  // grouping is simulated via cell-merge; drag-panel would be non-functional
             GridViewMeter.OptionsView.ShowFooter = true;       // footer band for totals
@@ -587,8 +770,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo" })
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
+
+            // Secondary columns hidden BY DEFAULT to keep the grid focused — still available through
+            // the column chooser (right-click the header -> Column Chooser).
+            foreach (string h in new string[] { "MachineStatus", "Mode", "BillingDay", "UseMin", "Status", "EntrySource", "FetchedReading", "HasConflict" })
+            {
+                GridColumn hc = GridViewMeter.Columns[h];
+                if (hc == null) continue;
+                hc.Visible = false;
+                hc.OptionsColumn.ShowInCustomizationForm = true;
+            }
 
             SetCol("SelCssi", "Select", 55, true);
             GridColumn selc = GridViewMeter.Columns["SelCssi"];
@@ -625,8 +818,40 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetNum("CurrentReading", "Current Reading", 100, true, "n0");
             SetNum("MeterUsage", "Meter Usage", 95, false, "n0");
             SetNum("TotalCharges", "Total Charges", 95, false, "n2");
+            SetCol("LastInvNo", "Last Invoice No", 110, false);
+            SetCol("LastInvDate", "Last Invoice Date", 105, false);
+            GridColumn cInvDt = GridViewMeter.Columns["LastInvDate"];
+            if (cInvDt != null)
+            {
+                cInvDt.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                cInvDt.DisplayFormat.FormatString = "dd/MM/yyyy";
+            }
             SetCol("UseMin", "Use Min.", 70, true);
             SetCol("Status", "Status", 130, false);
+            // Invoiced-this-period rows: paint the Last Invoice cells green so a 0 Current Reading is
+            // unmistakably "already billed" rather than "no reading yet".
+            GridViewMeter.RowCellStyle -= new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
+            GridViewMeter.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
+
+            // Highlight the two columns the operator actually works with: Current Reading (amber —
+            // the key-in column) and Total Charges (green — the money). Column-level cell appearance
+            // outranks the RowStyle shading, so the tint shows on every row.
+            GridColumn cCurHl = GridViewMeter.Columns["CurrentReading"];
+            if (cCurHl != null)
+            {
+                cCurHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(255, 249, 196);
+                cCurHl.AppearanceCell.Options.UseBackColor = true;
+                cCurHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
+                cCurHl.AppearanceHeader.Options.UseFont = true;
+            }
+            GridColumn cChgHl = GridViewMeter.Columns["TotalCharges"];
+            if (cChgHl != null)
+            {
+                cChgHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(223, 240, 216);
+                cChgHl.AppearanceCell.Options.UseBackColor = true;
+                cChgHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
+                cChgHl.AppearanceHeader.Options.UseFont = true;
+            }
 
             // Freeze the identifier columns on the left so they stay visible when scrolling horizontally.
             // (Requires ColumnAutoWidth = false, set above.)
@@ -661,6 +886,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (c == null) return;
             c.Caption = caption; c.Width = width;
             c.OptionsColumn.AllowEdit = editable; c.OptionsColumn.ReadOnly = !editable;
+        }
+
+        // GREEN bold Last Invoice No/Date when that invoice falls inside the SELECTED billing period —
+        // i.e. this meter is already billed for the period on screen.
+        private void GridViewMeter_LastInvCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column == null || (e.Column.FieldName != "LastInvNo" && e.Column.FieldName != "LastInvDate")) return;
+            object inv = GridViewMeter.GetRowCellValue(e.RowHandle, "InvoicedDocNo");
+            if (inv == null || inv == DBNull.Value || inv.ToString().Trim().Length == 0) return;
+            e.Appearance.BackColor = System.Drawing.Color.FromArgb(200, 230, 201);
+            e.Appearance.ForeColor = System.Drawing.Color.FromArgb(27, 94, 32);
+            e.Appearance.FontStyleDelta = System.Drawing.FontStyle.Bold;
         }
         private void SetNum(string field, string caption, int width, bool editable, string fmt)
         {
@@ -739,27 +976,64 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     System.Threading.Tasks.Task.WaitAll(tOn, tOff);
                 });
 
-                // Merge: online wins over offline for the same code. Each DTO carries its endpoint.
+                // Merge: online wins over offline for the same machine. Each DTO carries its endpoint.
+                // Primary match key = MACHINE SERIAL (zSCP2_Item.SerialNumber is the CSSI's machine);
+                // Code (= ServiceItemNo in the mock) is kept as a fallback for APIs without serials.
+                Dictionary<string, MeterReadingDto> bySerial = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
                 Dictionary<string, MeterReadingDto> byCode = new Dictionary<string, MeterReadingDto>(StringComparer.OrdinalIgnoreCase);
                 if (onlineList != null)
                     foreach (MeterReadingDto d in onlineList)
-                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, year, month, day)) byCode[d.Code.Trim()] = d;
+                    {
+                        if (!QualifiesByDate(d, year, month, day)) continue;
+                        if (!string.IsNullOrWhiteSpace(d.SerialNumber)) bySerial[d.SerialNumber.Trim()] = d;
+                        if (!string.IsNullOrWhiteSpace(d.Code)) byCode[d.Code.Trim()] = d;
+                    }
                 if (offlineList != null)
                     foreach (MeterReadingDto d in offlineList)
-                        if (!string.IsNullOrWhiteSpace(d.Code) && QualifiesByDate(d, year, month, day) && !byCode.ContainsKey(d.Code.Trim()))
-                            byCode[d.Code.Trim()] = d;
+                    {
+                        if (!QualifiesByDate(d, year, month, day)) continue;
+                        if (!string.IsNullOrWhiteSpace(d.SerialNumber) && !bySerial.ContainsKey(d.SerialNumber.Trim())) bySerial[d.SerialNumber.Trim()] = d;
+                        if (!string.IsNullOrWhiteSpace(d.Code) && !byCode.ContainsKey(d.Code.Trim())) byCode[d.Code.Trim()] = d;
+                    }
 
                 int matchedMeters = 0;
                 int onlineMeters = 0, offlineMeters = 0, conflicts = 0;
                 System.Collections.Generic.HashSet<string> matchedItems = new System.Collections.Generic.HashSet<string>();
+
+                // Distinct serial count per CSSI: the byCode fallback (Code = ServiceItemNo, shared by
+                // every machine of a multi-machine item) is only safe when the item has ONE machine —
+                // otherwise machine B could take machine A's totals.
+                System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> serialsByItem =
+                    new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+                foreach (DataRow r in _dtGrid.Rows)
+                {
+                    string it = S(r["ServiceItemNo"]).Trim();
+                    if (it.Length == 0) continue;
+                    System.Collections.Generic.HashSet<string> set;
+                    if (!serialsByItem.TryGetValue(it, out set))
+                    { set = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase); serialsByItem[it] = set; }
+                    string sn = S(r["SerialNo"]).Trim();
+                    if (sn.Length > 0) set.Add(sn);
+                }
+
                 foreach (DataRow r in _dtGrid.Rows)
                 {
                     // Already invoiced for this period — done; don't overwrite the reading or status.
                     if (S(r["InvoicedDocNo"]).Trim().Length > 0) continue;
 
+                    // Machine serial first (the CSSI's machine identity); ServiceItemNo as fallback,
+                    // but only for single-machine items (see serialsByItem above).
+                    string serialKey = S(r["SerialNo"]).Trim();
                     string code = S(r["ServiceItemNo"]).Trim();
-                    MeterReadingDto dto;
-                    if (code.Length > 0 && byCode.TryGetValue(code, out dto))
+                    MeterReadingDto dto = null;
+                    if (serialKey.Length > 0) bySerial.TryGetValue(serialKey, out dto);
+                    if (dto == null && code.Length > 0)
+                    {
+                        System.Collections.Generic.HashSet<string> sset;
+                        bool singleMachine = !serialsByItem.TryGetValue(code, out sset) || sset.Count <= 1;
+                        if (singleMachine) byCode.TryGetValue(code, out dto);
+                    }
+                    if (dto != null)
                     {
                         bool isOnline = dto.Status == MachineStatus.Online;
                         decimal apiVal = S(r["Role"]) == "CL" ? dto.TotalCL : dto.TotalBK;
@@ -1020,6 +1294,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (invNo.Length > 0)
                 {
                     r["InvoicedDocNo"] = invNo;
+                    r["LastInvNo"] = invNo;
+                    if (s["InvoicedAt"] != DBNull.Value) r["LastInvDate"] = Convert.ToDateTime(s["InvoicedAt"]);
                     string invAt = (s["InvoicedAt"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["InvoicedAt"]).ToString("dd/MM/yyyy") : "";
                     r["Status"] = "INVOICED " + invNo + invAt;
                 }
@@ -1086,6 +1362,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             cmd.Parameters.AddWithValue("@dt", (object)readingDate ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@src", source);
             cmd.ExecuteNonQuery();
+            // Immutable audit trail: every staged reading (manual or API) is also APPENDED to the log.
+            ServiceContractPhotocopier.Classes.ScpMeterReadingLog.Append(
+                cn, tx, itemMeterKey, year, month, reading, readingDate, source, "");
         }
 
         // Remove a staged reading (used when the user clears a reading back to 0).
@@ -1097,6 +1376,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             cmd.Parameters.AddWithValue("@yr", year);
             cmd.Parameters.AddWithValue("@mo", month);
             cmd.ExecuteNonQuery();
+            // Audit: record that the staged reading was cleared (the log itself keeps prior rows).
+            ServiceContractPhotocopier.Classes.ScpMeterReadingLog.Append(
+                cn, tx, itemMeterKey, year, month, 0m, null,
+                ServiceContractPhotocopier.Classes.ScpMeterReadingLog.SOURCE_CLEARED, "");
         }
 
         // Block editing the Current Reading unless manual mode is on (and never on an API-sourced row —
@@ -1151,7 +1434,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 dt.Rows.Add(d);
             }
 
-            using (MeterReadingDetail_Form f = new MeterReadingDetail_Form(contractNo, customer, dt))
+            using (MeterReadingDetail_Form f = new MeterReadingDetail_Form(contractNo, customer, dt, _dbSetting, contractKey))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
             }
@@ -1241,6 +1524,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void SelCssiEditor_EditValueChanged(object sender, EventArgs e)
         {
             GridViewMeter.PostEditor();
+        }
+
+        // One left-click anywhere on the (merged) Select cell toggles the whole machine.
+        private void GridViewMeter_MouseDown(object sender, System.Windows.Forms.MouseEventArgs e)
+        {
+            if (e.Button != System.Windows.Forms.MouseButtons.Left) return;
+            DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit = GridViewMeter.CalcHitInfo(e.Location);
+            if (hit.RowHandle < 0 || hit.Column == null || hit.Column.FieldName != "SelCssi" || !hit.InRowCell) return;
+            object cur = GridViewMeter.GetRowCellValue(hit.RowHandle, "SelCssi");
+            bool v = !(cur != null && cur != DBNull.Value && Convert.ToBoolean(cur));
+            GridViewMeter.SetRowCellValue(hit.RowHandle, "SelCssi", v);
+            DevExpress.Utils.DXMouseEventArgs dx = DevExpress.Utils.DXMouseEventArgs.GetMouseArgs(e);
+            if (dx != null) dx.Handled = true;
         }
 
         private void GridViewMeter_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
@@ -1345,8 +1641,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (S(r["InvoicedDocNo"]).Trim().Length > 0) { alreadyInvoiced++; continue; }
                 if (Dec(r["CurrentReading"]) <= 0m) continue;
                 // Invoice grouping: the checkbox overrides each contract's stored BillingMode for this run.
-                // (Legacy data is one CSSI per contract, so either way it's one invoice per machine there.)
-                string mode = (_chkPerCssi != null && _chkPerCssi.Checked) ? "S" : "G";
+                // CHECKED = "Group same debtor into one invoice" (G); unchecked = one invoice per CSSI (S).
+                string mode = (_chkPerCssi != null && _chkPerCssi.Checked) ? "G" : "S";
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
                 string groupKey = mode == "S" ? ("C" + contractKey + "_I" + itemKey) : ("C" + contractKey);
@@ -1361,6 +1657,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.DebtorCode = S(r["DebtorCode"]);
                 ln.SerialNumber = S(r["SerialNo"]);
                 ln.ItemName = S(r["ServiceItemNo"]);
+                ln.ItemDesc = S(r["ItemDesc"]);
                 ln.MeterTypeCode = S(r["MeterType"]);
                 ln.MeterTypeName = S(r["MeterTypeName"]);
                 ln.ACItemCode = S(r["ACItemCode"]);
@@ -1383,7 +1680,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     job = new MeterInvoiceGenerator.InvoiceJob();
                     job.DebtorCode = ln.DebtorCode;
                     job.RefDocNo = refNo;
-                    job.Description = "Meter Billing " + monthName + " - " + refNo;
+                    // Legacy header text (verified against the customer's V8 meter invoices).
+                    job.Description = "Billing- [" + refNo + "]";
                     job.Label = refNo;
                     job.Lines = new List<MeterBillLine>();
                     jobs[groupKey] = job;

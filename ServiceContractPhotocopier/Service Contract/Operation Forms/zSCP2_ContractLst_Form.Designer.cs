@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.ServiceContract.OperationForms
+﻿namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 {
     partial class zSCP2_ContractLst_Form
     {
@@ -19,7 +19,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnEdit;
         private DevExpress.XtraEditors.SimpleButton BtnDelete;
         private DevExpress.XtraEditors.SimpleButton BtnRefresh;
-        private DevExpress.XtraEditors.SimpleButton BtnExit;
+        protected DevExpress.XtraEditors.SimpleButton BtnExit;
         protected DevExpress.XtraGrid.GridControl Grid;                 // protected: the "Maintain Service Item"
         protected DevExpress.XtraGrid.Views.Grid.GridView GridView;    // alias rebuilds the list at item level
         private DevExpress.XtraGrid.Columns.GridColumn ColContractNo;

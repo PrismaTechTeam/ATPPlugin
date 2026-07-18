@@ -12,8 +12,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private System.ComponentModel.IContainer components = null;
         protected override void Dispose(bool disposing) { if (disposing && (components != null)) components.Dispose(); base.Dispose(disposing); }
 
-        private LabelControl LblTitle;
-        private SimpleButton BtnNew, BtnRefresh, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnExit;
+        private AutoCount.Controls.PanelHeader PanelHeaderTop;
+        private PanelControl PanelToolbar;
+        private SimpleButton BtnNew, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
         private GridControl GridMP; private GridView GridViewMP;
         private LabelControl LblCode, LblDesc;
         private TextEdit TxtCode, TxtDesc;
@@ -23,10 +24,11 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private void InitializeComponent()
         {
-            this.LblTitle = new LabelControl();
-            this.BtnNew = new SimpleButton(); this.BtnRefresh = new SimpleButton(); this.BtnEdit = new SimpleButton();
+            this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
+            this.PanelToolbar = new PanelControl();
+            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton();
             this.BtnSave = new SimpleButton(); this.BtnCancel = new SimpleButton();
-            this.BtnDelete = new SimpleButton(); this.BtnExit = new SimpleButton();
+            this.BtnDelete = new SimpleButton(); this.BtnRefresh = new SimpleButton(); this.BtnExit = new SimpleButton();
             this.GridMP = new GridControl(); this.GridViewMP = new GridView();
             this.LblCode = new LabelControl(); this.TxtCode = new TextEdit();
             this.LblDesc = new LabelControl(); this.TxtDesc = new TextEdit();
@@ -39,17 +41,31 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.Text = "Meter Multi Pricing"; this.ClientSize = new Size(1050, 700);
             this.StartPosition = FormStartPosition.CenterParent; this.MinimumSize = new Size(900, 600);
 
-            this.LblTitle.Text = "Meter Multi Pricing";
-            this.LblTitle.Appearance.Font = new Font("Tahoma", 14F, FontStyle.Bold);
-            this.LblTitle.Appearance.ForeColor = Color.FromArgb(180, 20, 40);
-            this.LblTitle.Location = new Point(14, 8);
+            // Native AutoCount green header (same as Maintain Service Contract / Item; hint hidden).
+            this.PanelHeaderTop.Dock = DockStyle.Top;
+            this.PanelHeaderTop.Header = "Meter Multi Pricing";
+            this.PanelHeaderTop.Hint = "";
+            this.PanelHeaderTop.Location = new Point(0, 0);
+            this.PanelHeaderTop.Size = new Size(1050, 56);
 
-            Tb(this.BtnNew, "New", 780, 10, 60); this.BtnNew.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnNew.Click += new System.EventHandler(this.OnNew);
-            Tb(this.BtnRefresh, "Refresh", 845, 10, 75); this.BtnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
-            Tb(this.BtnExit, "Exit (F2)", 980, 10, 60); this.BtnExit.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            // Toolbar row — 86x50 icon buttons, identical to the Maintain Service Contract list.
+            this.PanelToolbar.Dock = DockStyle.Top;
+            this.PanelToolbar.Location = new Point(0, 56);
+            this.PanelToolbar.Size = new Size(1050, 62);
+            Tb(this.BtnNew, "New", 8, 6, 86); this.BtnNew.Click += new System.EventHandler(this.OnNew);
+            Tb(this.BtnEdit, "Edit", 98, 6, 86); this.BtnEdit.Click += new System.EventHandler(this.OnEdit);
+            Tb(this.BtnSave, "Save", 188, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
+            Tb(this.BtnCancel, "Cancel", 278, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
+            Tb(this.BtnDelete, "Delete", 368, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
+            Tb(this.BtnRefresh, "Refresh", 458, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
+            Tb(this.BtnExit, "Exit (F2)", 556, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            this.PanelToolbar.Controls.Add(this.BtnNew); this.PanelToolbar.Controls.Add(this.BtnEdit);
+            this.PanelToolbar.Controls.Add(this.BtnSave); this.PanelToolbar.Controls.Add(this.BtnCancel);
+            this.PanelToolbar.Controls.Add(this.BtnDelete); this.PanelToolbar.Controls.Add(this.BtnRefresh);
+            this.PanelToolbar.Controls.Add(this.BtnExit);
 
             // Top grid — MultiPrice codes
-            this.GridMP.Location = new Point(14, 44); this.GridMP.Size = new Size(1020, 230);
+            this.GridMP.Location = new Point(14, 128); this.GridMP.Size = new Size(1020, 220);
             this.GridMP.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             this.GridViewMP.GridControl = this.GridMP; this.GridViewMP.OptionsView.ShowGroupPanel = false;
             this.GridViewMP.OptionsBehavior.Editable = false;
@@ -58,18 +74,18 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(this.GridViewMP, "Description", "Description", 720);
 
             // Detail fields
-            Lbl(this.LblCode, "Multi Pricing Code :", 14, 288);
-            this.TxtCode.Location = new Point(160, 285); this.TxtCode.Width = 300;
-            Lbl(this.LblDesc, "Description :", 14, 318);
-            this.TxtDesc.Location = new Point(160, 315); this.TxtDesc.Width = 720;
+            Lbl(this.LblCode, "Multi Pricing Code :", 14, 362);
+            this.TxtCode.Location = new Point(160, 359); this.TxtCode.Width = 300;
+            Lbl(this.LblDesc, "Description :", 14, 392);
+            this.TxtDesc.Location = new Point(160, 389); this.TxtDesc.Width = 720;
 
             // Pricing rates grid
-            Lbl(this.LblItems, "Meter Pricing Rates :", 14, 348);
-            Tb(this.BtnAddRow,  "+ Add Row",    780, 345, 85); this.BtnAddRow.Anchor  = AnchorStyles.Top | AnchorStyles.Right; this.BtnAddRow.Click  += new System.EventHandler(this.OnAddItemRow);
-            Tb(this.BtnDelRow,  "- Delete Row", 870, 345, 95); this.BtnDelRow.Anchor  = AnchorStyles.Top | AnchorStyles.Right; this.BtnDelRow.Click  += new System.EventHandler(this.OnDeleteItemRow);
-            Tb(this.BtnRowUp,   "Move Up",      970, 345, 30); this.BtnRowUp.Text = "↑"; this.BtnRowUp.Anchor   = AnchorStyles.Top | AnchorStyles.Right; this.BtnRowUp.Click   += new System.EventHandler(this.OnMoveItemUp);
-            Tb(this.BtnRowDown, "Move Down",    1005, 345, 30); this.BtnRowDown.Text = "↓"; this.BtnRowDown.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnRowDown.Click += new System.EventHandler(this.OnMoveItemDown);
-            this.GridItems.Location = new Point(14, 370); this.GridItems.Size = new Size(1020, 240);
+            Lbl(this.LblItems, "Meter Pricing Rates :", 14, 422);
+            Tb2(this.BtnAddRow, "+ Add Row", 780, 419, 85); this.BtnAddRow.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnAddRow.Click += new System.EventHandler(this.OnAddItemRow);
+            Tb2(this.BtnDelRow, "- Delete Row", 870, 419, 95); this.BtnDelRow.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnDelRow.Click += new System.EventHandler(this.OnDeleteItemRow);
+            Tb2(this.BtnRowUp, "Move Up", 970, 419, 30); this.BtnRowUp.Text = "↑"; this.BtnRowUp.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnRowUp.Click += new System.EventHandler(this.OnMoveItemUp);
+            Tb2(this.BtnRowDown, "Move Down", 1005, 419, 30); this.BtnRowDown.Text = "↓"; this.BtnRowDown.Anchor = AnchorStyles.Top | AnchorStyles.Right; this.BtnRowDown.Click += new System.EventHandler(this.OnMoveItemDown);
+            this.GridItems.Location = new Point(14, 444); this.GridItems.Size = new Size(1020, 242);
             this.GridItems.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             this.GridViewItems.GridControl = this.GridItems; this.GridViewItems.OptionsView.ShowGroupPanel = false;
             this.GridViewItems.OptionsView.NewItemRowPosition = DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.Bottom;
@@ -77,25 +93,22 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(this.GridViewItems, "MeterReading", "Meter Reading (<=)", 350);
             AddCol(this.GridViewItems, "UnitPrice", "Unit Price (Base UOM)", 350);
 
-            // Buttons below items grid (inside detail area)
-            int bX = 14, bY = 620, bW = 90;
-            Tb(this.BtnSave,    "Save (F7)",   bX + 0,            bY, bW); this.BtnSave.Anchor   = AnchorStyles.Bottom | AnchorStyles.Left; this.BtnSave.Click   += new System.EventHandler(this.OnSave);
-            Tb(this.BtnCancel,  "Cancel (F8)", bX + (bW + 6) * 1, bY, bW); this.BtnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
-            Tb(this.BtnEdit,    "Edit (F6)",   bX + (bW + 6) * 2, bY, bW); this.BtnEdit.Anchor   = AnchorStyles.Bottom | AnchorStyles.Left; this.BtnEdit.Click   += new System.EventHandler(this.OnEdit);
-            Tb(this.BtnDelete,  "Delete (F9)", bX + (bW + 6) * 3, bY, bW); this.BtnDelete.Anchor = AnchorStyles.Bottom | AnchorStyles.Left; this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
-
-            this.Controls.Add(this.LblTitle); this.Controls.Add(this.BtnNew); this.Controls.Add(this.BtnRefresh); this.Controls.Add(this.BtnExit);
             this.Controls.Add(this.GridMP);
             this.Controls.Add(this.LblCode); this.Controls.Add(this.TxtCode);
             this.Controls.Add(this.LblDesc); this.Controls.Add(this.TxtDesc);
             this.Controls.Add(this.LblItems); this.Controls.Add(this.GridItems);
             this.Controls.Add(this.BtnAddRow); this.Controls.Add(this.BtnDelRow);
             this.Controls.Add(this.BtnRowUp); this.Controls.Add(this.BtnRowDown);
-            this.Controls.Add(this.BtnSave); this.Controls.Add(this.BtnCancel); this.Controls.Add(this.BtnEdit); this.Controls.Add(this.BtnDelete);
+            this.Controls.Add(this.PanelToolbar);
+            this.Controls.Add(this.PanelHeaderTop);
             this.ResumeLayout(false);
         }
 
-        private static void Tb(SimpleButton b, string t, int x, int y, int w) { b.Text = t; b.Location = new Point(x, y); b.Width = w; b.Height = 28; }
+        // Toolbar button: 50px tall with the icon on the left (icons assigned at runtime).
+        private static void Tb(SimpleButton b, string t, int x, int y, int w)
+        { b.Text = t; b.Location = new Point(x, y); b.Width = w; b.Height = 50; b.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft; }
+        // Small inline row button (Add/Delete Row, arrows).
+        private static void Tb2(SimpleButton b, string t, int x, int y, int w) { b.Text = t; b.Location = new Point(x, y); b.Width = w; b.Height = 28; }
         private static void Lbl(LabelControl l, string t, int x, int y) { l.Text = t; l.Location = new Point(x, y + 3); }
         private static void AddCol(GridView gv, string f, string c, int w)
         { var col = new GridColumn(); col.FieldName = f; col.Caption = c; col.Visible = true; col.Width = w; col.VisibleIndex = gv.Columns.Count; gv.Columns.Add(col); }

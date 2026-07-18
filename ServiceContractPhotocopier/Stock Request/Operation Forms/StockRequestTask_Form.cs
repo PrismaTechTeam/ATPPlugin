@@ -45,9 +45,11 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
         public StockRequestTask_Form()
         {
             InitializeComponent();
+            // Native AutoCount header (same as Maintain Service Contract) with the hint line hidden.
+            try { this.PanelHeaderTop.HintCtrl.Visible = false; } catch { }
             InitDefaults();
             SetupLocationBanner();
-            ApplyButtonIcons();   // toolbar SVG icons (controls themselves now live in the designer)
+            ApplyButtonIcons();   // toolbar icons (controls themselves live in the designer)
             // Highlight cancellation-request transfer rows (approval=No on an already-generated id)
             this.GridViewTransfer.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewTransfer_RowStyle);
             // Highlight change/cancel-request stock issue rows (re-sent id with different/zero qty)
@@ -1341,20 +1343,39 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
 
         // ---------- Toolbar icons (controls + layout now live in the designer) ----------
 
-        // Colourful DevExpress XAF SVG icons on the toolbar buttons (so the UI isn't plain text).
+        // Native AutoCount toolbar icons — the SAME family and size the "Maintain Service Contract"
+        // list uses (GetLargeImage_*, MiddleLeft), so the two toolbars read identically.
         private void ApplyButtonIcons()
         {
-            SetBtnIcon(this.BtnRefresh,          "svgimages/xaf/action_refresh.svg");
-            SetBtnIcon(this.BtnFilter,           "svgimages/xaf/action_filter.svg");
-            SetBtnIcon(this.BtnReset,            "svgimages/xaf/action_reload.svg");
-            SetBtnIcon(this.BtnGenerateSIST,     "svgimages/xaf/action_new.svg");
-            SetBtnIcon(this.BtnMarkIgnore,       "svgimages/xaf/state_validation_warning.svg");
-            SetBtnIcon(this.BtnSettings,         "svgimages/xaf/action_edit.svg");
-            SetBtnIcon(this.BtnViewLog,          "svgimages/xaf/action_aboutinfo.svg");
-            SetBtnIcon(_btnApproveChange,        "svgimages/xaf/action_validation_validate.svg");
-            // The four "Select All …" buttons are intentionally icon-less — no DevExpress icon
-            // cleanly conveys "select all <state>", and mismatched icons looked worse than none.
-            // (BtnGenerateSISTAll = "Select All New", _btnSelUpdate, _btnSelCancel, _btnSelRequest)
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                SetBtnAcIcon(this.BtnRefresh, img.GetLargeImage_Refresh());
+                SetBtnAcIcon(this.BtnGenerateSIST, img.GetLargeImage_New());
+                SetBtnAcIcon(this.BtnMarkIgnore, img.GetLargeImage_Cancel());
+                SetBtnAcIcon(this.BtnSettings, img.GetLargeImage_Options());
+                SetBtnAcIcon(this.BtnViewLog, img.GetLargeImage_View());
+                SetBtnAcIcon(_btnApproveChange, img.GetLargeImage_Approve());
+            }
+            catch { }   // icons are cosmetic — never block the form over an image lookup
+            // Filter/Reset are the small 28px buttons inside Filter Options — the 32px toolbar icons
+            // don't fit there, so they keep compact SVGs.
+            SetBtnIcon(this.BtnFilter, "svgimages/xaf/action_filter.svg");
+            SetBtnIcon(this.BtnReset, "svgimages/xaf/action_reload.svg");
+            // The four "Select All …" buttons are intentionally icon-less — no icon cleanly conveys
+            // "select all <state>", and mismatched icons looked worse than none.
+        }
+
+        private static void SetBtnAcIcon(DevExpress.XtraEditors.SimpleButton btn, System.Drawing.Image image)
+        {
+            if (btn == null || image == null) return;
+            btn.ImageOptions.SvgImage = null;
+            btn.ImageOptions.Image = image;
+            btn.ImageOptions.ImageToTextIndent = 6;
+            btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
         }
 
         private static void SetBtnIcon(DevExpress.XtraEditors.SimpleButton btn, string svgName)

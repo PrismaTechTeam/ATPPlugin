@@ -338,3 +338,289 @@ unambiguous i./c. qualification + alias resolution in the LoadExtrasFromDb JOIN,
 controls read into `_data` in BtnOK_Click, header coordinates collision-free, and Reference No
 consistent across contract Insert/Update/Params/Load with correct param count. Behavioral note:
 opening+saving an item solidifies inherited contract context onto the item row (intended).
+
+---
+
+## 2026-07-16 — Contract↔Item relationship hardening + Serial No on provided items
+
+**Request:** Item always shows Customer; item may exist without a contract, but bound to one it follows
+the contract (some fields read-only + live-follow, others overridable); item-added provided items must
+show on the contract; Item Provided gets a Serial No column (SearchLookUpEdit).
+
+**Delivered:**
+- Customer always on the item header: embedded mode shows read-only `code — name` from the contract
+  debtor; standalone picker fills+locks when a contract is picked.
+- Bound rules: Contract Type read-only when bound (edit on the contract; "+" guarded). Other context
+  fields overridable.
+- Live-follow ("contract改 item也会改"): PersistItemExtras now stores ONLY true overrides — values equal
+  to the parent contract store ''/NULL so LoadExtras' COALESCE keeps inheriting. Untouched fields
+  (== LoadedCtx snapshot) preserve the raw stored value, so a same-save contract edit can't masquerade
+  as an override. Helpers CtxStore/CtxStoreDate; snapshot filled in LoadExtras.
+- Serial No: zSCP2_ContractSparePart.SerialNumber (migration v2, idempotent, applied); Serial No column
+  (index 3) in BOTH Item Provided grids via shared ConfigureSpareView; repo = SearchLookUpEdit over
+  dbo.ItemSerialNo (150 rows), free typing allowed; save/load in all 4 paths (contract-level save,
+  static item save, list-form insert, loaders).
+
+**Validation agent findings:**
+- CRITICAL (fixed): contract-editor save persists EVERY item via PersistItemExtras, but LoadOneItem
+  didn't hydrate extras → unopened items' ItemCode/Grade/Note/Remarks/PM/ReferenceNo + context overrides
+  were wiped with empty defaults on every contract save (latent since the overhaul; dedupe widened it).
+  Fix: extracted LoadExtras(db, data, itemKey) static; LoadOneItem hydrates every item, giving each a
+  valid LoadedCtx snapshot → untouched persists round-trip raw values.
+- Confirmed correct: dedupe SELECT aliases, param 1:1, LoadedCtx coverage, InsertItemTree serial persist,
+  clipboard TSV uses named fields (Serial column additive-safe), DBNull-safe new rows, idempotent
+  migration, no coordinate collisions, no NRE in the _lkContract delegate.
+
+---
+
+## 2026-07-16 (2) — Pre-integration audit of Contract/Item/Meter Reading + fixes
+
+**Serial design decision (locked):** header "Machine Serial No *" = THE machine of the CSSI
+(Meter Reading matches on it; one CSSI = one billable machine + BK/CL meters). Item Provided rows
+carry per-unit "Serial No" for extra machines/accessories (delivery/tracking, no meters). A machine
+that needs its own meter billing becomes its own CSSI under the same contract.
+
+**Audit agent findings + fixes:**
+1. CRITICAL (fixed): re-tagging a meter's role (BK<->CL) hit UNIQUE(ItemKey, MeterTypeCode) — matcher
+   used type+role but the DB key is type-only, and inserts happen before the delete pass. Fixed:
+   SaveMetersPreservingReadings matches on MeterTypeCode alone, the UPDATE rewrites MeterRole (role
+   re-tag = in-place edit of the same counter, readings kept), matched candidates leave the pool
+   (no silent two-rows-onto-one merges).
+2. HIGH (fixed): Meter Reading matched machines by ServiceItemNo (dto.Code) despite every doc/comment
+   saying serial — the mock hid it by setting Code=ServiceItemNo. Fixed: serial-first matching
+   (bySerial), Code kept as fallback.
+3. MED (fixed): Edit-item from the CONTRACT editor used the 3-arg ctor (no Contract No/Customer shown,
+   Contract Type editable) — inconsistent with Add-from-contract and Edit-from-list. Now 4-arg.
+4. MED (fixed): "hide expired" filter + item-list Expiry column read raw i.ServiceExpiryDate; bound
+   items store expiry as override-only (NULL when inherited) so inherited-expiry items never filtered
+   and showed blank. Both now COALESCE(i, c).
+5. MED (fixed): BtnOK now blocks duplicate MeterTypeCode rows (DB identity is item+type; duplicates
+   previously threw raw UNIQUE violations for new items / silently merged for existing).
+6. LOW (fixed): whole-contract delete warning now states reading history is destroyed too; contract
+   loop stores InsertItem's new key back into d.ItemKey.
+
+**Audit checks that passed:** no remaining collateral cascade deletes (all meter/item deletes are
+user-initiated), detach keeps readings + re-attach preserves ItemKey, PersistItemExtras safe on
+detached items, all multi-write paths single-transaction with rollback, Meter Reading's expected
+columns all maintained, inactive item+contract filtered. Operational note: a machine with only
+NA-role meters (or none) is invisible to Meter Reading — consistent with "NA = not billed".
+
+---
+
+## 2026-07-16 (3) — Multi-machine CSSI meters + per-item serial filtering
+
+**Feature:** checkbox "Meters per provided item (multi-machine)" on Meter Configuration.
+OFF (default) = classic one-CSSI-one-machine (meters MachineSerialNo=''). ON = each meter is assigned
+to an Item Provided row by that unit's Serial No: select the provided row -> + Add Meter attaches the
+meter to that machine; "Machine Serial" column (combo of provided serials) shows/edits the assignment;
+validation is per machine (<=1 BK, <=1 CL, unique meter type, serial must exist among provided rows).
+Unchecking clears assignments after confirmation.
+
+**Schema (02_Update_zSCP2_ItemMeter_v2_MachineSerial.sql, applied+verified):** zSCP2_ItemMeter.MachineSerialNo
+NVARCHAR(100) DEFAULT '', zSCP2_Item.MultiMachine CHAR(1); unique key widened (ItemKey, MeterTypeCode)
+-> UNIQUE INDEX (ItemKey, MeterTypeCode, MachineSerialNo) so two machines may share a meter type.
+
+**Persistence:** MachineSerialNo flows through CreateMetersTable/LoadOneItem/InsertMeters/InsertItemTree/
+SaveMetersPreservingReadings (match key = type+machineSerial; role re-tag still in-place, readings kept);
+MultiMachine flag via LoadExtras/PersistItemExtras. List bk/cl joins grouped (no row multiplication).
+
+**Meter Reading:** each meter row now shows ITS machine's serial (COALESCE(m.MachineSerialNo, i.SerialNumber));
+search matches machine serials; serial-first API matching applies per machine.
+
+**Also:** Item Provided "Serial No" dropdown now populates only after the row's Item Code is picked —
+filtered to that item's serials (both the contract and the item editors, via ShowingEditor RowFilter).
+
+---
+
+## 2026-07-16 (4) — Multi-machine polish + audit round 2 fixes
+
+**User adjustments:** Add Meter never blocks (focused provided row's serial is a convenience; '' = the
+header machine, assignable later; combo has a leading blank to clear). Serial No cells now DISPLAY raw
+text — the filtered lookup moved to edit time via CustomRowCellEditForEditing (a filtered ColumnEdit
+was blanking every other row's serial). Meter grid buttons replaced with the same +/-/up/down icon
+toolbar as Item Provided (MeterMove = ItemArray swap).
+
+**Audit round 2 (all fixed):**
+- HIGH: UX_zSCP2_ItemMeter_BK/CL filtered unique indexes were per-ItemKey — a second machine's BK
+  meter would abort the save. Migration now rebuilds them as (ItemKey, MachineSerialNo) WHERE role
+  (old shape detected by key-column count). Verified live: keys=2.
+- HIGH: the ItemMeter v2 migration was registered BEFORE the ItemMeter CreateTable — fresh books would
+  abort the whole migration chain (ALTER on a missing table). Reordered after the create.
+- HIGH: Meter Reading byCode fallback (Code=ServiceItemNo, shared by all machines of a CSSI) could
+  attribute machine A's totals to machine B. Fallback now applies only to single-machine items.
+- MED: meter grid AutoPopulateColumns would append a stray second MachineSerialNo column — disabled.
+- MED: reading grid merged SerialNo/MachineStatus per ItemKey — now merges per machine serial
+  (SelCssi stays per CSSI by design).
+
+---
+
+## 2026-07-16 (5) — Change Ownership (contract OR customer) + contract-less items
+
+**Feature:** ribbon "Change Ownership" on the Service Item editor (enabled only when opened from
+"Maintain Service Item" on an EXISTING item — the contract editor's save loop re-parents items back,
+so it stays off there). Dialog (new form triple zSCP2_ChangeOwnership_Form): transfer to a CONTRACT
+(ownership = that contract / its debtor) or to a CUSTOMER directly (no contract).
+
+**Rules (as specified):** with a contract, ownership IS the contract; without one, ownership IS the
+debtor (new zSCP2_Item.OwnerDebtorCode, migration v8, applied+verified). Transferring to a contract of
+the SAME customer = re-attach, NOT an ownership change (no history row; the confirmation message says
+so). A real owner change closes the open period and opens a new one in zSCP2_ItemDebtorHistory —
+visible immediately (history tab rebuilds; read-only Contract No/Customer header refreshes).
+
+**Plumbing:** effective owner everywhere = COALESCE(contract debtor, OwnerDebtorCode) —
+RecordDebtorHistory (now returns bool), ownership header, item list (LEFT JOIN so contract-less items
+still appear, Customer column shows the direct owner). Applied in its own transaction with rollback.
+
+---
+
+## 2026-07-16 (6) — Ownership validation round + polish batch
+
+**Validation agent (Change Ownership):** all core semantics confirmed correct — same-customer
+re-attach records nothing, owner change closes+opens periods atomically with rollback, no
+duplicate/spurious history on normal saves, dialog radios safe, LEFT-JOIN list DBNull-safe,
+contract-less items correctly excluded from Meter Reading/billing. Two LOW fixes applied:
+UpdateItem now clears OwnerDebtorCode when (re)attaching (stale direct-owner could mis-resolve if a
+contract's debtor were blank); contract-editor detach now closes the item's open ownership period.
+
+**Also this batch:** "Reset Service Item Debtor Ownership" menu removed (legacy v1 form superseded by
+Change Ownership; form kept compiled, unreachable). Big expiry badge on the Service Item header
+(22pt: red past expiry / green otherwise / gray no date, live-follows the To field). Stock Request
+Task toolbar switched to the same AutoCount GetLargeImage_* icons/size as Maintain Service Contract
+(Refresh/New/Cancel/Options/View/Approve; Filter+Reset keep compact SVGs).
+
+---
+
+## 2026-07-16 (7) — Meter Reading UX round + LEGACY invoice format
+
+**UI round (user-driven):** native PanelHeader on Stock Request Task + Meter Reading (hint hidden);
+AutoCount GetLargeImage_* icons + uniform 150x50/156px toolbar buttons on both (Setting was code-built
+at 1085 and overlapped Generate Invoice — moved to 1134); 8 secondary grid columns hidden by default
+(column chooser retains them); Current Reading (amber) + Total Charges (green) cell highlights, bold
+headers; "Reset Service Item Debtor Ownership" menu removed; big red/green expiry badge on the item
+editor.
+
+**Select checkbox fix (VERIFIED with real input):** DevExpress MERGED cells never activate in-place
+editors, so the merged per-CSSI Select checkbox ignored clicks entirely (EditorShowMode didn't help).
+Fixed with a GridView.MouseDown hit-test that toggles SelCssi via SetRowCellValue (fires the existing
+whole-CSSI propagation). Verified end-to-end via UI automation: click 1 -> "Selected to bill: 2
+meter(s), RM 240.60"; click 2 -> back to 0.
+
+**Legacy invoice format (from v8_atp_main master, e.g. MR2603.0691):** ScpInvoiceBuilder rewritten —
+header Description "Billing- [ref]" + Remark1=ref; ONE detail line per meter ("{item desc}
+S/N:{serial}- {meter name}", Qty=billable copies x Rate) with the legacy 16-line breakdown block in
+FurtherDescription (legend + type/name/min/rate/FOC/rebate/last date+reading/usage/charge/multi-price/
+rebate qty/current date/short dates, "d MMM yyyy h:mm:ss am/pm"); minimum-charge lines Qty 1 x min with
+"*** Minimum Charges ***". ItemDesc plumbed through the grid (hidden col). Deliberate deviation: we
+keep OUR charge math (FOC/rebate deducted; qty=billable so Qty x Rate == charge) — the V8 sample
+billed raw usage ignoring FOC; flip if the customer insists.
+
+---
+
+## 2026-07-17 — Invoice lifecycle + master-format verification round
+
+**Deleted/cancelled invoice reconciliation:** ReconcileDeletedInvoices() runs at every Meter Reading
+load — stamps whose IV doc is gone/cancelled are cleared and the billed MeterTrans rows removed
+(scoped to OUR generator's DocKeys via zSCP2_MeterEntry; the 145k legacy readings carry no DocKey and
+are untouchable). Fixes "ALREADY INVOICED" after a manual delete (user's CSSI 00000623 case).
+
+**Usage resets after billing:** the Last Reading baseline now also takes any BILLED reading inside the
+period (SalesInvoiceDocKey set) — after Generate, Last=billed Current so Usage shows 0; deleting the
+invoice removes that reading and the usage comes back. 
+
+**Detail dialog:** enlarged to 1240x780 + "Generated Invoice" grid at the bottom (IV joined via
+zSCP_MeterTrans per contract; shows DocNo/Date/Total/Cancelled/Meters); double-click opens the doc in
+AutoCount's FormInvoiceEntry (InvoiceCommand.Edit(docKey)) and refreshes on close.
+
+**Master-format verification (user challenged the FurtherDescription):** compared line-by-line against
+the V8 book's 2026 invoices (MR2604.0006 etc.) — the 16-line block matches exactly. Two money
+discrepancies found and fixed: (1) the master bills RAW usage x rate — FOC Qty / Rebate % are
+informational and never deducted (proof: usage 5645, FOC 1000, billed 5645x0.03=169.35). ComputeCharge
++ BuildInvoice now follow that convention (min-charge floor kept; floor-billed lines present as
+"*** Minimum Charges ***" qty 1). (2) the plugin book had SalesPriceDecimal=2, so rate 0.028 was
+rounded to 0.03 on the invoice — raised to 4 via dbo.Settings JSON (master's V8 stored 6dp).
+
+---
+
+## 2026-07-17 (2) — Invoice content format (master-exact) + native numbering + dev tooling
+
+**Invoice CONTENT format corrected (user pointed out the single-line version was wrong):** each meter
+is a GROUP of rows exactly like the master's MR260x invoices — charge row (meter item, qty=usage x
+rate) then text rows "Current Meter Reading (dd/MM/yyyy) : N" / "Previous Meter Reading (...) : N" /
+"Meter FOC Qty : N" (only when FOC>0) / "Meter Charges Usage : N" / blank separator; readings printed
+as plain digits (no thousands separators); every row of the group carries the 16-line block in
+FurtherDescription; minimum-billed lines are qty 1 x floor with "*** Minimum Charges ***".
+
+**Native numbering:** invoices draw from the book's Document Numbering Format via
+doc.DocNoFormatName. The format NAME is configurable — Service Option > Defaults > "Meter Invoice
+No. Format" (ComboBoxEdit listing dbo.DocNoFormat DocType='IV'; stored in Z_PumsConfig as
+METER_INVOICE_DOCNO_FORMAT, default "MR FORMAT" = MR{@yyMM}.<0000>). Applied only when the named
+format exists; otherwise the IV default numbering is used (never fails a run).
+
+**Dev/test shortcut:** Ctrl+Shift+3 in Meter Reading (hidden, no button) — confirmation then deletes
+ALL meter-generated invoices via the proper AutoCount InvoiceCommand.Delete (postings reversed),
+reconciles stamps/readings, reloads. Scoped strictly to DocKeys recorded by our generator.
+
+---
+
+## 2026-07-17 (3) — Generate From Serial No + contract/item form restructure
+
+**New feature set (user request, 6 parts):**
+1. Contract ribbon "Generate From Serial No" (grpItem, Inquiry icon) → new dialog
+   `zSCP2_GenerateFromSerial_Form` (triple) listing DO/IV lines that carry serials
+   (`dbo.SerialNoTrans` single-serial rows joined to DO/IV headers + Debtor + Item). NEW mode:
+   header auto-fills Customer (cascades address/agent/More Header via OnDebtorChanged) +
+   Reference No = source DocNo. One service item auto-created per picked serial (ItemCode +
+   MachineSerial + item desc; ServiceItemNo auto-reserved by ScpDocNo at save).
+2. Contract "Service Item Under Contract" tab: new Create/Edit/Delete Service Item buttons
+   (wired to the existing ribbon handlers). Item Create/Edit/Delete now enabled in NEW mode too
+   (the save loop inserts header first, then _items — verified the flow supports it).
+3. Contract Service Start Date hidden from UI (column + save logic kept; expiry field relabelled
+   "Service Expiry Date" and moved into its row). Items own their start/expiry dates now.
+4. Item form strict editability (ApplyFieldEditability): NEW-only = ServiceItemNo(+Auto),
+   Contract picker; both modes = ItemCode, MachineSerial, Grade, RefNo, Start/To, BillingDayOverride,
+   Description, Inactive; everything else (CType/Agent/Address/Attn/Phone/Term/Area/Dept/Proj +
+   whole More Header tab) is READ-ONLY and renders from the contract.
+5. Item form Machine Serial No is now a typeable ComboBoxEdit (designer TxtSerial TextEdit→ComboBoxEdit);
+   dropdown = dbo.ItemSerialNo serials of the chosen Item Code (PopulateSerialCombo).
+6. Item form "Item Provided" grid HIDDEN (still built + bound so existing rows keep load/save);
+   meter grid now fills the tab; item-form ribbon Clipboard group removed (operated on that grid).
+
+**Notes-to-self / judgment calls (didn't stop to ask):**
+- "add 3 more button is create Service item Delete Service item" — added Create + Edit + Delete
+  (assumed Edit is the third). Attach/Detach kept, edit-mode-only.
+- ChkInactive kept editable in both modes even though not in the user's allowed list — item
+  lifecycle flag, not contract data.
+- Customer picker (_lkCustomer): pickable only for a NEW UNBOUND item (contract-less items can
+  still be debtor-owned); once a contract is chosen or in edit mode it's locked (Change Ownership
+  dialog is the path).
+- ItemCode/MachineSerial stay editable in EDIT mode too (user listed them under "for user to use");
+  meter identity per-machine survives via SaveMetersPreservingReadings matching.
+- Multi-machine Add-Meter no longer reads the (hidden) Item Provided focused row — guard added;
+  serial defaults to '' (header machine). If real multi-machine assignment is still wanted the
+  Machine Serial column would need to become editable — deferred.
+- Dev seed: dbo.SerialNoTrans was EMPTY in AED_ATPTEST → seeded 77 DO + 1 IV mock rows (TransKey
+  explicit, single-serial semantics FromSerialNo + ToSerialNo='') linking real DO/IV lines to
+  dbo.ItemSerialNo serials. DEV DATA ONLY — real books get rows from AutoCount serial module.
+- Contract Service Start Date: only HIDDEN (kept column/save so existing data survives; validation
+  start<=expiry skips when start empty). If the user wants it fully dropped, remove editor + params.
+
+**Validation agent round (2026-07-17 (3)) — findings & resolutions:**
+- HIGH: generated items saved with blank ServiceItemNo (save loop reserves numbers only when
+  ServiceItemNoIsAuto) → FIXED: BarGenSerial_ItemClick sets d.ServiceItemNoIsAuto = true.
+- MEDIUM: ApplyFieldEditability over-locked context for UNBOUND (contract-less) items → FIXED:
+  split into ApplyContextEditability(bound); unbound items keep context + More Header editable;
+  the _lkContract delegate now calls the same helper so pick/clear toggles consistently.
+- MEDIUM: generated serials skipped the DB duplicate check → FIXED: serials already on any
+  zSCP2_Item row are skipped (reported in the summary message).
+- LOW: edit-mode generation now warns when picked serials belong to a different customer than
+  the contract's debtor.
+- LOW: dead Item-Provided clipboard code (ItemClipCopy*/Paste*/Tsv/SetClip/SI_CLIP) deleted.
+- LOW (accepted): multi-machine meter assignment is effectively read-only with the Item Provided
+  grid hidden — new meters land on the header machine. Deferred until the user asks.
+
+**Correction (user feedback, same day):** the validation agent's MEDIUM #2 "unbound items keep
+context editable" was WRONG per the user's intent — contract-rendered fields (Customer, Address,
+Attention, Phone, Term, Area, Contract Type, Agent, Dept, Proj, More Header) are read-only ALWAYS,
+even for a new item with no contract chosen; they can only be filled by picking a contract.
+_lkCustomer is permanently disabled; ownership changes go through the Change Ownership dialog.
+ApplyContextEditability() now takes no parameter (always locks).

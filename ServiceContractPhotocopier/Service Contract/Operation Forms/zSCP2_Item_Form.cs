@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Windows.Forms;
 using AutoCount.Data;
@@ -43,6 +43,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public string Phone = "";
         public string TermCode = "";
         public string AreaCode = "";
+        // Snapshot of the EFFECTIVE context at load time (contract-inherited display values). Lets
+        // PersistItemExtras tell "user changed this" apart from "this was just the inherited value",
+        // so untouched fields keep following the contract instead of being solidified onto the item.
+        public System.Collections.Generic.Dictionary<string, string> LoadedCtx
+            = new System.Collections.Generic.Dictionary<string, string>();
+        public DateTime? LoadedStart;
+        public DateTime? LoadedExpiry;
+        public bool LoadedCtxValid;
+        // Multi-machine mode: meters are assigned to provided units (Item Provided rows) by that unit's
+        // serial (Meters.MachineSerialNo). OFF = classic one-CSSI-one-machine (all meters serial='').
+        public bool MultiMachine;
         // More Header block keyed by zSCP2_Item column name (City/PostalCode/State/Country/Fax/Ref1-4 + Del*).
         public System.Collections.Generic.Dictionary<string, string> MoreHeader
             = new System.Collections.Generic.Dictionary<string, string>();
@@ -159,6 +170,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataTable dt = new DataTable("Meters");
             dt.Columns.Add("MeterTypeCode", typeof(string));
             dt.Columns.Add("MeterRole", typeof(string));
+            dt.Columns.Add("MachineSerialNo", typeof(string));   // '' = the CSSI's own header machine
             dt.Columns.Add("MinimumCharges", typeof(decimal));
             dt.Columns.Add("ChargesRate", typeof(decimal));
             dt.Columns.Add("MeterMultiPriceCode", typeof(string));
@@ -185,22 +197,34 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             LblBillDayHint.Text = "0 = follow contract day (" + _contractBillingDay + ")";
 
-            // Embedded add (from within a contract): show the parent Contract No READ-ONLY so the user
-            // knows the item's home. The contract itself can't be changed here (that's the "read-only"
-            // scenario) — only the item fields are editable.
-            if (!_standalone && !string.IsNullOrEmpty(_parentContractNo))
+            // Embedded add/edit (not standalone-new): show the item's OWNERSHIP read-only — its contract
+            // (or "(no contract)") + its customer. Ownership changes only via the ribbon's Change
+            // Ownership action, never by typing here.
+            if (!_standalone && (!string.IsNullOrEmpty(_parentContractNo) || _data.ItemKey > 0))
             {
                 DevExpress.XtraEditors.LabelControl lblC = new DevExpress.XtraEditors.LabelControl();
                 lblC.Text = "Contract No";
-                lblC.Location = new System.Drawing.Point(14, 420);
+                lblC.Location = new System.Drawing.Point(14, 149);
                 this.Controls.Add(lblC); lblC.BringToFront();
-                DevExpress.XtraEditors.TextEdit txtC = new DevExpress.XtraEditors.TextEdit();
-                txtC.Location = new System.Drawing.Point(120, 417);
-                txtC.Size = new System.Drawing.Size(214, 20);
-                txtC.Text = _parentContractNo;
-                txtC.Properties.ReadOnly = true;
-                txtC.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
-                this.Controls.Add(txtC); txtC.BringToFront();
+                _txtParentContractRO = new DevExpress.XtraEditors.TextEdit();
+                _txtParentContractRO.Location = new System.Drawing.Point(120, 146);
+                _txtParentContractRO.Size = new System.Drawing.Size(280, 20);
+                _txtParentContractRO.Properties.ReadOnly = true;
+                _txtParentContractRO.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+                this.Controls.Add(_txtParentContractRO); _txtParentContractRO.BringToFront();
+
+                DevExpress.XtraEditors.LabelControl lblCu = new DevExpress.XtraEditors.LabelControl();
+                lblCu.Text = "Customer";
+                lblCu.Location = new System.Drawing.Point(470, 125);
+                this.Controls.Add(lblCu); lblCu.BringToFront();
+                _txtCustomerRO = new DevExpress.XtraEditors.TextEdit();
+                _txtCustomerRO.Location = new System.Drawing.Point(600, 122);
+                _txtCustomerRO.Size = new System.Drawing.Size(280, 20);
+                _txtCustomerRO.Properties.ReadOnly = true;
+                _txtCustomerRO.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+                this.Controls.Add(_txtCustomerRO); _txtCustomerRO.BringToFront();
+
+                RefreshOwnershipHeader();
             }
 
             // Standalone-new (opened from "Maintain Service Item"): the item needs a home. A new row 5
@@ -211,13 +235,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DevExpress.XtraEditors.LabelControl lblContract = new DevExpress.XtraEditors.LabelControl();
                 lblContract.Text = "Contract No";
-                lblContract.Location = new System.Drawing.Point(14, 420);
+                lblContract.Location = new System.Drawing.Point(14, 149);
                 this.Controls.Add(lblContract);
                 lblContract.BringToFront();
 
                 _lkContract = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkContract.Location = new System.Drawing.Point(120, 417);
-                _lkContract.Size = new System.Drawing.Size(214, 20);
+                _lkContract.Location = new System.Drawing.Point(120, 146);
+                _lkContract.Size = new System.Drawing.Size(280, 20);
                 _lkContract.Properties.NullText = "(create new contract)";
                 _lkContract.Properties.ValueMember = "ContractKey";
                 _lkContract.Properties.DisplayMember = "ContractNo";
@@ -233,21 +257,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 catch { }
                 _lkContract.EditValueChanged += delegate
                 {
-                    if (_lkCustomer != null)
-                        _lkCustomer.Enabled = (_lkContract.EditValue == null || _lkContract.EditValue == DBNull.Value);
+                    bool none = (_lkContract.EditValue == null || _lkContract.EditValue == DBNull.Value);
+                    // Context fields stay locked either way — they only RENDER from the picked contract.
+                    // Picking a contract = "this item belongs to it": inherit its shared fields into the
+                    // header (customer, type, agent, dates, address block, dept/proj, More Header).
+                    // Everything stays editable — the user can override any of it before saving.
+                    if (!none)
+                    {
+                        long ck; long.TryParse(_lkContract.EditValue.ToString(), out ck);
+                        if (ck > 0) ApplyContractContextByKey(ck);
+                    }
                 };
                 this.Controls.Add(_lkContract);
                 _lkContract.BringToFront();
 
                 _lblCustomer = new DevExpress.XtraEditors.LabelControl();
                 _lblCustomer.Text = "Customer *";
-                _lblCustomer.Location = new System.Drawing.Point(470, 420);
+                _lblCustomer.Location = new System.Drawing.Point(470, 125);
                 this.Controls.Add(_lblCustomer);
                 _lblCustomer.BringToFront();
 
                 _lkCustomer = new DevExpress.XtraEditors.SearchLookUpEdit();
-                _lkCustomer.Location = new System.Drawing.Point(600, 417);
-                _lkCustomer.Size = new System.Drawing.Size(210, 20);
+                _lkCustomer.Location = new System.Drawing.Point(600, 122);
+                _lkCustomer.Size = new System.Drawing.Size(280, 20);
                 _lkCustomer.Properties.NullText = "Select customer...";
                 _lkCustomer.Properties.ValueMember = "AccNo";
                 _lkCustomer.Properties.DisplayMember = "AccNo";
@@ -280,6 +312,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridItemCodes.DataSource = _itemCodes;   // Provided-Items grid is hidden in the overhaul; kept bound to avoid null refs
 
             _meters = _data.Meters != null ? _data.Meters.Copy() : CreateMetersTable();
+            if (!_meters.Columns.Contains("MachineSerialNo")) _meters.Columns.Add("MachineSerialNo", typeof(string));
+            // Designer defines the meter columns; without this, binding would auto-append a stray
+            // plain-text MachineSerialNo column next to the code-built combo one.
+            GridViewMeters.OptionsBehavior.AutoPopulateColumns = false;
             GridMeters.DataSource = _meters;
 
             BuildOverhaulUI();   // header Item Code/Grade, hide Stock Location + Provided Items, build the tab layout
@@ -303,8 +339,58 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (_itemSpareParts != null) { _itemSpareParts.RowChanged += delegate { _dirty = true; }; _itemSpareParts.RowDeleted += delegate { _dirty = true; }; }
             if (_lkCustomer != null) _lkCustomer.EditValueChanged += mark;
             if (_lkContract != null) _lkContract.EditValueChanged += mark;
+            ApplyFieldEditability();
             _dirty = false;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(OnItemFormClosing);
+        }
+
+        // A service item is contract-bound: only the item-own fields stay editable. Allowed —
+        // NEW mode: Service Item No, Contract picker, Item Code, Machine Serial No, Grade Code,
+        // Reference No, Service Start/To, Billing Day Override, Description (+ Inactive).
+        // EDIT mode: the same minus Service Item No and the Contract picker (contract/customer moves
+        // go through the Change Ownership dialog). Everything else RENDERS from the contract.
+        private void ApplyFieldEditability()
+        {
+            bool isNew = _data.ItemKey <= 0;
+
+            TxtServiceItemNo.Properties.ReadOnly = !isNew;
+            BtnAutoNo.Enabled = isNew;
+            if (_lkContract != null) _lkContract.Properties.ReadOnly = !isNew;
+
+            // Contract-rendered fields are ALWAYS locked — even before a contract is chosen. They can
+            // only be filled by selecting a contract (its context renders in). The customer is part of
+            // that context, so the picker is locked too; ownership moves go through Change Ownership.
+            if (_lkCustomer != null) _lkCustomer.Enabled = false;
+            ApplyContextEditability();
+        }
+
+        // Contract-rendered context (customer info, type, agent, dept/proj + the whole More Header
+        // tab): permanently read-only on the item — values arrive only by picking a contract.
+        private void ApplyContextEditability()
+        {
+            if (_sluCType != null) _sluCType.Properties.ReadOnly = true;
+            if (_sluAgentI != null) _sluAgentI.Properties.ReadOnly = true;
+            if (_txtAddr != null) _txtAddr.Properties.ReadOnly = true;
+            if (_txtAttn != null) _txtAttn.Properties.ReadOnly = true;
+            if (_txtPhone != null) _txtPhone.Properties.ReadOnly = true;
+            if (_txtTerm != null) _txtTerm.Properties.ReadOnly = true;
+            if (_txtArea != null) _txtArea.Properties.ReadOnly = true;
+            SluDept.Properties.ReadOnly = true;
+            SluProject.Properties.ReadOnly = true;
+            foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
+                kv.Value.Properties.ReadOnly = true;
+            if (_imhDelAddress != null) _imhDelAddress.Properties.ReadOnly = true;
+            if (_pgMoreHeader != null) SetButtonsIn(_pgMoreHeader, false);
+        }
+
+        private static void SetButtonsIn(System.Windows.Forms.Control root, bool enabled)
+        {
+            foreach (System.Windows.Forms.Control c in root.Controls)
+            {
+                DevExpress.XtraEditors.SimpleButton b = c as DevExpress.XtraEditors.SimpleButton;
+                if (b != null) b.Enabled = enabled;
+                if (c.Controls.Count > 0) SetButtonsIn(c, enabled);
+            }
         }
 
         private bool _dirty;
@@ -427,10 +513,217 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // ---- Meter grid ----
+        // ===================== Multi-machine meters =====================
+        // OFF (default): the classic model — every meter belongs to the CSSI's own header machine.
+        // ON: each meter is assigned to one PROVIDED UNIT (an Item Provided row), keyed by that unit's
+        // Serial No — one CSSI can then hold several machines, each with its own meters.
+
+        private void BuildMultiMachineMeters()
+        {
+            // Replace the designer's text buttons with the same +/-/up/down icon toolbar the Item
+            // Provided grid uses, so the two grids read as one family.
+            BtnAddMeter.Visible = false;
+            BtnDelMeter.Visible = false;
+            AutoCount.Images.IAutoCountImage mimg = null;
+            try
+            {
+                float dpi = 96f; try { dpi = this.DeviceDpi; } catch { }
+                mimg = AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+            }
+            catch { }
+            DevExpress.XtraEditors.SimpleButton mIns = new DevExpress.XtraEditors.SimpleButton();
+            mIns.ToolTip = "Add Meter";
+            mIns.Location = new System.Drawing.Point(8, 25); mIns.Size = new System.Drawing.Size(30, 24);
+            mIns.Click += new EventHandler(BtnAddMeter_Click); GrpMeters.Controls.Add(mIns); mIns.BringToFront();
+            DevExpress.XtraEditors.SimpleButton mRem = new DevExpress.XtraEditors.SimpleButton();
+            mRem.ToolTip = "Delete Meter";
+            mRem.Location = new System.Drawing.Point(42, 25); mRem.Size = new System.Drawing.Size(30, 24);
+            mRem.Click += new EventHandler(BtnDelMeter_Click); GrpMeters.Controls.Add(mRem); mRem.BringToFront();
+            DevExpress.XtraEditors.SimpleButton mUp = new DevExpress.XtraEditors.SimpleButton();
+            mUp.ToolTip = "Move Up";
+            mUp.Location = new System.Drawing.Point(80, 25); mUp.Size = new System.Drawing.Size(30, 24);
+            mUp.Click += delegate { MeterMove(-1); }; GrpMeters.Controls.Add(mUp); mUp.BringToFront();
+            DevExpress.XtraEditors.SimpleButton mDn = new DevExpress.XtraEditors.SimpleButton();
+            mDn.ToolTip = "Move Down";
+            mDn.Location = new System.Drawing.Point(114, 25); mDn.Size = new System.Drawing.Size(30, 24);
+            mDn.Click += delegate { MeterMove(1); }; GrpMeters.Controls.Add(mDn); mDn.BringToFront();
+            if (mimg != null)
+            {
+                SetIcon(mIns, mimg.GetSmallImage_Insert());
+                SetIcon(mRem, mimg.GetSmallImage_Delete());
+                SetIcon(mUp, mimg.GetSmallImage_MoveUp());
+                SetIcon(mDn, mimg.GetSmallImage_MoveDown());
+            }
+
+            _chkMultiMachine = new DevExpress.XtraEditors.CheckEdit();
+            _chkMultiMachine.Text = "Meters per provided item (multi-machine)";
+            _chkMultiMachine.Location = new System.Drawing.Point(158, 27);
+            _chkMultiMachine.Size = new System.Drawing.Size(280, 20);
+            GrpMeters.Controls.Add(_chkMultiMachine);
+            _chkMultiMachine.BringToFront();
+
+            // Meter Type maintenance shortcut: create/edit meter types without leaving the item, then
+            // the Meter Type dropdown refreshes with the new rows.
+            DevExpress.XtraEditors.SimpleButton mMaint = new DevExpress.XtraEditors.SimpleButton();
+            mMaint.Text = "Meter Types...";
+            mMaint.ToolTip = "Open the Meter Type maintenance module";
+            mMaint.Location = new System.Drawing.Point(448, 25);
+            mMaint.Size = new System.Drawing.Size(120, 24);
+            mMaint.Click += new EventHandler(BtnMeterMaintenance_Click);
+            GrpMeters.Controls.Add(mMaint);
+            mMaint.BringToFront();
+
+            // READ-ONLY: the machine assignment is decided when the meter is ADDED (focused Item
+            // Provided row -> + Add Meter). To reassign, delete the meter and re-add it on the right
+            // unit — in-grid editing of the assignment is deliberately not allowed.
+            _colMachineSerial = new DevExpress.XtraGrid.Columns.GridColumn();
+            _colMachineSerial.FieldName = "MachineSerialNo";
+            _colMachineSerial.Caption = "Machine Serial";
+            _colMachineSerial.Width = 130;
+            _colMachineSerial.OptionsColumn.AllowEdit = false;
+            _colMachineSerial.OptionsColumn.ReadOnly = true;
+            GridViewMeters.Columns.Add(_colMachineSerial);
+
+            // Read-only companion column: the Item Code of the machine each meter is assigned to
+            // (unbound, derived live from the Item Provided rows; '' serial = the header machine).
+            _colMachineItemCode = new DevExpress.XtraGrid.Columns.GridColumn();
+            _colMachineItemCode.FieldName = "MachineItemCode";
+            _colMachineItemCode.Caption = "Item Code";
+            _colMachineItemCode.UnboundDataType = typeof(string);
+            _colMachineItemCode.Width = 120;
+            _colMachineItemCode.OptionsColumn.AllowEdit = false;
+            _colMachineItemCode.OptionsColumn.ReadOnly = true;
+            GridViewMeters.Columns.Add(_colMachineItemCode);
+            GridViewMeters.CustomUnboundColumnData += new DevExpress.XtraGrid.Views.Base.CustomColumnDataEventHandler(GridViewMeters_UnboundData);
+
+            _suppressMultiEvt = true;
+            _chkMultiMachine.Checked = _data.MultiMachine;
+            _suppressMultiEvt = false;
+            ApplyMultiMachineUi(_data.MultiMachine);
+            _chkMultiMachine.CheckedChanged += new EventHandler(ChkMultiMachine_CheckedChanged);
+        }
+
+        private void ApplyMultiMachineUi(bool on)
+        {
+            if (on)
+            {
+                _colMachineSerial.Visible = true; _colMachineSerial.VisibleIndex = 1;
+                _colMachineItemCode.Visible = true; _colMachineItemCode.VisibleIndex = 2;
+            }
+            else { _colMachineSerial.Visible = false; _colMachineItemCode.Visible = false; }
+            GrpMeters.Text = on
+                ? "Meter Configuration (per machine — one Black + one Colour each)"
+                : "Meter Configuration (tag one Black + one Colour)";
+        }
+
+        // Unbound "Item Code" cell = the item code of the provided unit whose serial the meter is
+        // assigned to; '' serial resolves to the header machine's own Item Code.
+        private void GridViewMeters_UnboundData(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDataEventArgs e)
+        {
+            if (!e.IsGetData || e.Column != _colMachineItemCode) return;
+            DataRowView drv = e.Row as DataRowView;
+            string serial = drv == null ? "" : (((drv.Row["MachineSerialNo"] as string) ?? "").Trim());
+            if (serial.Length == 0)
+            {
+                e.Value = _sluItemCode != null && _sluItemCode.EditValue != null ? _sluItemCode.EditValue.ToString() : "";
+                return;
+            }
+            e.Value = "";
+            if (_itemSpareParts == null) return;
+            foreach (DataRow r in _itemSpareParts.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string sn = (r.Table.Columns.Contains("SerialNumber") && r["SerialNumber"] != DBNull.Value ? (string)r["SerialNumber"] : "").Trim();
+                if (!string.Equals(sn, serial, StringComparison.OrdinalIgnoreCase)) continue;
+                e.Value = r["ItemCode"] == DBNull.Value ? "" : (string)r["ItemCode"];
+                return;
+            }
+        }
+
+        private void ChkMultiMachine_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_suppressMultiEvt) return;
+            bool on = _chkMultiMachine.Checked;
+            if (!on)
+            {
+                int assigned = 0;
+                foreach (DataRow r in _meters.Rows)
+                {
+                    if (r.RowState == DataRowState.Deleted) continue;
+                    if (((r["MachineSerialNo"] as string) ?? "").Trim().Length > 0) assigned++;
+                }
+                if (assigned > 0)
+                {
+                    if (XtraMessageBox.Show(
+                            "Turning multi-machine off clears the machine assignment on " + assigned + " meter(s) — " +
+                            "they all become meters of this service item's own machine. Continue?",
+                            "Multi-machine", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    {
+                        _suppressMultiEvt = true; _chkMultiMachine.Checked = true; _suppressMultiEvt = false;
+                        return;
+                    }
+                    foreach (DataRow r in _meters.Rows)
+                        if (r.RowState != DataRowState.Deleted) r["MachineSerialNo"] = "";
+                }
+            }
+            ApplyMultiMachineUi(on);
+            _dirty = true;
+        }
+
+        // Reorder meter rows by swapping full row contents with the neighbour (the grid is bound in
+        // table order, so a value swap IS the visual move).
+        private void MeterMove(int delta)
+        {
+            GridViewMeters.PostEditor();
+            int rh = GridViewMeters.FocusedRowHandle;
+            int target = rh + delta;
+            if (rh < 0 || target < 0 || target >= GridViewMeters.RowCount) return;
+            DataRowView a = GridViewMeters.GetRow(rh) as DataRowView;
+            DataRowView b = GridViewMeters.GetRow(target) as DataRowView;
+            if (a == null || b == null) return;
+            object[] tmp = a.Row.ItemArray;
+            a.Row.ItemArray = b.Row.ItemArray;
+            b.Row.ItemArray = tmp;
+            GridViewMeters.FocusedRowHandle = target;
+            _dirty = true;
+        }
+
+        // Distinct non-empty serials of the (non-deleted) Item Provided rows.
+        private System.Collections.Generic.List<string> ProvidedSerials()
+        {
+            System.Collections.Generic.List<string> list = new System.Collections.Generic.List<string>();
+            System.Collections.Generic.HashSet<string> seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (_itemSpareParts != null)
+            {
+                foreach (DataRow r in _itemSpareParts.Rows)
+                {
+                    if (r.RowState == DataRowState.Deleted) continue;
+                    string sn = (r.Table.Columns.Contains("SerialNumber") ? (r["SerialNumber"] as string ?? "") : "").Trim();
+                    if (sn.Length > 0 && seen.Add(sn)) list.Add(sn);
+                }
+            }
+            return list;
+        }
+
         private void BtnAddMeter_Click(object sender, EventArgs e)
         {
+            // Multi-machine: a focused Item Provided row (with a serial) is a CONVENIENCE — the new
+            // meter inherits its serial. No row selected / no serial = '' = the header machine; the
+            // assignment can also be set later in the Machine Serial column. Never blocks.
+            string machineSerial = "";
+            // The Item Provided grid is hidden now — only honour its focused row when it is actually
+            // visible, otherwise an invisible row 0 would silently tag every new meter.
+            if (_chkMultiMachine != null && _chkMultiMachine.Checked && _viewItemSp != null &&
+                _grpItemSp != null && _grpItemSp.Visible)
+            {
+                _viewItemSp.PostEditor();
+                int rh = _viewItemSp.FocusedRowHandle;
+                DataRowView drv = rh < 0 ? null : _viewItemSp.GetRow(rh) as DataRowView;
+                machineSerial = drv == null ? "" : ((drv.Row["SerialNumber"] as string) ?? "").Trim();
+            }
             DataRow r = _meters.NewRow();
             r["MeterRole"] = "NA";
+            r["MachineSerialNo"] = machineSerial;
             r["MinimumCharges"] = 0m;
             r["ChargesRate"] = 0m;
             r["MeterMultiPriceCode"] = "";
@@ -444,6 +737,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             int rh = GridViewMeters.FocusedRowHandle;
             if (rh >= 0) GridViewMeters.DeleteRow(rh);
+        }
+
+        // "Meter Types..." — open the Meter Type maintenance module; when it closes, reload the
+        // Meter Type dropdown so freshly created types are immediately pickable.
+        private void BtnMeterMaintenance_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.MeterTypeLst_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.MeterTypeLst_Form(_db))
+                {
+                    f.WindowState = System.Windows.Forms.FormWindowState.Normal;
+                    f.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                LoadMeterTypeLookup();   // refresh the dropdown datasource with any new/edited types
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Open Meter Type maintenance failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         private void GridViewMeters_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
@@ -471,22 +783,89 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (string.IsNullOrWhiteSpace(TxtServiceItemNo.Text))
             { XtraMessageBox.Show("Service Item No is required.", "Validation"); return; }
             if (string.IsNullOrWhiteSpace(TxtSerial.Text))
-            { XtraMessageBox.Show("Serial Number is required (it is the key the meter API matches on).", "Validation"); return; }
+            { XtraMessageBox.Show("Machine Serial No is required (it is the key the meter API matches on).", "Validation"); return; }
             if (_standalone && SelectedContractKey == 0 && SelectedDebtorCode.Length == 0)
             { XtraMessageBox.Show("Pick a Contract No, or pick a Customer (a new contract is then created).", "Validation"); return; }
 
-            int bk = 0, cl = 0;
+            // The machine serial is what Meter Reading Integration looks a machine up by — a duplicate
+            // makes readings ambiguous. Warn (legacy data may have duplicates, so allow an override).
+            try
+            {
+                string ser = TxtSerial.Text.Trim().Replace("'", "''");
+                DataTable dup = _db.GetDataTable(
+                    "SELECT TOP 1 ServiceItemNo FROM [dbo].[zSCP2_Item] " +
+                    "WHERE LTRIM(RTRIM(SerialNumber))='" + ser + "' AND ItemKey<>" + _data.ItemKey, false);
+                if (dup.Rows.Count > 0 &&
+                    XtraMessageBox.Show(
+                        "Machine Serial No '" + TxtSerial.Text.Trim() + "' is already used by service item " +
+                        dup.Rows[0]["ServiceItemNo"] + ".\r\nMeter reading matches machines by this serial — continue anyway?",
+                        "Duplicate Serial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    return;
+            }
+            catch { }
+
+            // Meter rules are PER MACHINE. Single mode: all meters belong to the header machine (one
+            // group). Multi mode: rows group by their assigned provided-unit serial — each unit gets
+            // its own <=1 BK, <=1 CL and unique-meter-type rules (DB identity: item + type + serial).
+            bool multi = _chkMultiMachine != null && _chkMultiMachine.Checked;
+            if (_viewItemSp != null) _viewItemSp.PostEditor();
+            System.Collections.Generic.List<string> provided = ProvidedSerials();
+
+            // Item Provided must not repeat: same Item Code + same Serial No is a duplicate row.
+            // The same Item Code with DIFFERENT serials is fine (several units of one model).
+            if (_itemSpareParts != null)
+            {
+                System.Collections.Generic.HashSet<string> unitKeys =
+                    new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (DataRow r in _itemSpareParts.Rows)
+                {
+                    if (r.RowState == DataRowState.Deleted) continue;
+                    string code = (r["ItemCode"] == DBNull.Value ? "" : (string)r["ItemCode"]).Trim();
+                    if (code.Length == 0) continue;
+                    string sn = (r.Table.Columns.Contains("SerialNumber") && r["SerialNumber"] != DBNull.Value ? (string)r["SerialNumber"] : "").Trim();
+                    if (!unitKeys.Add(code + "|" + sn))
+                    {
+                        XtraMessageBox.Show(
+                            "Item Provided has a duplicate: '" + code + "'" +
+                            (sn.Length > 0 ? " with serial '" + sn + "'" : " (no serial)") +
+                            ".\r\nThe same item code is allowed only with different serial numbers.",
+                            "Validation");
+                        return;
+                    }
+                }
+            }
+            System.Collections.Generic.Dictionary<string, int> bkPer = new System.Collections.Generic.Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            System.Collections.Generic.Dictionary<string, int> clPer = new System.Collections.Generic.Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            System.Collections.Generic.HashSet<string> typePerMachine =
+                new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (DataRow r in _meters.Rows)
             {
                 if (r.RowState == DataRowState.Deleted) continue;
-                string role = (r["MeterRole"] == null ? "" : r["MeterRole"].ToString()).Trim().ToUpperInvariant();
-                if (role == "BK") bk++;
-                else if (role == "CL") cl++;
-                if (string.IsNullOrWhiteSpace(r["MeterTypeCode"] as string))
+                string mtype = (r["MeterTypeCode"] as string ?? "").Trim();
+                if (mtype.Length == 0)
                 { XtraMessageBox.Show("Every meter row must have a Meter Type.", "Validation"); return; }
+                string mser = multi ? ((r["MachineSerialNo"] as string) ?? "").Trim() : "";
+                // Machine Serial is OPTIONAL ('' = this service item's own header machine). When set,
+                // it must point at an actual Item Provided row.
+                if (multi && mser.Length > 0)
+                {
+                    bool known = false;
+                    foreach (string sn in provided) if (string.Equals(sn, mser, StringComparison.OrdinalIgnoreCase)) { known = true; break; }
+                    if (!known)
+                    { XtraMessageBox.Show("Machine Serial '" + mser + "' is not on any Item Provided row. Add the unit (with its Serial No) first.", "Validation"); return; }
+                }
+                if (!typePerMachine.Add(mser.ToUpperInvariant() + "|" + mtype))
+                { XtraMessageBox.Show("Meter type '" + mtype + "' appears more than once" + (multi ? " for machine '" + mser + "'" : "") + ". Each meter type can only be configured once per machine.", "Validation"); return; }
+                string role = (r["MeterRole"] == null ? "" : r["MeterRole"].ToString()).Trim().ToUpperInvariant();
+                if (role == "BK") { int n; bkPer.TryGetValue(mser, out n); bkPer[mser] = n + 1; }
+                else if (role == "CL") { int n; clPer.TryGetValue(mser, out n); clPer[mser] = n + 1; }
             }
-            if (bk > 1) { XtraMessageBox.Show("Only one meter can be tagged Black (BK).", "Validation"); return; }
-            if (cl > 1) { XtraMessageBox.Show("Only one meter can be tagged Colour (CL).", "Validation"); return; }
+            foreach (System.Collections.Generic.KeyValuePair<string, int> kv in bkPer)
+                if (kv.Value > 1)
+                { XtraMessageBox.Show("Only one meter can be tagged Black (BK)" + (multi ? " per machine ('" + kv.Key + "')" : "") + ".", "Validation"); return; }
+            foreach (System.Collections.Generic.KeyValuePair<string, int> kv in clPer)
+                if (kv.Value > 1)
+                { XtraMessageBox.Show("Only one meter can be tagged Colour (CL)" + (multi ? " per machine ('" + kv.Key + "')" : "") + ".", "Validation"); return; }
 
             _data.ServiceItemNo = TxtServiceItemNo.Text.Trim();
             // Number still shows the auto-preview & the user didn't type their own -> reserve a real one at insert.
@@ -501,6 +880,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data.Inactive = ChkInactive.Checked;
             _itemCodes.AcceptChanges();
             _data.ItemCodes = _itemCodes;
+            _data.MultiMachine = multi;
+            if (!multi)
+                foreach (DataRow r in _meters.Rows)
+                    if (r.RowState != DataRowState.Deleted) r["MachineSerialNo"] = "";
             _meters.AcceptChanges();
             _data.Meters = _meters;
             if (_viewItemSp != null) _viewItemSp.PostEditor();
@@ -581,6 +964,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void SluDept_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            if (SluDept.Properties.ReadOnly) return;   // contract-rendered field
             OpenNativeDepartmentEditor();
         }
 
@@ -588,6 +972,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void SluProject_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            if (SluProject.Properties.ReadOnly) return;   // contract-rendered field
             OpenNativeProjectEditor();
         }
 
@@ -711,7 +1096,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             object k = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
                 this, "Copy From Service Item", dt, "ItemKey",
                 new string[] { "ServiceItemNo", "SerialNumber", "CompanyName" },
-                new string[] { "Service Item No", "Serial Number", "Company Name" },
+                new string[] { "Service Item No", "Machine Serial", "Company Name" },
                 new int[] { 130, 110, 220 });
             long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
@@ -725,8 +1110,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _itemSpCheck;
         private DataTable _itemSpItemLookup;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _itemSpItemRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _itemSpSerialRepo;
+        private DataTable _itemSpSerialLookup;                          // full ItemSerialNo list (filtered per row)
+        // --- multi-machine meters ---
+        private DevExpress.XtraEditors.CheckEdit _chkMultiMachine;
+        private DevExpress.XtraGrid.Columns.GridColumn _colMachineSerial;
+        private DevExpress.XtraGrid.Columns.GridColumn _colMachineItemCode;
+        private bool _suppressMultiEvt;
+        // --- ownership ---
+        private DevExpress.XtraEditors.TextEdit _txtParentContractRO;   // read-only Contract No display
+        private DevExpress.XtraEditors.TextEdit _txtCustomerRO;         // read-only Customer display
+        private DevExpress.XtraEditors.LabelControl _lblExpiryBig;      // big red/green expiry badge
+        private DevExpress.XtraBars.BarButtonItem _barChangeOwner;
+        /// <summary>Enables the ribbon's Change Ownership action. Set by "Maintain Service Item" only —
+        /// the contract editor keeps it off because its save loop re-parents items back to itself.</summary>
+        public bool AllowOwnershipChange;
         private DevExpress.XtraGrid.GridControl _gridItemSp;
         private DevExpress.XtraGrid.Views.Grid.GridView _viewItemSp;
+        private DevExpress.XtraEditors.GroupControl _grpItemSp;   // "Item Provided" container — hidden (#5)
 
         private static void SetIcon(DevExpress.XtraEditors.SimpleButton b, System.Drawing.Image im)
         {
@@ -745,29 +1146,39 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LblLocation.Visible = false; TxtLocation.Visible = false;   // Stock Location removed from UI
             GrpItemCodes.Visible = false;                               // "Provided Items" grid removed
 
-            // 1b. Reposition the designer header controls into a dense, contract-like two-column layout.
-            LblServiceItemNo.Location = new System.Drawing.Point(14, 160);
-            TxtServiceItemNo.Location = new System.Drawing.Point(120, 157);
-            BtnAutoNo.Location = new System.Drawing.Point(274, 156);
-            LblSerial.Location = new System.Drawing.Point(14, 212);
-            TxtSerial.Location = new System.Drawing.Point(120, 209);
-            LblDesc.Location = new System.Drawing.Point(14, 238);
-            TxtDescription.Location = new System.Drawing.Point(120, 235);
-            LblBillDay.Location = new System.Drawing.Point(470, 342);
-            SpnBillingDayOverride.Location = new System.Drawing.Point(600, 339);
-            LblBillDayHint.Location = new System.Drawing.Point(786, 342);
-            LblDept.Location = new System.Drawing.Point(470, 368);
-            SluDept.Location = new System.Drawing.Point(600, 365);
-            LblJob.Location = new System.Drawing.Point(470, 394);
-            SluProject.Location = new System.Drawing.Point(600, 391);
-            ChkInactive.Location = new System.Drawing.Point(120, 393);
+            // 1b. Reposition the designer header controls into a dense two-column layout.
+            //     Rows are 24px apart (fields at ROW_Y, labels +3). Description drops to a full-width
+            //     row at the bottom so it can stretch, with Inactive tucked at its right (as on the contract).
+            LblServiceItemNo.Location = new System.Drawing.Point(14, 125);
+            TxtServiceItemNo.Location = new System.Drawing.Point(120, 122);
+            TxtServiceItemNo.Size = new System.Drawing.Size(200, 20);
+            BtnAutoNo.Location = new System.Drawing.Point(326, 121);
+            LblSerial.Location = new System.Drawing.Point(14, 197);
+            TxtSerial.Location = new System.Drawing.Point(120, 194);
+            TxtSerial.Size = new System.Drawing.Size(280, 20);
+            // Billing Day Override sits in the LEFT column (row 9) - its hint sits beside it.
+            LblBillDay.Location = new System.Drawing.Point(14, 341);
+            SpnBillingDayOverride.Location = new System.Drawing.Point(120, 338);
+            SpnBillingDayOverride.Size = new System.Drawing.Size(80, 20);
+            LblBillDayHint.Location = new System.Drawing.Point(206, 341);
+            LblDept.Location = new System.Drawing.Point(470, 317);
+            SluDept.Location = new System.Drawing.Point(600, 314);
+            SluDept.Size = new System.Drawing.Size(280, 20);
+            LblJob.Location = new System.Drawing.Point(470, 341);
+            SluProject.Location = new System.Drawing.Point(600, 338);
+            SluProject.Size = new System.Drawing.Size(280, 20);
+            // Description: full-width bottom row, stretched; Inactive at its right end.
+            LblDesc.Location = new System.Drawing.Point(14, 365);
+            TxtDescription.Location = new System.Drawing.Point(120, 362);
+            TxtDescription.Size = new System.Drawing.Size(760, 20);
+            ChkInactive.Location = new System.Drawing.Point(900, 364);
 
             // 2. Header: Item Code (SearchLookUpEdit over the Item master) — left column, row 2.
-            MakeLbl("Item Code", 14, 186);
+            MakeLbl("Item Code", 14, 173);
             _itemHdrLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
             _sluItemCode = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluItemCode.Location = new System.Drawing.Point(120, 183);
-            _sluItemCode.Size = new System.Drawing.Size(214, 20);
+            _sluItemCode.Location = new System.Drawing.Point(120, 170);
+            _sluItemCode.Size = new System.Drawing.Size(280, 20);
             _sluItemCode.Properties.NullText = "";
             _sluItemCode.Properties.DataSource = _itemHdrLookup;
             _sluItemCode.Properties.ValueMember = "ItemCode";
@@ -776,11 +1187,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _sluItemCode.EditValueChanged += MarkDirty;
             this.Controls.Add(_sluItemCode); _sluItemCode.BringToFront();
 
-            // 3. Header: Grade Code (SearchLookUpEdit over zSCP_LK_ServiceItemGrade) + "+" create — left column, row 5.
-            MakeLbl("Grade Code", 14, 264);
+            // 3. Header: Grade Code (SearchLookUpEdit over zSCP_LK_ServiceItemGrade) + "+" create — left column, row 4.
+            MakeLbl("Grade Code", 14, 221);
             _sluGrade = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluGrade.Location = new System.Drawing.Point(120, 261);
-            _sluGrade.Size = new System.Drawing.Size(214, 20);
+            _sluGrade.Location = new System.Drawing.Point(120, 218);
+            _sluGrade.Size = new System.Drawing.Size(280, 20);
             _sluGrade.Properties.NullText = "";
             _sluGrade.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
@@ -794,11 +1205,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             // 3b. Contract-mirrored context fields (same as the contract, minus billing checkboxes + Contract Value).
             BuildContractContextHeader();
+            // Bound to a contract: Contract Type follows the contract and is READ-ONLY here (edit it on
+            // the contract). The other context fields stay editable as per-item overrides.
+            if (!string.IsNullOrEmpty(_parentContractNo)) _sluCType.Properties.ReadOnly = true;
 
             // 4. Tab control below the header.
             _tabMain = new DevExpress.XtraTab.XtraTabControl();
-            _tabMain.Location = new System.Drawing.Point(5, 448);
-            _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - 453);
+            _tabMain.Location = new System.Drawing.Point(5, 388);
+            _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - 393);
             _tabMain.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             _pgItemMeter = new DevExpress.XtraTab.XtraTabPage(); _pgItemMeter.Text = "Item & Meter";
             _pgPreventive = new DevExpress.XtraTab.XtraTabPage(); _pgPreventive.Text = "Preventive";
@@ -810,11 +1224,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 _pgItemMeter, _pgPreventive, _pgMoreHeader, _pgDebtorHist, _pgNote, _pgRemark });
             this.Controls.Add(_tabMain);
 
-            // 5. Tab 1 "Item & Meter": Item Provided grid (Fill) + the Meter group reparented on top.
+            // 5. Tab 1 "Item & Meter": the Meter grid fills the whole tab. The Item Provided grid is
+            //    still BUILT (so _itemSpareParts keeps loading/saving existing rows untouched) but is
+            //    HIDDEN — the header's Item Code + Machine Serial No define the machine now.
             BuildItemSparePartsGrid(_pgItemMeter);
-            GrpMeters.Dock = System.Windows.Forms.DockStyle.Top;
-            GrpMeters.Height = 240;
-            _pgItemMeter.Controls.Add(GrpMeters);   // Top added after the Fill grid
+            if (_grpItemSp != null) _grpItemSp.Visible = false;
+            GrpMeters.Dock = System.Windows.Forms.DockStyle.Fill;
+            _pgItemMeter.Controls.Add(GrpMeters);
+            GrpMeters.BringToFront();
+            BuildMultiMachineMeters();              // per-unit meters (checkbox + Machine Serial column)
 
             // 6. Tab 3 "More Header" + Tab 5/6 Note/Remarks + Tab 2 Preventive.
             BuildItemMoreHeaderTab(_pgMoreHeader);
@@ -839,12 +1257,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _txtArea.Text = _data.AreaCode ?? "";
             _dtStart.EditValue = _data.ServiceStartDate.HasValue ? (object)_data.ServiceStartDate.Value : null;
             _dtExpiry.EditValue = _data.ServiceExpiryDate.HasValue ? (object)_data.ServiceExpiryDate.Value : null;
+            // Dept/Project were populated from _data BEFORE the contract prefill ran (they're designer
+            // controls set in OnFormLoad), so push the inherited values in now for a new item.
+            if (_data.ItemKey <= 0)
+            {
+                if (SluDept.EditValue == null && !string.IsNullOrEmpty(_data.DepartmentCode)) SluDept.EditValue = _data.DepartmentCode;
+                if (SluProject.EditValue == null && !string.IsNullOrEmpty(_data.JobCode)) SluProject.EditValue = _data.JobCode;
+            }
             foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
                 if (_data.MoreHeader.ContainsKey(kv.Key)) kv.Value.Text = _data.MoreHeader[kv.Key];
             if (_imhDelAddress != null && _data.MoreHeader.ContainsKey("DelAddress")) _imhDelAddress.Text = _data.MoreHeader["DelAddress"];
             _txtNote.Text = _data.Note ?? "";
             _txtRemark1.Text = _data.Remark1 ?? "";
             _txtRemark2.Text = _data.Remark2 ?? "";
+            UpdateExpiryBadge();
             _dirty = false;   // programmatic population above must not look like a user edit
         }
 
@@ -886,10 +1312,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void BuildContractContextHeader()
         {
             // Contract Type (SearchLookUpEdit + "+" create, mirroring the contract's SluContractType).
-            MakeLbl("Contract Type", 14, 290);
+            MakeLbl("Contract Type", 14, 245);
             _sluCType = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluCType.Location = new System.Drawing.Point(120, 287);
-            _sluCType.Size = new System.Drawing.Size(214, 20);
+            _sluCType.Location = new System.Drawing.Point(120, 242);
+            _sluCType.Size = new System.Drawing.Size(280, 20);
             _sluCType.Properties.NullText = "";
             _sluCType.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo),
@@ -902,20 +1328,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Controls.Add(_sluCType); _sluCType.BringToFront();
 
             // Reference No.
-            MakeLbl("Reference No", 14, 316);
-            _txtRefNo = MakeTxt(120, 313, 214, 80);
+            MakeLbl("Reference No", 14, 269);
+            _txtRefNo = MakeTxt(120, 266, 280, 80);
 
             // Service Start Date [ To ] Expiry.
-            MakeLbl("Service Start Date", 14, 342);
-            _dtStart = MakeDate(120, 339, 92);
-            MakeLbl("To", 220, 342);
-            _dtExpiry = MakeDate(242, 339, 92);
+            MakeLbl("Service Start Date", 14, 293);
+            _dtStart = MakeDate(120, 290, 125);
+            MakeLbl("To", 253, 293);
+            _dtExpiry = MakeDate(275, 290, 125);
 
             // Agent (SearchLookUpEdit over AutoCount SalesAgent, mirroring the contract's SluAgent).
-            MakeLbl("Agent", 14, 368);
+            MakeLbl("Agent", 14, 317);
             _sluAgentI = new DevExpress.XtraEditors.SearchLookUpEdit();
-            _sluAgentI.Location = new System.Drawing.Point(120, 365);
-            _sluAgentI.Size = new System.Drawing.Size(214, 20);
+            _sluAgentI.Location = new System.Drawing.Point(120, 314);
+            _sluAgentI.Size = new System.Drawing.Size(280, 20);
             _sluAgentI.Properties.NullText = "";
             _sluAgentI.Properties.ValueMember = "SalesAgent";
             _sluAgentI.Properties.DisplayMember = "SalesAgent";
@@ -923,18 +1349,47 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LoadAgentLookupI();
             this.Controls.Add(_sluAgentI); _sluAgentI.BringToFront();
 
-            // Right column: Address (memo) + Attention / Phone / Term / Area.
-            MakeLbl("Address", 470, 160);
+            // Right column: Address (memo spanning rows 1-3) + Attention / Phone / Term / Area.
+            MakeLbl("Address", 470, 149);
             _txtAddr = new DevExpress.XtraEditors.MemoEdit();
-            _txtAddr.Location = new System.Drawing.Point(600, 157);
-            _txtAddr.Size = new System.Drawing.Size(300, 62);
+            _txtAddr.Location = new System.Drawing.Point(600, 146);
+            _txtAddr.Size = new System.Drawing.Size(280, 62);
             _txtAddr.EditValueChanged += MarkDirty;
             this.Controls.Add(_txtAddr); _txtAddr.BringToFront();
 
-            MakeLbl("Attention", 470, 238); _txtAttn = MakeTxt(600, 235, 210, 100);
-            MakeLbl("Phone", 470, 264); _txtPhone = MakeTxt(600, 261, 210, 40);
-            MakeLbl("Term", 470, 290); _txtTerm = MakeTxt(600, 287, 210, 40);
-            MakeLbl("Area", 470, 316); _txtArea = MakeTxt(600, 313, 210, 40);
+            MakeLbl("Attention", 470, 221); _txtAttn = MakeTxt(600, 218, 280, 100);
+            MakeLbl("Phone", 470, 245); _txtPhone = MakeTxt(600, 242, 280, 40);
+            MakeLbl("Term", 470, 269); _txtTerm = MakeTxt(600, 266, 280, 40);
+            MakeLbl("Area", 470, 293); _txtArea = MakeTxt(600, 290, 280, 40);
+
+            // Big expiry badge (top-right): GREEN while the service is still covered, RED once the
+            // expiry date has passed. Follows the header's effective expiry live.
+            MakeLbl("Service Expiry", 920, 150);
+            _lblExpiryBig = new DevExpress.XtraEditors.LabelControl();
+            _lblExpiryBig.Location = new System.Drawing.Point(920, 168);
+            _lblExpiryBig.Appearance.Font = new System.Drawing.Font("Tahoma", 22F, System.Drawing.FontStyle.Bold);
+            _lblExpiryBig.Appearance.Options.UseFont = true;
+            _lblExpiryBig.Appearance.Options.UseForeColor = true;
+            _lblExpiryBig.Text = "";
+            this.Controls.Add(_lblExpiryBig); _lblExpiryBig.BringToFront();
+            _dtExpiry.EditValueChanged += delegate { UpdateExpiryBadge(); };
+        }
+
+        // Green = not yet expired; red = past expiry; gray = no expiry set.
+        private void UpdateExpiryBadge()
+        {
+            if (_lblExpiryBig == null || _dtExpiry == null) return;
+            if (_dtExpiry.EditValue == null || _dtExpiry.EditValue == DBNull.Value)
+            {
+                _lblExpiryBig.Text = "(no expiry)";
+                _lblExpiryBig.Appearance.ForeColor = System.Drawing.Color.Gray;
+                return;
+            }
+            DateTime exp = Convert.ToDateTime(_dtExpiry.EditValue).Date;
+            _lblExpiryBig.Text = exp.ToString("dd/MM/yyyy");
+            _lblExpiryBig.Appearance.ForeColor = exp < DateTime.Today
+                ? System.Drawing.Color.Firebrick
+                : System.Drawing.Color.Green;
         }
 
         private void LoadContractTypeLookupI()
@@ -967,6 +1422,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void SluCType_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            if (_sluCType.Properties.ReadOnly) return;   // bound to a contract: type is contract-owned
             try
             {
                 using (ServiceContractPhotocopier.GeneralSetup.MasterForms.ServiceContractType_Form f =
@@ -983,13 +1439,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // New item under an existing contract: copy that contract's context into _data so the header shows it.
+        // Fill-if-empty only (a Copy-to-New template keeps its own values); every field stays editable.
         private void PrefillContextFromContract(string contractNo)
         {
             try
             {
                 DataTable dt = _db.GetDataTable(
                     "SELECT TOP 1 ContractTypeCode, StaffCode, ServiceStartDate, ServiceExpiryDate, " +
-                    "Address1, Attention, Phone, TermCode, AreaCode FROM [dbo].[zSCP2_Contract] WHERE ContractNo=" +
+                    "Address1, Attention, Phone, TermCode, AreaCode, DeptNo, ProjNo, " +
+                    "[" + string.Join("], [", _imhCols) + "] " +
+                    "FROM [dbo].[zSCP2_Contract] WHERE ContractNo=" +
                     "'" + contractNo.Replace("'", "''") + "'", false);
                 if (dt.Rows.Count == 0) return;
                 DataRow r = dt.Rows[0];
@@ -1000,8 +1459,49 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (string.IsNullOrEmpty(_data.Phone)) _data.Phone = AsS(r["Phone"]);
                 if (string.IsNullOrEmpty(_data.TermCode)) _data.TermCode = AsS(r["TermCode"]);
                 if (string.IsNullOrEmpty(_data.AreaCode)) _data.AreaCode = AsS(r["AreaCode"]);
+                if (string.IsNullOrEmpty(_data.DepartmentCode)) _data.DepartmentCode = AsS(r["DeptNo"]);
+                if (string.IsNullOrEmpty(_data.JobCode)) _data.JobCode = AsS(r["ProjNo"]);   // item's JobCode stores the AutoCount ProjNo
                 if (!_data.ServiceStartDate.HasValue && r["ServiceStartDate"] != DBNull.Value) _data.ServiceStartDate = Convert.ToDateTime(r["ServiceStartDate"]);
                 if (!_data.ServiceExpiryDate.HasValue && r["ServiceExpiryDate"] != DBNull.Value) _data.ServiceExpiryDate = Convert.ToDateTime(r["ServiceExpiryDate"]);
+                foreach (string c in _imhCols)
+                {
+                    string cur; _data.MoreHeader.TryGetValue(c, out cur);
+                    if (string.IsNullOrEmpty(cur)) _data.MoreHeader[c] = AsS(r[c]);
+                }
+            }
+            catch { }
+        }
+
+        // Standalone: the user picked a contract in the Contract No dropdown — pull that contract's
+        // shared fields straight into the CONTROLS (an explicit pick means "inherit from this one",
+        // so values are overwritten; the user can still edit everything afterwards).
+        private void ApplyContractContextByKey(long contractKey)
+        {
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT TOP 1 ContractTypeCode, StaffCode, DebtorCode, ServiceStartDate, ServiceExpiryDate, " +
+                    "Address1, Attention, Phone, TermCode, AreaCode, DeptNo, ProjNo, " +
+                    "[" + string.Join("], [", _imhCols) + "] " +
+                    "FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + contractKey, false);
+                if (dt.Rows.Count == 0) return;
+                DataRow r = dt.Rows[0];
+                if (_sluCType != null) _sluCType.EditValue = string.IsNullOrEmpty(AsS(r["ContractTypeCode"])) ? null : (object)AsS(r["ContractTypeCode"]);
+                if (_sluAgentI != null) _sluAgentI.EditValue = string.IsNullOrEmpty(AsS(r["StaffCode"])) ? null : (object)AsS(r["StaffCode"]);
+                if (_dtStart != null) _dtStart.EditValue = r["ServiceStartDate"] == DBNull.Value ? null : r["ServiceStartDate"];
+                if (_dtExpiry != null) _dtExpiry.EditValue = r["ServiceExpiryDate"] == DBNull.Value ? null : r["ServiceExpiryDate"];
+                if (_txtAddr != null) _txtAddr.Text = AsS(r["Address1"]);
+                if (_txtAttn != null) _txtAttn.Text = AsS(r["Attention"]);
+                if (_txtPhone != null) _txtPhone.Text = AsS(r["Phone"]);
+                if (_txtTerm != null) _txtTerm.Text = AsS(r["TermCode"]);
+                if (_txtArea != null) _txtArea.Text = AsS(r["AreaCode"]);
+                SluDept.EditValue = string.IsNullOrEmpty(AsS(r["DeptNo"])) ? null : (object)AsS(r["DeptNo"]);
+                SluProject.EditValue = string.IsNullOrEmpty(AsS(r["ProjNo"])) ? null : (object)AsS(r["ProjNo"]);
+                // Show the contract's customer in the (disabled) Customer picker so the link is visible.
+                if (_lkCustomer != null) _lkCustomer.EditValue = string.IsNullOrEmpty(AsS(r["DebtorCode"])) ? null : (object)AsS(r["DebtorCode"]);
+                foreach (string c in _imhCols)
+                    if (_imh.ContainsKey(c)) _imh[c].Text = AsS(r[c]);
+                if (_imhDelAddress != null) _imhDelAddress.Text = AsS(r["DelAddress"]);
             }
             catch { }
         }
@@ -1011,7 +1511,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             "DelBranchCode","DelBranchName","DelAddress","DelCity","DelPostalCode","DelState","DelCountry",
             "DelPhone","DelFax","DelEmail","DelContactPerson" };
 
-        private void LoadExtrasFromDb(long itemKey)
+        private void LoadExtrasFromDb(long itemKey) { LoadExtras(_db, _data, itemKey); }
+
+        // Static so zSCP2_Contract_Form.LoadOneItem hydrates the SAME extras for every item in a
+        // contract: the contract save loop persists ALL items, and persisting an item whose extras
+        // were never loaded would wipe them (empty defaults, no LoadedCtx snapshot).
+        internal static void LoadExtras(DBSetting db, ItemEditData data, long itemKey)
         {
             try
             {
@@ -1019,7 +1524,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // item hasn't overridden them, so legacy items and items-under-a-contract show the contract's data.
                 // Reference No stays item-specific (a per-document reference), never inherited.
                 string iMh = "i.[" + string.Join("], i.[", _imhCols) + "]";
-                DataTable dt = _db.GetDataTable(
+                DataTable dt = db.GetDataTable(
                     "SELECT i.ItemCode, i.GradeCode, i.Note, i.Remark1, i.Remark2, " + iMh +
                     ", i.ReferenceNo AS ReferenceNo" +
                     ", COALESCE(NULLIF(i.ContractTypeCode,''), c.ContractTypeCode, '') AS ContractTypeCode" +
@@ -1032,26 +1537,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     ", COALESCE(NULLIF(i.TermCode,''), c.TermCode, '') AS TermCode" +
                     ", COALESCE(NULLIF(i.AreaCode,''), c.AreaCode, '') AS AreaCode" +
                     ", i.PMActive, i.PMIntervalType, i.PMIntervalValue, i.PMStartDate, i.PMLastServiceDate, i.PMNextServiceDate, i.PMDept, i.PMJob, i.PMLocation" +
+                    ", i.MultiMachine" +
                     " FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey" +
                     " WHERE i.ItemKey=" + itemKey, false);
                 if (dt.Rows.Count == 0) return;
                 DataRow r = dt.Rows[0];
-                _data.ItemCode = AsS(r["ItemCode"]); _data.GradeCode = AsS(r["GradeCode"]);
-                _data.Note = AsS(r["Note"]); _data.Remark1 = AsS(r["Remark1"]); _data.Remark2 = AsS(r["Remark2"]);
-                foreach (string c in _imhCols) _data.MoreHeader[c] = AsS(r[c]);
-                _data.ReferenceNo = AsS(r["ReferenceNo"]); _data.ContractTypeCode = AsS(r["ContractTypeCode"]);
-                _data.StaffCode = AsS(r["StaffCode"]); _data.Address1 = AsS(r["Address1"]);
-                _data.Attention = AsS(r["Attention"]); _data.Phone = AsS(r["Phone"]);
-                _data.TermCode = AsS(r["TermCode"]); _data.AreaCode = AsS(r["AreaCode"]);
-                _data.ServiceStartDate = r["ServiceStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["ServiceStartDate"]);
-                if (_data.ServiceExpiryDate == null && r["ServiceExpiryDate"] != DBNull.Value) _data.ServiceExpiryDate = Convert.ToDateTime(r["ServiceExpiryDate"]);
-                _data.PMActive = AsS(r["PMActive"]) == "Y";
-                _data.PMIntervalType = AsS(r["PMIntervalType"]);
-                _data.PMIntervalValue = r["PMIntervalValue"] == DBNull.Value ? 0 : Convert.ToInt32(r["PMIntervalValue"]);
-                _data.PMStartDate = r["PMStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMStartDate"]);
-                _data.PMLastServiceDate = r["PMLastServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMLastServiceDate"]);
-                _data.PMNextServiceDate = r["PMNextServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMNextServiceDate"]);
-                _data.PMDept = AsS(r["PMDept"]); _data.PMJob = AsS(r["PMJob"]); _data.PMLocation = AsS(r["PMLocation"]);
+                data.ItemCode = AsS(r["ItemCode"]); data.GradeCode = AsS(r["GradeCode"]);
+                data.Note = AsS(r["Note"]); data.Remark1 = AsS(r["Remark1"]); data.Remark2 = AsS(r["Remark2"]);
+                foreach (string c in _imhCols) data.MoreHeader[c] = AsS(r[c]);
+                data.ReferenceNo = AsS(r["ReferenceNo"]); data.ContractTypeCode = AsS(r["ContractTypeCode"]);
+                data.StaffCode = AsS(r["StaffCode"]); data.Address1 = AsS(r["Address1"]);
+                data.Attention = AsS(r["Attention"]); data.Phone = AsS(r["Phone"]);
+                data.TermCode = AsS(r["TermCode"]); data.AreaCode = AsS(r["AreaCode"]);
+                data.ServiceStartDate = r["ServiceStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["ServiceStartDate"]);
+                if (data.ServiceExpiryDate == null && r["ServiceExpiryDate"] != DBNull.Value) data.ServiceExpiryDate = Convert.ToDateTime(r["ServiceExpiryDate"]);
+                // Snapshot the effective (inherited) context so the save can detect what the user changed.
+                data.LoadedCtx["ContractTypeCode"] = data.ContractTypeCode;
+                data.LoadedCtx["StaffCode"] = data.StaffCode;
+                data.LoadedCtx["Address1"] = data.Address1;
+                data.LoadedCtx["Attention"] = data.Attention;
+                data.LoadedCtx["Phone"] = data.Phone;
+                data.LoadedCtx["TermCode"] = data.TermCode;
+                data.LoadedCtx["AreaCode"] = data.AreaCode;
+                foreach (string c in _imhCols) data.LoadedCtx[c] = data.MoreHeader.ContainsKey(c) ? data.MoreHeader[c] : "";
+                data.LoadedStart = data.ServiceStartDate;
+                data.LoadedExpiry = data.ServiceExpiryDate;
+                data.LoadedCtxValid = true;
+                data.PMActive = AsS(r["PMActive"]) == "Y";
+                data.PMIntervalType = AsS(r["PMIntervalType"]);
+                data.PMIntervalValue = r["PMIntervalValue"] == DBNull.Value ? 0 : Convert.ToInt32(r["PMIntervalValue"]);
+                data.PMStartDate = r["PMStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMStartDate"]);
+                data.PMLastServiceDate = r["PMLastServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMLastServiceDate"]);
+                data.PMNextServiceDate = r["PMNextServiceDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PMNextServiceDate"]);
+                data.PMDept = AsS(r["PMDept"]); data.PMJob = AsS(r["PMJob"]); data.PMLocation = AsS(r["PMLocation"]);
+                data.MultiMachine = AsS(r["MultiMachine"]) == "Y";
             }
             catch { }
         }
@@ -1059,104 +1578,133 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private static string AsS(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
 
         // Clipboard ribbon group on the Item Provided grid (mirrors the contract's Clipboard group).
-        private const string SI_CLIP = "ATP-SCP-SI-V1";
         private void ExtendItemRibbon()
         {
-            DevExpress.XtraBars.BarButtonItem bCW = MakeBar("Copy Whole Document", ItemClipCopyWhole);
-            DevExpress.XtraBars.BarButtonItem bCS = MakeBar("Copy Selected Details", ItemClipCopySelected);
-            DevExpress.XtraBars.BarButtonItem bCX = MakeBar("Copy as Spreadsheet", ItemClipCopySpreadsheet);
-            DevExpress.XtraBars.BarButtonItem bPW = MakeBar("Paste Whole Document", ItemClipPasteWhole);
-            DevExpress.XtraBars.BarButtonItem bPI = MakeBar("Paste Item Detail Only", ItemClipPasteItems);
-            RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] { bCW, bCS, bCX, bPW, bPI });
-            DevExpress.XtraBars.Ribbon.RibbonPageGroup grp = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
-            grp.Text = "Clipboard";
-            grp.ItemLinks.Add(bCW); grp.ItemLinks.Add(bCS); grp.ItemLinks.Add(bCX); grp.ItemLinks.Add(bPW); grp.ItemLinks.Add(bPI);
-            ribbonPageHome.Groups.Add(grp);
+            // (Clipboard group removed — it operated on the Item Provided grid, which is hidden now.)
+
+            // Ownership: transfer the item to another contract / customer (existing items, list only —
+            // the contract editor's save loop would re-parent the item back, so it stays off there).
+            _barChangeOwner = MakeBar("Change" + System.Environment.NewLine + "Ownership", BarChangeOwner_Click);
+            _barChangeOwner.Enabled = AllowOwnershipChange && _data.ItemKey > 0;
+            RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] { _barChangeOwner });
+            DevExpress.XtraBars.Ribbon.RibbonPageGroup grpOwn = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            grpOwn.Text = "Ownership";
+            grpOwn.ItemLinks.Add(_barChangeOwner);
+            ribbonPageHome.Groups.Add(grpOwn);
+
+            // Demo group (mirrors the contract's): random-fill every header field. NEW items only.
+            _barDemoFill = MakeBar("Demo Fill" + System.Environment.NewLine + "(Random)", barDemoFill_ItemClick);
+            _barDemoFill.Enabled = (_data.ItemKey <= 0);
+            RibbonCtl.Items.AddRange(new DevExpress.XtraBars.BarItem[] { _barDemoFill });
+            DevExpress.XtraBars.Ribbon.RibbonPageGroup grpDemo = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            grpDemo.Text = "Demo";
+            grpDemo.ItemLinks.Add(_barDemoFill);
+            ribbonPageHome.Groups.Add(grpDemo);
+
             try
             {
                 float dpi = 96f; try { dpi = this.DeviceDpi; } catch { }
                 AutoCount.Images.IAutoCountImage img = AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
-                bCW.ImageOptions.Image = img.GetSmallImage_CopyToClipboard();
-                bCS.ImageOptions.Image = img.GetSmallImage_CopySelectedToClipboard();
-                bCX.ImageOptions.Image = img.GetSmallImage_CopyAsSpreadsheet();
-                bPW.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
-                bPI.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
+                _barDemoFill.ImageOptions.Image = img.GetLargeImage_Refresh();
+                _barDemoFill.ImageOptions.LargeImage = img.GetLargeImage_Refresh();
+                _barChangeOwner.ImageOptions.Image = img.GetLargeImage_Edit();
+                _barChangeOwner.ImageOptions.LargeImage = img.GetLargeImage_Edit();
             }
             catch { }
+            _barDemoFill.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            _barChangeOwner.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+        }
+
+        // ===================== Demo Fill (random test data) =====================
+
+        private DevExpress.XtraBars.BarButtonItem _barDemoFill;
+        private static readonly Random _rngI = new Random();
+        private static readonly string[] _demoWordsI = {
+            "Alpha","Beta","Gamma","Delta","Prime","Nova","Metro","Summit","Vertex","Pioneer",
+            "Copier","Printer","MFP","Toner","Drum","Fuser","Roller","Panel","Sensor","Unit" };
+        private static readonly string[] _demoCitiesI = { "Johor Bahru","Kuala Lumpur","Penang","Ipoh","Melaka","Shah Alam","Klang" };
+        private static readonly string[] _demoStatesI = { "Johor","Selangor","Penang","Perak","Melaka","Kedah","Pahang" };
+
+        private string DWI() { return _demoWordsI[_rngI.Next(_demoWordsI.Length)]; }
+        private string RandRefI() { return DWI() + "-" + _rngI.Next(1000, 9999); }
+
+        // Picks a random value from a SearchLookUpEdit's bound datasource (null-safe).
+        private object RandomLookupValueI(DevExpress.XtraEditors.SearchLookUpEdit slu)
+        {
+            if (slu == null) return null;
+            DataTable dt = slu.Properties.DataSource as DataTable;
+            if (dt == null || dt.Rows.Count == 0) return null;
+            string vm = slu.Properties.ValueMember;
+            if (string.IsNullOrEmpty(vm) || !dt.Columns.Contains(vm)) return null;
+            return dt.Rows[_rngI.Next(dt.Rows.Count)][vm];
+        }
+
+        private void barDemoFill_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            try { DemoFillItem(); }
+            catch (Exception ex) { XtraMessageBox.Show("Demo fill failed:\r\n" + ex.Message, "Demo"); }
+        }
+
+        // Fills every header field with random values (different each click). Per the agreed behaviour
+        // this does NOT add grid rows — header + More Header + Note/Remarks only.
+        private void DemoFillItem()
+        {
+            TxtSerial.Text = "SN" + _rngI.Next(100000, 999999);
+            TxtDescription.Text = "Demo " + DWI() + " " + _rngI.Next(100, 999);
+
+            if (_sluItemCode != null) _sluItemCode.EditValue = RandomLookupValueI(_sluItemCode);
+            if (_sluGrade != null) _sluGrade.EditValue = RandomLookupValueI(_sluGrade);
+            if (_sluCType != null) _sluCType.EditValue = RandomLookupValueI(_sluCType);
+            if (_sluAgentI != null) _sluAgentI.EditValue = RandomLookupValueI(_sluAgentI);
+            if (SluDept != null) SluDept.EditValue = RandomLookupValueI(SluDept);
+            if (SluProject != null) SluProject.EditValue = RandomLookupValueI(SluProject);
+
+            if (_txtRefNo != null) _txtRefNo.Text = RandRefI();
+            DateTime sd = DateTime.Today.AddDays(-_rngI.Next(0, 60));
+            if (_dtStart != null) _dtStart.EditValue = sd;
+            if (_dtExpiry != null) _dtExpiry.EditValue = sd.AddMonths(_rngI.Next(6, 36));
+
+            if (_txtAddr != null) _txtAddr.Text = _rngI.Next(1, 200) + ", Jalan " + DWI() + Environment.NewLine + _demoCitiesI[_rngI.Next(_demoCitiesI.Length)];
+            if (_txtAttn != null) _txtAttn.Text = "Mr. " + DWI();
+            if (_txtPhone != null) _txtPhone.Text = "01" + _rngI.Next(0, 9) + "-" + _rngI.Next(100, 999) + _rngI.Next(1000, 9999);
+            if (_txtTerm != null) _txtTerm.Text = "C.O.D.";
+            if (_txtArea != null) _txtArea.Text = _demoStatesI[_rngI.Next(_demoStatesI.Length)];
+
+            SpnBillingDayOverride.Value = _rngI.Next(0, 28);
+
+            // More Header
+            ImhSet("City", _demoCitiesI[_rngI.Next(_demoCitiesI.Length)]);
+            ImhSet("State", _demoStatesI[_rngI.Next(_demoStatesI.Length)]);
+            ImhSet("PostalCode", _rngI.Next(10000, 99999).ToString());
+            ImhSet("Country", "Malaysia");
+            ImhSet("Ref1", RandRefI()); ImhSet("Ref2", RandRefI()); ImhSet("Ref3", RandRefI()); ImhSet("Ref4", RandRefI());
+
+            if (_txtNote != null) _txtNote.Text = "Auto-generated demo note " + DWI() + " " + _rngI.Next(1000, 9999);
+            if (_txtRemark1 != null) _txtRemark1.Text = "Remark " + DWI();
+            if (_txtRemark2 != null) _txtRemark2.Text = "Remark " + DWI();
+
+            _dirty = true;
+        }
+
+        private void ImhSet(string col, string val)
+        {
+            if (_imh != null && _imh.ContainsKey(col) && _imh[col] != null) _imh[col].Text = val;
         }
 
         private DevExpress.XtraBars.BarButtonItem MakeBar(string caption, DevExpress.XtraBars.ItemClickEventHandler h)
         {
             DevExpress.XtraBars.BarButtonItem b = new DevExpress.XtraBars.BarButtonItem();
-            b.Caption = caption; b.Name = "bar_" + caption.Replace(" ", "");
+            b.Caption = caption;
+            // Name must stay an identifier: captions may carry line breaks/brackets for ribbon display.
+            System.Text.StringBuilder nm = new System.Text.StringBuilder("bar_");
+            foreach (char ch in caption) if (char.IsLetterOrDigit(ch)) nm.Append(ch);
+            b.Name = nm.ToString();
             b.ItemClick += h;
             return b;
         }
 
-        private string ItemProvidedTsv(bool selectedOnly)
-        {
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.AppendLine("No\tItem Code\tDescription\tUnlimited\tUOM\tQuantity\tDiscount\tUnit Price\tAmount\tTax Type\tTax Inclusive\tTax %\tTax Amount\tAmount After Tax");
-            System.Collections.Generic.IEnumerable<int> handles;
-            if (selectedOnly) { handles = _viewItemSp.GetSelectedRows(); }
-            else { System.Collections.Generic.List<int> all = new System.Collections.Generic.List<int>(); for (int i = 0; i < _viewItemSp.RowCount; i++) all.Add(_viewItemSp.GetVisibleRowHandle(i)); handles = all; }
-            foreach (int rh in handles)
-            {
-                if (rh < 0) continue;
-                sb.Append(Cell(rh, "No")).Append('\t').Append(Cell(rh, "ItemCode")).Append('\t').Append(Cell(rh, "Description")).Append('\t')
-                  .Append(Cell(rh, "Unlimited")).Append('\t').Append(Cell(rh, "UOM")).Append('\t').Append(Cell(rh, "Quantity")).Append('\t')
-                  .Append(Cell(rh, "Discount")).Append('\t').Append(Cell(rh, "UnitPrice")).Append('\t').Append(Cell(rh, "Amount")).Append('\t')
-                  .Append(Cell(rh, "TaxType")).Append('\t').Append(Cell(rh, "TaxInclusive")).Append('\t').Append(Cell(rh, "TaxRate")).Append('\t')
-                  .Append(Cell(rh, "TaxAmount")).Append('\t').Append(Cell(rh, "AmountAfterTax")).AppendLine();
-            }
-            return sb.ToString();
-        }
-
-        private string Cell(int rh, string field)
-        {
-            object v = _viewItemSp.GetRowCellValue(rh, field);
-            return v == null || v == DBNull.Value ? "" : v.ToString().Replace("\t", " ").Replace("\r", " ").Replace("\n", " ");
-        }
-
-        private void SetClip(string text)
-        { try { System.Windows.Forms.Clipboard.SetText(text); XtraMessageBox.Show("Copied.", "Clipboard"); } catch (Exception ex) { XtraMessageBox.Show("Clipboard failed:\r\n" + ex.Message, "Error"); } }
-
-        private void ItemClipCopyWhole(object s, DevExpress.XtraBars.ItemClickEventArgs e) { _viewItemSp.PostEditor(); SetClip(SI_CLIP + "\r\n" + ItemProvidedTsv(false)); }
-        private void ItemClipCopySelected(object s, DevExpress.XtraBars.ItemClickEventArgs e)
-        { if (_viewItemSp.GetSelectedRows() == null || _viewItemSp.GetSelectedRows().Length == 0) { XtraMessageBox.Show("Select rows first.", "Copy Selected"); return; } _viewItemSp.PostEditor(); SetClip(ItemProvidedTsv(true)); }
-        private void ItemClipCopySpreadsheet(object s, DevExpress.XtraBars.ItemClickEventArgs e) { _viewItemSp.PostEditor(); SetClip(ItemProvidedTsv(false)); }
-        private void ItemClipPasteWhole(object s, DevExpress.XtraBars.ItemClickEventArgs e) { PasteItemRows(true); }
-        private void ItemClipPasteItems(object s, DevExpress.XtraBars.ItemClickEventArgs e) { PasteItemRows(false); }
-
-        private void PasteItemRows(bool requireTag)
-        {
-            string text = null;
-            try { text = System.Windows.Forms.Clipboard.ContainsText() ? System.Windows.Forms.Clipboard.GetText() : null; } catch { }
-            if (string.IsNullOrEmpty(text)) { XtraMessageBox.Show("Clipboard is empty.", "Paste"); return; }
-            if (requireTag && !text.StartsWith(SI_CLIP)) { XtraMessageBox.Show("The clipboard does not contain a copied Item-Provided document.", "Paste"); return; }
-            string[] lines = text.Replace("\r\n", "\n").Split('\n');
-            int added = 0;
-            foreach (string line in lines)
-            {
-                if (line.Trim().Length == 0 || line.StartsWith(SI_CLIP)) continue;
-                string[] p = line.Split('\t');
-                if (p.Length < 3 || p[0] == "No") continue;   // skip header row
-                DataRow r = _itemSpareParts.NewRow();
-                r["SparePartKey"] = 0L; r["ItemKey"] = DBNull.Value; r["Bound"] = false;
-                r["ItemCode"] = At(p, 1); r["Description"] = At(p, 2); r["Unlimited"] = At(p, 3) == "True" || At(p, 3) == "Y";
-                r["UOM"] = At(p, 4); r["Quantity"] = DecOr(At(p, 5)); r["Discount"] = At(p, 6); r["UnitPrice"] = DecOr(At(p, 7));
-                r["TaxType"] = At(p, 9); r["TaxInclusive"] = At(p, 10) == "True" || At(p, 10) == "Y"; r["TaxRate"] = DecOr(At(p, 11));
-                r["Pos"] = _itemSpareParts.Rows.Count;
-                zSCP2_Contract_Form.ComputeSpareRow(r);
-                _itemSpareParts.Rows.Add(r); added++;
-            }
-            if (added == 0) { XtraMessageBox.Show("No item rows found on the clipboard.", "Paste"); return; }
-            _dirty = true; RenumberItemSp(); _viewItemSp.RefreshData();
-            XtraMessageBox.Show(added + " row(s) pasted.", "Pasted");
-        }
-
-        private static string At(string[] a, int i) { return (i >= 0 && i < a.Length) ? a[i] : ""; }
-        private static decimal DecOr(string s) { decimal d; return decimal.TryParse(s, out d) ? d : 0m; }
+        // (Item Provided clipboard copy/paste handlers removed with the ribbon Clipboard group — the
+        // grid itself is hidden now.)
 
         // Single source of truth for the item's EXTENDED columns (Item Code, Grade, More Header, Note,
         // Remarks). Called by BOTH persistence paths (contract editor upsert loop + standalone
@@ -1164,6 +1712,48 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         internal static void PersistItemExtras(System.Data.SqlClient.SqlConnection conn,
             System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
         {
+            // ---- inherit-dedupe --------------------------------------------------------------------
+            // A bound item's context columns store ONLY true overrides. Anything equal to the parent
+            // contract is stored ''/NULL so LoadExtrasFromDb keeps COALESCE-inheriting it — that is what
+            // makes a later contract edit show up on all its items automatically. Untouched fields
+            // (value == the LoadedCtx snapshot) keep their raw stored value, so a contract edit in the
+            // SAME save (contract row updates before the item loop) can't masquerade as an override.
+            string[] ctxScalars = { "ContractTypeCode", "StaffCode", "Address1", "Attention", "Phone", "TermCode", "AreaCode" };
+            System.Collections.Generic.List<string> ctxAll = new System.Collections.Generic.List<string>(ctxScalars);
+            ctxAll.AddRange(_imhCols);
+            bool hasC = false;
+            System.Collections.Generic.Dictionary<string, string> rawCtx = new System.Collections.Generic.Dictionary<string, string>();
+            System.Collections.Generic.Dictionary<string, string> curCtx = new System.Collections.Generic.Dictionary<string, string>();
+            object rawStart = DBNull.Value, rawExpiry = DBNull.Value;
+            DateTime? curStart = null, curExpiry = null;
+            System.Text.StringBuilder qb = new System.Text.StringBuilder(
+                "SELECT CASE WHEN c.ContractKey IS NULL THEN 0 ELSE 1 END AS HasC, " +
+                "i.ServiceStartDate AS [r_Start], i.ServiceExpiryDate AS [r_Expiry], " +
+                "c.ServiceStartDate AS [c_Start], c.ServiceExpiryDate AS [c_Expiry]");
+            foreach (string c in ctxAll)
+                qb.Append(", ISNULL(i.[").Append(c).Append("],'') AS [r_").Append(c)
+                  .Append("], ISNULL(c.[").Append(c).Append("],'') AS [c_").Append(c).Append("]");
+            qb.Append(" FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey WHERE i.ItemKey=@ik");
+            using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(qb.ToString(), conn, tx))
+            {
+                q.Parameters.AddWithValue("@ik", itemKey);
+                using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader())
+                {
+                    if (r.Read())
+                    {
+                        hasC = Convert.ToInt32(r["HasC"]) == 1;
+                        foreach (string c in ctxAll)
+                        {
+                            rawCtx[c] = Convert.ToString(r["r_" + c]);
+                            curCtx[c] = Convert.ToString(r["c_" + c]);
+                        }
+                        rawStart = r["r_Start"]; rawExpiry = r["r_Expiry"];
+                        curStart = r["c_Start"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["c_Start"]);
+                        curExpiry = r["c_Expiry"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["c_Expiry"]);
+                    }
+                }
+            }
+
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.Append("UPDATE [dbo].[zSCP2_Item] SET ItemCode=@ItemCode, GradeCode=@GradeCode, ")
               .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2, ")
@@ -1172,7 +1762,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append("Address1=@Address1, Attention=@Attention, Phone=@Phone, TermCode=@TermCode, AreaCode=@AreaCode, ")
               .Append("PMActive=@PMActive, PMIntervalType=@PMIntervalType, PMIntervalValue=@PMIntervalValue, ")
               .Append("PMStartDate=@PMStartDate, PMLastServiceDate=@PMLastServiceDate, PMNextServiceDate=@PMNextServiceDate, ")
-              .Append("PMDept=@PMDept, PMJob=@PMJob, PMLocation=@PMLocation");
+              .Append("PMDept=@PMDept, PMJob=@PMJob, PMLocation=@PMLocation, MultiMachine=@MultiMachine");
             foreach (string c in _imhCols) sb.Append(", [").Append(c).Append("]=@").Append(c);
             sb.Append(", LastModified=GETDATE() WHERE ItemKey=@ik");
             using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(sb.ToString(), conn, tx))
@@ -1183,15 +1773,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@Remark1", d.Remark1 ?? "");
                 cmd.Parameters.AddWithValue("@Remark2", d.Remark2 ?? "");
                 cmd.Parameters.AddWithValue("@ReferenceNo", d.ReferenceNo ?? "");
-                cmd.Parameters.AddWithValue("@ContractTypeCode", d.ContractTypeCode ?? "");
-                cmd.Parameters.AddWithValue("@StaffCode", d.StaffCode ?? "");
-                cmd.Parameters.AddWithValue("@ServiceStartDate", (object)d.ServiceStartDate ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@ServiceExpiryDate", (object)d.ServiceExpiryDate ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@Address1", d.Address1 ?? "");
-                cmd.Parameters.AddWithValue("@Attention", d.Attention ?? "");
-                cmd.Parameters.AddWithValue("@Phone", d.Phone ?? "");
-                cmd.Parameters.AddWithValue("@TermCode", d.TermCode ?? "");
-                cmd.Parameters.AddWithValue("@AreaCode", d.AreaCode ?? "");
+                cmd.Parameters.AddWithValue("@ContractTypeCode", CtxStore(d.ContractTypeCode, LCtx(d, "ContractTypeCode"), d.LoadedCtxValid, DGet(rawCtx, "ContractTypeCode"), DGet(curCtx, "ContractTypeCode"), hasC));
+                cmd.Parameters.AddWithValue("@StaffCode", CtxStore(d.StaffCode, LCtx(d, "StaffCode"), d.LoadedCtxValid, DGet(rawCtx, "StaffCode"), DGet(curCtx, "StaffCode"), hasC));
+                cmd.Parameters.AddWithValue("@ServiceStartDate", CtxStoreDate(d.ServiceStartDate, d.LoadedStart, d.LoadedCtxValid, rawStart, curStart, hasC));
+                cmd.Parameters.AddWithValue("@ServiceExpiryDate", CtxStoreDate(d.ServiceExpiryDate, d.LoadedExpiry, d.LoadedCtxValid, rawExpiry, curExpiry, hasC));
+                cmd.Parameters.AddWithValue("@Address1", CtxStore(d.Address1, LCtx(d, "Address1"), d.LoadedCtxValid, DGet(rawCtx, "Address1"), DGet(curCtx, "Address1"), hasC));
+                cmd.Parameters.AddWithValue("@Attention", CtxStore(d.Attention, LCtx(d, "Attention"), d.LoadedCtxValid, DGet(rawCtx, "Attention"), DGet(curCtx, "Attention"), hasC));
+                cmd.Parameters.AddWithValue("@Phone", CtxStore(d.Phone, LCtx(d, "Phone"), d.LoadedCtxValid, DGet(rawCtx, "Phone"), DGet(curCtx, "Phone"), hasC));
+                cmd.Parameters.AddWithValue("@TermCode", CtxStore(d.TermCode, LCtx(d, "TermCode"), d.LoadedCtxValid, DGet(rawCtx, "TermCode"), DGet(curCtx, "TermCode"), hasC));
+                cmd.Parameters.AddWithValue("@AreaCode", CtxStore(d.AreaCode, LCtx(d, "AreaCode"), d.LoadedCtxValid, DGet(rawCtx, "AreaCode"), DGet(curCtx, "AreaCode"), hasC));
                 cmd.Parameters.AddWithValue("@PMActive", d.PMActive ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@PMIntervalType", d.PMIntervalType ?? "NONE");
                 cmd.Parameters.AddWithValue("@PMIntervalValue", d.PMIntervalValue);
@@ -1201,8 +1791,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@PMDept", d.PMDept ?? "");
                 cmd.Parameters.AddWithValue("@PMJob", d.PMJob ?? "");
                 cmd.Parameters.AddWithValue("@PMLocation", d.PMLocation ?? "");
+                cmd.Parameters.AddWithValue("@MultiMachine", d.MultiMachine ? "Y" : "N");
                 foreach (string c in _imhCols)
-                    cmd.Parameters.AddWithValue("@" + c, (d.MoreHeader != null && d.MoreHeader.ContainsKey(c)) ? (d.MoreHeader[c] ?? "") : "");
+                {
+                    string nv = (d.MoreHeader != null && d.MoreHeader.ContainsKey(c)) ? (d.MoreHeader[c] ?? "") : "";
+                    cmd.Parameters.AddWithValue("@" + c, CtxStore(nv, LCtx(d, c), d.LoadedCtxValid, DGet(rawCtx, c), DGet(curCtx, c), hasC));
+                }
                 cmd.Parameters.AddWithValue("@ik", itemKey);
                 cmd.ExecuteNonQuery();
             }
@@ -1210,22 +1804,167 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             RecordDebtorHistory(conn, tx, d, itemKey);
         }
 
+        // Save an item's meter configuration WITHOUT wiping zSCP2_ItemMeter: that table is the FK parent
+        // of zSCP_MeterTrans and zSCP2_MeterEntry with ON DELETE CASCADE, so deleting a meter row
+        // destroys that meter's entire reading history. Meters are matched on their natural key
+        // (MeterTypeCode + normalized MeterRole) and updated in place; only meters the user actually
+        // removed are deleted (and only those lose their readings). Shared by the contract editor's
+        // save loop and the item list's update path.
+        internal static void SaveMetersPreservingReadings(System.Data.SqlClient.SqlConnection conn,
+            System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
+        {
+            DataTable existing = new DataTable();
+            using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
+                "SELECT ItemMeterKey, MeterTypeCode, MeterRole, ISNULL(MachineSerialNo,'') AS MachineSerialNo " +
+                "FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=@ik", conn, tx))
+            {
+                q.Parameters.AddWithValue("@ik", itemKey);
+                using (System.Data.SqlClient.SqlDataAdapter da = new System.Data.SqlClient.SqlDataAdapter(q)) da.Fill(existing);
+            }
+
+            System.Collections.Generic.List<long> keep = new System.Collections.Generic.List<long>();
+            // Unmatched candidates. Matched rows are REMOVED from this pool so two grid rows can never
+            // silently merge onto one DB row.
+            System.Collections.Generic.List<DataRow> pool = new System.Collections.Generic.List<DataRow>();
+            foreach (DataRow e in existing.Rows) pool.Add(e);
+            if (d.Meters != null)
+            {
+                foreach (DataRow r in d.Meters.Rows)
+                {
+                    if (r.RowState == DataRowState.Deleted) continue;
+                    string type = r["MeterTypeCode"] == null ? "" : r["MeterTypeCode"].ToString().Trim();
+                    if (type.Length == 0) continue;
+                    string role = NormalizeMeterRole(r["MeterRole"]);
+                    string mser = r.Table.Columns.Contains("MachineSerialNo")
+                        ? ((r["MachineSerialNo"] as string) ?? "").Trim() : "";
+
+                    // The DB identity is UNIQUE(ItemKey, MeterTypeCode, MachineSerialNo) — role is NOT
+                    // part of the key. So match on type+machine and let the UPDATE rewrite the role:
+                    // re-tagging BK<->CL is an in-place edit of the SAME physical counter and keeps its
+                    // readings. (Matching type+role instead would route a re-tag to the INSERT branch
+                    // and violate the unique key, because the old row is only deleted after the loop.)
+                    long hit = 0; DataRow hitRow = null;
+                    foreach (DataRow e in pool)
+                    {
+                        if (string.Equals(Convert.ToString(e["MeterTypeCode"]).Trim(), type, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(Convert.ToString(e["MachineSerialNo"]).Trim(), mser, StringComparison.OrdinalIgnoreCase))
+                        { hit = Convert.ToInt64(e["ItemMeterKey"]); hitRow = e; break; }
+                    }
+
+                    if (hit > 0)
+                    {
+                        pool.Remove(hitRow);
+                        using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
+                            "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, MinimumCharges=@min, ChargesRate=@rate, " +
+                            "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
+                            "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
+                        {
+                            up.Parameters.AddWithValue("@role", role);
+                            AddMeterRowParams(up, r);
+                            up.Parameters.AddWithValue("@mk", hit);
+                            up.ExecuteNonQuery();
+                        }
+                        keep.Add(hit);
+                    }
+                    else
+                    {
+                        using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
+                            "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, " +
+                            "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
+                            "VALUES (@ik,@type,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                        {
+                            ins.Parameters.AddWithValue("@ik", itemKey);
+                            ins.Parameters.AddWithValue("@type", type);
+                            ins.Parameters.AddWithValue("@role", role);
+                            ins.Parameters.AddWithValue("@mser", mser);
+                            AddMeterRowParams(ins, r);
+                            keep.Add(Convert.ToInt64(ins.ExecuteScalar()));
+                        }
+                    }
+                }
+            }
+
+            foreach (DataRow e in existing.Rows)
+            {
+                long k = Convert.ToInt64(e["ItemMeterKey"]);
+                if (keep.Contains(k)) continue;
+                using (System.Data.SqlClient.SqlCommand del = new System.Data.SqlClient.SqlCommand(
+                    "DELETE FROM [dbo].[zSCP2_ItemMeter] WHERE ItemMeterKey=@mk", conn, tx))
+                { del.Parameters.AddWithValue("@mk", k); del.ExecuteNonQuery(); }
+            }
+        }
+
+        private static string NormalizeMeterRole(object roleValue)
+        {
+            string role = (roleValue == null || roleValue == DBNull.Value) ? "NA" : roleValue.ToString().Trim().ToUpperInvariant();
+            return (role == "BK" || role == "CL") ? role : "NA";
+        }
+
+        private static void AddMeterRowParams(System.Data.SqlClient.SqlCommand cmd, DataRow r)
+        {
+            cmd.Parameters.AddWithValue("@min", r["MinimumCharges"] == DBNull.Value ? (object)0m : r["MinimumCharges"]);
+            cmd.Parameters.AddWithValue("@rate", r["ChargesRate"] == DBNull.Value ? (object)0m : r["ChargesRate"]);
+            cmd.Parameters.AddWithValue("@mp", r["MeterMultiPriceCode"] == null || r["MeterMultiPriceCode"] == DBNull.Value ? "" : r["MeterMultiPriceCode"].ToString());
+            cmd.Parameters.AddWithValue("@reb", r["RebateQtyInPercent"] == DBNull.Value ? (object)0m : r["RebateQtyInPercent"]);
+            cmd.Parameters.AddWithValue("@foc", r["FOCQty"] == DBNull.Value ? (object)0m : r["FOCQty"]);
+            cmd.Parameters.AddWithValue("@init", r["InitialReading"] == DBNull.Value ? (object)0m : r["InitialReading"]);
+        }
+
+        // Decide what a context column actually stores. Unbound item: the value as typed. Bound item:
+        // untouched (== load snapshot) keeps whatever the row already stored (override or inherit-'');
+        // touched stores '' when it now matches the contract (re-inherit) else the override itself.
+        private static string CtxStore(string newVal, string loadedVal, bool loadedValid, string rawVal, string contractVal, bool hasContract)
+        {
+            string nv = (newVal ?? "").Trim();
+            if (!hasContract) return nv;
+            if (loadedValid && nv == (loadedVal ?? "").Trim()) return rawVal ?? "";
+            return string.Equals(nv, (contractVal ?? "").Trim(), StringComparison.OrdinalIgnoreCase) ? "" : nv;
+        }
+
+        private static object CtxStoreDate(DateTime? newVal, DateTime? loadedVal, bool loadedValid, object rawVal, DateTime? contractVal, bool hasContract)
+        {
+            if (!hasContract) return newVal.HasValue ? (object)newVal.Value : DBNull.Value;
+            if (loadedValid)
+            {
+                bool sameAsLoaded = (!newVal.HasValue && !loadedVal.HasValue)
+                    || (newVal.HasValue && loadedVal.HasValue && newVal.Value.Date == loadedVal.Value.Date);
+                if (sameAsLoaded) return rawVal == null ? DBNull.Value : rawVal;
+            }
+            if (newVal.HasValue && contractVal.HasValue && newVal.Value.Date == contractVal.Value.Date) return DBNull.Value;
+            return newVal.HasValue ? (object)newVal.Value : DBNull.Value;
+        }
+
+        private static string LCtx(ItemEditData d, string key)
+        {
+            string v;
+            return (d.LoadedCtx != null && d.LoadedCtx.TryGetValue(key, out v)) ? v : null;
+        }
+
+        private static string DGet(System.Collections.Generic.Dictionary<string, string> dict, string key)
+        {
+            string v;
+            return dict.TryGetValue(key, out v) ? v : "";
+        }
+
         // Auto-record a debtor-ownership-history row when the item's customer (its contract's debtor)
         // changes: close the previous open period and open a new one. No-op if unchanged.
         // Writes to the v2 table zSCP2_ItemDebtorHistory (keyed to zSCP2_Item.ItemKey) — NOT the legacy
         // zSCP_ServiceItemDebtorHistory, whose FK targets the v1 zSCP_ServiceItem.
-        private static void RecordDebtorHistory(System.Data.SqlClient.SqlConnection conn,
+        // Returns true when an ownership change was actually recorded (owner differed from the last
+        // open period). The effective owner is the contract's debtor, or OwnerDebtorCode when the item
+        // has no contract — so a re-attach to a contract of the SAME customer records nothing.
+        private static bool RecordDebtorHistory(System.Data.SqlClient.SqlConnection conn,
             System.Data.SqlClient.SqlTransaction tx, ItemEditData d, long itemKey)
         {
             string debtor = "", contractNo = "";
             using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
-                "SELECT ISNULL(c.DebtorCode,''), ISNULL(c.ContractNo,'') FROM [dbo].[zSCP2_Item] i " +
+                "SELECT ISNULL(COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')),''), ISNULL(c.ContractNo,'') FROM [dbo].[zSCP2_Item] i " +
                 "LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey=i.ContractKey WHERE i.ItemKey=@ik", conn, tx))
             {
                 q.Parameters.AddWithValue("@ik", itemKey);
                 using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { debtor = r.GetString(0).Trim(); contractNo = r.GetString(1).Trim(); } }
             }
-            if (debtor.Length == 0) return;
+            if (debtor.Length == 0) return false;
 
             long openKey = 0; string openDebtor = "";
             using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
@@ -1235,7 +1974,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 q.Parameters.AddWithValue("@ik", itemKey);
                 using (System.Data.SqlClient.SqlDataReader r = q.ExecuteReader()) { if (r.Read()) { openKey = r.GetInt64(0); openDebtor = r.GetString(1).Trim(); } }
             }
-            if (openDebtor == debtor) return;   // unchanged -> nothing to record
+            if (openDebtor == debtor) return false;   // unchanged -> nothing to record
 
             if (openKey > 0)
                 using (System.Data.SqlClient.SqlCommand u = new System.Data.SqlClient.SqlCommand(
@@ -1253,15 +1992,148 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ins.Parameters.AddWithValue("@cno", contractNo);
                 ins.ExecuteNonQuery();
             }
+            return true;
+        }
+
+        // ===================== Change Ownership =====================
+        // Ownership = the item's contract (owner is that contract's debtor), or a customer directly
+        // when contract-less (OwnerDebtorCode). Applied immediately in its own transaction; a real
+        // owner change closes the open history period and opens a new one on the history tab.
+
+        private void BarChangeOwner_Click(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            string cur = "(none)";
+            try
+            {
+                DataTable dt = _db.GetDataTable(OwnershipQuery(_data.ItemKey), false);
+                if (dt.Rows.Count > 0)
+                {
+                    string cno = dt.Rows[0]["ContractNo"] as string ?? "";
+                    string owner = dt.Rows[0]["OwnerCode"] as string ?? "";
+                    string name = dt.Rows[0]["CompanyName"] as string ?? "";
+                    string who = name.Length > 0 ? owner + " — " + name : owner;
+                    cur = cno.Length > 0 ? "Contract " + cno + "   (" + who + ")"
+                        : (owner.Length > 0 ? who + "   (no contract)" : "(none)");
+                }
+            }
+            catch { }
+            using (zSCP2_ChangeOwnership_Form dlg = new zSCP2_ChangeOwnership_Form(_db, cur))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                try { ApplyOwnershipChange(dlg.ToContract, dlg.SelectedContractKey, dlg.SelectedDebtorCode); }
+                catch (Exception ex) { XtraMessageBox.Show("Ownership change failed:\r\n" + ex.Message, "Error"); }
+            }
+        }
+
+        private static string OwnershipQuery(long itemKey)
+        {
+            return
+                "SELECT TOP 1 ISNULL(c.ContractNo,'') AS ContractNo, " +
+                "ISNULL(COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')),'') AS OwnerCode, " +
+                "ISNULL(dd.CompanyName,'') AS CompanyName " +
+                "FROM [dbo].[zSCP2_Item] i " +
+                "LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                "LEFT JOIN [dbo].[Debtor] dd ON dd.AccNo = COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')) " +
+                "WHERE i.ItemKey=" + itemKey;
+        }
+
+        private void ApplyOwnershipChange(bool toContract, long contractKey, string debtorCode)
+        {
+            bool changed;
+            using (System.Data.SqlClient.SqlConnection cn = new System.Data.SqlClient.SqlConnection(_db.ConnectionString))
+            {
+                cn.Open();
+                using (System.Data.SqlClient.SqlTransaction tx = cn.BeginTransaction())
+                {
+                    try
+                    {
+                        using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                            toContract
+                                ? "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', LastModified=GETDATE() WHERE ItemKey=@ik"
+                                : "UPDATE [dbo].[zSCP2_Item] SET ContractKey=NULL, OwnerDebtorCode=@d, LastModified=GETDATE() WHERE ItemKey=@ik", cn, tx))
+                        {
+                            if (toContract) cmd.Parameters.AddWithValue("@ck", contractKey);
+                            else cmd.Parameters.AddWithValue("@d", debtorCode ?? "");
+                            cmd.Parameters.AddWithValue("@ik", _data.ItemKey);
+                            cmd.ExecuteNonQuery();
+                        }
+                        changed = RecordDebtorHistory(cn, tx, _data, _data.ItemKey);
+                        tx.Commit();
+                    }
+                    catch { tx.Rollback(); throw; }
+                }
+            }
+            RefreshOwnershipHeader();
+            RefreshDebtorHistoryTab();
+            XtraMessageBox.Show(changed
+                ? "Ownership transferred — recorded in the Debtors Ownership History tab."
+                : "Binding updated — same customer, so no ownership change was recorded.",
+                "Change Ownership", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Repaint the read-only Contract No + Customer boxes from the item's CURRENT ownership.
+        private void RefreshOwnershipHeader()
+        {
+            if (_txtParentContractRO == null) return;
+            string cno = _parentContractNo ?? "", owner = "", name = "";
+            try
+            {
+                DataTable dt = _data.ItemKey > 0
+                    ? _db.GetDataTable(OwnershipQuery(_data.ItemKey), false)
+                    : _db.GetDataTable(
+                        "SELECT TOP 1 ISNULL(c.ContractNo,'') AS ContractNo, ISNULL(c.DebtorCode,'') AS OwnerCode, " +
+                        "ISNULL(dd.CompanyName,'') AS CompanyName " +
+                        "FROM [dbo].[zSCP2_Contract] c LEFT JOIN [dbo].[Debtor] dd ON dd.AccNo = c.DebtorCode " +
+                        "WHERE c.ContractNo='" + cno.Replace("'", "''") + "'", false);
+                if (dt.Rows.Count > 0)
+                {
+                    cno = dt.Rows[0]["ContractNo"] as string ?? "";
+                    owner = dt.Rows[0]["OwnerCode"] as string ?? "";
+                    name = dt.Rows[0]["CompanyName"] as string ?? "";
+                }
+            }
+            catch { }
+            _txtParentContractRO.Text = cno.Length > 0 ? cno : "(no contract — owned by customer)";
+            _txtCustomerRO.Text = owner.Length > 0 ? (name.Length > 0 ? owner + " — " + name : owner) : "";
+        }
+
+        private void RefreshDebtorHistoryTab()
+        {
+            if (_pgDebtorHist == null) return;
+            _pgDebtorHist.Controls.Clear();
+            BuildDebtorHistoryTab(_pgDebtorHist);
         }
 
         private void ItemCodeHeader_Changed(object sender, EventArgs e)
         {
             _dirty = true;
+            PopulateSerialCombo();
             if (_sluItemCode.EditValue == null || _itemHdrLookup == null) return;
             string code = _sluItemCode.EditValue.ToString().Trim();
             DataRow[] f = _itemHdrLookup.Select("ItemCode='" + code.Replace("'", "''") + "'");
             if (f.Length > 0 && string.IsNullOrWhiteSpace(TxtDescription.Text)) TxtDescription.Text = f[0]["Description"].ToString();
+        }
+
+        // Machine Serial No is a TYPEABLE combo: its dropdown lists the serial numbers registered for
+        // the chosen Item Code (dbo.ItemSerialNo), but any free-text serial is still accepted.
+        private void PopulateSerialCombo()
+        {
+            string keep = TxtSerial.Text;
+            TxtSerial.Properties.Items.Clear();
+            string ic = _sluItemCode == null || _sluItemCode.EditValue == null ? "" : _sluItemCode.EditValue.ToString().Trim();
+            if (ic.Length > 0)
+            {
+                try
+                {
+                    DataTable dt = _db.GetDataTable(
+                        "SELECT SerialNumber FROM [dbo].[ItemSerialNo] WHERE ItemCode='" + ic.Replace("'", "''") +
+                        "' ORDER BY SerialNumber", false);
+                    foreach (DataRow r in dt.Rows)
+                        TxtSerial.Properties.Items.Add(r["SerialNumber"].ToString());
+                }
+                catch { }
+            }
+            TxtSerial.Text = keep;
         }
 
         private void LoadGradeLookup()
@@ -1376,20 +2248,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             view.OptionsView.ShowGroupPanel = false;
             page.Controls.Add(grid);
 
-            if (_data.ItemKey <= 0) return;   // a brand-new item has no history yet
-            try
+            // Always bind SOMETHING so the column headers render. A brand-new item has no history yet,
+            // but an empty grid with no columns at all just looks broken.
+            DataTable dt = null;
+            if (_data.ItemKey > 0)
             {
-                DataTable dt = _db.GetDataTable(
-                    "SELECT h.DebtorCode AS [Debtor Code], ISNULL(d.CompanyName,'') AS [Debtor Name], " +
-                    "h.GradeCode AS [Service Item Grade], h.ContractNo AS [Contract No], " +
-                    "h.StartDate AS [Service Start Date], h.EndDate AS [End Date] " +
-                    "FROM [dbo].[zSCP2_ItemDebtorHistory] h LEFT JOIN [dbo].[Debtor] d ON d.AccNo=h.DebtorCode " +
-                    "WHERE h.ItemKey=" + _data.ItemKey + " ORDER BY h.StartDate", false);
-                grid.DataSource = dt;
-                view.PopulateColumns();
-                view.BestFitColumns();
+                try
+                {
+                    dt = _db.GetDataTable(
+                        "SELECT h.DebtorCode AS [Debtor Code], ISNULL(d.CompanyName,'') AS [Debtor Name], " +
+                        "h.GradeCode AS [Service Item Grade], h.ContractNo AS [Contract No], " +
+                        "h.StartDate AS [Service Start Date], h.EndDate AS [End Date], h.Remark AS [Remark] " +
+                        "FROM [dbo].[zSCP2_ItemDebtorHistory] h LEFT JOIN [dbo].[Debtor] d ON d.AccNo=h.DebtorCode " +
+                        "WHERE h.ItemKey=" + _data.ItemKey + " ORDER BY h.StartDate", false);
+                }
+                catch { dt = null; }
             }
-            catch { }
+            if (dt == null) dt = EmptyDebtorHistoryTable();
+            grid.DataSource = dt;
+            view.PopulateColumns();
+            view.BestFitColumns();
+        }
+
+        // Same shape as the history SELECT, so the grid shows its headers even with no rows.
+        private static DataTable EmptyDebtorHistoryTable()
+        {
+            DataTable t = new DataTable();
+            t.Columns.Add("Debtor Code", typeof(string));
+            t.Columns.Add("Debtor Name", typeof(string));
+            t.Columns.Add("Service Item Grade", typeof(string));
+            t.Columns.Add("Contract No", typeof(string));
+            t.Columns.Add("Service Start Date", typeof(DateTime));
+            t.Columns.Add("End Date", typeof(DateTime));
+            t.Columns.Add("Remark", typeof(string));
+            return t;
         }
 
         // Preventive Maintenance tab (Image #126): Active gate + interval + service dates + Dept/Job/Location.
@@ -1510,6 +2402,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void BuildItemSparePartsGrid(System.Windows.Forms.Control parent)
         {
             DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
+            _grpItemSp = grp;
             grp.Text = "Item Provided";
             grp.Dock = System.Windows.Forms.DockStyle.Fill;
 
@@ -1564,20 +2457,41 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _itemSpItemLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
             _itemSpItemRepo = zSCP2_Contract_Form.MakeItemCodeRepo(_itemSpItemLookup);
             _gridItemSp.RepositoryItems.Add(_itemSpItemRepo);
+            _itemSpSerialLookup = zSCP2_Contract_Form.LoadSerialLookup(_db);
+            _itemSpSerialRepo = zSCP2_Contract_Form.MakeSerialRepo(_itemSpSerialLookup);
+            _gridItemSp.RepositoryItems.Add(_itemSpSerialRepo);
+            // Serial No: display stays raw text; the EDIT-time dropdown lists only the row's Item Code
+            // serials (empty until one is picked). See ItemSp_SerialEditor.
+            _viewItemSp.CustomRowCellEditForEditing += new DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventHandler(ItemSp_SerialEditor);
 
             _itemSpareParts = _data.SpareParts != null ? _data.SpareParts.Copy() : zSCP2_Contract_Form.CreateSparePartsTable();
+            if (!_itemSpareParts.Columns.Contains("SerialNumber")) _itemSpareParts.Columns.Add("SerialNumber", typeof(string));
             _gridItemSp.DataSource = _itemSpareParts.DefaultView;
             _itemSpareParts.DefaultView.Sort = "Pos";
-            zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck, _itemSpItemRepo);
+            zSCP2_Contract_Form.ConfigureSpareView(_viewItemSp, _itemSpCheck, _itemSpItemRepo, _itemSpSerialRepo);
             _viewItemSp.RowHeight = 26;   // ~20% taller rows for easier editing
             RenumberItemSp();
 
             _viewItemSp.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(ItemSp_CellValueChanged);
         }
 
+        // Serial No edit-time picker: dropdown filtered to the row's Item Code (empty until one is
+        // picked). No ColumnEdit is set for display, so other rows' serials always render as raw text.
+        private void ItemSp_SerialEditor(object sender, DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "SerialNumber") return;
+            string code = Convert.ToString(_viewItemSp.GetRowCellValue(e.RowHandle, "ItemCode") ?? "").Trim();
+            DataView dv = new DataView(_itemSpSerialLookup);
+            dv.RowFilter = code.Length == 0 ? "1=0" : "ItemCode='" + code.Replace("'", "''") + "'";
+            _itemSpSerialRepo.DataSource = dv;
+            e.RepositoryItem = _itemSpSerialRepo;
+        }
+
         private void ItemSp_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             _dirty = true;
+            // Keep the meter grid's derived Item Code cells in sync with provided-row edits.
+            if (GridViewMeters != null) GridViewMeters.RefreshData();
             if (e.Column.FieldName == "Amount" || e.Column.FieldName == "TaxAmount" ||
                 e.Column.FieldName == "AmountAfterTax" || e.Column.FieldName == "No") return;
             _viewItemSp.PostEditor();

@@ -44,6 +44,10 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_METER_API_TIMEOUT_MS = "METER_API_TIMEOUT_MS";
         public const int DEFAULT_METER_API_TIMEOUT_MS = 15000;
 
+        /// <summary>Name of the active zSCP2_ApiProfile row (Plugin Option &gt; API tab). Applying a
+        /// profile copies its BaseUrl/Token/Mode/Timeout into the four METER_API_* keys above.</summary>
+        public const string KEY_METER_API_ACTIVE_PROFILE = "METER_API_ACTIVE_PROFILE";
+
         /// <summary>Default day-of-month (1..31) used when creating a new contract.</summary>
         public const string KEY_DEFAULT_BILLING_DAY = "DEFAULT_BILLING_DAY";
         public const int DEFAULT_BILLING_DAY_VALUE = 1;
@@ -56,6 +60,12 @@ namespace ServiceContractPhotocopier.Data
         /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
         public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
+
+        /// <summary>Native Document Numbering Format (DocType IV) used by meter-billing invoices.
+        /// Configurable in Service Option; the builder falls back to the IV default when the named
+        /// format doesn't exist in dbo.DocNoFormat.</summary>
+        public const string KEY_METER_INVOICE_DOCNO_FORMAT = "METER_INVOICE_DOCNO_FORMAT";
+        public const string DEFAULT_METER_INVOICE_DOCNO_FORMAT = "MR FORMAT";
 
         /// <summary>Reads an int config value, falling back to <paramref name="defaultValue"/> on missing/invalid.</summary>
         public static int GetInt(DBSetting db, string key, int defaultValue)

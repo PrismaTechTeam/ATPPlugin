@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.ServiceContract.OperationForms
+﻿namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 {
     partial class zSCP2_Contract_Form
     {
@@ -87,6 +87,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraTab.XtraTabControl TabMain;
         private DevExpress.XtraTab.XtraTabPage PageItems;
         private DevExpress.XtraEditors.PanelControl PnlItemBar;
+        private DevExpress.XtraEditors.SimpleButton BtnItemCreate;
+        private DevExpress.XtraEditors.SimpleButton BtnItemEdit;
+        private DevExpress.XtraEditors.SimpleButton BtnItemDelete;
         private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
         private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
         private DevExpress.XtraEditors.LabelControl LblItemsHint;
@@ -195,6 +198,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PageItems = new DevExpress.XtraTab.XtraTabPage();
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
             this.PnlItemBar = new DevExpress.XtraEditors.PanelControl();
+            this.BtnItemCreate = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemEdit = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemDelete = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
             this.LblItemsHint = new DevExpress.XtraEditors.LabelControl();
@@ -943,6 +949,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // PnlItemBar
             //
             this.PnlItemBar.Controls.Add(this.LblItemsHint);
+            this.PnlItemBar.Controls.Add(this.BtnItemCreate);
+            this.PnlItemBar.Controls.Add(this.BtnItemEdit);
+            this.PnlItemBar.Controls.Add(this.BtnItemDelete);
             this.PnlItemBar.Controls.Add(this.BtnItemAttach);
             this.PnlItemBar.Controls.Add(this.BtnItemDetach);
             this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
@@ -951,33 +960,63 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PnlItemBar.Size = new System.Drawing.Size(1174, 34);
             this.PnlItemBar.TabIndex = 0;
             //
+            // BtnItemCreate
+            //
+            this.BtnItemCreate.ImageOptions.ImageUri.Uri = "New;Size16x16";
+            this.BtnItemCreate.Location = new System.Drawing.Point(6, 5);
+            this.BtnItemCreate.Name = "BtnItemCreate";
+            this.BtnItemCreate.Size = new System.Drawing.Size(150, 24);
+            this.BtnItemCreate.TabIndex = 0;
+            this.BtnItemCreate.Text = "Create Service Item";
+            this.BtnItemCreate.Click += new System.EventHandler(this.BtnAddItem_Click);
+            //
+            // BtnItemEdit
+            //
+            this.BtnItemEdit.ImageOptions.ImageUri.Uri = "Edit;Size16x16";
+            this.BtnItemEdit.Location = new System.Drawing.Point(162, 5);
+            this.BtnItemEdit.Name = "BtnItemEdit";
+            this.BtnItemEdit.Size = new System.Drawing.Size(140, 24);
+            this.BtnItemEdit.TabIndex = 1;
+            this.BtnItemEdit.Text = "Edit Service Item";
+            this.BtnItemEdit.Click += new System.EventHandler(this.BtnEditItem_Click);
+            //
+            // BtnItemDelete
+            //
+            this.BtnItemDelete.ImageOptions.ImageUri.Uri = "Delete;Size16x16";
+            this.BtnItemDelete.Location = new System.Drawing.Point(308, 5);
+            this.BtnItemDelete.Name = "BtnItemDelete";
+            this.BtnItemDelete.Size = new System.Drawing.Size(150, 24);
+            this.BtnItemDelete.TabIndex = 2;
+            this.BtnItemDelete.Text = "Delete Service Item";
+            this.BtnItemDelete.Click += new System.EventHandler(this.BtnDelItem_Click);
+            //
             // BtnItemAttach
             //
             this.BtnItemAttach.ImageOptions.ImageUri.Uri = "Add;Size16x16";
-            this.BtnItemAttach.Location = new System.Drawing.Point(6, 5);
+            this.BtnItemAttach.Location = new System.Drawing.Point(478, 5);
             this.BtnItemAttach.Name = "BtnItemAttach";
             this.BtnItemAttach.Size = new System.Drawing.Size(200, 24);
-            this.BtnItemAttach.TabIndex = 0;
+            this.BtnItemAttach.TabIndex = 3;
             this.BtnItemAttach.Text = "Attach existing Service Item";
             this.BtnItemAttach.Click += new System.EventHandler(this.BtnItemAttach_Click);
             //
             // BtnItemDetach
             //
             this.BtnItemDetach.ImageOptions.ImageUri.Uri = "Remove;Size16x16";
-            this.BtnItemDetach.Location = new System.Drawing.Point(212, 5);
+            this.BtnItemDetach.Location = new System.Drawing.Point(684, 5);
             this.BtnItemDetach.Name = "BtnItemDetach";
             this.BtnItemDetach.Size = new System.Drawing.Size(210, 24);
-            this.BtnItemDetach.TabIndex = 1;
+            this.BtnItemDetach.TabIndex = 4;
             this.BtnItemDetach.Text = "Remove selected from contract";
             this.BtnItemDetach.Click += new System.EventHandler(this.BtnItemDetach_Click);
             //
             // LblItemsHint
             //
             this.LblItemsHint.Appearance.ForeColor = System.Drawing.Color.FromArgb(198, 40, 40);
-            this.LblItemsHint.Location = new System.Drawing.Point(440, 11);
+            this.LblItemsHint.Location = new System.Drawing.Point(904, 11);
             this.LblItemsHint.Name = "LblItemsHint";
-            this.LblItemsHint.Size = new System.Drawing.Size(400, 13);
-            this.LblItemsHint.TabIndex = 2;
+            this.LblItemsHint.Size = new System.Drawing.Size(260, 13);
+            this.LblItemsHint.TabIndex = 5;
             this.LblItemsHint.Text = "";
             //
             // GridItems
@@ -1023,7 +1062,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ColSerial
             //
-            this.ColSerial.Caption = "Serial Number";
+            this.ColSerial.Caption = "Machine Serial";
             this.ColSerial.FieldName = "SerialNumber";
             this.ColSerial.Name = "ColSerial";
             this.ColSerial.Visible = true;
