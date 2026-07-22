@@ -834,3 +834,40 @@ agents mapped the engine; user decided **NET** (FOC/rebate really deducted, grid
 - Bugfix carried in: rental detection `StartsWith("RA")` → `ScpStrategy.IsRentalMeterCode`.
 - Build green, deployed. Tier math verified on real data (SQL replication of the marginal algorithm).
   STILL TO DO: live UI generate (flaui) end-to-end confirmation of an actual invoice amount.
+
+## 2026-07-22 — COMMIT 76b7c9b + Step A: flexible FOC reset period (accrual)
+
+Committed the whole session (strategy builder + audit/history + rental + unified NET engine + tiers +
+group pool) as 76b7c9b (68 files) before starting the reset feature.
+
+Step A — per-contract FOC/Rebate RESET period (the allowance refreshes every reset period; finer-than-
+billing periods ACCRUE):
+- Schema: zSCP2_Contract v6 +FOCResetUnit char(1) 'M'(default)/'W'/'D' +FOCResetN int (N for 'D').
+- Engine: MeterBillLine.FocResetCount; ComputeCharge scales the FOC allowance by it — flat path
+  billed = usage - FOC*resetCount; ladder path scales the tier boundaries * resetCount (its 0.00 FOC
+  band too). ScpMultiPrice.MarginalCharge gained a boundaryScale param; ScpMultiPrice.FocResetCount(
+  unit,n,periodDays) = round(periodDays/resetDays), min 1 (Monthly=1; ~30d month + Weekly≈4; +3-day≈10).
+- Wiring: Meter Reading load SQL selects c.FOCResetUnit/N; grid carries them (hidden); FocResetCountFor(r)
+  = FocResetCount(unit,n, DaysInMonth(selYear,selMonth)) set on ln in Recalc + generate.
+- Contract UI: "FOC Reset" combo (Monthly/Weekly/Every N days) + N spin in the Strategy tab top bar;
+  loaded (SELECT *)/saved (Insert+Update SQL + AddContractParams @focresetunit/@focresetn).
+- ROUNDING: round-to-nearest whole reset period (user can switch to floor — one line in FocResetCount).
+- Deployed + migration verified (columns present; note migrations finish slightly AFTER the
+  "StartWithStartupInfo" log line — re-query if a just-added column reads absent).
+
+STILL TO DO — Step B: flexible BILLING period (generate per week / date range, not only month) — reworks
+the monthly Meter Reading module (period selector, baseline query, MeterEntry period stamping). Bigger.
+
+## 2026-07-22 — Group FOC pool = pooled + REPLACES per-meter FOC (spec confirmed)
+
+User clarified the group FOC: each machine has its own usage, the free quota is POOLED; group is free up to
+LimitQty across the group TOTAL, excess billed. "group FOC 5000, printed 10000 -> pay 5000; group FOC 20000
+-> all waived". KEY: the group limit is the group's TOTAL free — it REPLACES per-meter ("normal") FOC for
+the covered machines (not stacked), else the total free would exceed the limit.
+
+Rewrote MeterReadingIntegration_Form.ApplyGroupLimit: totalUsage = Σ members' RAW usage;
+poolUsed = min(LimitQty, totalUsage); each member's share = round(poolUsed × usage/totalUsage) (last gets
+the remainder so shares sum exactly to poolUsed); l.Foc = share (REPLACE, not +=); recompute. Proportional
+(order-independent, fair); rebate still applies. Flat-rate meters only — a ladder meter keeps its ladder FOC
+(ComputeCharge ignores ln.Foc when a ladder is present), so don't put ladder meters in a group pool.
+Docs (DhaiDev/ATP-Docs) updated: strategy.md #6 + billing-calculation.md.

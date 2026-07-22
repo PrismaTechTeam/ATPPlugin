@@ -45,17 +45,18 @@ namespace ServiceContractPhotocopier.Classes
         /// how many copies fell in bands priced 0.00 (the FOC allowance) — the caller uses that to show the
         /// billed (non-free) quantity on the invoice. Beyond the last boundary the last band's price applies.</summary>
         public static decimal MarginalCharge(Dictionary<string, List<decimal[]>> ladders,
-            string code, decimal usage, out decimal freeCopies)
+            string code, decimal usage, int boundaryScale, out decimal freeCopies)
         {
             freeCopies = 0m;
             List<decimal[]> tiers;
             if (usage <= 0m || ladders == null || string.IsNullOrEmpty(code)
                 || !ladders.TryGetValue(code, out tiers) || tiers.Count == 0) return 0m;
+            if (boundaryScale < 1) boundaryScale = 1;   // FOC reset accrual: bands are per reset period
 
             decimal charge = 0m, remaining = usage, prevBound = 0m, lastPrice = 0m;
             foreach (decimal[] t in tiers)   // ascending by boundary
             {
-                decimal bound = t[0], price = t[1];
+                decimal bound = t[0] * boundaryScale, price = t[1];
                 lastPrice = price;
                 decimal bandWidth = bound - prevBound;
                 if (bandWidth < 0m) bandWidth = 0m;
@@ -86,5 +87,19 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         private static decimal AsDec(object v) { return v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v); }
+
+        /// <summary>How many FOC-reset periods fall in a billed span of <paramref name="periodDays"/> days.
+        /// Unit 'M' (or default) = monthly reset = 1 per monthly bill; 'W' = weekly (7d); 'D' = every N days.
+        /// Rounds to the nearest whole reset period, minimum 1 (e.g. ~30-day month + weekly -> 4; + 3-day -> 10).</summary>
+        public static int FocResetCount(string unit, int n, int periodDays)
+        {
+            if (periodDays <= 0) periodDays = 30;
+            int resetDays;
+            if (unit == "W") resetDays = 7;
+            else if (unit == "D") resetDays = n > 0 ? n : 30;
+            else return 1;   // 'M' / empty -> monthly reset = one allowance per monthly bill
+            int c = (int)Math.Round((decimal)periodDays / resetDays, MidpointRounding.AwayFromZero);
+            return c < 1 ? 1 : c;
+        }
     }
 }

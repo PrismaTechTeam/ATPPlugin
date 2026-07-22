@@ -42,6 +42,8 @@ namespace ServiceContractPhotocopier.Classes
         public decimal BillCopies;         // the NET qty the invoice line bills (usage - FOC)
         public string MultiPriceCode = ""; // tiered-pricing ladder code (per-meter override or meter type)
         public decimal EffUnitPrice;       // the resolved per-copy price (multi-price tier, or flat rate)
+        public int FocResetCount = 1;      // FOC allowance multiplier = reset periods in this billed span
+                                           // (1 = monthly reset on a monthly bill; 4 ≈ weekly reset billed monthly)
         public DateTime? RentalStartDate;  // n/N anchor
         public int RentalMonths;           // N (0 = open-ended, no n/N text)
         public char RentalBasis = 'A';     // A accrual / P prepayment
@@ -89,18 +91,22 @@ namespace ServiceContractPhotocopier.Classes
             //   (a) multi-price ladder present -> MARGINAL charge (its 0.00 first band IS the FOC allowance);
             //       billed = usage - freeCopies, effective price = grossCharge / billed (blended).
             //   (b) no ladder -> flat rate with the FOCQty column deducted (NET).
+            // FOC reset accrual: the free allowance refreshes every reset period, so a bill spanning N
+            // reset periods grants N x the base allowance (FocResetCount; 1 = the simple monthly case).
+            int resetN = ln.FocResetCount < 1 ? 1 : ln.FocResetCount;
             decimal billed, effUnit;
             if (ScpMultiPrice.HasLadder(ladders, ln.MultiPriceCode))
             {
                 decimal freeCopies;
-                decimal gross = ScpMultiPrice.MarginalCharge(ladders, ln.MultiPriceCode, usage, out freeCopies);
+                // Scale the ladder's boundaries (its FOC bands + tier breaks are "per reset period").
+                decimal gross = ScpMultiPrice.MarginalCharge(ladders, ln.MultiPriceCode, usage, resetN, out freeCopies);
                 billed = usage - freeCopies;
                 if (billed < 0m) billed = 0m;
                 effUnit = billed > 0m ? Math.Round(gross / billed, 6) : 0m;
             }
             else
             {
-                billed = usage - ln.Foc;
+                billed = usage - ln.Foc * resetN;
                 if (billed < 0m) billed = 0m;
                 effUnit = ln.Rate;
             }

@@ -902,6 +902,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "COALESCE(NULLIF(m.MachineSerialNo,''), i.SerialNumber) AS SerialNumber, " +
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                     "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
+                    "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
@@ -981,6 +982,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["UnitPrice"] = Dec(r["UnitPrice"]);
                     g["FOCQty"] = Dec(r["FOCQty"]);
                     g["MultiPriceCode"] = S(r["MultiPriceCode"]);
+                    g["FOCResetUnit"] = S(r["FOCResetUnit"]);
+                    g["FOCResetN"] = r["FOCResetN"] == DBNull.Value ? 0 : Convert.ToInt32(r["FOCResetN"]);
                     g["RebatePct"] = Dec(r["RebatePct"]);
                     if (r["LastDate"] != DBNull.Value) g["LastReadDate"] = Convert.ToDateTime(r["LastDate"]);
                     g["LastReading"] = (r["LastReading"] == DBNull.Value) ? Dec(r["InitReading"]) : Dec(r["LastReading"]);
@@ -1046,6 +1049,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("UnitPrice", typeof(decimal));
             dt.Columns.Add("FOCQty", typeof(decimal));
             dt.Columns.Add("MultiPriceCode", typeof(string));   // tiered-pricing ladder code (hidden; drives the tier price)
+            dt.Columns.Add("FOCResetUnit", typeof(string));     // contract FOC reset period M/W/D (hidden)
+            dt.Columns.Add("FOCResetN", typeof(int));           // N for 'D' (hidden)
             dt.Columns.Add("RebatePct", typeof(decimal));
             dt.Columns.Add("LastReadDate", typeof(DateTime));
             dt.Columns.Add("LastAuditDate", typeof(DateTime));   // API audit date of the CURRENT fetched reading
@@ -1118,7 +1123,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // the column chooser (right-click the header -> Column Chooser).
             // MachineStatus is VISIBLE now (green=ONLINE / orange=OFFLINE cell tint) — it replaced the
             // old Online/Offline tabs.
-            foreach (string h in new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "Status", "EntrySource", "FetchedReading", "HasConflict" })
+            foreach (string h in new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict" })
             {
                 GridColumn hc = GridViewMeter.Columns[h];
                 if (hc == null) continue;
@@ -2098,6 +2103,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Multi-price tier ladders for this billing run (code -> ascending [boundary, unitPrice]).
         private System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<decimal[]>> _ladders;
 
+        // FOC-reset accrual multiplier for a row: how many of the contract's reset periods fall in the
+        // billed (monthly) span. 'M'/default = 1; 'W' ≈ 4; 'D' N ≈ daysInMonth/N. Applied to the FOC allowance.
+        private int FocResetCountFor(DataRow r)
+        {
+            string unit = r.Table.Columns.Contains("FOCResetUnit") ? S(r["FOCResetUnit"]) : "M";
+            int n = r.Table.Columns.Contains("FOCResetN") && r["FOCResetN"] != DBNull.Value ? Convert.ToInt32(r["FOCResetN"]) : 0;
+            int periodDays = System.DateTime.DaysInMonth(SelectedYear(), SelectedMonth());
+            return ServiceContractPhotocopier.Classes.ScpMultiPrice.FocResetCount(unit, n, periodDays);
+        }
+
         // Grid preview charge = the SAME engine the invoice uses (ScpInvoiceBuilder.ComputeCharge), so grid
         // and invoice can never diverge: NET (FOC copies + rebate deducted) + multi-price tier + min floor.
         private void Recalc(DataRow r)
@@ -2111,6 +2126,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ln.Foc = Dec(r["FOCQty"]);
             ln.RebatePct = Dec(r["RebatePct"]);
             ln.MultiPriceCode = S(r["MultiPriceCode"]);
+            ln.FocResetCount = FocResetCountFor(r);
             ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
             // Honour the user's "Use Min." tick (force the minimum charge) without clobbering their input.
             if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) ln.Charge = ln.MinCharges;
@@ -2182,6 +2198,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.Foc = Dec(r["FOCQty"]);
                 ln.RebatePct = Dec(r["RebatePct"]);
                 ln.MultiPriceCode = S(r["MultiPriceCode"]);
+                ln.FocResetCount = FocResetCountFor(r);
                 ln.IsFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
                 // Charge via the SAME engine the grid used, so the invoice matches the preview exactly
                 // (NET: FOC copies + rebate deducted, multi-price tier, min floor). Sets BillCopies / EffUnitPrice.
@@ -2262,10 +2279,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // (reach X% of target -> waive X% of the rental). FOC free months take precedence (they
         // already made the rental free). Rentals billed in a run with NO usage lines are NOT waived —
         // the evaluation can only see this run.
-        // GROUP FOC LIMIT: the whole group shares ONE free-copy pool (LimitQty), accumulated across the
-        // contract's usage meters that the rule covers (Scope BK/CL/both + optional Service Item set). The
-        // pooled free copies are allocated across the members (sequentially), reducing each line's billed
-        // copies; the excess is charged. Runs at generation (cross-machine — can't live in the per-row grid).
+        // GROUP FOC LIMIT: the whole group shares ONE free-copy pool (LimitQty) across the contract's
+        // covered usage meters (Scope BK/CL/both + optional Service Item set). Each machine has its OWN
+        // usage; the pool frees up to LimitQty across the GROUP TOTAL and the excess is charged:
+        //   freed = min(LimitQty, total group usage);  group pays for (total usage − freed).
+        // The pool REPLACES the per-meter ("normal") FOC for the covered machines (so "group FOC 5000,
+        // printed 10000 -> pay 5000" holds — it is the group's total free, not stacked on per-meter FOC).
+        // Allocated PROPORTIONALLY by each machine's usage (fair + order-independent); rebate still applies.
+        // Runs at generation (cross-machine — can't live in the per-row grid). Flat-rate meters; a machine
+        // on a multi-price ladder keeps its ladder's own FOC (don't put those in a group pool).
         private void ApplyGroupLimit(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs)
         {
             try
@@ -2303,17 +2325,30 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             return c != 0 ? c : a.ItemMeterKey.CompareTo(b.ItemMeterKey);
                         });
 
-                        decimal pool = rule.LimitQty;
-                        foreach (MeterBillLine l in members)
+                        if (members.Count == 0) continue;
+                        // Total RAW usage of the group; the pool frees min(LimitQty, total usage).
+                        decimal totalUsage = 0m;
+                        foreach (MeterBillLine l in members) totalUsage += l.Usage;
+                        if (totalUsage <= 0m) continue;
+                        decimal poolUsed = Math.Min(rule.LimitQty, totalUsage);
+
+                        // Proportional share per machine (whole copies; remainder to the last so the shares
+                        // sum EXACTLY to poolUsed). The share REPLACES the machine's per-meter FOC.
+                        decimal allocated = 0m;
+                        for (int i = 0; i < members.Count; i++)
                         {
-                            if (pool <= 0m) break;
-                            decimal free = Math.Min(pool, l.BillCopies);
-                            if (free <= 0m) continue;
-                            l.Foc += free;   // bump this machine's FOC by its slice of the shared pool
-                            pool -= free;
+                            MeterBillLine l = members[i];
+                            decimal share = (i == members.Count - 1)
+                                ? poolUsed - allocated
+                                : Math.Round(poolUsed * l.Usage / totalUsage, 0, MidpointRounding.AwayFromZero);
+                            if (share < 0m) share = 0m;
+                            if (share > l.Usage) share = l.Usage;   // never free more than this machine printed
+                            allocated += share;
+                            l.Foc = share;   // REPLACE per-meter FOC with the group pool share
                             ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(l, _ladders);
-                            l.StrategyNote = "GROUP FOC pool: " + free.ToString("0") + " free copies (of " +
-                                             rule.LimitQty.ToString("0") + " shared)";
+                            l.StrategyNote = "GROUP FOC: " + share.ToString("0") + " free (pool " +
+                                             poolUsed.ToString("0") + "/" + totalUsage.ToString("0") +
+                                             " of " + rule.LimitQty.ToString("0") + ")";
                         }
                     }
                 }

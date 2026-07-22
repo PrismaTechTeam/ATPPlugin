@@ -1017,6 +1017,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.Checked = AsStr(r["Inactive"]) == "Y";
             SluStrategy.EditValue = r.Table.Columns.Contains("StrategyCode") ? SetOrNull(AsStr(r["StrategyCode"])) : null;
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            if (_cmbFocReset != null)
+            {
+                string fru = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
+                _cmbFocReset.SelectedIndex = fru == "W" ? 1 : (fru == "D" ? 2 : 0);
+                if (r.Table.Columns.Contains("FOCResetN") && AsInt(r["FOCResetN"], 0) > 0) _spnFocResetN.EditValue = AsInt(r["FOCResetN"], 3);
+                _spnFocResetN.Visible = _cmbFocReset.SelectedIndex == 2;
+            }
 
             LoadItems();
             }
@@ -2614,6 +2621,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SimpleButton _btnCopyTemplate;
         private DevExpress.XtraEditors.SimpleButton _btnApplyMeters;
         private DevExpress.XtraEditors.LabelControl _lblStrategyTabHint;
+        private DevExpress.XtraEditors.LabelControl _lblFocReset;
+        private DevExpress.XtraEditors.ComboBoxEdit _cmbFocReset;   // FOC reset period: Monthly / Weekly / Every N days
+        private DevExpress.XtraEditors.SpinEdit _spnFocResetN;      // the N for "Every N days"
 
         private void BuildStrategyTab()
         {
@@ -2654,9 +2664,32 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             if (ChkRentalSeparate != null) { ChkRentalSeparate.Location = new System.Drawing.Point(760, 12); top.Controls.Add(ChkRentalSeparate); }
 
+            // FOC Reset period (contract-level): how often the FOC/rebate free allowance refreshes.
+            _lblFocReset = new DevExpress.XtraEditors.LabelControl();
+            _lblFocReset.Text = "FOC Reset";
+            _lblFocReset.Location = new System.Drawing.Point(10, 49);
+            top.Controls.Add(_lblFocReset);
+            _cmbFocReset = new DevExpress.XtraEditors.ComboBoxEdit();
+            _cmbFocReset.Location = new System.Drawing.Point(78, 45);
+            _cmbFocReset.Width = 130;
+            _cmbFocReset.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            _cmbFocReset.Properties.Items.AddRange(new object[] { "Monthly", "Weekly", "Every N days" });
+            _cmbFocReset.SelectedIndex = 0;   // default Monthly
+            _cmbFocReset.SelectedIndexChanged += new EventHandler(CmbFocReset_Changed);
+            top.Controls.Add(_cmbFocReset);
+            _spnFocResetN = new DevExpress.XtraEditors.SpinEdit();
+            _spnFocResetN.Location = new System.Drawing.Point(214, 45);
+            _spnFocResetN.Width = 55;
+            _spnFocResetN.Properties.IsFloatValue = false;
+            _spnFocResetN.Properties.MinValue = 1m; _spnFocResetN.Properties.MaxValue = 365m;
+            _spnFocResetN.EditValue = 3;
+            _spnFocResetN.Visible = false;
+            _spnFocResetN.EditValueChanged += delegate { if (!_loading) _dirty = true; };
+            top.Controls.Add(_spnFocResetN);
+
             _lblStrategyTabHint = new DevExpress.XtraEditors.LabelControl();
-            _lblStrategyTabHint.Text = "Copy from a Template, edit these rules (this contract's own copy), Save, then Apply to Meters to fill the BK/CL meters per each rule's scope.";
-            _lblStrategyTabHint.Location = new System.Drawing.Point(10, 48);
+            _lblStrategyTabHint.Text = "FOC/rebate allowance refreshes every reset period (default Monthly). Copy from a Template, edit rules, Save, then Apply to Meters.";
+            _lblStrategyTabHint.Location = new System.Drawing.Point(290, 49);
             top.Controls.Add(_lblStrategyTabHint);
 
             // Add the Fill control first, then the Top bar, so docking lays them out without overlap.
@@ -2681,6 +2714,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     items.Rows.Add(d.ItemKey, string.IsNullOrEmpty(d.ServiceItemNo) ? ("#" + d.ItemKey) : d.ServiceItemNo, d.Description ?? "");
             _strategyEditor.SetServiceItems(items);
             _strategyEditor.LoadRules(ServiceContractPhotocopier.Classes.ScpStrategy.LoadContractRules(_db, _contractKey));
+        }
+
+        private void CmbFocReset_Changed(object sender, EventArgs e)
+        {
+            if (_spnFocResetN != null) _spnFocResetN.Visible = _cmbFocReset.SelectedIndex == 2;   // Every N days
+            if (!_loading) _dirty = true;
         }
 
         private void BtnCopyTemplate_Click(object sender, EventArgs e)
@@ -3032,9 +3071,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, Inactive, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, FOCResetUnit, FOCResetN, Inactive, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@focresetunit,@focresetn,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -3051,6 +3090,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, " +
+                "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -3089,6 +3129,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@note", (object)(TxtNote.Text ?? ""));
             cmd.Parameters.AddWithValue("@strategy", SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
+            string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
+                : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
+            cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
+            cmd.Parameters.AddWithValue("@focresetn", focResetUnit == "D" && _spnFocResetN != null ? Convert.ToInt32(_spnFocResetN.Value) : 0);
             cmd.Parameters.AddWithValue("@inact", ChkInactive.Checked ? "Y" : "N");
         }
 
