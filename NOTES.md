@@ -624,3 +624,213 @@ Attention, Phone, Term, Area, Contract Type, Agent, Dept, Proj, More Header) are
 even for a new item with no contract chosen; they can only be filled by picking a contract.
 _lkCustomer is permanently disabled; ownership changes go through the Change Ownership dialog.
 ApplyContextEditability() now takes no parameter (always locks).
+
+**2026-07-18 data backfill:** zSCP2_Item.SerialNumber populated from the MASTER's
+serviceitem.departmentcode convention ("A/JWC14521" -> serial after "/"): 3,008 items updated
+(matched by ServiceItemNo = master serviceitemcode); 59 remain blank (58 master rows without "/"
++ locally created test items). One-time cross-DB data op (not a migration file).
+
+---
+
+## 2026-07-20 — Billing-day AUTO-FETCH snapshot + cutoff lock
+
+- New background service `ScpAutoFetchService` (started from PluginMain.BeforeLoad; in-process
+  System.Threading.Timer, checks every 10 min WHILE AUTOCOUNT IS OPEN — it is not a Windows
+  service; if the client PC has AutoCount closed over the cutoff, the snapshot runs on next open,
+  still honouring the cutoff timestamp).
+- Meter Reading > Setting: AUTO-FETCH enable checkbox + cutoff DAY (day BEFORE billing day / ON
+  billing day) + cutoff TIME (HH:mm, default 23:59). Keys: AUTO_FETCH_ENABLED / AUTO_FETCH_CUTOFF /
+  AUTO_FETCH_CUTOFF_DAY. One snapshot per calendar day (marker AUTO_FETCH_DONE_yyyyMMdd stores
+  run result).
+- Snapshot: machines whose EFFECTIVE billing day = today; API readings audited on/before the
+  cutoff moment; staged into zSCP2_MeterEntry with LockedAt (migration v3) + audit-logged.
+- LOCK semantics: locked rows are frozen — UpsertStaging refuses (fetch AND manual), grid blocks
+  the Current Reading editor, fetch loop skips them, Status shows "AUTO-FETCHED (locked)".
+  Invoicing stamps them normally; invoice deletion reconciles as usual (stamp cleared, lock stays
+  until the staging row is deleted).
+
+---
+
+## 2026-07-21 — Strategy Maintenance = composable BUILDER (redesign) + billing-stamp bugfix
+
+### Strategy is now a master–detail BUILDER (not a single hardcoded kind)
+User feedback (strong): the first `StrategyLst_Form` was a "single hardcoded kind dropdown" —
+one strategy could only be ONE of 6 kinds with fixed param fields. That is not a builder; users
+must be able to COMPOSE a strategy from many rules and mix kinds (e.g. FOC+Rebate for BK *and*
+CL *and* Rental-Free-N *and* Waive-on-Target in one strategy). Decision (AskUserQuestion): option
+**组合式规则(主从表)** — a strategy header + a freely-composed list of rule lines.
+
+- **Schema:** new detail table `zSCP2_StrategyRule` (FK+`ON DELETE CASCADE` to `zSCP2_Strategy`,
+  index on (StrategyKey,Seq)). Columns = Seq, RuleKind, Scope('' /BK/CL/RENTAL) + the union of all
+  kinds' params (TargetAmount/PartialPct/FreeMonths/CommitAmount/FocCopies/RebatePct/NetBilling/
+  LimitScope/LimitQty). The header's old `StrategyType` + scalar param columns are now **vestigial**
+  (kept for compat; new saves write `StrategyType=''` and carry everything in the rule lines).
+  Migration `02_CreateTable_zSCP2_StrategyRule.sql` (registered + EmbeddedResource).
+- **`ScpStrategy.cs`:** `StrategyDef` now holds `List<StrategyRule> Rules` (+ `FirstRuleOfKind`/
+  `RulesOfKind`/`HasKind`); flat fields removed. `LoadForContracts` loads header + all rule lines;
+  added `LoadByCode(db, code)`.
+- **`StrategyLst_Form`** rebuilt: header (Code/Desc/Remark/Inactive) + a **Rules grid** (Seq / Rule
+  Kind / Applies-to / Parameters-summary) with **+ Add Rule / Delete Rule / Up / Down**, and a
+  **Rule Parameters** editor panel (CmbRuleKind + CmbScope + the per-kind param fields) that edits
+  the selected rule line. Save = header upsert + delete-all-then-reinsert rule lines in one tx.
+  Delete refuses when a contract references the code (rules cascade with the header).
+- **Consumers updated to iterate rules:** contract "Apply Strategy to Meters" (`BarApplyStrategy`)
+  now loops `sd.Rules` — RENTAL-FREE-N→rental FOCQty, FOC-REBATE(Scope BK/CL)→FOCQty+Rebate%,
+  COMMIT-MIN/LIMIT/WAIVE-TARGET/INITIAL-METER→report notes; staged per (meter|column) so later
+  rules override; still one audited tx (source STRATEGY-APPLY). `ApplyWaiveTarget` in Meter Reading
+  now finds the WAIVE-TARGET **rule** in the bundle.
+- Verified on AED_ATPTEST: rule table+FK+index present; insert header+2 rules works; cascade-delete
+  removes rules. Build green, deploy clean (Plugin reinstalled OK).
+
+### BUGFIX (deploy-blocker) — `zSCP2_MeterEntry.Source` CHECK rejected 'INVOICE'
+Found by the rule-4 validation agent. `MeterInvoiceGenerator.WriteMeterTrans`/`WriteNoCharge` INSERT
+a fresh staging row with `Source='INVOICE'` whenever no staging row exists to UPDATE — which is the
+NORMAL case for **rentals/flat meters** (never fetched: fetch skips role≠BK/CL; no manual key-in) and
+for any usage meter typed straight into the grid. But `CK_zSCP2_MeterEntry_Source` only allowed
+MANUAL/ONLINE/OFFLINE → the INSERT violated the CHECK → the stamp tx rolled back → invoice **saved**
+but period **un-stamped** → next Generate double-billed. Fix: migration
+`02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql` widens the CHECK to include 'INVOICE' (idempotent
+drop+recreate). Verified: constraint definition now lists INVOICE.
+
+### Validation agent (rule 4) — remaining findings & disposition
+- **HIGH#1 (Source CHECK):** FIXED above.
+- **HIGH#2 (invoice save & stamp in separate tx → double-bill on stamp failure):** partly mitigated
+  by #1 (removes the main failure). AutoCount's `doc.Save()` commits in its own tx; my stamp is a
+  second tx. Full atomicity isn't possible via the AutoCount API. DEFERRED — add a "does an invoice
+  already exist for this period?" guard in the generate loop (belt-and-suspenders beyond InvoicedDocNo).
+- **HIGH#3 (grid/log/waive amount is NET of FOC+rebate but the invoice bills RAW usage×rate):** this
+  is the KNOWN P5b split, gated on the user's FOC口径 decision. See `Docs\Strategy\FOC-Rebate-Billing-
+  Modes.md`. Concrete risk (a): a meter with usage>0 but usage≤FOCQty and min=0 computes NET=0 →
+  lands in NO-CHARGE bucket → not invoiced though the master convention bills it raw. Still DEFERRED
+  pending the NET-vs-RAW decision.
+- **MEDIUM#4:** only WAIVE-TARGET is enforced LIVE at generation; the other kinds take effect by
+  "Apply Strategy to Meters" materialising their numbers onto the meters (FOCQty/Rebate%/rental
+  FOCQty), which the existing engine then reads. NetBilling='Y' is NOT yet honoured at generation
+  (that is P5b). By design given P5b deferral — documented so the stamped code isn't mistaken for a
+  live guarantee.
+- **MEDIUM#5:** marking a referenced strategy Inactive silently stops waiving while the code stays
+  attached. TODO: warn on contract load when StrategyCode → inactive/missing strategy.
+- **MEDIUM#6:** rental-separate in GROUP mode keys the rental invoice by debtor, so a debtor with two
+  RentSep contracts gets one "Rental- [ContractA]" invoice covering both (per-line Dept/Proj still
+  correct; labeling/traceability only). TODO: label generically or key per-contract for rentals.
+- **LOW#7:** prepayment first period renders "2/N" (basis 'P' = n+1 by spec) — confirm with user.
+  **LOW#8:** ComposeRentalPeriodText uses the row's RentalMonths as denominator (row authoritative;
+  cosmetic). **LOW#9:** audit writes are swallowed by design (no signal if a future column rename
+  breaks the INSERT).
+- **Cleared as non-issues:** audit captures BOTH contract UPDATEs with no missed/double diffs; RENTAL
+  WAIVED never decrements FOCQty; rentals can't receive a BK/CL API reading; no empty/duplicate
+  rental invoice; Apply-Strategy / Rental-save / Rental-assign are each single-tx atomic; strategy
+  delete/soft-code integrity holds; no SQL injection in the new paths; ComputeCharge is dead;
+  NULL strategy params don't throw; billing-history joins + double-click are correct.
+
+### Still deferred (as planned)
+⑤ Initial-Meter deep automation (estimates via manual key-in for now); GROUP FOC pooling engine
+(master `.C` convention kept — strategy LIMIT is a label/validator, not a pool); MultiPrice tier
+evaluator; rental auto-stop at n>N (only red-flagged now); Change-Ownership audit rows; point-in-time
+TVF/report (query pattern documented); Billing-History non-billed-periods toggle; **P5b billing-engine
+unification (NET vs RAW) — GATES on the user's FOC decision in `Docs\Strategy\FOC-Rebate-Billing-Modes.md`.**
+
+### Test env reminder
+Local test API (PID may have changed) on :8090 + DB profile "Local JSON Test" against AED_ATPTEST —
+switch back to Production before real use. Ctrl+Shift+3 dev shortcut still needs an env gate before
+client delivery.
+
+## 2026-07-22 — Strategy: template→instance (contract Strategy tab) + per-rule Service Item binding
+
+User redesign: the Strategy Maintenance form is just the TEMPLATE library; strategies must attach to a
+contract as the contract's OWN editable copy. Implemented as "template → instance":
+- **New table `zSCP2_ContractStrategyRule`** = the contract's own rule copy (FK+cascade to zSCP2_Contract).
+  Same columns as zSCP2_StrategyRule + `ServiceItemKey` (0 = all items in contract; >0 = one zSCP2_Item)
+  + `SeededFromCode` (which template it came from). Migration registered + EmbeddedResource.
+- **Shared UserControl `Classes\CommonForms\StrategyRulesEditorControl`** (triple) = the builder guts
+  (rules grid + Add/Del/Up/Down + per-rule editor), extracted so BOTH the master form and the contract
+  tab use ONE implementation (CLAUDE.md rule 5). API: SetServiceItems(dt) [null=master mode hides the
+  binding; non-null=contract mode], LoadRules(List<StrategyRule>), GetRules(), SetEditable(bool),
+  ValidateRules(out), RulesChanged event. **StrategyLst_Form was refactored to host it** (removed its
+  duplicated grid/panel).
+- **Per-rule Service Item binding** (contract mode only): each rule row has "Applied for all Service
+  Items" checkbox (default checked → ServiceItemKey=0 → all items) + a Service Item SearchLookUpEdit
+  (enabled when unchecked → binds the rule to one machine). Shown as a "Service Item" grid column.
+  Chosen per-rule (superset of "whole-strategy one binding"); if the user later wants tab-level, just
+  move the control — schema already holds it.
+- **Contract "Strategy" tab** = 2nd tab (TabPages.Insert(1,...)), after "Service Item Under Contract".
+  Hosts the control in contract mode + "Copy Rules from Strategy Template" button (reads the header
+  SluStrategy code → ScpStrategy.LoadByCode → LoadRules, replace-with-confirm). Saved inside the contract
+  save tx via SaveContractStrategyRules (delete-all by ContractKey + reinsert with ServiceItemKey +
+  SeededFromCode). RulesChanged → sets _dirty. Refreshed after a new-contract save (items now have keys).
+- **Downstream now reads the contract's OWN rules:** `ScpStrategy.LoadForContracts` reads
+  zSCP2_ContractStrategyRule (was: master join). `StrategyRule` gained ServiceItemKey (ReadRule reads it
+  when the column exists; master rows stay 0). "Apply Strategy to Meters" loads the contract's rules via
+  LoadForContracts (not the master) and skips meters whose ItemKey ≠ a rule's ServiceItemKey>0. Generate
+  `ApplyWaiveTarget` computes both per-contract and per-item usage totals; an item-bound WAIVE-TARGET rule
+  wins over a contract-wide one for that item and waives using the item's total.
+- Verified: table+FK+ServiceItemKey present; contract-rule round-trip (item-bound FOC-REBATE + contract-
+  wide WAIVE-TARGET) inserts/reads/cascades against a real contract. Build green, deploy clean (5 phases).
+- NOTE: binding a rule to a specific item requires the item to be SAVED first (new items get keys on save;
+  the dropdown lists only saved items). All-items rules (default) work before save.
+
+## 2026-07-22 (later) — Strategy UI refinements + per-kind test pass + rental-detection bugfix
+
+UI changes (contract Strategy tab / shared control):
+- Strategy TEMPLATE picker + "Rental separate invoice" moved OFF the header INTO the Strategy tab's top
+  bar (reparented the existing controls, keeps save/load/dirty wiring). Header no longer carries them.
+- Service Item binding is now a **multi-tick CheckedComboBoxEdit** (was single SearchLookUpEdit): a rule
+  can bind to a SET of service items. Model changed ServiceItemKey(bigint) → **ServiceItemKeys(nvarchar
+  CSV, ''=all)** on zSCP2_ContractStrategyRule (table dropped+recreated — no shipped data). StrategyRule
+  now holds List<long> ServiceItemKeys; ScpStrategy.ParseItemKeys/JoinItemKeys (de)serialise. Downstream
+  Apply filters + ApplyWaiveTarget use set-membership; item-scoped WAIVE-TARGET sums the bound items'
+  usage totals.
+- Scope ("Applies to") is now **FOC-REBATE only** (relabelled "Apply FOC/Rebate to"): options BK / CL /
+  **BK+CL** (added). Hidden for all other kinds — WAIVE-TARGET/RENTAL-FREE-N/etc. have implicit targets,
+  so offering "Rental/flat meters" there was nonsense (user feedback). Grid "Applies to" column shows the
+  implicit target per kind ("Rental (waived)", "Rental", "Flat/rental", "FOC cap").
+- "No rule selected" greys the whole Rule Parameters panel (earlier fix, carried into the control).
+
+BUGFIX (found by the test pass) — rental detection missed prefixed codes:
+Both the Apply handler (RENTAL-FREE-N) and the generate IsRental flag used `code.StartsWith("RA")`, which
+MISSES the real convention "01.RA.xxx" / "01. RENTAL HSI". → new shared `ScpStrategy.IsRentalMeterCode`
+(RA prefix / .RA / -RA / space-RA / RENTAL), used in both. Verified on contract 3970: "01. RENTAL HSI"
+(role NA, "RENTAL" in name) is now correctly treated as a rental for free-months + rental-separate.
+
+Per-kind test pass (harness on real contract 3970 = 2 BK + 1 CL + 2 rentals, values set→verify→rollback,
+zero residue):
+- RENTAL-FREE-N (6): both rentals → FOCQty=6 (incl. the RENTAL-keyword one). ✅
+- FOC-REBATE (1000 / 3% / BK+CL): the 3 usage meters → FOCQty=1000, Rebate=3; rentals skipped. ✅
+- COMMIT-MIN (200): flat meters with MinCharges≠200 flagged (report-only). ✅
+- WAIVE-TARGET (Target 500 / Partial 50): deterministic formula — usage≥500 → rental 0; ≥250 → rental×0.5;
+  <250 → unchanged. ✅  CAVEAT: the usage total summed is the grid NET Charge (P5b RAW-vs-NET still
+  deferred), so the target is compared against NET, not RAW usage×rate, until the FOC decision is made.
+- LIMIT / INITIAL-METER: load correctly, no meter push (report/tag only, by design). ✅
+- Contract-rule round-trip (save/load, incl. ServiceItemKeys CSV + FK cascade): ✅.
+
+## 2026-07-22 (P5b DONE) — unified NET billing engine + multi-price tiers + group FOC pool
+
+User forced the deferred engine work ("multiple pricing / group FOC / 三者配合 100% work"). Two Explore
+agents mapped the engine; user decided **NET** (FOC/rebate really deducted, grid=invoice) + tiers.
+
+- **Single charge engine, revived `ScpInvoiceBuilder.ComputeCharge(ln, ladders)`** — used by BOTH the grid
+  (`MeterReadingIntegration_Form.Recalc`) and the invoice (`BuildInvoice`), killing the RAW/NET split.
+  Model: usage=cur−last; billed+effUnit from ONE of two mechanisms; sub=round(billed×effUnit,2);
+  charge=round(sub×(1−rebate),2); min floor. Invoice line = Qty=billed, UnitPrice=effUnit, Discount=rebate%
+  → line total == grid charge exactly. Flat/rental branch unchanged (FOC=free months).
+- **Multi-price tiers now EVALUATED (`ScpMultiPrice`)** — was purely decorative. Loaded once per run
+  (`_ladders`), code = COALESCE(zSCP2_ItemMeter.MeterMultiPriceCode, zSCP_MeterType…). **Semantics =
+  MARGINAL**, NOT flat-per-tier: the real 193 tier rows encode the FOC allowance as a first band priced
+  0.00 (ladder names literally "FOC2.5K"; those meters have FOCQty=0, FlatRate=0). Verified on real ladder
+  `BK C+P - 0.02FOC2.5K` (2500→0, ∞→0.02): usage 3000 → 2500 free + 500×0.02 = RM10.00; usage 10000 →
+  RM150.00. **flat-per-tier would have overcharged 5–100× (charged the free copies)** — user had picked
+  flat-per-tier on a hypothetical; switched to marginal because the data requires it (told user, offered a
+  per-ladder "retroactive volume discount" mode if ever needed). Ladder meters: billed=usage−freeCopies,
+  effUnit=gross/billed; the ladder handles FOC so the FOCQty column is ignored when a ladder is present.
+- **NET now correct end-to-end**: a meter fully covered by FOC → charge 0 → NO CHARGE (routing keys off the
+  NET ln.Charge, which is now right); a min-charge meter still bills the min even when FOC covers usage.
+- **Group FOC pool (`ApplyGroupLimit`)** — the ".C" GROUP LIMIT now actually pools: LimitQty free copies
+  shared across the contract's covered usage meters (Scope BK/CL/both + item set), allocated sequentially
+  (bump each line's FOC, recompute via ComputeCharge). Runs at generate beside ApplyWaiveTarget (order:
+  pool → waive), cross-machine so NOT in the per-row grid preview (like WAIVE-TARGET). FOC Limit is now
+  ALWAYS group (single/group choice removed from the UI).
+- **Coordination**: meter type gives default rate/min → per-meter override → multi-price ladder decides the
+  price → strategy FOC/rebate/min/waive/group-pool layer on → one engine → grid == invoice.
+- Bugfix carried in: rental detection `StartsWith("RA")` → `ScpStrategy.IsRentalMeterCode`.
+- Build green, deployed. Tier math verified on real data (SQL replication of the marginal algorithm).
+  STILL TO DO: live UI generate (flaui) end-to-end confirmation of an actual invoice amount.

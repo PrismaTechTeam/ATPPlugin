@@ -80,6 +80,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LoadDebtorLookup();
             LoadContractTypeLookup();
             LoadAgentLookup();
+            LoadAreaLookup();
+            LoadStrategyLookup();
             LoadDeptProjectLookups();
             WireBillingModeRadios();
             LkDebtorCode.EditValueChanged += new EventHandler(OnDebtorChanged);
@@ -100,11 +102,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
 
             SetupInlineOrphanLookup();
+            EnableInlineItemEditing();
+            BuildItemMeterPanel();
             RebuildItemsView();
             SetupSparePartsGrid();
             LoadSpareParts();
             BuildMoreHeaderTab();
             LoadMoreHeader();
+            BuildStrategyTab();
+            BuildBillingHistoryTab();
+            BuildChangeHistoryTab();
 
             // Dirty tracking for the close confirmation: any header edit marks the form dirty. Wired
             // AFTER the initial load so loading an existing contract does not itself set the flag.
@@ -126,8 +133,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             barAddItem.Enabled = true;
             barEditItem.Enabled = true;
             barDelItem.Enabled = true;
-            if (BtnItemCreate != null) BtnItemCreate.Enabled = true;
-            if (BtnItemEdit != null) BtnItemEdit.Enabled = true;
             if (BtnItemDelete != null) BtnItemDelete.Enabled = true;
             if (BtnItemAttach != null) BtnItemAttach.Enabled = canAttach;
             if (BtnItemDetach != null) BtnItemDetach.Enabled = canAttach;
@@ -138,6 +143,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.Bottom
                 : DevExpress.XtraGrid.Views.Grid.NewItemRowPosition.None;
             barDemoFill.Enabled = _isNew;   // demo random-fill only for a NEW contract
+            // Generate From Serial No: NEW mode only (hide after a new contract is saved -> edit mode).
+            if (_barGenSerial != null)
+                _barGenSerial.Visibility = _isNew
+                    ? DevExpress.XtraBars.BarItemVisibility.Always
+                    : DevExpress.XtraBars.BarItemVisibility.Never;
             LblItemsHint.Text = "";
             LblItemsHint.Visible = false;
         }
@@ -156,6 +166,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // "Generate From Serial No" — pick DO/IV lines that carry machine serials; auto-fill the
         // customer header (NEW mode) and auto-create one service item per machine.
         private DevExpress.XtraBars.BarButtonItem _barGenSerial;
+        private DevExpress.XtraBars.BarButtonItem _barApplyStrategy;
 
         private void ExtendContractRibbon()
         {
@@ -167,6 +178,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 _barGenSerial.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(BarGenSerial_ItemClick);
                 RibbonCtl.Items.Add(_barGenSerial);
                 grpItem.ItemLinks.Add(_barGenSerial);
+                // Generate From Serial No is a NEW-contract-only action (it drives the whole header from
+                // the picked document) — hidden once the contract exists / is being edited.
+                _barGenSerial.Visibility = _isNew
+                    ? DevExpress.XtraBars.BarItemVisibility.Always
+                    : DevExpress.XtraBars.BarItemVisibility.Never;
+
+                // "Apply Strategy to Meters": fan the attached strategy's parameters onto this
+                // contract's BK/CL + rental meters in one audited click (the strategy fast path).
+                _barApplyStrategy = new DevExpress.XtraBars.BarButtonItem();
+                _barApplyStrategy.Caption = "Apply Strategy\r\nto Meters";
+                _barApplyStrategy.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+                _barApplyStrategy.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(BarApplyStrategy_ItemClick);
+                RibbonCtl.Items.Add(_barApplyStrategy);
+                grpItem.ItemLinks.Add(_barApplyStrategy);
+
                 try
                 {
                     float dpi = 96f;
@@ -174,10 +200,225 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     AutoCount.Images.IAutoCountImage img =
                         AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
                     _barGenSerial.ImageOptions.Image = img.GetLargeImage_Inquiry();
+                    _barApplyStrategy.ImageOptions.Image = img.GetLargeImage_Commit();
                 }
                 catch { }
             }
             catch { }
+        }
+
+        // Apply the attached strategy's RULE lines to this contract's meters — with a PREVIEW + confirm,
+        // every write audited (source STRATEGY-APPLY). A strategy is a bundle of rules; each meter-push
+        // rule (RENTAL-FREE-N, FOC-REBATE) materialises its numbers onto the meters, so the existing
+        // billing engine (which reads FOCQty/RebateQtyInPercent off the meter) then honours it. COMMIT-MIN,
+        // LIMIT, WAIVE-TARGET and INITIAL-METER are reported only (evaluated live at generation / manually).
+        // Requires a saved, non-dirty contract so the in-memory grid can be reloaded to match the DB after.
+        private void BarApplyStrategy_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            ApplyStrategyToMeters();
+        }
+
+        // Fills / overrides this contract's BK/CL (and rental) meters from its own strategy rules, per each
+        // rule's Scope + Service Item set. One audited transaction, with a preview. Shared by the ribbon
+        // button and the Strategy tab's "Apply to Meters" button.
+        private void ApplyStrategyToMeters()
+        {
+            if (_isNew || _contractKey <= 0)
+            { XtraMessageBox.Show("Save the contract first, then apply the strategy.", "Apply Strategy"); return; }
+            if (_dirty)
+            { XtraMessageBox.Show("You have unsaved changes. Save the contract first — the apply writes directly to the saved meters.", "Apply Strategy"); return; }
+
+            // Apply the CONTRACT'S OWN strategy rules (from the Strategy tab / zSCP2_ContractStrategyRule),
+            // not the master template — the contract edits its own copy.
+            System.Collections.Generic.Dictionary<long, ServiceContractPhotocopier.Classes.StrategyDef> smap =
+                ServiceContractPhotocopier.Classes.ScpStrategy.LoadForContracts(_db, new long[] { _contractKey });
+            ServiceContractPhotocopier.Classes.StrategyDef sd;
+            if (!smap.TryGetValue(_contractKey, out sd) || sd.Rules.Count == 0)
+            {
+                XtraMessageBox.Show("This contract has no strategy rules yet.\r\n\r\nGo to the Strategy tab — copy from a " +
+                    "template (or add rules), Save the contract, then Apply.", "Apply Strategy");
+                return;
+            }
+            string code = string.IsNullOrEmpty(sd.Code)
+                ? (SluStrategy.EditValue == null ? "(contract)" : SluStrategy.EditValue.ToString().Trim()) : sd.Code;
+
+            // Build the preview: which meters change which field to what.
+            DataTable meters;
+            try
+            {
+                meters = _db.GetDataTable(
+                    "SELECT m.ItemMeterKey, i.ItemKey, i.ServiceItemNo, m.MeterTypeCode, m.MeterRole, " +
+                    "ISNULL(m.FOCQty,0) AS FOCQty, ISNULL(m.RebateQtyInPercent,0) AS RebatePct, " +
+                    "ISNULL(m.MinimumCharges,0) AS MinCharges, ISNULL(mt.IsFlatCharge,'N') AS IsFlat " +
+                    "FROM dbo.zSCP2_ItemMeter m " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = m.MeterTypeCode " +
+                    "WHERE i.ContractKey = " + _contractKey + " ORDER BY i.ServiceItemNo, m.MeterTypeCode", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load meters failed:\r\n" + ex.Message, "Apply Strategy"); return; }
+
+            // Meter-push changes keyed by (ItemMeterKey|column) so later rules override earlier ones on the
+            // same field; old value is always the original DB value read above.
+            System.Collections.Generic.Dictionary<string, object[]> changeMap =
+                new System.Collections.Generic.Dictionary<string, object[]>();
+            System.Text.StringBuilder reportNotes = new System.Text.StringBuilder();
+
+            foreach (ServiceContractPhotocopier.Classes.StrategyRule rule in sd.Rules)
+            {
+                string kind = rule.Kind;
+                if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_RENTAL_FREE_N)
+                {
+                    foreach (DataRow m in meters.Rows)
+                    {
+                        if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(Convert.ToInt64(m["ItemKey"]))) continue;
+                        bool rental = Convert.ToString(m["IsFlat"]) == "Y" &&
+                                      ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(Convert.ToString(m["MeterTypeCode"]));
+                        if (!rental) continue;
+                        StageChange(changeMap, m, "FOCQty", "FOCQty", AsDec(m["FOCQty"]), rule.FreeMonths);
+                    }
+                }
+                else if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_FOC_REBATE)
+                {
+                    foreach (DataRow m in meters.Rows)
+                    {
+                        if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(Convert.ToInt64(m["ItemKey"]))) continue;
+                        string role = Convert.ToString(m["MeterRole"]).Trim().ToUpperInvariant();
+                        if (role != "BK" && role != "CL") continue;
+                        if (!ScopeMatchesRole(rule.Scope, role)) continue;   // BK / CL / BK+CL
+                        StageChange(changeMap, m, "FOCQty", "FOCQty", AsDec(m["FOCQty"]), rule.FocCopies);
+                        StageChange(changeMap, m, "RebateQtyInPercent", "RebatePct", AsDec(m["RebatePct"]), rule.RebatePct);
+                    }
+                }
+                else if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_COMMIT_MIN)
+                {
+                    // Committed minimum PRINT charge -> write MinimumCharges on the scoped BK/CL usage meters.
+                    foreach (DataRow m in meters.Rows)
+                    {
+                        if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(Convert.ToInt64(m["ItemKey"]))) continue;
+                        string role = Convert.ToString(m["MeterRole"]).Trim().ToUpperInvariant();
+                        if (role != "BK" && role != "CL") continue;
+                        if (!ScopeMatchesRole(rule.Scope, role)) continue;
+                        StageChange(changeMap, m, "MinimumCharges", "MinCharges", AsDec(m["MinCharges"]), rule.CommitAmount);
+                    }
+                }
+                else if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_LIMIT)
+                {
+                    if (rule.LimitScope == 'G')
+                    {
+                        bool hasCombine = false;
+                        foreach (ItemEditData it in _items)
+                            if ((it.ServiceItemNo ?? "").Trim().ToUpperInvariant().EndsWith(".C")) hasCombine = true;
+                        reportNotes.AppendLine(hasCombine
+                            ? "• GROUP LIMIT — .C combine item present; group billing flows through it."
+                            : "• GROUP LIMIT WARNING — no '.C' combine item on this contract; create one to pool group FOC.");
+                    }
+                    else
+                    {
+                        // Single-machine FOC cap -> write FOCQty (free-copy cap) on the scoped BK/CL meters.
+                        foreach (DataRow m in meters.Rows)
+                        {
+                            if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(Convert.ToInt64(m["ItemKey"]))) continue;
+                            string role = Convert.ToString(m["MeterRole"]).Trim().ToUpperInvariant();
+                            if (role != "BK" && role != "CL") continue;
+                            if (!ScopeMatchesRole(rule.Scope, role)) continue;
+                            StageChange(changeMap, m, "FOCQty", "FOCQty", AsDec(m["FOCQty"]), rule.LimitQty);
+                        }
+                    }
+                }
+                else if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_WAIVE_TARGET)
+                {
+                    reportNotes.AppendLine("• WAIVE-TARGET — evaluated live at invoice generation (target RM " +
+                        rule.TargetAmount.ToString("0.00") + (rule.PartialPct > 0m ? ", partial " + rule.PartialPct.ToString("0.##") + "%" : "") + ").");
+                }
+                else if (kind == ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_INITIAL_METER)
+                {
+                    reportNotes.AppendLine("• INITIAL-METER — estimate readings are keyed manually in Meter Reading (no meter value pushed).");
+                }
+            }
+
+            // Turn the staged map into a concrete change list (skip no-ops).
+            System.Collections.Generic.List<object[]> changes = new System.Collections.Generic.List<object[]>();
+            System.Text.StringBuilder preview = new System.Text.StringBuilder();
+            foreach (object[] ch in changeMap.Values)
+            {
+                decimal oldV = (decimal)ch[3], newV = (decimal)ch[4];
+                if (oldV == newV) continue;
+                changes.Add(ch);
+                preview.AppendLine(ch[6] + "  " + ch[7] + ":  " + (string)ch[5] + "  " +
+                    oldV.ToString("0.##") + " → " + newV.ToString("0.##"));
+            }
+
+            if (changes.Count == 0)
+            {
+                string msg = "No meter fields need changing for strategy '" + code + "'.";
+                if (reportNotes.Length > 0) msg += "\r\n\r\nNotes:\r\n" + reportNotes;
+                XtraMessageBox.Show(msg, "Apply Strategy");
+                return;
+            }
+            string pv = preview.ToString();
+            if (pv.Length > 1600) pv = pv.Substring(0, 1600) + "\r\n… (" + changes.Count + " changes in total)";
+            string body = "Apply strategy '" + code + "' to this contract's meters?\r\n\r\n" + pv;
+            if (reportNotes.Length > 0) body += "\r\nNotes:\r\n" + reportNotes;
+            body += "\r\n\r\nThis FILLS the meter fields (Min Charges / Rebate % / Free Qty). The meter grid is where\r\n" +
+                    "the actual billing values live — you can still adjust any machine there afterwards.";
+            if (XtraMessageBox.Show(body, "Apply Strategy — Preview", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            try
+            {
+                using (SqlConnection cn = new SqlConnection(_db.ConnectionString))
+                {
+                    cn.Open();
+                    using (SqlTransaction tx = cn.BeginTransaction("ApplyStrategy"))
+                    {
+                        try
+                        {
+                            Guid changeSet = Guid.NewGuid();
+                            foreach (object[] ch in changes)
+                            {
+                                ExecNonQuery(cn, tx,
+                                    "UPDATE dbo.zSCP2_ItemMeter SET [" + (string)ch[2] + "]=@v, LastModified=GETDATE() WHERE ItemMeterKey=@mk",
+                                    P("@v", (decimal)ch[4]), P("@mk", Convert.ToInt64(ch[0])));
+                                ServiceContractPhotocopier.Classes.ScpContractAudit.WriteRow(cn, tx, _contractKey,
+                                    TxtContractNo.Text.Trim(), Convert.ToInt64(ch[1]), Convert.ToInt64(ch[0]), changeSet,
+                                    ServiceContractPhotocopier.Classes.ScpContractAudit.SOURCE_STRATEGY_APPLY,
+                                    "STRATEGY." + (string)ch[5],
+                                    ((decimal)ch[3]).ToString("0.######"), ((decimal)ch[4]).ToString("0.######"));
+                            }
+                            tx.Commit();
+                        }
+                        catch { tx.Rollback(); throw; }
+                    }
+                }
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Apply failed:\r\n" + ex.Message, "Error"); return; }
+
+            // Reload so the in-memory items match the DB (a later Save must not overwrite the apply).
+            LoadItems();
+            RebuildItemsView();
+            BindItemMeterPanel();
+            RefreshChangeHistoryTab();
+            XtraMessageBox.Show(changes.Count + " meter field(s) updated and audited.\r\n\r\n" +
+                "These values now live in the meter grid (Min Charges / Rebate % / Free Qty). If a machine " +
+                "needs a special value, edit it there — that is what actually bills.", "Apply Strategy",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // A rule's Scope vs a meter's role: "BK"/"CL" targets that role only; ""/"BKCL" = both.
+        private static bool ScopeMatchesRole(string scope, string role)
+        {
+            if (scope == "BK") return role == "BK";
+            if (scope == "CL") return role == "CL";
+            return true;
+        }
+
+        // Stages one meter-field change for Apply Strategy, keyed by (ItemMeterKey|column) so a later rule
+        // overrides an earlier one on the same field; the old value is always the original DB value.
+        private static void StageChange(System.Collections.Generic.Dictionary<string, object[]> map,
+            DataRow m, string column, string fieldLabel, decimal oldVal, decimal newVal)
+        {
+            string key = Convert.ToString(m["ItemMeterKey"]) + "|" + column;
+            map[key] = new object[] { m["ItemMeterKey"], m["ItemKey"], column, oldVal, newVal, fieldLabel,
+                Convert.ToString(m["ServiceItemNo"]), Convert.ToString(m["MeterTypeCode"]) };
         }
 
         private void BarGenSerial_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
@@ -289,6 +530,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DtExpiryDate.EditValueChanged += h;
             SpnContractValue.EditValueChanged += h;
             SpnBillingDay.EditValueChanged += h;
+            // Items without an override display the contract's day — keep the grid current when it changes.
+            EventHandler bd = delegate { if (!_loading) RebuildItemsView(); };
+            SpnBillingDay.EditValueChanged += bd;
+            ChkMonthEnd.CheckedChanged += bd;
             SluAgent.EditValueChanged += h;
             SluDept.EditValueChanged += h;
             SluProject.EditValueChanged += h;
@@ -302,6 +547,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtRemark2.EditValueChanged += h;
             TxtNote.EditValueChanged += h;
             ChkInactive.EditValueChanged += h;
+            SluStrategy.EditValueChanged += h;
+            SluStrategy.EditValueChanged += new EventHandler(SluStrategy_EditValueChanged);
+            ChkRentalSeparate.EditValueChanged += h;
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
@@ -333,13 +581,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LkDebtorCode.Properties.DataSource = _debtorLookup;
             LkDebtorCode.Properties.DisplayMember = "AccNo";
             LkDebtorCode.Properties.ValueMember = "AccNo";
-            // SearchLookUpEdit shows its columns through the popup GridView — show only Code + Name,
-            // and turn on the auto-filter row so the user can search (CLAUDE.md rule 9).
+            // SearchLookUpEdit shows its columns through the popup GridView — show ONLY Code + Company
+            // Name. AutoPopulateColumns must be OFF: the popup binds lazily, and a later auto-populate
+            // would resurrect every Debtor column (PopulateColumns() here ran before binding = no-op).
+            LkDebtorView.OptionsBehavior.AutoPopulateColumns = false;
             LkDebtorView.Columns.Clear();
-            LkDebtorView.PopulateColumns();
-            foreach (DevExpress.XtraGrid.Columns.GridColumn c in LkDebtorView.Columns) c.Visible = false;
-            ShowLkCol(LkDebtorView, "AccNo", "Code", 90, 0);
-            ShowLkCol(LkDebtorView, "CompanyName", "Company Name", 240, 1);
+            DevExpress.XtraGrid.Columns.GridColumn lkCode = LkDebtorView.Columns.AddVisible("AccNo");
+            lkCode.Caption = "Code"; lkCode.Width = 100;
+            DevExpress.XtraGrid.Columns.GridColumn lkName = LkDebtorView.Columns.AddVisible("CompanyName");
+            lkName.Caption = "Company Name"; lkName.Width = 320;
             LkDebtorView.OptionsView.ShowAutoFilterRow = true;
         }
 
@@ -384,6 +634,85 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SluAgent.Properties.ValueMember = "SalesAgent";
             SluAgent.Properties.DisplayMember = "SalesAgent";
             // Popup shows the 2 datasource columns (Agent + Description) auto-populated by the view.
+        }
+
+        // Strategy dropdown lists the active strategies (Strategy Maintenance master). Picking one with
+        // NET billing shows a one-time explanation so the operator knows the billing mode changes.
+        private DataTable _strategyLookup;
+
+        private void LoadStrategyLookup()
+        {
+            try
+            {
+                _strategyLookup = _db.GetDataTable(
+                    "SELECT StrategyCode, [Description], StrategyType, NetBilling FROM [dbo].[zSCP2_Strategy] " +
+                    "WHERE Inactive = 'N' ORDER BY StrategyCode", false);
+            }
+            catch { _strategyLookup = new DataTable(); }
+            SluStrategy.Properties.DataSource = _strategyLookup;
+            SluStrategy.Properties.ValueMember = "StrategyCode";
+            SluStrategy.Properties.DisplayMember = "StrategyCode";
+            SluStrategyView.OptionsBehavior.AutoPopulateColumns = false;
+            SluStrategyView.Columns.Clear();
+            DevExpress.XtraGrid.Columns.GridColumn sc = SluStrategyView.Columns.AddVisible("StrategyCode");
+            sc.Caption = "Strategy"; sc.Width = 110;
+            DevExpress.XtraGrid.Columns.GridColumn sd = SluStrategyView.Columns.AddVisible("Description");
+            sd.Caption = "Description"; sd.Width = 240;
+            DevExpress.XtraGrid.Columns.GridColumn st = SluStrategyView.Columns.AddVisible("StrategyType");
+            st.Caption = "Kind"; st.Width = 110;
+            SluStrategyView.OptionsView.ShowAutoFilterRow = true;
+        }
+
+        // "+" on the Strategy dropdown: open Strategy Maintenance; on close refresh + select the
+        // last-saved code (SluContractType "+" pattern).
+        private void SluStrategy_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Plus) return;
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.StrategyLst_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.StrategyLst_Form(_db))
+                {
+                    f.WindowState = System.Windows.Forms.FormWindowState.Normal;
+                    f.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                    LoadStrategyLookup();
+                    if (!string.IsNullOrEmpty(f.SavedCode)) SluStrategy.EditValue = f.SavedCode;
+                }
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Open Strategy Maintenance failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        // Picking a NET-billing strategy changes the FOC/rebate money math — say so once, clearly.
+        private void SluStrategy_EditValueChanged(object sender, EventArgs e)
+        {
+            if (_loading || _strategyLookup == null) return;
+            string code = SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim();
+            if (code.Length == 0) return;
+            DataRow[] f = _strategyLookup.Select("StrategyCode='" + code.Replace("'", "''") + "'");
+            if (f.Length > 0 && Convert.ToString(f[0]["NetBilling"]) == "Y")
+                XtraMessageBox.Show(
+                    "Strategy '" + code + "' uses NET billing:\r\n\r\n" +
+                    "billed copies = usage − FOC − (usage − FOC) × rebate%\r\n\r\n" +
+                    "Contracts WITHOUT this strategy keep the current convention (bill RAW usage; FOC/rebate " +
+                    "shown on the invoice but not deducted).",
+                    "NET Billing Strategy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Area dropdown lists AutoCount's own Area master (dbo.Area — the native Area Maintenance data).
+        private void LoadAreaLookup()
+        {
+            DataTable dt;
+            try
+            {
+                dt = _db.GetDataTable(
+                    "SELECT AreaCode, ISNULL(Description,'') AS Description FROM [dbo].[Area] ORDER BY AreaCode", false);
+            }
+            catch { dt = new DataTable(); }
+            TxtArea.Properties.DataSource = dt;
+            TxtArea.Properties.ValueMember = "AreaCode";
+            TxtArea.Properties.DisplayMember = "AreaCode";
         }
 
         // Department + Project dropdowns list AutoCount's own masters (Dept / Project tables).
@@ -487,7 +816,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtAttention.Text = AsStr(d["Attention"]);
             TxtPhone.Text = AsStr(d["Phone1"]);
             TxtTerm.Text = AsStr(d["DisplayTerm"]);
-            TxtArea.Text = AsStr(d["AreaCode"]);
+            TxtArea.EditValue = SetOrNull(AsStr(d["AreaCode"]));
             SluAgent.EditValue = SetOrNull(AsStr(d["SalesAgent"]));
 
             // Map the debtor's info into the More Header tab too (only fields the Debtor master has —
@@ -676,7 +1005,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtAttention.Text = AsStr(r["Attention"]);
             TxtPhone.Text = AsStr(r["Phone"]);
             TxtTerm.Text = AsStr(r["TermCode"]);
-            TxtArea.Text = AsStr(r["AreaCode"]);
+            TxtArea.EditValue = SetOrNull(AsStr(r["AreaCode"]));
             if (r.Table.Columns.Contains("ReferenceNo")) TxtRefNo.Text = AsStr(r["ReferenceNo"]);
             SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
             SluDept.EditValue = r.Table.Columns.Contains("DeptNo") ? SetOrNull(AsStr(r["DeptNo"])) : null;
@@ -686,6 +1015,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtRemark2.Text = AsStr(r["Remark2"]);
             TxtNote.Text = AsStr(r["Note"]);
             ChkInactive.Checked = AsStr(r["Inactive"]) == "Y";
+            SluStrategy.EditValue = r.Table.Columns.Contains("StrategyCode") ? SetOrNull(AsStr(r["StrategyCode"])) : null;
+            ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
 
             LoadItems();
             }
@@ -732,6 +1063,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DataRow nr = d.Meters.NewRow();
                 nr["MeterTypeCode"] = AsStr(mr["MeterTypeCode"]);
+                nr["Description"] = mr.Table.Columns.Contains("Description") ? AsStr(mr["Description"]) : "";
                 nr["MeterRole"] = AsStr(mr["MeterRole"]);
                 nr["MachineSerialNo"] = mr.Table.Columns.Contains("MachineSerialNo") ? AsStr(mr["MachineSerialNo"]) : "";
                 nr["MinimumCharges"] = AsDec(mr["MinimumCharges"]);
@@ -842,9 +1174,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         // "-" Remove selected service item from the contract (detach — the item survives as
         // contract-less; existing items get ContractKey=NULL on save, new ones are just dropped).
+        // Detach: the item leaves THIS contract but survives contract-less (meters + history intact).
         private void BtnItemDetach_Click(object sender, EventArgs e)
         {
-            BtnDelItem_Click(sender, e);
+            int rh = GridViewItems.FocusedRowHandle;
+            if (rh < 0) return;
+            int idx = Convert.ToInt32(GridViewItems.GetRowCellValue(rh, "No")) - 1;
+            if (idx < 0 || idx >= _items.Count) return;
+            string no = string.IsNullOrEmpty(_items[idx].ServiceItemNo) ? "this service item" : _items[idx].ServiceItemNo;
+            if (XtraMessageBox.Show("Detach " + no + " from this contract?\r\n\r\n" +
+                "The service item itself is KEPT (it becomes contract-less, with all its meters and " +
+                "history) and can be attached to a contract again later.",
+                "Detach from Contract", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            long removedKey = _items[idx].ItemKey;
+            _items.RemoveAt(idx);
+            // Existing item -> it becomes an orphan (contract-less) on save; make it re-pickable now.
+            if (removedKey > 0 && !_detachedThisSession.Contains(removedKey)) _detachedThisSession.Add(removedKey);
+            _dirty = true;
+            RebuildItemsView();
         }
 
         private void RebuildItemsView()
@@ -852,11 +1199,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView = new DataTable();
             _dtItemsView.Columns.Add("No", typeof(int));
             _dtItemsView.Columns.Add("ServiceItemNo", typeof(string));
+            _dtItemsView.Columns.Add("ItemCode", typeof(string));
             _dtItemsView.Columns.Add("SerialNumber", typeof(string));
+            _dtItemsView.Columns.Add("GradeCode", typeof(string));
+            _dtItemsView.Columns.Add("ServiceType", typeof(string));
+            _dtItemsView.Columns.Add("PurchaseDate", typeof(DateTime));
+            _dtItemsView.Columns.Add("ReferenceNo", typeof(string));
             _dtItemsView.Columns.Add("Items", typeof(string));
             _dtItemsView.Columns.Add("BillingDay", typeof(string));
+            _dtItemsView.Columns.Add("ServiceStart", typeof(DateTime));
             _dtItemsView.Columns.Add("BKMeter", typeof(string));
             _dtItemsView.Columns.Add("CLMeter", typeof(string));
+            _dtItemsView.Columns.Add("Description", typeof(string));
             _dtItemsView.Columns.Add("Inactive", typeof(string));
             _dtItemsView.Columns.Add("Expiry", typeof(DateTime));
 
@@ -865,12 +1219,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DataRow r = _dtItemsView.NewRow();
                 r["No"] = n++;
-                r["ServiceItemNo"] = d.ServiceItemNo;
+                r["ServiceItemNo"] = string.IsNullOrWhiteSpace(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
+                r["ItemCode"] = d.ItemCode ?? "";
                 r["SerialNumber"] = d.SerialNumber;
+                r["GradeCode"] = d.GradeCode ?? "";
+                r["ServiceType"] = d.ServiceTypeCode ?? "";
+                r["PurchaseDate"] = (object)d.PurchaseDate ?? DBNull.Value;
+                r["ReferenceNo"] = d.ReferenceNo ?? "";
                 r["Items"] = ItemCodesSummary(d);
-                r["BillingDay"] = d.BillingDayOverride.HasValue ? d.BillingDayOverride.Value.ToString() : "(contract)";
+                r["BillingDay"] = d.BillingDayOverride.HasValue
+                    ? d.BillingDayOverride.Value.ToString()
+                    : (ChkMonthEnd.Checked ? "31" : ((int)SpnBillingDay.Value).ToString());
+                r["ServiceStart"] = (object)d.ServiceStartDate ?? DBNull.Value;
                 r["BKMeter"] = MeterForRole(d, "BK");
                 r["CLMeter"] = MeterForRole(d, "CL");
+                r["Description"] = d.Description ?? "";
                 r["Inactive"] = d.Inactive ? "Y" : "N";
                 r["Expiry"] = (object)d.ServiceExpiryDate ?? DBNull.Value;
                 _dtItemsView.Rows.Add(r);
@@ -878,6 +1241,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridItems.DataSource = _dtItemsView;
             GridViewItems.BestFitColumns();
             RefreshOrphanLookup();   // keep the inline attach list current after add/detach/swap
+            BindItemMeterPanel();    // rebind: the selected item's Meters table may have been replaced
         }
 
         private static string ItemCodesSummary(ItemEditData d)
@@ -902,6 +1266,319 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 string rr = (r["MeterRole"] == null ? "" : r["MeterRole"].ToString()).Trim().ToUpperInvariant();
                 if (rr == role) return r["MeterTypeCode"] == null ? "" : r["MeterTypeCode"].ToString();
             }
+            return "";
+        }
+
+        // ===================== Meter Configuration panel (bottom of the Service Item tab) =====================
+        // The selected service item's meters are viewed and edited RIGHT HERE — no need to open the item
+        // dialog. The grid binds directly to that item's ItemEditData.Meters table, so edits ride the
+        // normal contract save (new items -> InsertMeters, existing -> SaveMetersPreservingReadings).
+
+        private DevExpress.XtraEditors.GroupControl _grpMeterCfg;
+        private DevExpress.XtraGrid.GridControl _gridMeterCfg;
+        private DevExpress.XtraGrid.Views.Grid.GridView _viewMeterCfg;
+        private DevExpress.XtraEditors.SimpleButton _btnMeterCfgAdd;
+        private DevExpress.XtraEditors.SimpleButton _btnMeterCfgDel;
+        private DevExpress.XtraEditors.SimpleButton _btnMeterCfgMaint;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _meterCfgRepoType;
+        private DataTable _meterCfgLookup;
+        private ItemEditData _meterCfgItem;   // the item currently bound in the panel
+
+        private void BuildItemMeterPanel()
+        {
+            _grpMeterCfg = new DevExpress.XtraEditors.GroupControl();
+            _grpMeterCfg.Text = "Meter Configuration";
+            _grpMeterCfg.Dock = System.Windows.Forms.DockStyle.Bottom;
+            _grpMeterCfg.Height = 250;
+            PageItems.Controls.Add(_grpMeterCfg);
+
+            _gridMeterCfg = new DevExpress.XtraGrid.GridControl();
+            _viewMeterCfg = new DevExpress.XtraGrid.Views.Grid.GridView();
+            _gridMeterCfg.MainView = _viewMeterCfg;
+            _viewMeterCfg.GridControl = _gridMeterCfg;
+            _gridMeterCfg.Dock = System.Windows.Forms.DockStyle.Fill;
+            _grpMeterCfg.Controls.Add(_gridMeterCfg);
+
+            System.Windows.Forms.Panel bar = new System.Windows.Forms.Panel();
+            bar.Dock = System.Windows.Forms.DockStyle.Top;
+            bar.Height = 30;
+            _grpMeterCfg.Controls.Add(bar);
+
+            _btnMeterCfgAdd = new DevExpress.XtraEditors.SimpleButton();
+            _btnMeterCfgAdd.Text = "+";
+            _btnMeterCfgAdd.Location = new System.Drawing.Point(4, 3);
+            _btnMeterCfgAdd.Size = new System.Drawing.Size(28, 24);
+            _btnMeterCfgAdd.Click += new EventHandler(BtnMeterCfgAdd_Click);
+            bar.Controls.Add(_btnMeterCfgAdd);
+
+            _btnMeterCfgDel = new DevExpress.XtraEditors.SimpleButton();
+            _btnMeterCfgDel.Text = "-";
+            _btnMeterCfgDel.Location = new System.Drawing.Point(36, 3);
+            _btnMeterCfgDel.Size = new System.Drawing.Size(28, 24);
+            _btnMeterCfgDel.Click += new EventHandler(BtnMeterCfgDel_Click);
+            bar.Controls.Add(_btnMeterCfgDel);
+
+            _btnMeterCfgMaint = new DevExpress.XtraEditors.SimpleButton();
+            _btnMeterCfgMaint.Text = "Maintain Meter Type";
+            _btnMeterCfgMaint.ImageOptions.ImageUri.Uri = "Edit;Size16x16";
+            _btnMeterCfgMaint.Location = new System.Drawing.Point(72, 3);
+            _btnMeterCfgMaint.Size = new System.Drawing.Size(150, 24);
+            _btnMeterCfgMaint.ToolTip = "Open the Meter Type maintenance module. New / edited types are pickable here as soon as it closes.";
+            _btnMeterCfgMaint.Click += new EventHandler(BtnMeterCfgMaint_Click);
+            bar.Controls.Add(_btnMeterCfgMaint);
+
+            DevExpress.XtraEditors.LabelControl hint = new DevExpress.XtraEditors.LabelControl();
+            hint.Text = "Meters of the selected service item. Pick a Meter Type — pricing fills from the type and can be overridden per machine. Saved together with the contract.";
+            hint.Location = new System.Drawing.Point(232, 8);
+            bar.Controls.Add(hint);
+
+            LoadMeterCfgLookup();
+
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit repoType =
+                new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            DevExpress.XtraGrid.Views.Grid.GridView popup = new DevExpress.XtraGrid.Views.Grid.GridView();
+            popup.OptionsView.ShowAutoFilterRow = true;
+            popup.OptionsBehavior.AutoPopulateColumns = false;
+            repoType.PopupView = popup;
+            DevExpress.XtraGrid.Columns.GridColumn pCode = popup.Columns.AddVisible("MeterTypeCode");
+            pCode.Caption = "Meter Type"; pCode.Width = 120;
+            DevExpress.XtraGrid.Columns.GridColumn pDesc = popup.Columns.AddVisible("Description");
+            pDesc.Caption = "Description"; pDesc.Width = 260;
+            repoType.DataSource = _meterCfgLookup;
+            repoType.DisplayMember = "MeterTypeCode";
+            repoType.ValueMember = "MeterTypeCode";
+            repoType.NullText = "";
+            _gridMeterCfg.RepositoryItems.Add(repoType);
+            _meterCfgRepoType = repoType;   // kept so "Maintain Meter Type" can refresh its datasource
+
+            DevExpress.XtraEditors.Repository.RepositoryItemComboBox repoRole =
+                new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            repoRole.Items.AddRange(new object[] { "BK", "CL", "NA" });
+            repoRole.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            _gridMeterCfg.RepositoryItems.Add(repoRole);
+
+            _viewMeterCfg.OptionsBehavior.AutoPopulateColumns = false;
+            _viewMeterCfg.OptionsView.ShowGroupPanel = false;
+            // First column: which service item these meters belong to (unbound — the panel always
+            // shows ONE item's meters, so every row carries that item's number).
+            DevExpress.XtraGrid.Columns.GridColumn colSi = _viewMeterCfg.Columns.AddVisible("PanelServiceItemNo");
+            colSi.Caption = "Service Item No";
+            colSi.UnboundDataType = typeof(string);
+            colSi.OptionsColumn.AllowEdit = false;
+            colSi.Width = 120;
+            _viewMeterCfg.CustomUnboundColumnData += new DevExpress.XtraGrid.Views.Base.CustomColumnDataEventHandler(ViewMeterCfg_UnboundData);
+            MeterCfgCol("MeterTypeCode", "Meter Type", 140, repoType);
+            MeterCfgCol("Description", "Meter Description", 220, null);   // defaults from the type; editable per machine
+            MeterCfgCol("MeterRole", "Role (BK/CL)", 80, repoRole);
+            MeterCfgCol("MinimumCharges", "Min Charges", 90, null);
+            MeterCfgCol("ChargesRate", "Rate", 80, null);
+            MeterCfgCol("MeterMultiPriceCode", "Multi-Price", 100, null);
+            MeterCfgCol("RebateQtyInPercent", "Rebate %", 80, null);
+            MeterCfgCol("FOCQty", "Free Qty", 80, null);
+            MeterCfgCol("InitialReading", "Initial Reading", 100, null);
+            _viewMeterCfg.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(ViewMeterCfg_CellValueChanged);
+            _viewMeterCfg.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(ViewMeterCfg_RowCellStyle);
+
+            GridViewItems.FocusedRowChanged += new DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventHandler(GridViewItems_FocusedRowChangedMeterCfg);
+        }
+
+        private DevExpress.XtraGrid.Columns.GridColumn MeterCfgCol(string field, string caption, int width,
+            DevExpress.XtraEditors.Repository.RepositoryItem edit)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = _viewMeterCfg.Columns.AddVisible(field);
+            c.Caption = caption;
+            c.Width = width;
+            if (edit != null) c.ColumnEdit = edit;
+            return c;
+        }
+
+        private void LoadMeterCfgLookup()
+        {
+            try
+            {
+                _meterCfgLookup = _db.GetDataTable(
+                    "SELECT MeterTypeCode, Description, MinimumCharges, ChargesRate, " +
+                    "MeterMultiPriceCode, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge " +
+                    "FROM [dbo].[zSCP_MeterType] WHERE Inactive='N' ORDER BY MeterTypeCode", false);
+            }
+            catch { _meterCfgLookup = new DataTable(); }
+        }
+
+        // "Maintain Meter Type": open the Meter Type maintenance module; when it saves & closes, reload
+        // the lookup so this panel's Meter Type SearchLookUpEdit immediately shows new/edited types.
+        private void BtnMeterCfgMaint_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.MeterTypeLst_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.MeterTypeLst_Form(_db))
+                {
+                    f.WindowState = System.Windows.Forms.FormWindowState.Normal;
+                    f.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                LoadMeterCfgLookup();
+                if (_meterCfgRepoType != null) _meterCfgRepoType.DataSource = _meterCfgLookup;
+                if (_viewMeterCfg != null) _viewMeterCfg.RefreshData();
+            }
+            catch (Exception ex)
+            { XtraMessageBox.Show("Open Meter Type maintenance failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }
+
+        private void GridViewItems_FocusedRowChangedMeterCfg(object sender,
+            DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventArgs e)
+        {
+            BindItemMeterPanel();
+        }
+
+        /// <summary>The ItemEditData behind the focused items-grid row (null on the NEW row / no rows).</summary>
+        private ItemEditData FocusedItemData()
+        {
+            int rh = GridViewItems.FocusedRowHandle;
+            if (rh < 0) return null;
+            DataRowView drv = GridViewItems.GetRow(rh) as DataRowView;
+            if (drv == null) return null;
+            int no;
+            if (!int.TryParse(Convert.ToString(drv.Row["No"]), out no)) return null;
+            int idx = no - 1;
+            return (idx >= 0 && idx < _items.Count) ? _items[idx] : null;
+        }
+
+        private void BindItemMeterPanel()
+        {
+            if (_grpMeterCfg == null) return;
+            ItemEditData d = FocusedItemData();
+            _meterCfgItem = d;
+            if (d == null)
+            {
+                _grpMeterCfg.Text = "Meter Configuration  (select a service item above)";
+                _gridMeterCfg.DataSource = null;
+                _btnMeterCfgAdd.Enabled = false;
+                _btnMeterCfgDel.Enabled = false;
+                return;
+            }
+            if (d.Meters == null) d.Meters = zSCP2_Item_Form.CreateMetersTable();
+            if (!d.Meters.Columns.Contains("MachineSerialNo")) d.Meters.Columns.Add("MachineSerialNo", typeof(string));
+            if (!d.Meters.Columns.Contains("Description")) d.Meters.Columns.Add("Description", typeof(string));
+            // Meters may only be ADDED once the service item is saved (has a real number) — otherwise
+            // there is no Service Item No to tell which meter belongs to which machine.
+            bool saved = d.ItemKey > 0;
+            _grpMeterCfg.Text = saved
+                ? "Meter Configuration — " + d.ServiceItemNo
+                : "Meter Configuration — <NEW>  (save the contract first, then add meters here)";
+            _gridMeterCfg.DataSource = d.Meters;
+            _btnMeterCfgAdd.Enabled = saved;
+            _btnMeterCfgDel.Enabled = true;
+        }
+
+        private void ViewMeterCfg_UnboundData(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDataEventArgs e)
+        {
+            if (e.Column.FieldName != "PanelServiceItemNo" || !e.IsGetData) return;
+            e.Value = _meterCfgItem == null ? ""
+                : (string.IsNullOrEmpty(_meterCfgItem.ServiceItemNo) ? "<NEW>" : _meterCfgItem.ServiceItemNo);
+        }
+
+        private void BtnMeterCfgAdd_Click(object sender, EventArgs e)
+        {
+            ItemEditData d = _meterCfgItem;
+            if (d == null) { XtraMessageBox.Show("Select a service item in the grid first.", "Meters"); return; }
+            if (d.ItemKey <= 0)
+            {
+                XtraMessageBox.Show("This service item is not saved yet (<NEW>). Save the contract first — " +
+                    "then its Service Item No exists and meters can be added here.", "Meters");
+                return;
+            }
+            if (d.Meters == null) { d.Meters = zSCP2_Item_Form.CreateMetersTable(); _gridMeterCfg.DataSource = d.Meters; }
+            DataRow r = d.Meters.NewRow();
+            r["MeterRole"] = "NA";
+            r["Description"] = "";
+            r["MachineSerialNo"] = "";
+            r["MinimumCharges"] = 0m;
+            r["ChargesRate"] = 0m;
+            r["MeterMultiPriceCode"] = "";
+            r["RebateQtyInPercent"] = 0m;
+            r["FOCQty"] = 0m;
+            r["InitialReading"] = 0m;
+            d.Meters.Rows.Add(r);
+            _viewMeterCfg.FocusedRowHandle = _viewMeterCfg.RowCount - 1;
+            _dirty = true;
+        }
+
+        private void BtnMeterCfgDel_Click(object sender, EventArgs e)
+        {
+            int rh = _viewMeterCfg.FocusedRowHandle;
+            if (rh < 0 || _meterCfgItem == null) return;
+            // Removing a saved meter also removes its reading history on save (cascade) — make sure.
+            string code = Convert.ToString(_viewMeterCfg.GetRowCellValue(rh, "MeterTypeCode"));
+            if (_meterCfgItem.ItemKey > 0 && !string.IsNullOrEmpty(code))
+            {
+                DialogResult ok = XtraMessageBox.Show(
+                    "Remove meter '" + code + "' from " + _meterCfgItem.ServiceItemNo + "?\r\n\r\n" +
+                    "When the contract is saved, this meter AND its reading/invoice history are deleted permanently.",
+                    "Remove Meter", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (ok != DialogResult.Yes) return;
+            }
+            _viewMeterCfg.DeleteRow(rh);
+            _dirty = true;
+        }
+
+        // Rental (flat) meter rows shade amber — their home is now Rental Maintenance; editing here
+        // still works (nothing is locked) but the colour steers users to the dedicated module.
+        private static readonly System.Drawing.Color _rentalRowColor = System.Drawing.Color.FromArgb(255, 248, 225);
+
+        private bool IsFlatType(string meterTypeCode)
+        {
+            if (_meterCfgLookup == null || string.IsNullOrEmpty(meterTypeCode)) return false;
+            DataRow[] f = _meterCfgLookup.Select("MeterTypeCode='" + meterTypeCode.Replace("'", "''") + "'");
+            return f.Length > 0 && Convert.ToString(f[0]["IsFlatCharge"]) == "Y";
+        }
+
+        private void ViewMeterCfg_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            string type = Convert.ToString(_viewMeterCfg.GetRowCellValue(e.RowHandle, "MeterTypeCode"));
+            if (!IsFlatType(type)) return;
+            e.Appearance.BackColor = _rentalRowColor;
+            e.Appearance.Options.UseBackColor = true;
+        }
+
+        // Picking a Meter Type pre-fills its pricing (same behaviour as the item dialog); any edit dirties.
+        private void ViewMeterCfg_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            _dirty = true;
+            if (e.Column == null || e.Column.FieldName != "MeterTypeCode" || _meterCfgLookup == null) return;
+            string code = e.Value == null ? "" : e.Value.ToString();
+            DataRow[] found = _meterCfgLookup.Select("MeterTypeCode='" + code.Replace("'", "''") + "'");
+            if (found.Length == 0) return;
+            DataRow m = found[0];
+            int rh = e.RowHandle;
+            // Description defaults from the type ONLY when the cell is still blank — never clobber a
+            // description the user already keyed for this machine.
+            object curDesc = _viewMeterCfg.GetRowCellValue(rh, "Description");
+            if (curDesc == null || curDesc == DBNull.Value || curDesc.ToString().Trim().Length == 0)
+                _viewMeterCfg.SetRowCellValue(rh, "Description", m.Table.Columns.Contains("Description") ? m["Description"] : "");
+            _viewMeterCfg.SetRowCellValue(rh, "MinimumCharges", m["MinimumCharges"]);
+            _viewMeterCfg.SetRowCellValue(rh, "ChargesRate", m["ChargesRate"]);
+            _viewMeterCfg.SetRowCellValue(rh, "MeterMultiPriceCode", m["MeterMultiPriceCode"]);
+            _viewMeterCfg.SetRowCellValue(rh, "RebateQtyInPercent", m["RebateQtyInPercent"]);
+            _viewMeterCfg.SetRowCellValue(rh, "FOCQty", m["FOCQty"]);
+            // Default the BK/CL role from the meter type name when the role is still unset — a usage
+            // meter with no role would be skipped by the Meter Reading fetch (only BK/CL get readings).
+            object curRole = _viewMeterCfg.GetRowCellValue(rh, "MeterRole");
+            string curRoleS = curRole == null ? "" : curRole.ToString().Trim().ToUpperInvariant();
+            if (curRoleS == "" || curRoleS == "NA")
+            {
+                string inferred = InferMeterRole(code, m.Table.Columns.Contains("Description") ? Convert.ToString(m["Description"]) : "");
+                if (inferred.Length > 0) _viewMeterCfg.SetRowCellValue(rh, "MeterRole", inferred);
+            }
+        }
+
+        // Infer BK (black) / CL (colour) from a meter type's code + description. Blank = leave as-is
+        // (rental / minimum / fax types have no colour role).
+        internal static string InferMeterRole(string code, string desc)
+        {
+            string u = ((code ?? "") + " " + (desc ?? "")).ToUpperInvariant();
+            if (u.Contains("COLOR") || u.Contains("COLOUR") || u.Contains(".CL.") || u.Contains("-CL")) return "CL";
+            if (u.Contains(".BK.") || u.Contains("-BK") || u.Contains(" BK") || u.Contains("BLACK")) return "BK";
             return "";
         }
 
@@ -936,23 +1613,95 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
         }
 
+        // DELETE: permanently removes the service item from the DATABASE — meters, readings, staged
+        // entries and invoice links cascade away. Guarded by a DOUBLE confirmation (warning + typed
+        // DELETE). To merely take an item out of the contract, Detach is the right action.
         private void BtnDelItem_Click(object sender, EventArgs e)
         {
             int rh = GridViewItems.FocusedRowHandle;
             if (rh < 0) return;
             int idx = Convert.ToInt32(GridViewItems.GetRowCellValue(rh, "No")) - 1;
             if (idx < 0 || idx >= _items.Count) return;
-            if (XtraMessageBox.Show("Remove the selected service item from this contract?", "Confirm",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            long removedKey = _items[idx].ItemKey;
+            ItemEditData d = _items[idx];
+            string no = string.IsNullOrEmpty(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
+
+            // Unsaved row: nothing exists in the DB yet — one confirm is enough.
+            if (d.ItemKey <= 0)
+            {
+                if (XtraMessageBox.Show("Discard the new (unsaved) service item row?", "Delete Service Item",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                _items.RemoveAt(idx);
+                _dirty = true;
+                RebuildItemsView();
+                return;
+            }
+
+            // Confirm #1: the SUPER warning.
+            if (XtraMessageBox.Show(
+                "PERMANENTLY DELETE service item " + no + "?\r\n\r\n" +
+                "This deletes the machine from the database TOGETHER WITH:\r\n" +
+                "   -  all its meters\r\n" +
+                "   -  ALL meter readings and staged entries\r\n" +
+                "   -  its invoice links (meter transactions)\r\n" +
+                "   -  its ownership history and provided-item lines\r\n\r\n" +
+                "THIS CANNOT BE UNDONE.\r\n\r\n" +
+                "If you only want to take it out of this contract, use 'Detach from Contract' instead.\r\n\r\n" +
+                "Continue to the final confirmation?",
+                "DELETE Service Item — WARNING", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+            // Confirm #2: type DELETE.
+            string typed = DevExpress.XtraEditors.XtraInputBox.Show(
+                "FINAL CONFIRMATION\r\n\r\nType  DELETE  (capital letters) to permanently delete " + no + ":",
+                "DELETE Service Item — Final Confirm", "");
+            if (typed == null || typed.Trim() != "DELETE")
+            {
+                XtraMessageBox.Show("Cancelled — nothing was deleted.", "Delete Service Item");
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(_db.ConnectionString))
+                {
+                    conn.Open();
+                    using (SqlTransaction tx = conn.BeginTransaction("DelItem"))
+                    {
+                        try
+                        {
+                            ExecNonQuery(conn, tx, "DELETE FROM dbo.zSCP2_ContractSparePart WHERE ItemKey=@ik", P("@ik", d.ItemKey));
+                            // zSCP2_ItemMeter / ItemCode / ItemDebtorHistory cascade from the item row;
+                            // zSCP_MeterTrans + zSCP2_MeterEntry cascade from the meters. The reading
+                            // log (zSCP2_MeterReadingLog) is append-only audit and is intentionally KEPT.
+                            ExecNonQuery(conn, tx, "DELETE FROM dbo.zSCP2_Item WHERE ItemKey=@ik", P("@ik", d.ItemKey));
+                            tx.Commit();
+                        }
+                        catch { tx.Rollback(); throw; }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            _detachedThisSession.Remove(d.ItemKey);
             _items.RemoveAt(idx);
-            // Existing item -> it becomes an orphan (contract-less) on save; make it re-pickable now.
-            if (removedKey > 0 && !_detachedThisSession.Contains(removedKey)) _detachedThisSession.Add(removedKey);
             _dirty = true;
             RebuildItemsView();
+            XtraMessageBox.Show("Service item " + no + " was permanently deleted.", "Deleted",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void GridViewItems_DoubleClick(object sender, EventArgs e) { BtnEditItem_Click(null, null); }
+        private void GridViewItems_DoubleClick(object sender, EventArgs e)
+        {
+            // With inline editing on, double-click on an editable cell should edit the CELL, not open
+            // the dialog. The full editor still opens from the No / Service Item No cells or Edit button.
+            DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit =
+                GridViewItems.CalcHitInfo(GridItems.PointToClient(System.Windows.Forms.Cursor.Position));
+            if (hit.InRowCell && hit.Column != null &&
+                hit.Column.OptionsColumn.AllowEdit && hit.Column.FieldName != "ServiceItemNo") return;
+            BtnEditItem_Click(null, null);
+        }
 
         // #5: the Service Item No column is an inline SearchLookUpEdit of ORPHAN items (contract-less +
         // detached-this-session). Picking one on a row attaches/swaps it in place. Other columns stay
@@ -981,23 +1730,301 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewItems.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewItems_CellValueChanged);
         }
 
-        // Edit-time editor for the Service Item No column: the inline-attach orphan picker.
+        // Edit-time editors: Service Item No -> orphan attach picker; Item Code / Grade -> searchable
+        // lookups. Supplied at EDIT time only so display never depends on the lookup contents.
         private void GridViewItems_ItemNoEditor(object sender, DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventArgs e)
         {
-            if (e.Column != null && e.Column.FieldName == "ServiceItemNo" && _orphanRepo != null)
-                e.RepositoryItem = _orphanRepo;
+            if (e.Column == null) return;
+            if (e.Column.FieldName == "ServiceItemNo" && _orphanRepo != null) e.RepositoryItem = _orphanRepo;
+            else if (e.Column.FieldName == "ItemCode" && _inlineItemCodeRepo != null) e.RepositoryItem = _inlineItemCodeRepo;
+            else if (e.Column.FieldName == "GradeCode" && _inlineGradeRepo != null) e.RepositoryItem = _inlineGradeRepo;
         }
 
-        // Only the NEW row (bottom "add" row, or a still-blank row) may open the attach dropdown —
-        // rows that already hold a service item are locked (swap/detach goes through the buttons).
+        // ServiceItemNo: only the NEW row (bottom "add" row, or a still-blank row) may open the attach
+        // dropdown. All other item fields: editable on REAL rows only — the bottom NEW row is purely
+        // the attach picker.
         private void GridViewItems_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "ServiceItemNo") return;
+            if (GridViewItems.FocusedColumn == null) return;
             int rh = GridViewItems.FocusedRowHandle;
+            if (GridViewItems.FocusedColumn.FieldName != "ServiceItemNo")
+            {
+                if (rh == DevExpress.XtraGrid.GridControl.NewItemRowHandle) e.Cancel = true;
+                return;
+            }
             if (rh == DevExpress.XtraGrid.GridControl.NewItemRowHandle) return;
             object cur = GridViewItems.GetRowCellValue(rh, "ServiceItemNo");
             bool blank = cur == null || cur == DBNull.Value || cur.ToString().Trim().Length == 0;
             if (!blank) e.Cancel = true;
+        }
+
+        // ===================== Inline item editing + quick CSSI creation =====================
+        // Every user-editable service-item field can be changed straight in the grid (writes back into
+        // the ItemEditData, saved by the normal contract save). "Quick Add Row" appends a blank CSSI —
+        // its number shows <NEW> until Save draws a real one (the existing blank-number safety net).
+
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineItemCodeRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineGradeRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineSerialRepo;
+        private DataTable _inlineItemLookup;
+        private DataTable _inlineGradeLookup;
+        private DataTable _inlineSerialLookup;
+        private DevExpress.XtraEditors.SimpleButton _btnItemQuickAdd;
+
+        private void EnableInlineItemEditing()
+        {
+            try
+            {
+                _inlineItemLookup = _db.GetDataTable(
+                    "SELECT ItemCode, ISNULL(Description,'') AS Description FROM dbo.Item ORDER BY ItemCode", false);
+            }
+            catch { _inlineItemLookup = new DataTable(); }
+            _inlineItemCodeRepo = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            DevExpress.XtraGrid.Views.Grid.GridView vIc = new DevExpress.XtraGrid.Views.Grid.GridView();
+            vIc.OptionsView.ShowAutoFilterRow = true;
+            vIc.OptionsBehavior.AutoPopulateColumns = false;
+            _inlineItemCodeRepo.PopupView = vIc;
+            DevExpress.XtraGrid.Columns.GridColumn icCode = vIc.Columns.AddVisible("ItemCode");
+            icCode.Caption = "Item Code"; icCode.Width = 110;
+            DevExpress.XtraGrid.Columns.GridColumn icDesc = vIc.Columns.AddVisible("Description");
+            icDesc.Caption = "Description"; icDesc.Width = 260;
+            _inlineItemCodeRepo.DataSource = _inlineItemLookup;
+            _inlineItemCodeRepo.DisplayMember = "ItemCode";
+            _inlineItemCodeRepo.ValueMember = "ItemCode";
+            _inlineItemCodeRepo.NullText = "";
+            GridItems.RepositoryItems.Add(_inlineItemCodeRepo);
+
+            try
+            {
+                _inlineGradeLookup = _db.GetDataTable(
+                    "SELECT ServiceItemGradeCode, ISNULL(Description,'') AS Description " +
+                    "FROM dbo.zSCP_LK_ServiceItemGrade WHERE ISNULL(Inactive,'N')='N' ORDER BY ServiceItemGradeCode", false);
+            }
+            catch { _inlineGradeLookup = new DataTable(); }
+            _inlineGradeRepo = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            DevExpress.XtraGrid.Views.Grid.GridView vGr = new DevExpress.XtraGrid.Views.Grid.GridView();
+            vGr.OptionsView.ShowAutoFilterRow = true;
+            vGr.OptionsBehavior.AutoPopulateColumns = false;
+            _inlineGradeRepo.PopupView = vGr;
+            DevExpress.XtraGrid.Columns.GridColumn grCode = vGr.Columns.AddVisible("ServiceItemGradeCode");
+            grCode.Caption = "Grade"; grCode.Width = 90;
+            DevExpress.XtraGrid.Columns.GridColumn grDesc = vGr.Columns.AddVisible("Description");
+            grDesc.Caption = "Description"; grDesc.Width = 220;
+            _inlineGradeRepo.DataSource = _inlineGradeLookup;
+            _inlineGradeRepo.DisplayMember = "ServiceItemGradeCode";
+            _inlineGradeRepo.ValueMember = "ServiceItemGradeCode";
+            _inlineGradeRepo.NullText = "";
+            GridItems.RepositoryItems.Add(_inlineGradeRepo);
+
+            // Machine Serial: typeable combo — the dropdown lists the serials registered (ItemSerialNo)
+            // for the row's Item Code, filled at edit time by GridViewItems_ShownEditor; free text allowed.
+            try
+            {
+                _inlineSerialLookup = _db.GetDataTable(
+                    "SELECT ItemCode, SerialNumber FROM dbo.ItemSerialNo " +
+                    "WHERE ISNULL(SerialNumber,'') <> '' ORDER BY ItemCode, SerialNumber", false);
+            }
+            catch { _inlineSerialLookup = new DataTable(); }
+            _inlineSerialRepo = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            _inlineSerialRepo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;   // typeable
+            GridItems.RepositoryItems.Add(_inlineSerialRepo);
+            GridViewItems.ShownEditor += new EventHandler(GridViewItems_ShownEditorSerial);
+
+            DevExpress.XtraEditors.Repository.RepositoryItemDateEdit repoDate =
+                new DevExpress.XtraEditors.Repository.RepositoryItemDateEdit();
+            repoDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            repoDate.DisplayFormat.FormatString = "dd/MM/yyyy";
+            repoDate.EditFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            repoDate.EditFormat.FormatString = "dd/MM/yyyy";
+            repoDate.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+            GridItems.RepositoryItems.Add(repoDate);
+
+            DevExpress.XtraEditors.Repository.RepositoryItemComboBox repoYN =
+                new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            repoYN.Items.AddRange(new object[] { "N", "Y" });
+            repoYN.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            GridItems.RepositoryItems.Add(repoYN);
+
+            // Service Type: searchable dropdown over the Service Type list (zSCP_LK_ServiceType,
+            // maintained under General Setup -> Service Type; seeded from the Contract Type list).
+            DataTable stLookup;
+            try
+            {
+                stLookup = _db.GetDataTable(
+                    "SELECT ServiceTypeCode, ISNULL(Description,'') AS Description FROM dbo.zSCP_LK_ServiceType " +
+                    "WHERE ISNULL(Inactive,'N')='N' ORDER BY ServiceTypeCode", false);
+            }
+            catch { stLookup = new DataTable(); }
+            DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit repoServiceType =
+                new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            DevExpress.XtraGrid.Views.Grid.GridView vSt = new DevExpress.XtraGrid.Views.Grid.GridView();
+            vSt.OptionsView.ShowAutoFilterRow = true;
+            vSt.OptionsBehavior.AutoPopulateColumns = false;
+            repoServiceType.PopupView = vSt;
+            DevExpress.XtraGrid.Columns.GridColumn stCode = vSt.Columns.AddVisible("ServiceTypeCode");
+            stCode.Caption = "Service Type"; stCode.Width = 100;
+            DevExpress.XtraGrid.Columns.GridColumn stDesc = vSt.Columns.AddVisible("Description");
+            stDesc.Caption = "Description"; stDesc.Width = 220;
+            repoServiceType.DataSource = stLookup;
+            repoServiceType.DisplayMember = "ServiceTypeCode";
+            repoServiceType.ValueMember = "ServiceTypeCode";
+            repoServiceType.NullText = "";
+            GridItems.RepositoryItems.Add(repoServiceType);
+
+            SetItemColEditable("ItemCode", null);          // editor supplied at edit time (lookup)
+            // Machine Serial: bind the designer column DIRECTLY (a hidden duplicate FieldName once
+            // made ColumnByFieldName pick the wrong column and the visible cell stayed locked).
+            ColSerial.OptionsColumn.AllowEdit = true;
+            ColSerial.ColumnEdit = _inlineSerialRepo;      // permanent combo: arrow + typing
+            SetItemColEditable("GradeCode", null);         // editor supplied at edit time (lookup)
+            SetItemColEditable("ServiceType", repoServiceType);
+            SetItemColEditable("PurchaseDate", repoDate);
+            SetItemColEditable("ReferenceNo", null);
+            SetItemColEditable("BillingDay", null);
+            SetItemColEditable("ServiceStart", repoDate);
+            SetItemColEditable("Expiry", repoDate);
+            SetItemColEditable("Description", null);
+            SetItemColEditable("Inactive", repoYN);
+
+            // "Preventive..." button column: opens the item dialog directly on its Preventive
+            // Maintenance tab for the clicked row.
+            DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit repoPM =
+                new DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit();
+            repoPM.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.HideTextEditor;
+            repoPM.Buttons.Clear();
+            DevExpress.XtraEditors.Controls.EditorButton pmBtn =
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Glyph);
+            pmBtn.Caption = "Preventive...";
+            pmBtn.ImageOptions.ImageUri.Uri = "Recurrence;Size16x16";   // verified in the DX gallery
+            repoPM.Buttons.Add(pmBtn);
+            repoPM.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(RepoPM_ButtonClick);
+            GridItems.RepositoryItems.Add(repoPM);
+            DevExpress.XtraGrid.Columns.GridColumn colPM = GridViewItems.Columns.AddVisible("PMButton");
+            colPM.Caption = "Preventive";
+            colPM.UnboundDataType = typeof(string);
+            colPM.OptionsColumn.AllowEdit = true;
+            colPM.ColumnEdit = repoPM;
+            colPM.ShowButtonMode = DevExpress.XtraGrid.Views.Base.ShowButtonModeEnum.ShowAlways;
+            colPM.Width = 90;
+
+            _btnItemQuickAdd = new DevExpress.XtraEditors.SimpleButton();
+            _btnItemQuickAdd.Text = "Quick Add Row";
+            _btnItemQuickAdd.ImageOptions.ImageUri.Uri = "Add;Size16x16";
+            _btnItemQuickAdd.Location = new System.Drawing.Point(6, 5);
+            _btnItemQuickAdd.Size = new System.Drawing.Size(130, 24);
+            _btnItemQuickAdd.ToolTip = "Add a blank service item (CSSI) and key it in directly in the grid. The number is drawn on Save.";
+            _btnItemQuickAdd.Click += new EventHandler(BtnItemQuickAdd_Click);
+            PnlItemBar.Controls.Add(_btnItemQuickAdd);
+        }
+
+        // Cascade: when the Machine Serial cell opens, fill its dropdown with the serials registered
+        // for that row's Item Code (typing a free value is still allowed).
+        private void GridViewItems_ShownEditorSerial(object sender, EventArgs e)
+        {
+            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "SerialNumber") return;
+            DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;
+            if (ed == null) return;
+            ed.Properties.Items.Clear();
+            string code = (GridViewItems.GetFocusedRowCellValue("ItemCode") ?? "").ToString().Trim();
+            if (_inlineSerialLookup == null || code.Length == 0) return;
+            foreach (DataRow r in _inlineSerialLookup.Select("ItemCode='" + code.Replace("'", "''") + "'"))
+                ed.Properties.Items.Add(r["SerialNumber"].ToString());
+        }
+
+        private void SetItemColEditable(string field, DevExpress.XtraEditors.Repository.RepositoryItem edit)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = GridViewItems.Columns.ColumnByFieldName(field);
+            if (c == null) return;
+            c.OptionsColumn.AllowEdit = true;
+            if (edit != null) c.ColumnEdit = edit;
+        }
+
+        // Preventive button on a row: open that item's editor directly on the Preventive tab.
+        private void RepoPM_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            ItemEditData d = FocusedItemData();
+            if (d == null) return;
+            using (zSCP2_Item_Form dlg = new zSCP2_Item_Form(_db, d, (int)SpnBillingDay.Value, TxtContractNo.Text.Trim()))
+            {
+                dlg.ShowPreventiveTab();
+                if (dlg.ShowDialog(this) == DialogResult.OK) { _dirty = true; RebuildItemsView(); }
+            }
+        }
+
+        private void BtnItemQuickAdd_Click(object sender, EventArgs e)
+        {
+            ItemEditData d = new ItemEditData();
+            d.ServiceItemNo = "";                 // shows <NEW>; a real number is drawn at save
+            d.ServiceItemNoIsAuto = false;
+            d.Meters = zSCP2_Item_Form.CreateMetersTable();
+            d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
+            d.SpareParts = CreateSparePartsTable();
+            _items.Add(d);
+            _dirty = true;
+            RebuildItemsView();
+            int rh = GridViewItems.DataRowCount - 1;
+            if (rh >= 0)
+            {
+                GridViewItems.FocusedRowHandle = rh;
+                DevExpress.XtraGrid.Columns.GridColumn c = GridViewItems.Columns.ColumnByFieldName("ItemCode");
+                if (c != null) { GridViewItems.FocusedColumn = c; GridViewItems.ShowEditor(); }
+            }
+        }
+
+        // Write an inline cell edit back into the row's ItemEditData (display table is throwaway).
+        private void ApplyInlineItemEdit(DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            if (e.RowHandle < 0 || e.Column == null) return;
+            object noVal = GridViewItems.GetRowCellValue(e.RowHandle, "No");
+            if (noVal == null || noVal == DBNull.Value) return;
+            int idx = Convert.ToInt32(noVal) - 1;
+            if (idx < 0 || idx >= _items.Count) return;
+            ItemEditData d = _items[idx];
+            string s = (e.Value == null || e.Value == DBNull.Value) ? "" : e.Value.ToString().Trim();
+            switch (e.Column.FieldName)
+            {
+                case "ItemCode":
+                    d.ItemCode = s;
+                    // Same convenience as the item dialog: picking an item fills an empty Description.
+                    if (string.IsNullOrEmpty(d.Description) && _inlineItemLookup != null && s.Length > 0)
+                    {
+                        DataRow[] f = _inlineItemLookup.Select("ItemCode='" + s.Replace("'", "''") + "'");
+                        if (f.Length > 0)
+                        {
+                            d.Description = Convert.ToString(f[0]["Description"]);
+                            GridViewItems.SetRowCellValue(e.RowHandle, "Description", d.Description);
+                        }
+                    }
+                    break;
+                case "SerialNumber": d.SerialNumber = s; break;
+                case "GradeCode": d.GradeCode = s; break;
+                case "ServiceType": d.ServiceTypeCode = s; break;
+                case "PurchaseDate":
+                    d.PurchaseDate = (e.Value == null || e.Value == DBNull.Value)
+                        ? (DateTime?)null : Convert.ToDateTime(e.Value);
+                    break;
+                case "ReferenceNo": d.ReferenceNo = s; break;
+                case "Description": d.Description = s; break;
+                case "Inactive": d.Inactive = s.Equals("Y", StringComparison.OrdinalIgnoreCase); break;
+                case "BillingDay":
+                {
+                    int bd;
+                    d.BillingDayOverride = (int.TryParse(s, out bd) && bd >= 1 && bd <= 31) ? (int?)bd : null;
+                    break;
+                }
+                case "ServiceStart":
+                    d.ServiceStartDate = (e.Value == null || e.Value == DBNull.Value)
+                        ? (DateTime?)null : Convert.ToDateTime(e.Value);
+                    break;
+                case "Expiry":
+                    d.ServiceExpiryDate = (e.Value == null || e.Value == DBNull.Value)
+                        ? (DateTime?)null : Convert.ToDateTime(e.Value);
+                    break;
+                default: return;
+            }
+            _dirty = true;
         }
 
         private void RefreshOrphanLookup()
@@ -1009,7 +2036,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void GridViewItems_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
-            if (e.Column.FieldName != "ServiceItemNo") return;
+            if (e.Column.FieldName != "ServiceItemNo") { ApplyInlineItemEdit(e); return; }
             string picked = e.Value == null ? "" : e.Value.ToString().Trim();
             if (picked.Length == 0) return;
             object noVal = e.RowHandle == DevExpress.XtraGrid.GridControl.NewItemRowHandle
@@ -1578,6 +2605,210 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return _mh.TryGetValue(col, out ed) ? (ed.Text ?? "").Trim() : "";
         }
 
+        // ===================== Strategy tab (this contract's OWN strategy rules) =====================
+        // The contract's editable COPY of strategy rules (zSCP2_ContractStrategyRule). Seeded from a master
+        // template by "Copy Rules from Strategy Template", then edited here WITHOUT touching the template.
+        // The billing pipeline + "Apply Strategy to Meters" read these rows. Inserted as the 2nd tab.
+        private DevExpress.XtraTab.XtraTabPage _pgStrategy;
+        private ServiceContractPhotocopier.Classes.CommonForms.StrategyRulesEditorControl _strategyEditor;
+        private DevExpress.XtraEditors.SimpleButton _btnCopyTemplate;
+        private DevExpress.XtraEditors.SimpleButton _btnApplyMeters;
+        private DevExpress.XtraEditors.LabelControl _lblStrategyTabHint;
+
+        private void BuildStrategyTab()
+        {
+            _pgStrategy = new DevExpress.XtraTab.XtraTabPage();
+            _pgStrategy.Text = "Strategy";
+
+            _strategyEditor = new ServiceContractPhotocopier.Classes.CommonForms.StrategyRulesEditorControl();
+            _strategyEditor.Dock = System.Windows.Forms.DockStyle.Fill;
+            _strategyEditor.RulesChanged += delegate { if (!_loading) _dirty = true; };
+
+            DevExpress.XtraEditors.PanelControl top = new DevExpress.XtraEditors.PanelControl();
+            top.Dock = System.Windows.Forms.DockStyle.Top;
+            top.Height = 74;
+
+            // Move the strategy TEMPLATE picker + "Rental separate invoice" off the header into this tab —
+            // strategy lives here now. Reparent the existing controls (keeps their save/load/dirty wiring).
+            if (LblStrategy != null && LblStrategy.Parent != null) LblStrategy.Parent.Controls.Remove(LblStrategy);
+            if (SluStrategy != null && SluStrategy.Parent != null) SluStrategy.Parent.Controls.Remove(SluStrategy);
+            if (ChkRentalSeparate != null && ChkRentalSeparate.Parent != null) ChkRentalSeparate.Parent.Controls.Remove(ChkRentalSeparate);
+
+            if (LblStrategy != null) { LblStrategy.Text = "Strategy Template"; LblStrategy.Location = new System.Drawing.Point(10, 13); top.Controls.Add(LblStrategy); }
+            if (SluStrategy != null) { SluStrategy.Location = new System.Drawing.Point(115, 9); SluStrategy.Width = 200; top.Controls.Add(SluStrategy); }
+
+            _btnCopyTemplate = new DevExpress.XtraEditors.SimpleButton();
+            _btnCopyTemplate.Text = "Copy Rules from Template";
+            _btnCopyTemplate.Location = new System.Drawing.Point(325, 8);
+            _btnCopyTemplate.Width = 190; _btnCopyTemplate.Height = 26;
+            _btnCopyTemplate.Click += new EventHandler(BtnCopyTemplate_Click);
+            top.Controls.Add(_btnCopyTemplate);
+
+            // Fills/overrides the BK/CL (+ rental) meters from these rules, per each rule's scope. Save first.
+            _btnApplyMeters = new DevExpress.XtraEditors.SimpleButton();
+            _btnApplyMeters.Text = "Apply to Meters (override BK/CL)";
+            _btnApplyMeters.Location = new System.Drawing.Point(520, 8);
+            _btnApplyMeters.Width = 220; _btnApplyMeters.Height = 26;
+            _btnApplyMeters.Click += new EventHandler(delegate { ApplyStrategyToMeters(); });
+            top.Controls.Add(_btnApplyMeters);
+
+            if (ChkRentalSeparate != null) { ChkRentalSeparate.Location = new System.Drawing.Point(760, 12); top.Controls.Add(ChkRentalSeparate); }
+
+            _lblStrategyTabHint = new DevExpress.XtraEditors.LabelControl();
+            _lblStrategyTabHint.Text = "Copy from a Template, edit these rules (this contract's own copy), Save, then Apply to Meters to fill the BK/CL meters per each rule's scope.";
+            _lblStrategyTabHint.Location = new System.Drawing.Point(10, 48);
+            top.Controls.Add(_lblStrategyTabHint);
+
+            // Add the Fill control first, then the Top bar, so docking lays them out without overlap.
+            _pgStrategy.Controls.Add(_strategyEditor);
+            _pgStrategy.Controls.Add(top);
+            TabMain.TabPages.Insert(1, _pgStrategy);   // second tab, right after "Service Item Under Contract"
+
+            _strategyEditor.SetEditable(true);
+            RefreshStrategyTab();
+        }
+
+        // Feed the control this contract's saved service items + load its own rules from the DB.
+        private void RefreshStrategyTab()
+        {
+            if (_strategyEditor == null) return;
+            DataTable items = new DataTable();
+            items.Columns.Add("ItemKey", typeof(long));
+            items.Columns.Add("ServiceItemNo", typeof(string));
+            items.Columns.Add("Description", typeof(string));
+            foreach (ItemEditData d in _items)
+                if (d.ItemKey > 0)
+                    items.Rows.Add(d.ItemKey, string.IsNullOrEmpty(d.ServiceItemNo) ? ("#" + d.ItemKey) : d.ServiceItemNo, d.Description ?? "");
+            _strategyEditor.SetServiceItems(items);
+            _strategyEditor.LoadRules(ServiceContractPhotocopier.Classes.ScpStrategy.LoadContractRules(_db, _contractKey));
+        }
+
+        private void BtnCopyTemplate_Click(object sender, EventArgs e)
+        {
+            string code = SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim();
+            if (code.Length == 0)
+            { XtraMessageBox.Show("Pick a Strategy on the header first, then click Copy.", "Copy Strategy Template"); return; }
+            ServiceContractPhotocopier.Classes.StrategyDef def =
+                ServiceContractPhotocopier.Classes.ScpStrategy.LoadByCode(_db, code);
+            if (def == null || def.Rules.Count == 0)
+            { XtraMessageBox.Show("Strategy '" + code + "' has no rules to copy (or is inactive).", "Copy Strategy Template"); return; }
+            if (_strategyEditor.GetRules().Count > 0 &&
+                XtraMessageBox.Show("Replace this contract's current strategy rules with the " + def.Rules.Count +
+                    " rule(s) from template '" + code + "'?", "Copy Strategy Template",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _strategyEditor.LoadRules(def.Rules);   // ServiceItemKey defaults to 0 (all items)
+            _dirty = true;
+            XtraMessageBox.Show(def.Rules.Count + " rule(s) copied from template '" + code +
+                "'. Bind any rule to a single Service Item if needed, then Save the contract.", "Copy Strategy Template",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Persist this contract's own strategy rules (replace-all) inside the contract save transaction.
+        private void SaveContractStrategyRules(SqlConnection conn, SqlTransaction tx)
+        {
+            if (_strategyEditor == null || _contractKey <= 0) return;
+            string seed = SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim();
+            ExecNonQuery(conn, tx, "DELETE FROM dbo.zSCP2_ContractStrategyRule WHERE ContractKey=@ck", P("@ck", _contractKey));
+            foreach (ServiceContractPhotocopier.Classes.StrategyRule r in _strategyEditor.GetRules())
+            {
+                ExecNonQuery(conn, tx,
+                    "INSERT INTO dbo.zSCP2_ContractStrategyRule (ContractKey, ServiceItemKeys, Seq, RuleKind, Scope, " +
+                    "TargetAmount, PartialPct, FreeMonths, CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, LimitQty, SeededFromCode) " +
+                    "VALUES (@ck,@sik,@seq,@kind,@scope,@tgt,@pp,@fm,@cm,@fc,@rb,@net,@ls,@lq,@seed)",
+                    P("@ck", _contractKey), P("@sik", ServiceContractPhotocopier.Classes.ScpStrategy.JoinItemKeys(r.ServiceItemKeys)),
+                    P("@seq", r.Seq), P("@kind", r.Kind),
+                    P("@scope", r.Scope), P("@tgt", r.TargetAmount), P("@pp", r.PartialPct), P("@fm", r.FreeMonths),
+                    P("@cm", r.CommitAmount), P("@fc", r.FocCopies), P("@rb", r.RebatePct),
+                    P("@net", r.NetBilling ? "Y" : "N"), P("@ls", r.LimitScope == 'G' ? "G" : "S"),
+                    P("@lq", r.LimitQty), P("@seed", seed));
+            }
+        }
+
+        // ===================== Billing History tab ("what billing was generated") =====================
+        private DevExpress.XtraTab.XtraTabPage _pgBillingHist;
+
+        private void BuildBillingHistoryTab()
+        {
+            _pgBillingHist = new DevExpress.XtraTab.XtraTabPage();
+            _pgBillingHist.Text = "Billing History";
+            TabMain.TabPages.Add(_pgBillingHist);
+            ServiceContractPhotocopier.Classes.ScpBillingHistory.BuildTab(_pgBillingHist, _db, "i.ContractKey", _contractKey);
+        }
+
+        private void RefreshBillingHistoryTab()
+        {
+            if (_pgBillingHist == null) return;
+            ServiceContractPhotocopier.Classes.ScpBillingHistory.BuildTab(_pgBillingHist, _db, "i.ContractKey", _contractKey);
+        }
+
+        // ===================== Change History tab (field-level audit viewer) =====================
+        // Read-only view over zSCP2_ContractAudit: every save's field diffs (old -> new, who, when),
+        // plus rental / strategy-apply rows scoped to this contract. Answers "what did this field
+        // say in June" for reports.
+
+        private DevExpress.XtraTab.XtraTabPage _pgChangeHist;
+        private DevExpress.XtraGrid.GridControl _gridChangeHist;
+        private DevExpress.XtraGrid.Views.Grid.GridView _viewChangeHist;
+
+        private void BuildChangeHistoryTab()
+        {
+            _pgChangeHist = new DevExpress.XtraTab.XtraTabPage();
+            _pgChangeHist.Text = "Change History";
+            TabMain.TabPages.Add(_pgChangeHist);
+
+            _gridChangeHist = new DevExpress.XtraGrid.GridControl();
+            _viewChangeHist = new DevExpress.XtraGrid.Views.Grid.GridView();
+            _gridChangeHist.MainView = _viewChangeHist;
+            _viewChangeHist.GridControl = _gridChangeHist;
+            _gridChangeHist.Dock = System.Windows.Forms.DockStyle.Fill;
+            _viewChangeHist.OptionsBehavior.Editable = false;
+            _viewChangeHist.OptionsView.ShowGroupPanel = false;
+            _viewChangeHist.OptionsView.ShowAutoFilterRow = true;
+            _pgChangeHist.Controls.Add(_gridChangeHist);
+            RefreshChangeHistoryTab();
+        }
+
+        private void RefreshChangeHistoryTab()
+        {
+            if (_gridChangeHist == null) return;
+            DataTable dt = null;
+            if (_contractKey > 0)
+            {
+                try
+                {
+                    dt = _db.GetDataTable(
+                        "SELECT a.ChangedAt AS [When], a.ChangedBy AS [Who], a.ChangeSource AS [Source], " +
+                        "a.FieldName AS [Field], ISNULL(a.OldValue,'') AS [Old], ISNULL(a.NewValue,'') AS [New], " +
+                        "ISNULL(i.ServiceItemNo,'') AS [Item] " +
+                        "FROM dbo.zSCP2_ContractAudit a " +
+                        "LEFT JOIN dbo.zSCP2_Item i ON i.ItemKey = a.ItemKey " +
+                        "WHERE a.ContractKey = " + _contractKey + " " +
+                        "ORDER BY a.ChangedAt DESC, a.AuditKey DESC", false);
+                }
+                catch { }
+            }
+            if (dt == null)
+            {
+                dt = new DataTable();
+                dt.Columns.Add("When", typeof(DateTime));
+                dt.Columns.Add("Who", typeof(string));
+                dt.Columns.Add("Source", typeof(string));
+                dt.Columns.Add("Field", typeof(string));
+                dt.Columns.Add("Old", typeof(string));
+                dt.Columns.Add("New", typeof(string));
+                dt.Columns.Add("Item", typeof(string));
+            }
+            _gridChangeHist.DataSource = dt;
+            _viewChangeHist.PopulateColumns();
+            if (_viewChangeHist.Columns["When"] != null)
+            {
+                _viewChangeHist.Columns["When"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                _viewChangeHist.Columns["When"].DisplayFormat.FormatString = "dd/MM/yyyy HH:mm:ss";
+                _viewChangeHist.Columns["When"].Width = 130;
+            }
+            _viewChangeHist.BestFitColumns();
+        }
+
         private void MhSet(string col, string val)
         {
             DevExpress.XtraEditors.TextEdit ed;
@@ -1641,6 +2872,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void BtnSave_Click(object sender, EventArgs e)
         {
             bool wasNew = _isNew;   // InsertContract flips _isNew during save; remember the entry state
+            // Commit any in-progress inline edit (items grid + meter panel) so it rides this save.
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            if (_viewMeterCfg != null)
+            {
+                _viewMeterCfg.PostEditor();
+                _viewMeterCfg.CloseEditor();
+                _viewMeterCfg.UpdateCurrentRow();
+            }
             if (string.IsNullOrWhiteSpace(TxtContractNo.Text))
             { XtraMessageBox.Show("Contract No is required.", "Validation"); return; }
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
@@ -1678,6 +2918,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     conn.Open();
                     using (SqlTransaction tx = conn.BeginTransaction())
                     {
+                        // Field-level change audit: snapshot BEFORE any of this save's updates. The
+                        // contract row is updated twice (UpdateContract + SaveMoreHeader) — one
+                        // before/after diff at the end covers both.
+                        bool auditWasNew = _isNew;
+                        System.Collections.Generic.Dictionary<string, string> auditBefore =
+                            _isNew ? null : ServiceContractPhotocopier.Classes.ScpContractAudit.Snapshot(conn, tx, _contractKey);
+
                         if (_isNew) InsertContract(conn, tx, debtor);
                         else UpdateContract(conn, tx, debtor);
 
@@ -1731,6 +2978,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         }
                         SaveSpareParts(conn, tx);
                         SaveMoreHeader(conn, tx);
+                        SaveContractStrategyRules(conn, tx);   // this contract's own strategy rules copy
+
+                        // Change History: diff old vs new contract row (both UPDATEs included); new
+                        // contracts get a single CREATED marker. Never blocks the save.
+                        if (auditWasNew)
+                            ServiceContractPhotocopier.Classes.ScpContractAudit.WriteCreated(
+                                conn, tx, _contractKey, TxtContractNo.Text.Trim(),
+                                ServiceContractPhotocopier.Classes.ScpContractAudit.SOURCE_CONTRACT);
+                        else if (auditBefore != null)
+                            ServiceContractPhotocopier.Classes.ScpContractAudit.WriteDiff(
+                                conn, tx, _contractKey, TxtContractNo.Text.Trim(), auditBefore,
+                                ServiceContractPhotocopier.Classes.ScpContractAudit.Snapshot(conn, tx, _contractKey),
+                                ServiceContractPhotocopier.Classes.ScpContractAudit.SOURCE_CONTRACT);
                         tx.Commit();
                     }
                 }
@@ -1744,6 +3004,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     RebuildItemsView();
                     LoadSpareParts();
                     LoadMoreHeader();
+                    RefreshStrategyTab();
+                    RefreshBillingHistoryTab();
+                    RefreshChangeHistoryTab();
                     _dirty = false;
                     UpdateServiceItemButtons();
                     XtraMessageBox.Show("Contract saved. You can now add service items.", "Saved",
@@ -1769,9 +3032,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, Inactive, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, Inactive, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@inact,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -1787,7 +3050,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "ContractDate=@cdate, ServiceStartDate=@sdate, ServiceExpiryDate=@edate, ContractValue=@val, " +
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
-                "DeptNo=@dept, ProjNo=@proj, Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
+                "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, " +
+                "Inactive=@inact, Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -1814,7 +3078,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@attn", TxtAttention.Text.Trim());
             cmd.Parameters.AddWithValue("@phone", TxtPhone.Text.Trim());
             cmd.Parameters.AddWithValue("@term", TxtTerm.Text.Trim());
-            cmd.Parameters.AddWithValue("@area", TxtArea.Text.Trim());
+            cmd.Parameters.AddWithValue("@area", TxtArea.EditValue == null ? "" : TxtArea.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@refno", TxtRefNo.Text.Trim());
             cmd.Parameters.AddWithValue("@staff", SluAgent.EditValue == null ? "" : SluAgent.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@dept", SluDept.EditValue == null ? "" : SluDept.EditValue.ToString().Trim());
@@ -1823,6 +3087,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@r1", TxtRemark1.Text.Trim());
             cmd.Parameters.AddWithValue("@r2", TxtRemark2.Text.Trim());
             cmd.Parameters.AddWithValue("@note", (object)(TxtNote.Text ?? ""));
+            cmd.Parameters.AddWithValue("@strategy", SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim());
+            cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
             cmd.Parameters.AddWithValue("@inact", ChkInactive.Checked ? "Y" : "N");
         }
 
@@ -1912,13 +3178,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (string.IsNullOrEmpty(code)) continue;
                 string sql =
                     "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
-                    "(ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
+                    "(ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
                     " RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                    "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE());";
+                    "VALUES (@ik,@code,@desc,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE());";
                 using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
                 {
                     cmd.Parameters.AddWithValue("@ik", itemKey);
                     cmd.Parameters.AddWithValue("@code", code);
+                    cmd.Parameters.AddWithValue("@desc", r.Table.Columns.Contains("Description") && r["Description"] != DBNull.Value
+                        ? (object)r["Description"].ToString() : "");
                     string role = r["MeterRole"] == null ? "NA" : r["MeterRole"].ToString().Trim().ToUpperInvariant();
                     if (role != "BK" && role != "CL") role = "NA";
                     cmd.Parameters.AddWithValue("@role", role);
@@ -2091,7 +3359,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(Cv(SluContractType)).Append('\t').Append(Cv(LkDebtorCode)).Append('\t')
               .Append(TxtAddress.Text.Replace("\r", " ").Replace("\n", " ")).Append('\t')
               .Append(TxtAttention.Text).Append('\t').Append(TxtPhone.Text).Append('\t')
-              .Append(TxtTerm.Text).Append('\t').Append(TxtArea.Text).Append('\t')
+              .Append(TxtTerm.Text).Append('\t').Append(TxtArea.EditValue == null ? "" : TxtArea.EditValue.ToString()).Append('\t')
               .Append(Cv(SluAgent)).Append('\t').Append(TxtDescription.Text).Append('\t')
               .Append(((int)SpnBillingDay.Value)).Append('\t').Append(CurrentBillingMode()).AppendLine();
             foreach (ItemEditData d in _items)
@@ -2161,7 +3429,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     SluContractType.EditValue = SetOrNull(p[1]);
                     LkDebtorCode.EditValue = SetOrNull(p[2]);
                     TxtAddress.Text = p[3]; TxtAttention.Text = p[4]; TxtPhone.Text = p[5];
-                    TxtTerm.Text = p[6]; TxtArea.Text = p[7]; SluAgent.EditValue = SetOrNull(p[8]);
+                    TxtTerm.Text = p[6]; TxtArea.EditValue = SetOrNull(p[7]); SluAgent.EditValue = SetOrNull(p[8]);
                     TxtDescription.Text = p[9];
                     int bd; if (int.TryParse(p[10], out bd)) SpnBillingDay.Value = bd;
                     SetBillingMode(p[11]);
@@ -2230,7 +3498,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SetBillingMode(AsStr(r["BillingMode"]));
                 TxtAddress.Text = AsStr(r["Address1"]); TxtAttention.Text = AsStr(r["Attention"]);
                 TxtPhone.Text = AsStr(r["Phone"]); TxtTerm.Text = AsStr(r["TermCode"]);
-                TxtArea.Text = AsStr(r["AreaCode"]); SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
+                TxtArea.EditValue = SetOrNull(AsStr(r["AreaCode"])); SluAgent.EditValue = SetOrNull(AsStr(r["StaffCode"]));
                 TxtDescription.Text = AsStr(r["Description"]);
                 TxtRemark1.Text = AsStr(r["Remark1"]); TxtRemark2.Text = AsStr(r["Remark2"]); TxtNote.Text = AsStr(r["Note"]);
 

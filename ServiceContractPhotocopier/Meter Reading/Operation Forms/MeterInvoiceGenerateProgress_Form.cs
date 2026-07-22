@@ -20,6 +20,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private readonly IList<MeterInvoiceGenerator.InvoiceJob> _jobs;
         private CancellationTokenSource _cts;
         private Task _task;
+        // Humane progress: elapsed clock + remaining-time estimate + projected finish time.
+        private DateTime _startedAt;
+        private System.Windows.Forms.Timer _clock;
+        private int _processed;
+        private LabelControl _lblEta;
 
         public MeterInvoiceGenerateProgress_Form() { InitializeComponent(); }
 
@@ -37,15 +42,34 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.Progress.Properties.Maximum = Math.Max(1, _jobs.Count);
             this.Progress.EditValue = 0;
             this.BtnClose.Enabled = false;
+
+            _lblEta = new LabelControl();
+            _lblEta.Location = new System.Drawing.Point(18, 199);
+            _lblEta.AutoSizeMode = LabelAutoSizeMode.None;
+            _lblEta.Size = new System.Drawing.Size(296, 18);
+            _lblEta.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            _lblEta.Appearance.ForeColor = System.Drawing.Color.FromArgb(27, 94, 32);
+            _lblEta.Appearance.Options.UseFont = true;
+            _lblEta.Appearance.Options.UseForeColor = true;
+            _lblEta.Text = "";
+            this.Controls.Add(_lblEta);
+            _lblEta.BringToFront();
+
             this.Load += new EventHandler(StartRun);
         }
 
         /// <summary>Invoices actually created (for the caller's summary).</summary>
-        public int CreatedCount { get { return _gen != null ? _gen.Done : 0; } }
+        public int CreatedCount { get { return _gen != null ? _gen.CreatedDocNos.Count : 0; } }
         public List<string> CreatedDocNos { get { return _gen != null ? _gen.CreatedDocNos : new List<string>(); } }
 
         private void StartRun(object sender, EventArgs e)
         {
+            _startedAt = DateTime.Now;
+            _clock = new System.Windows.Forms.Timer();
+            _clock.Interval = 1000;
+            _clock.Tick += new EventHandler(Clock_Tick);
+            _clock.Start();
+
             _cts = new CancellationTokenSource();
             _task = Task.Run(() =>
             {
@@ -63,16 +87,43 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (!this.IsHandleCreated) return;
             this.BeginInvoke(new Action(() =>
             {
-                this.Progress.EditValue = p.Done + p.Failed;
+                _processed = p.Done + p.Failed;
+                this.Progress.EditValue = _processed;
                 this.LblDone.Text    = "Done: "   + p.Done;
                 this.LblFail.Text    = "Failed: " + p.Failed;
                 this.LblCurrent.Text = string.IsNullOrEmpty(p.CurrentLabel) ? "" : "Working on: " + p.CurrentLabel;
             }));
         }
 
+        // Once a second: elapsed time; after a few invoices, also the projected remaining time and
+        // the clock time it should finish — so the operator can walk away and come back on time.
+        private void Clock_Tick(object sender, EventArgs e)
+        {
+            TimeSpan elapsed = DateTime.Now - _startedAt;
+            string t = "Elapsed " + FmtSpan(elapsed);
+            int total = _jobs.Count;
+            if (_processed > 0 && _processed < total && elapsed.TotalSeconds >= 3)
+            {
+                double perJob = elapsed.TotalSeconds / _processed;
+                TimeSpan remaining = TimeSpan.FromSeconds(perJob * (total - _processed));
+                DateTime finishAt = DateTime.Now.Add(remaining);
+                t += "   •   ~" + FmtSpan(remaining) + " left   •   finish ≈ " + finishAt.ToString("h:mm tt");
+            }
+            _lblEta.Text = t;
+        }
+
+        private static string FmtSpan(TimeSpan s)
+        {
+            if (s.TotalHours >= 1) return string.Format("{0}:{1:00}:{2:00}", (int)s.TotalHours, s.Minutes, s.Seconds);
+            return string.Format("{0:00}:{1:00}", s.Minutes, s.Seconds);
+        }
+
         private void OnRunFinished()
         {
-            this.LblCurrent.Text = "Finished.  " + _gen.Done + " invoice(s) created.";
+            if (_clock != null) _clock.Stop();
+            _lblEta.Text = "Completed in " + FmtSpan(DateTime.Now - _startedAt);
+            this.LblCurrent.Text = "Finished.  " + _gen.CreatedDocNos.Count + " invoice(s) created." +
+                (_gen.NoChargeMeters > 0 ? "  " + _gen.NoChargeMeters + " zero-amount meter(s) marked NO CHARGE." : "");
             this.BtnCancel.Enabled = false;
             this.BtnClose.Enabled = true;
             if (_gen.ErrorLog.Count > 0)

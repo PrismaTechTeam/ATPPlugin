@@ -43,6 +43,11 @@ namespace ServiceContractPhotocopier.Classes
             }
 
             RegisterAccessRights();
+
+            // Billing-day auto-fetch snapshot service (background while AutoCount is open; it
+            // no-ops unless enabled in Meter Reading > Setting).
+            try { ScpAutoFetchService.Start(e.DBSetting); } catch { }
+
             return true;
         }
 
@@ -138,6 +143,10 @@ namespace ServiceContractPhotocopier.Classes
             Add(AccessRightsConsts.CMD_OPEN_SCP_SETUP_METER_TYPE, "OPEN SETUP METER TYPE");
             Add(AccessRightsConsts.CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE, "SHOW SETUP METER MULTI PRICING");
             Add(AccessRightsConsts.CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE, "OPEN SETUP METER MULTI PRICING");
+            Add(AccessRightsConsts.CMD_SHOW_SCP_SETUP_STRATEGY, "SHOW SETUP STRATEGY MAINTENANCE");
+            Add(AccessRightsConsts.CMD_OPEN_SCP_SETUP_STRATEGY, "OPEN SETUP STRATEGY MAINTENANCE");
+            Add(AccessRightsConsts.CMD_SHOW_SCP_RENTAL_MAINT, "SHOW RENTAL MAINTENANCE");
+            Add(AccessRightsConsts.CMD_OPEN_SCP_RENTAL_MAINT, "OPEN RENTAL MAINTENANCE");
 
             // --- Service Option ---
             Add(AccessRightsConsts.CMD_SHOW_SCP_OPTION, "SHOW SERVICE OPTION");

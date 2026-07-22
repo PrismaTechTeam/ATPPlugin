@@ -30,7 +30,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         { _dbSetting = dbSetting; this.Load += new EventHandler(OnFormLoad); }
 
         private void OnFormLoad(object sender, EventArgs e)
-        { if (_dbSetting == null) return; ApplyButtonIcons(); LoadGrid(); GridViewMT.FocusedRowChanged += delegate { PopulateDetail(); }; SetReadOnly(true); }
+        { if (_dbSetting == null) return; ApplyButtonIcons(); LoadGrid(); GridViewMT.FocusedRowChanged += delegate { PopulateDetail(); }; SetReadOnly(true); SetEditMode(false); }
 
         // Same AutoCount large icons as the Maintain Service Contract / Item toolbars.
         private void ApplyButtonIcons()
@@ -43,13 +43,35 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
                 BtnNew.ImageOptions.Image = img.GetLargeImage_New();
                 BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                BtnCopyNew.ImageOptions.Image = img.GetLargeImage_CopyTo2();
                 BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
                 BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
                 BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
                 BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
-                BtnExit.ImageOptions.Image = img.GetLargeImage_Close();
+                // Exit uses a DOOR icon (XAF exit-action) so it is not confused with the red-X
+                // Cancel / Delete buttons.
+                try
+                {
+                    System.Drawing.Image door = DevExpress.Images.ImageResourceCache.Default.GetImage("images/xaf/action_exit_32x32.png");
+                    BtnExit.ImageOptions.Image = door ?? img.GetLargeImage_Close();
+                }
+                catch { BtnExit.ImageOptions.Image = img.GetLargeImage_Close(); }
             }
             catch { }   // icons are cosmetic — never block the form
+        }
+
+        // Edit mode = a New / Edit / Copy-to-New is in progress: only Save + Cancel (and Exit) are
+        // usable, the grid is locked, and the list actions are disabled until Save or Cancel.
+        private void SetEditMode(bool editing)
+        {
+            BtnNew.Enabled = !editing;
+            BtnEdit.Enabled = !editing;
+            BtnCopyNew.Enabled = !editing;
+            BtnDelete.Enabled = !editing;
+            BtnRefresh.Enabled = !editing;
+            BtnSave.Enabled = editing;
+            BtnCancel.Enabled = editing;
+            GridMT.Enabled = !editing;   // lock row navigation while editing
         }
 
         private void SetReadOnly(bool ro)
@@ -63,6 +85,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtRebateQty.Properties.ReadOnly = ro;
             TxtFOCQty.Properties.ReadOnly = ro;
             ChkInactive.Properties.ReadOnly = ro;
+            ChkFlatCharge.Properties.ReadOnly = ro;
         }
 
         private void LoadGrid()
@@ -71,7 +94,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             {
                 GridMT.DataSource = _dbSetting.GetDataTable(
                     "SELECT MeterTypeKey, MeterTypeCode, [Description], StockCode, MeterMultiPriceCode, " +
-                    "ChargesRate, MinimumCharges, RebateQtyInPercent, FOCQty, Inactive " +
+                    "ChargesRate, MinimumCharges, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge, Inactive " +
                     "FROM [dbo].[zSCP_MeterType] ORDER BY MeterTypeCode", false);
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
@@ -94,7 +117,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtRebateQty.Text = D(row, "RebateQtyInPercent", "0.00");
             TxtFOCQty.Text = D(row, "FOCQty", "0.00");
             ChkInactive.Checked = V(row, "Inactive") == "Y";
+            ChkFlatCharge.Checked = V(row, "IsFlatCharge") == "Y";
             SetReadOnly(true);
+            SetEditMode(false);
         }
 
         private void ClearDetail()
@@ -105,16 +130,42 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtMinCharges.Text = "0.00"; TxtChargesRate.Text = "0.000000";
             TxtRebateQty.Text = "0.00"; TxtFOCQty.Text = "0.00";
             ChkInactive.Checked = false;
+            ChkFlatCharge.Checked = false;
             SetReadOnly(true);
         }
 
         private void OnNew(object sender, EventArgs e)
-        { ClearDetail(); _isNewRow = true; SetReadOnly(false); TxtCode.Properties.ReadOnly = false; TxtCode.Focus(); }
+        { ClearDetail(); _isNewRow = true; SetReadOnly(false); TxtCode.Properties.ReadOnly = false; SetEditMode(true); TxtCode.Focus(); }
 
-        private void OnRefresh(object sender, EventArgs e) { LoadGrid(); ClearDetail(); }
+        // Copy to New: duplicate the selected meter type into a fresh entry — EVERY field is copied
+        // EXCEPT the Meter Type Code, which is left blank for the user to key a new one.
+        private void OnCopyToNew(object sender, EventArgs e)
+        {
+            int rh = GridViewMT.FocusedRowHandle;
+            if (rh < 0) return;
+            DataRow row = GridViewMT.GetDataRow(rh);
+            if (row == null) return;
+            _selectedKey = 0; _isNewRow = true;
+            TxtCode.Text = "";                                  // the only field NOT copied
+            TxtDesc.Text = V(row, "Description");
+            TxtStockCode.Text = V(row, "StockCode");
+            TxtMultiPriceCode.Text = V(row, "MeterMultiPriceCode");
+            TxtMinCharges.Text = D(row, "MinimumCharges", "0.00");
+            TxtChargesRate.Text = D(row, "ChargesRate", "0.000000");
+            TxtRebateQty.Text = D(row, "RebateQtyInPercent", "0.00");
+            TxtFOCQty.Text = D(row, "FOCQty", "0.00");
+            ChkInactive.Checked = V(row, "Inactive") == "Y";
+            ChkFlatCharge.Checked = V(row, "IsFlatCharge") == "Y";
+            SetReadOnly(false);
+            TxtCode.Properties.ReadOnly = false;
+            SetEditMode(true);
+            TxtCode.Focus();
+        }
+
+        private void OnRefresh(object sender, EventArgs e) { LoadGrid(); ClearDetail(); SetEditMode(false); }
 
         private void OnEdit(object sender, EventArgs e)
-        { if (_selectedKey == 0) return; SetReadOnly(false); TxtDesc.Focus(); }
+        { if (_selectedKey == 0) return; SetReadOnly(false); SetEditMode(true); TxtDesc.Focus(); }
 
         private void OnSave(object sender, EventArgs e)
         {
@@ -128,15 +179,17 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 decimal.TryParse(TxtMinCharges.Text, out mc); decimal.TryParse(TxtChargesRate.Text, out cr);
                 decimal.TryParse(TxtRebateQty.Text, out rq); decimal.TryParse(TxtFOCQty.Text, out fq);
                 string ia = ChkInactive.Checked ? "Y" : "N";
+                string fc = ChkFlatCharge.Checked ? "Y" : "N";
                 if (_isNewRow || _selectedKey == 0)
-                    _dbSetting.ExecuteNonQuery("INSERT INTO [dbo].[zSCP_MeterType] (MeterTypeCode,[Description],StockCode,MeterMultiPriceCode,MinimumCharges,ChargesRate,RebateQtyInPercent,FOCQty,Inactive) VALUES " +
-                        "(N'" + c + "',N'" + d + "',N'" + s + "',N'" + m + "'," + mc.ToString("0.00") + "," + cr.ToString("0.000000") + "," + rq.ToString("0.00") + "," + fq.ToString("0.00") + ",'" + ia + "')");
+                    _dbSetting.ExecuteNonQuery("INSERT INTO [dbo].[zSCP_MeterType] (MeterTypeCode,[Description],StockCode,MeterMultiPriceCode,MinimumCharges,ChargesRate,RebateQtyInPercent,FOCQty,IsFlatCharge,Inactive) VALUES " +
+                        "(N'" + c + "',N'" + d + "',N'" + s + "',N'" + m + "'," + mc.ToString("0.00") + "," + cr.ToString("0.000000") + "," + rq.ToString("0.00") + "," + fq.ToString("0.00") + ",'" + fc + "','" + ia + "')");
                 else
                     _dbSetting.ExecuteNonQuery("UPDATE [dbo].[zSCP_MeterType] SET [Description]=N'" + d + "',StockCode=N'" + s + "',MeterMultiPriceCode=N'" + m + "'," +
-                        "MinimumCharges=" + mc.ToString("0.00") + ",ChargesRate=" + cr.ToString("0.000000") + ",RebateQtyInPercent=" + rq.ToString("0.00") + ",FOCQty=" + fq.ToString("0.00") + ",Inactive='" + ia + "',LastModified=GETDATE() WHERE MeterTypeKey=" + _selectedKey);
+                        "MinimumCharges=" + mc.ToString("0.00") + ",ChargesRate=" + cr.ToString("0.000000") + ",RebateQtyInPercent=" + rq.ToString("0.00") + ",FOCQty=" + fq.ToString("0.00") + ",IsFlatCharge='" + fc + "',Inactive='" + ia + "',LastModified=GETDATE() WHERE MeterTypeKey=" + _selectedKey);
                 _isNewRow = false;
                 LoadGrid();
                 SetReadOnly(true);
+                SetEditMode(false);
             }
             catch (Exception ex) { XtraMessageBox.Show("Save failed:\r\n" + ex.Message, "Error"); }
         }
@@ -149,7 +202,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             catch (Exception ex) { XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error"); }
         }
 
-        private void OnCancel(object sender, EventArgs e) { PopulateDetail(); }
+        private void OnCancel(object sender, EventArgs e) { PopulateDetail(); SetEditMode(false); }
         private void OnExit(object sender, EventArgs e) { this.Close(); }
 
         private static string V(DataRow r, string c) { return r[c] == DBNull.Value ? "" : r[c].ToString(); }

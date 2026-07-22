@@ -14,18 +14,20 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private AutoCount.Controls.PanelHeader PanelHeaderTop;
         private PanelControl PanelToolbar;
-        private SimpleButton BtnNew, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
+        private SimpleButton BtnNew, BtnEdit, BtnCopyNew, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
         private GridControl GridMT; private GridView GridViewMT;
         private GroupControl GrpDetail;
         private LabelControl LblCode, LblDesc, LblStock, LblMultiPrice, LblMinCharges, LblChargesRate, LblRebateQty, LblFOCQty;
         private TextEdit TxtCode, TxtDesc, TxtStockCode, TxtMultiPriceCode, TxtMinCharges, TxtChargesRate, TxtRebateQty, TxtFOCQty;
         private CheckEdit ChkInactive;
+        private CheckEdit ChkFlatCharge;
 
         private void InitializeComponent()
         {
             this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
             this.PanelToolbar = new PanelControl();
-            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton(); this.BtnSave = new SimpleButton();
+            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton(); this.BtnCopyNew = new SimpleButton();
+            this.BtnSave = new SimpleButton();
             this.BtnCancel = new SimpleButton(); this.BtnDelete = new SimpleButton();
             this.BtnRefresh = new SimpleButton(); this.BtnExit = new SimpleButton();
             this.GridMT = new GridControl(); this.GridViewMT = new GridView();
@@ -39,6 +41,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblRebateQty = new LabelControl(); this.TxtRebateQty = new TextEdit();
             this.LblFOCQty = new LabelControl(); this.TxtFOCQty = new TextEdit();
             this.ChkInactive = new CheckEdit();
+            this.ChkFlatCharge = new CheckEdit();
 
             this.SuspendLayout();
             this.Text = "Meter Type"; this.ClientSize = new Size(1050, 720);
@@ -57,12 +60,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.PanelToolbar.Size = new Size(1050, 62);
             Tb(this.BtnNew, "New", 8, 6, 86); this.BtnNew.Click += new System.EventHandler(this.OnNew);
             Tb(this.BtnEdit, "Edit", 98, 6, 86); this.BtnEdit.Click += new System.EventHandler(this.OnEdit);
-            Tb(this.BtnSave, "Save", 188, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
-            Tb(this.BtnCancel, "Cancel", 278, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
-            Tb(this.BtnDelete, "Delete", 368, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
-            Tb(this.BtnRefresh, "Refresh", 458, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
-            Tb(this.BtnExit, "Exit (F2)", 556, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            Tb(this.BtnCopyNew, "Copy to New", 188, 6, 120); this.BtnCopyNew.Click += new System.EventHandler(this.OnCopyToNew);
+            Tb(this.BtnSave, "Save", 312, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
+            Tb(this.BtnCancel, "Cancel", 402, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
+            Tb(this.BtnDelete, "Delete", 492, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
+            Tb(this.BtnRefresh, "Refresh", 588, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
+            Tb(this.BtnExit, "Exit (F2)", 684, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
             this.PanelToolbar.Controls.Add(this.BtnNew); this.PanelToolbar.Controls.Add(this.BtnEdit);
+            this.PanelToolbar.Controls.Add(this.BtnCopyNew);
             this.PanelToolbar.Controls.Add(this.BtnSave); this.PanelToolbar.Controls.Add(this.BtnCancel);
             this.PanelToolbar.Controls.Add(this.BtnDelete); this.PanelToolbar.Controls.Add(this.BtnRefresh);
             this.PanelToolbar.Controls.Add(this.BtnExit);
@@ -82,7 +87,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             int lX = 14, eX = 170, eW = 300; int y = 28, gap = 26;
             Lbl(this.LblCode, "Meter Type Code", lX, y); this.TxtCode.Location = new Point(eX, y); this.TxtCode.Width = eW;
-            this.ChkInactive.Properties.Caption = "Inactive"; this.ChkInactive.Location = new Point(eX + eW + 20, y); y += gap;
+            this.ChkInactive.Properties.Caption = "Inactive"; this.ChkInactive.Location = new Point(eX + eW + 20, y);
+            this.ChkFlatCharge.Properties.Caption = "Flat charge (Rental) - no meter reading";
+            this.ChkFlatCharge.Location = new Point(eX + eW + 20, y + 26); this.ChkFlatCharge.Width = 300; y += gap;
 
             Lbl(this.LblDesc, "Description", lX, y); this.TxtDesc.Location = new Point(eX, y); this.TxtDesc.Width = 560; y += gap;
 
@@ -99,6 +106,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             Lbl(this.LblRebateQty, "Rebate Qty (%)", lX, y); this.TxtRebateQty.Location = new Point(eX, y); this.TxtRebateQty.Width = 150; y += gap + 8;
 
             this.GrpDetail.Controls.Add(this.LblCode); this.GrpDetail.Controls.Add(this.TxtCode); this.GrpDetail.Controls.Add(this.ChkInactive);
+            this.GrpDetail.Controls.Add(this.ChkFlatCharge);
             this.GrpDetail.Controls.Add(this.LblDesc); this.GrpDetail.Controls.Add(this.TxtDesc);
             this.GrpDetail.Controls.Add(this.LblStock); this.GrpDetail.Controls.Add(this.TxtStockCode);
             this.GrpDetail.Controls.Add(this.LblMultiPrice); this.GrpDetail.Controls.Add(this.TxtMultiPriceCode);

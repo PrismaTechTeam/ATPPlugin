@@ -39,6 +39,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         /// <summary>Full version: also shows the GENERATED INVOICE grid for this contract —
         /// double-click a row to open that invoice in AutoCount's Invoice module.</summary>
+        /// <summary>Set when the user chose "Save &amp; Generate Invoice" — the caller saves the
+        /// readings as usual and then runs Generate for THIS contract right away.</summary>
+        public bool GenerateRequested;
+
         public MeterReadingDetail_Form(string contractNo, string customer, DataTable dt,
             AutoCount.Data.DBSetting db, long contractKey)
             : this(contractNo, customer, dt)
@@ -47,6 +51,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _contractKey = contractKey;
             BuildGeneratedInvoiceSection();
             LoadGeneratedInvoices();
+
+            // One-stop billing: key in the readings and fire the invoice without going back out.
+            // Sits right-anchored beside OK, same 40px height as the rest of the bottom row.
+            DevExpress.XtraEditors.SimpleButton btnGen = new DevExpress.XtraEditors.SimpleButton();
+            btnGen.Text = "Save && Generate Invoice";
+            btnGen.Size = new Size(240, 40);
+            btnGen.Location = new Point(this.PanelBottom.ClientSize.Width - 510, 10);
+            btnGen.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnGen.Appearance.ForeColor = Color.FromArgb(198, 40, 40);
+            btnGen.Appearance.Options.UseForeColor = true;
+            btnGen.Appearance.FontStyleDelta = FontStyle.Bold;
+            btnGen.Click += delegate { GenerateRequested = true; BtnOk_Click(btnGen, EventArgs.Empty); };
+            this.PanelBottom.Controls.Add(btnGen);
+            btnGen.BringToFront();
         }
 
         private void BuildGeneratedInvoiceSection()
@@ -160,14 +178,45 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (this.GridViewDetail.Columns["ItemMeterKey"] != null) this.GridViewDetail.Columns["ItemMeterKey"].Visible = false;
             if (this.GridViewDetail.Columns["HasConflict"] != null) this.GridViewDetail.Columns["HasConflict"].Visible = false;
 
-            SetCol("ServiceItemNo", "Service Item No", 120);
-            SetCol("SerialNo", "Serial", 100);
-            SetCol("MeterType", "Meter Type", 120);
-            SetCol("Role", "Meter", 100);
+            SetCol("ServiceItemNo", "Service Item No", 115);
+            SetCol("SerialNo", "Serial", 90);
+            SetCol("MeterType", "Meter Type", 115);
+            SetCol("Role", "Meter", 85);
+            SetCol("MeterTypeName", "Meter Type Name", 150);
+            SetNum("MinCharges", "Min. Charges", 85, "n2");
+            SetNum("UnitPrice", "Unit Price", 80, "n4");
+            SetNum("FOCQty", "FOC Qty", 70, "n0");
+            SetNum("RebatePct", "Rebate (%)", 75, "n2");
+            SetCol("LastReadDate", "Last Read Date", 95);
             SetNum("LastReading", "Last Reading", 95, "n0");
-            SetNum("CurrentReading", "Manual Reading", 150, "n0");
-            SetNum("FetchedReading", "API Reading", 110, "n0");
-            SetCol("Source", "Source", 75);
+            SetNum("CurrentReading", "Manual Reading", 130, "n0");
+            SetNum("MeterUsage", "Meter Usage", 90, "n0");
+            SetNum("TotalCharges", "Total Charges", 90, "n2");
+            SetNum("FetchedReading", "API Reading", 95, "n0");
+            SetCol("Source", "Source", 70);
+            SetCol("LastInvNo", "Last Invoice No", 105);
+            SetCol("LastInvDate", "Last Invoice Date", 100);
+            GridColumn dcol = this.GridViewDetail.Columns["LastReadDate"];
+            if (dcol != null)
+            { dcol.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime; dcol.DisplayFormat.FormatString = "dd/MM/yyyy"; }
+            dcol = this.GridViewDetail.Columns["LastInvDate"];
+            if (dcol != null)
+            { dcol.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime; dcol.DisplayFormat.FormatString = "dd/MM/yyyy"; }
+
+            // Total Charges gets the same green money tint as the main grid.
+            GridColumn chg = this.GridViewDetail.Columns["TotalCharges"];
+            if (chg != null)
+            {
+                chg.AppearanceCell.BackColor = Color.FromArgb(223, 240, 216);
+                chg.AppearanceCell.Options.UseBackColor = true;
+            }
+            // Computation-only column stays hidden.
+            if (this.GridViewDetail.Columns["UseMin"] != null) this.GridViewDetail.Columns["UseMin"].Visible = false;
+            // Recompute on commit (cell leave / checkbox toggle)...
+            this.GridViewDetail.CellValueChanged +=
+                new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(Detail_CellValueChanged);
+            // ...AND live while TYPING in the Manual Reading cell — usage + charges follow every keystroke.
+            this.GridViewDetail.ShownEditor += new EventHandler(Detail_ShownEditor);
 
             // Current Reading is editable here so the user can key in readings manually for this
             // contract (typed values are saved as MANUAL on OK).
@@ -230,6 +279,69 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     d["AcceptFetched"] = true;
             this.GridDetail.RefreshDataSource();
         }
+
+        private void Detail_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
+        {
+            if (e.Column == null) return;
+            if (e.Column.FieldName != "CurrentReading" && e.Column.FieldName != "AcceptFetched") return;
+            DataRow d = this.GridViewDetail.GetDataRow(e.RowHandle);
+            if (d == null) return;
+            RecalcDetail(d);
+        }
+
+        // While the Manual Reading editor is open, EVERY KEYSTROKE recomputes usage/charges of the
+        // row immediately. NOTE: an in-place editor only updates .Text while typing (.EditValue lags
+        // until the cell is committed), so the per-keystroke hook must be TextChanged.
+        private void Detail_ShownEditor(object sender, EventArgs e)
+        {
+            if (this.GridViewDetail.FocusedColumn == null ||
+                this.GridViewDetail.FocusedColumn.FieldName != "CurrentReading") return;
+            DevExpress.XtraEditors.BaseEdit ed = this.GridViewDetail.ActiveEditor;
+            if (ed == null) return;
+            // Editors are pooled/reused — remove first so repeated ShownEditor never stacks handlers.
+            ed.TextChanged -= new EventHandler(Detail_LiveTyping);
+            ed.TextChanged += new EventHandler(Detail_LiveTyping);
+        }
+
+        private void Detail_LiveTyping(object sender, EventArgs e)
+        {
+            DevExpress.XtraEditors.BaseEdit ed = this.GridViewDetail.ActiveEditor;
+            if (ed == null) return;
+            int rh = this.GridViewDetail.FocusedRowHandle;
+            DataRow d = this.GridViewDetail.GetDataRow(rh);
+            if (d == null) return;
+            string txt = (ed.Text ?? "").Replace(",", "").Trim();
+            decimal typed;
+            if (txt.Length == 0) typed = 0m;
+            else if (!decimal.TryParse(txt, out typed)) return;
+            ComputeUsageCharge(d, typed);
+            this.GridViewDetail.InvalidateRow(rh);   // repaint usage/charges while the editor stays open
+        }
+
+        // Mirrors the main grid's Recalc: effective reading = API value when accepted, else the
+        // manual one; usage - FOC - rebate x rate, floored at the minimum charge.
+        private static void RecalcDetail(DataRow d)
+        {
+            decimal fv = DV(d["FetchedReading"]), cv = DV(d["CurrentReading"]);
+            bool accept = d["AcceptFetched"] != DBNull.Value && Convert.ToBoolean(d["AcceptFetched"]);
+            ComputeUsageCharge(d, (accept && fv > 0m) ? fv : cv);
+        }
+
+        private static void ComputeUsageCharge(DataRow d, decimal cur)
+        {
+            decimal last = DV(d["LastReading"]);
+            decimal usage = cur - last; if (usage < 0m) usage = 0m;
+            decimal billable = usage - DV(d["FOCQty"]); if (billable < 0m) billable = 0m;
+            decimal rebate = DV(d["RebatePct"]); if (rebate > 0m) billable = billable * (1m - rebate / 100m);
+            decimal rate = DV(d["UnitPrice"]); decimal min = DV(d["MinCharges"]);
+            bool useMin = d["UseMin"] != DBNull.Value && Convert.ToBoolean(d["UseMin"]);
+            decimal charge = useMin ? min : (billable * rate < min ? min : billable * rate);
+            d["MeterUsage"] = usage;
+            d["TotalCharges"] = charge;
+        }
+
+        private static decimal DV(object v)
+        { return v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v); }
 
         private void BtnOk_Click(object sender, EventArgs e)
         {

@@ -54,6 +54,8 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP_MeterMultiPriceItem",    "02_CreateTable_zSCP_MeterMultiPriceItem.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP_MeterType",              "02_CreateTable_zSCP_MeterType.sql", asm);
             RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.3.0.sql", asm);  // adds ACItemCode if missing (idempotent)
+            RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.4.0.sql", asm);  // adds IsFlatCharge (rental) + auto-marks RA*
+            RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.5.0.sql", asm);  // broadens rental flat-mark to "01.RA*"/"...RENTAL" codes
 
             // === Tier 4: service item ===
             RunIfTableMissing(dbsetting, "zSCP_ServiceItem",            "02_CreateTable_zSCP_ServiceItem.sql", asm);
@@ -98,17 +100,46 @@ namespace ServiceContractPhotocopier.Classes
             // Multi-machine CSSI: per-unit meters (MachineSerialNo) + MultiMachine flag + widened unique
             // keys. MUST run AFTER the ItemMeter create — a fresh book has no table to ALTER yet.
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v2_MachineSerial.sql", asm);
+            // Per-meter Description (defaults from the Meter Type, editable per machine).
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v3_Description.sql", asm);
+            // Rental period tracking (start date / total months / accrual-prepayment basis -> n/N).
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v4_Rental.sql", asm);
+            // Strategy Maintenance master (marketing/billing strategies attachable to contracts).
+            RunIfTableMissing(dbsetting, "zSCP2_Strategy",              "02_CreateTable_zSCP2_Strategy.sql", asm);
+            // Composable rule lines for a strategy (the builder detail table; FK+cascade to the header).
+            RunIfTableMissing(dbsetting, "zSCP2_StrategyRule",          "02_CreateTable_zSCP2_StrategyRule.sql", asm);
+            // Per-contract COPY of strategy rules (template->instance; edited on the contract, FK to contract).
+            RunIfTableMissing(dbsetting, "zSCP2_ContractStrategyRule",  "02_CreateTable_zSCP2_ContractStrategyRule.sql", asm);
+            // Field-level contract/item change audit (append-only, no FKs).
+            RunIfTableMissing(dbsetting, "zSCP2_ContractAudit",         "02_CreateTable_zSCP2_ContractAudit.sql", asm);
+            // Legacy usage meters tagged NA get BK/CL inferred from their type names (guards inside).
+            RunDDL(dbsetting, "05_Backfill_zSCP2_ItemMeter_Roles.sql", asm);
             // Ownership: contract-less items are owned by a debtor directly (OwnerDebtorCode).
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_OwnerDebtor.sql", asm);
+            // Per-item Purchase Date + Service Type (its own lookup list).
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v9_PurchaseServiceType.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemCode",              "02_CreateTable_zSCP2_ItemCode.sql", asm);
             // Staging of current readings (manual key-ins + accepted API values) per billing period.
             RunIfTableMissing(dbsetting, "zSCP2_MeterEntry",            "02_CreateTable_zSCP2_MeterEntry.sql", asm);
             // Append-only meter reading audit log (immutable history of every reading event).
             RunIfTableMissing(dbsetting, "zSCP2_MeterReadingLog",       "02_CreateTable_zSCP2_MeterReadingLog.sql", asm);
+            // Reading log v2: baseline + usage on every event (AFTER the create above).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterReadingLog_v2_LastUsage.sql", asm);
+            // Reading log v3: pricing-as-of-event (unit price / min / FOC / rebate / charge).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterReadingLog_v3_Pricing.sql", asm);
+            // Reading log v4: strategy code + human-readable strategy outcome per event.
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterReadingLog_v4_Strategy.sql", asm);
             // API connection profiles (Plugin Option > API tab), seeded Production + Local Mock.
             RunIfTableMissing(dbsetting, "zSCP2_ApiProfile",            "02_CreateTable_zSCP2_ApiProfile.sql", asm);
             // Add Invoiced stamp columns (billing-period duplicate guard). Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v2.sql", asm);
+            // Auto-fetch snapshot lock (LockedAt).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v3_Lock.sql", asm);
+            // Strategy in force when the period was stamped (traceability).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v4_Strategy.sql", asm);
+            // v5: allow Source='INVOICE' — rentals/flat meters are never staged, so the stamp path INSERTs
+            // a fresh entry with Source='INVOICE' which the original CHECK rejected (rolled back the stamp).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql", asm);
             // Plugin document numbering (SC / SI formats + running numbers), seeded past legacy max.
             RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Spare parts / services provided lines under a contract (contract- or item-bound).
@@ -121,6 +152,10 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v3_MonthEnd.sql", asm);
             // Contract-level Department + Project (AutoCount native masters). Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v4_DeptProj.sql", asm);
+            // v5: strategy attach (soft code) + rental-separate-invoice flag.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v5_Strategy.sql", asm);
+            // v6: per-contract FOC/Rebate reset period (Monthly default / Weekly / every N days -> accrual).
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v6_FOCReset.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent

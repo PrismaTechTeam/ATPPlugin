@@ -128,27 +128,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnAcceptAll
             //
-            this.BtnAcceptAll.Location = new System.Drawing.Point(16, 12);
+            this.BtnAcceptAll.Location = new System.Drawing.Point(16, 10);
             this.BtnAcceptAll.Name = "BtnAcceptAll";
-            this.BtnAcceptAll.Size = new System.Drawing.Size(180, 36);
+            this.BtnAcceptAll.Size = new System.Drawing.Size(190, 40);
             this.BtnAcceptAll.TabIndex = 0;
             this.BtnAcceptAll.Text = "Use API for All";
             this.BtnAcceptAll.Click += new System.EventHandler(this.BtnAcceptAll_Click);
             //
             // BtnOk
             //
-            this.BtnOk.Location = new System.Drawing.Point(740, 12);
+            this.BtnOk.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.BtnOk.Location = new System.Drawing.Point(740, 10);
             this.BtnOk.Name = "BtnOk";
-            this.BtnOk.Size = new System.Drawing.Size(120, 36);
+            this.BtnOk.Size = new System.Drawing.Size(130, 40);
             this.BtnOk.TabIndex = 1;
             this.BtnOk.Text = "OK";
             this.BtnOk.Click += new System.EventHandler(this.BtnOk_Click);
             //
             // BtnCancel
             //
-            this.BtnCancel.Location = new System.Drawing.Point(866, 12);
+            this.BtnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.BtnCancel.Location = new System.Drawing.Point(878, 10);
             this.BtnCancel.Name = "BtnCancel";
-            this.BtnCancel.Size = new System.Drawing.Size(120, 36);
+            this.BtnCancel.Size = new System.Drawing.Size(110, 40);
             this.BtnCancel.TabIndex = 2;
             this.BtnCancel.Text = "Cancel";
             this.BtnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
@@ -157,7 +159,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1240, 780);
+            this.ClientSize = new System.Drawing.Size(1660, 820);
             this.Controls.Add(this.GridDetail);
             this.Controls.Add(this.PanelBottom);
             this.Controls.Add(this.PanelTop);

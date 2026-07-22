@@ -54,3 +54,11 @@ BEGIN
 		(N'RA+MR', N'Rental + meter reading');
 END
 GO
+
+-- Service Type (per service item) mirrors the Contract Type list. Cloned from Contract Type so the
+-- two stay identical on a fresh install; maintained independently afterwards (General Setup -> Service Type).
+INSERT INTO [dbo].[zSCP_LK_ServiceType] ([ServiceTypeCode], [Description], [Inactive], [LastModified])
+SELECT ct.[ServiceContractTypeCode], ct.[Description], ct.[Inactive], GETDATE()
+FROM [dbo].[zSCP_LK_ServiceContractType] ct
+WHERE NOT EXISTS (SELECT 1 FROM [dbo].[zSCP_LK_ServiceType] st WHERE st.[ServiceTypeCode] = ct.[ServiceContractTypeCode]);
+GO

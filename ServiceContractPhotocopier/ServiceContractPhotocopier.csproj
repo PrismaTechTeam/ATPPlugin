@@ -142,6 +142,11 @@
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
+    <Compile Include="Classes\ScpContractAudit.cs" />
+    <Compile Include="Classes\ScpStrategy.cs" />
+    <Compile Include="Classes\ScpMultiPrice.cs" />
+    <Compile Include="Classes\ScpBillingHistory.cs" />
+    <Compile Include="Classes\ScpAutoFetchService.cs" />
     <Compile Include="Classes\ScpDocNo.cs" />
     <Compile Include="Classes\CommonForms\AdvanceSearch_Form.cs">
       <SubType>Form</SubType>
@@ -167,6 +172,18 @@
     </Compile>
     <Compile Include="Service Contract\Operation Forms\zSCP2_ContractLst_Form.Designer.cs">
       <DependentUpon>zSCP2_ContractLst_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalMaintenance_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalMaintenance_Form.Designer.cs">
+      <DependentUpon>RentalMaintenance_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalAssign_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalAssign_Form.Designer.cs">
+      <DependentUpon>RentalAssign_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Service Contract\Operation Forms\zSCP2_Contract_Form.cs">
       <SubType>Form</SubType>
@@ -240,6 +257,18 @@
     </Compile>
     <Compile Include="General Setup\Master Forms\MeterMultiPricing_Form.Designer.cs">
       <DependentUpon>MeterMultiPricing_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\StrategyLst_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\StrategyLst_Form.Designer.cs">
+      <DependentUpon>StrategyLst_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\StrategyRulesEditorControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\StrategyRulesEditorControl.Designer.cs">
+      <DependentUpon>StrategyRulesEditorControl.cs</DependentUpon>
     </Compile>
     <Compile Include="General Setup\Master Forms\MeterTypeLst_Form.cs">
       <SubType>Form</SubType>
@@ -664,6 +693,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.Designer.cs">
+      <DependentUpon>MeterReadingHistory_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.Designer.cs">
       <DependentUpon>MeterReadingDetail_Form.cs</DependentUpon>
     </Compile>
@@ -734,6 +769,9 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_OwnerDebtor.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterReadingLog.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ApiProfile.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterReadingLog_v2_LastUsage.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterReadingLog_v3_Pricing.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v3_Lock.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v3_MonthEnd.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v4_DeptProj.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
@@ -751,6 +789,21 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_LK_ServiceSolution.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_LK_ServiceStatus.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_LK_ServiceType.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_PurchaseServiceType.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v3_Description.sql" />
+    <EmbeddedResource Include="SQL\02_UpdateTable_zSCP_MeterType_v1.4.0.sql" />
+    <EmbeddedResource Include="SQL\02_UpdateTable_zSCP_MeterType_v1.5.0.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_Strategy.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_StrategyRule.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractStrategyRule.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractAudit.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v5_Strategy.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v6_FOCReset.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v4_Strategy.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterReadingLog_v4_Strategy.sql" />
+    <EmbeddedResource Include="SQL\05_Backfill_zSCP2_ItemMeter_Roles.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_Mechanic.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_MeterMultiPrice.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_MeterMultiPriceItem.sql" />
@@ -798,6 +851,18 @@
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\MeterMultiPricing_Form.resx">
       <DependentUpon>MeterMultiPricing_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\StrategyRulesEditorControl.resx">
+      <DependentUpon>StrategyRulesEditorControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\StrategyLst_Form.resx">
+      <DependentUpon>StrategyLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\RentalMaintenance_Form.resx">
+      <DependentUpon>RentalMaintenance_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\RentalAssign_Form.resx">
+      <DependentUpon>RentalAssign_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\MeterTypeLst_Form.resx">
       <DependentUpon>MeterTypeLst_Form.cs</DependentUpon>
@@ -1020,6 +1085,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.resx">
       <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.resx">
+      <DependentUpon>MeterReadingHistory_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingDetail_Form.resx">
       <DependentUpon>MeterReadingDetail_Form.cs</DependentUpon>

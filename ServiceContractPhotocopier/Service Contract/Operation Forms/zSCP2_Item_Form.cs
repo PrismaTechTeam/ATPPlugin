@@ -30,6 +30,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";
         public string GradeCode = "";
+        public DateTime? PurchaseDate;         // migrated from master serviceitem.purchasedate
+        public string ServiceTypeCode = "";    // per-item service type (zSCP_LK_ServiceType)
         public string Note = "";
         public string Remark1 = "";
         public string Remark2 = "";
@@ -169,6 +171,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             DataTable dt = new DataTable("Meters");
             dt.Columns.Add("MeterTypeCode", typeof(string));
+            dt.Columns.Add("Description", typeof(string));      // per-meter description (defaults from the type)
             dt.Columns.Add("MeterRole", typeof(string));
             dt.Columns.Add("MachineSerialNo", typeof(string));   // '' = the CSSI's own header machine
             dt.Columns.Add("MinimumCharges", typeof(decimal));
@@ -313,6 +316,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             _meters = _data.Meters != null ? _data.Meters.Copy() : CreateMetersTable();
             if (!_meters.Columns.Contains("MachineSerialNo")) _meters.Columns.Add("MachineSerialNo", typeof(string));
+            if (!_meters.Columns.Contains("Description")) _meters.Columns.Add("Description", typeof(string));
             // Designer defines the meter columns; without this, binding would auto-append a stray
             // plain-text MachineSerialNo column next to the code-built combo one.
             GridViewMeters.OptionsBehavior.AutoPopulateColumns = false;
@@ -411,7 +415,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 _meterTypeLookup = _db.GetDataTable(
                     "SELECT MeterTypeCode, Description, MinimumCharges, ChargesRate, " +
-                    "MeterMultiPriceCode, RebateQtyInPercent, FOCQty " +
+                    "MeterMultiPriceCode, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge " +
                     "FROM [dbo].[zSCP_MeterType] WHERE Inactive='N' ORDER BY MeterTypeCode", false);
             }
             catch { _meterTypeLookup = new DataTable(); }
@@ -595,6 +599,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _colMachineItemCode.OptionsColumn.ReadOnly = true;
             GridViewMeters.Columns.Add(_colMachineItemCode);
             GridViewMeters.CustomUnboundColumnData += new DevExpress.XtraGrid.Views.Base.CustomColumnDataEventHandler(GridViewMeters_UnboundData);
+            // Rental (flat) rows shade amber — maintained in the Rental Maintenance module.
+            GridViewMeters.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeters_FlatRowStyle);
 
             _suppressMultiEvt = true;
             _chkMultiMachine.Checked = _data.MultiMachine;
@@ -723,6 +729,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             DataRow r = _meters.NewRow();
             r["MeterRole"] = "NA";
+            r["Description"] = "";
             r["MachineSerialNo"] = machineSerial;
             r["MinimumCharges"] = 0m;
             r["ChargesRate"] = 0m;
@@ -758,6 +765,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { XtraMessageBox.Show("Open Meter Type maintenance failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
+        // Rental/flat rows: amber background (their home is the Rental Maintenance module).
+        private void GridViewMeters_FlatRowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (_meterTypeLookup == null || !_meterTypeLookup.Columns.Contains("IsFlatCharge")) return;
+            string type = Convert.ToString(GridViewMeters.GetRowCellValue(e.RowHandle, "MeterTypeCode"));
+            if (string.IsNullOrEmpty(type)) return;
+            DataRow[] f = _meterTypeLookup.Select("MeterTypeCode='" + type.Replace("'", "''") + "'");
+            if (f.Length == 0 || Convert.ToString(f[0]["IsFlatCharge"]) != "Y") return;
+            e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 248, 225);
+            e.Appearance.Options.UseBackColor = true;
+        }
+
         private void GridViewMeters_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (e.Column == null || e.Column.FieldName != "MeterTypeCode" || _meterTypeLookup == null) return;
@@ -766,11 +785,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (found.Length == 0) return;
             DataRow m = found[0];
             int rh = e.RowHandle;
+            object curDesc = GridViewMeters.GetRowCellValue(rh, "Description");
+            if (curDesc == null || curDesc == DBNull.Value || curDesc.ToString().Trim().Length == 0)
+                GridViewMeters.SetRowCellValue(rh, "Description", m.Table.Columns.Contains("Description") ? m["Description"] : "");
             GridViewMeters.SetRowCellValue(rh, "MinimumCharges", m["MinimumCharges"]);
             GridViewMeters.SetRowCellValue(rh, "ChargesRate", m["ChargesRate"]);
             GridViewMeters.SetRowCellValue(rh, "MeterMultiPriceCode", m["MeterMultiPriceCode"]);
             GridViewMeters.SetRowCellValue(rh, "RebateQtyInPercent", m["RebateQtyInPercent"]);
             GridViewMeters.SetRowCellValue(rh, "FOCQty", m["FOCQty"]);
+            // Default BK/CL role from the meter type name when still unset (usage meters must have a
+            // role or the Meter Reading fetch skips them).
+            object curRole = GridViewMeters.GetRowCellValue(rh, "MeterRole");
+            string curRoleS = curRole == null ? "" : curRole.ToString().Trim().ToUpperInvariant();
+            if (curRoleS == "" || curRoleS == "NA")
+            {
+                string inferred = zSCP2_Contract_Form.InferMeterRole(code, m.Table.Columns.Contains("Description") ? Convert.ToString(m["Description"]) : "");
+                if (inferred.Length > 0) GridViewMeters.SetRowCellValue(rh, "MeterRole", inferred);
+            }
         }
 
         private void BtnOK_Click(object sender, EventArgs e)
@@ -1239,6 +1270,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             BuildNoteRemarkTabs();
             BuildPreventiveTab(_pgPreventive);
             BuildDebtorHistoryTab(_pgDebtorHist);
+            // Billing History: what invoices this machine's meters generated (read-only, shared impl).
+            DevExpress.XtraTab.XtraTabPage pgBillHist = new DevExpress.XtraTab.XtraTabPage();
+            pgBillHist.Text = "Billing History";
+            _tabMain.TabPages.Add(pgBillHist);
+            ServiceContractPhotocopier.Classes.ScpBillingHistory.BuildTab(pgBillHist, _db, "i.ItemKey", _data.ItemKey);
             ExtendItemRibbon();
 
             // 6b. New item under a known contract: inherit that contract's context so the header isn't blank.
@@ -1525,7 +1561,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // Reference No stays item-specific (a per-document reference), never inherited.
                 string iMh = "i.[" + string.Join("], i.[", _imhCols) + "]";
                 DataTable dt = db.GetDataTable(
-                    "SELECT i.ItemCode, i.GradeCode, i.Note, i.Remark1, i.Remark2, " + iMh +
+                    "SELECT i.ItemCode, i.GradeCode, i.PurchaseDate, i.ServiceTypeCode, i.Note, i.Remark1, i.Remark2, " + iMh +
                     ", i.ReferenceNo AS ReferenceNo" +
                     ", COALESCE(NULLIF(i.ContractTypeCode,''), c.ContractTypeCode, '') AS ContractTypeCode" +
                     ", COALESCE(NULLIF(i.StaffCode,''), c.StaffCode, '') AS StaffCode" +
@@ -1543,6 +1579,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (dt.Rows.Count == 0) return;
                 DataRow r = dt.Rows[0];
                 data.ItemCode = AsS(r["ItemCode"]); data.GradeCode = AsS(r["GradeCode"]);
+                data.PurchaseDate = r["PurchaseDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["PurchaseDate"]);
+                data.ServiceTypeCode = AsS(r["ServiceTypeCode"]);
                 data.Note = AsS(r["Note"]); data.Remark1 = AsS(r["Remark1"]); data.Remark2 = AsS(r["Remark2"]);
                 foreach (string c in _imhCols) data.MoreHeader[c] = AsS(r[c]);
                 data.ReferenceNo = AsS(r["ReferenceNo"]); data.ContractTypeCode = AsS(r["ContractTypeCode"]);
@@ -1756,6 +1794,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.Append("UPDATE [dbo].[zSCP2_Item] SET ItemCode=@ItemCode, GradeCode=@GradeCode, ")
+              .Append("PurchaseDate=@PurchaseDate, ServiceTypeCode=@ServiceTypeCode, ")
               .Append("Note=@Note, Remark1=@Remark1, Remark2=@Remark2, ")
               .Append("ReferenceNo=@ReferenceNo, ContractTypeCode=@ContractTypeCode, StaffCode=@StaffCode, ")
               .Append("ServiceStartDate=@ServiceStartDate, ServiceExpiryDate=@ServiceExpiryDate, ")
@@ -1769,6 +1808,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 cmd.Parameters.AddWithValue("@ItemCode", d.ItemCode ?? "");
                 cmd.Parameters.AddWithValue("@GradeCode", d.GradeCode ?? "");
+                cmd.Parameters.AddWithValue("@PurchaseDate", (object)d.PurchaseDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@ServiceTypeCode", d.ServiceTypeCode ?? "");
                 cmd.Parameters.AddWithValue("@Note", (object)(d.Note ?? ""));
                 cmd.Parameters.AddWithValue("@Remark1", d.Remark1 ?? "");
                 cmd.Parameters.AddWithValue("@Remark2", d.Remark2 ?? "");
@@ -1855,7 +1896,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     {
                         pool.Remove(hitRow);
                         using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
-                            "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, MinimumCharges=@min, ChargesRate=@rate, " +
+                            "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, [Description]=@desc, MinimumCharges=@min, ChargesRate=@rate, " +
                             "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
@@ -1869,9 +1910,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     else
                     {
                         using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
-                            "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, " +
+                            "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, " +
                             "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                            "VALUES (@ik,@type,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
                         {
                             ins.Parameters.AddWithValue("@ik", itemKey);
                             ins.Parameters.AddWithValue("@type", type);
@@ -1902,6 +1943,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private static void AddMeterRowParams(System.Data.SqlClient.SqlCommand cmd, DataRow r)
         {
+            cmd.Parameters.AddWithValue("@desc", r.Table.Columns.Contains("Description") && r["Description"] != DBNull.Value
+                ? (object)r["Description"].ToString() : "");
             cmd.Parameters.AddWithValue("@min", r["MinimumCharges"] == DBNull.Value ? (object)0m : r["MinimumCharges"]);
             cmd.Parameters.AddWithValue("@rate", r["ChargesRate"] == DBNull.Value ? (object)0m : r["ChargesRate"]);
             cmd.Parameters.AddWithValue("@mp", r["MeterMultiPriceCode"] == null || r["MeterMultiPriceCode"] == DBNull.Value ? "" : r["MeterMultiPriceCode"].ToString());
@@ -2285,6 +2328,30 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Preventive Maintenance tab (Image #126): Active gate + interval + service dates + Dept/Job/Location.
+        /// <summary>Compact "Preventive Maintenance only" mode (used by the contract grid's Preventive
+        /// button column): every other tab is stripped, the header area is covered by the tab control,
+        /// and the form shrinks to just the PM page + the ribbon's Save/Close. Safe to call before
+        /// ShowDialog — applied once the form shows.</summary>
+        internal void ShowPreventiveTab()
+        {
+            this.Shown += delegate
+            {
+                if (_tabMain == null || _pgPreventive == null) return;
+                this.Text = "Preventive Maintenance" +
+                    (string.IsNullOrEmpty(_data.ServiceItemNo) ? "" : " — " + _data.ServiceItemNo);
+                for (int i = _tabMain.TabPages.Count - 1; i >= 0; i--)
+                    if (!object.ReferenceEquals(_tabMain.TabPages[i], _pgPreventive))
+                        _tabMain.TabPages.RemoveAt(i);
+                _tabMain.SelectedTabPage = _pgPreventive;
+                int topY = 145;
+                if (RibbonCtl != null) topY = RibbonCtl.Height + 4;
+                this.ClientSize = new System.Drawing.Size(850, topY + 300);
+                _tabMain.Location = new System.Drawing.Point(5, topY);
+                _tabMain.Size = new System.Drawing.Size(this.ClientSize.Width - 10, this.ClientSize.Height - topY - 5);
+                _tabMain.BringToFront();
+            };
+        }
+
         private void BuildPreventiveTab(System.Windows.Forms.Control page)
         {
             DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();

@@ -32,6 +32,19 @@ namespace ServiceContractPhotocopier.Classes
         public decimal RebatePct;
         public decimal Charge;
         public bool UseMin;
+        public bool IsFlat;   // flat/rental meter: bill qty 1 x rate regardless of readings
+        // --- strategy pipeline (P0 plumbing; wired progressively in P5a-P5c) ---
+        public string StrategyCode = "";   // contract's strategy in force for this billing run
+        public string StrategyNote = "";   // human-readable outcome ("WAIVED: ...", "NET: ...")
+        public bool NetBilling;            // FOC-REBATE strategy with NetBilling='Y'
+        public bool WaivedRental;          // WAIVE-TARGET met -> rental billed 0 this period
+        public bool IsRental;              // flat AND a rental (RA-*) type — distinguishes from MIN-*
+        public decimal BillCopies;         // the NET qty the invoice line bills (usage - FOC)
+        public string MultiPriceCode = ""; // tiered-pricing ladder code (per-meter override or meter type)
+        public decimal EffUnitPrice;       // the resolved per-copy price (multi-price tier, or flat rate)
+        public DateTime? RentalStartDate;  // n/N anchor
+        public int RentalMonths;           // N (0 = open-ended, no n/N text)
+        public char RentalBasis = 'A';     // A accrual / P prepayment
         public DateTime? LastDate;
         /// <summary>API LastAuditDate of the CURRENT reading — used as the MeterTrans date so the
         /// next period's "Last Read Date" is the real meter-read date (falls back to now if absent).</summary>
@@ -45,28 +58,61 @@ namespace ServiceContractPhotocopier.Classes
     /// </summary>
     public static class ScpInvoiceBuilder
     {
-        /// <summary>Computes Usage, UseMin and Charge in-place from the line's readings + config.
-        /// MASTER CONVENTION (verified against the customer's V8 meter invoices, e.g. MR2604.0006:
-        /// usage 5645 with FOC 1000 was billed 5645 x 0.03 in full): the charge is RAW USAGE x RATE
-        /// with the minimum-charge floor — FOC Qty and Rebate % are informational columns only and
-        /// are never deducted from the billed amount.</summary>
-        public static void ComputeCharge(MeterBillLine ln)
+        /// <summary>THE single meter-charge engine (used by BOTH the grid preview and the invoice, so they
+        /// can never diverge). NET convention (user decision 2026-07-22):
+        ///   billable = max(0, usage - FOC)                         (FOC copies really deducted)
+        ///   unitprice = flat-per-tier multi-price by usage, else the flat ChargesRate
+        ///   charge = round(billable x unitprice, 2) x (1 - rebate%)  (rebate really deducted)
+        ///   charge floored at MinCharges (committed minimum still bills when FOC covers all usage)
+        /// Flat/rental meters bill qty 1 x rate (FOC Qty = free-rental months -> RM0 this period).
+        /// Pass the pre-loaded multi-price ladders (null = flat rate only).</summary>
+        public static void ComputeCharge(MeterBillLine ln,
+            System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<decimal[]>> ladders)
         {
+            if (ln.IsFlat)
+            {
+                ln.Usage = 0m; ln.BillCopies = 0m;
+                if (ln.Foc > 0m) { ln.Charge = 0m; ln.UseMin = false; ln.EffUnitPrice = 0m; return; }
+                decimal flat = ln.Rate;
+                if (flat < ln.MinCharges) flat = ln.MinCharges;
+                ln.UseMin = (ln.Rate == 0m && ln.MinCharges > 0m);
+                ln.EffUnitPrice = ln.Rate;
+                ln.Charge = flat;
+                return;
+            }
+
             decimal usage = ln.Current - ln.Last;
             if (usage < 0m) usage = 0m;
             ln.Usage = usage;
 
-            ln.UseMin = (ln.Rate == 0m && ln.MinCharges > 0m);
-            if (ln.UseMin)
+            // Billed copies + effective per-copy price come from ONE of two mechanisms:
+            //   (a) multi-price ladder present -> MARGINAL charge (its 0.00 first band IS the FOC allowance);
+            //       billed = usage - freeCopies, effective price = grossCharge / billed (blended).
+            //   (b) no ladder -> flat rate with the FOCQty column deducted (NET).
+            decimal billed, effUnit;
+            if (ScpMultiPrice.HasLadder(ladders, ln.MultiPriceCode))
             {
-                ln.Charge = ln.MinCharges;
+                decimal freeCopies;
+                decimal gross = ScpMultiPrice.MarginalCharge(ladders, ln.MultiPriceCode, usage, out freeCopies);
+                billed = usage - freeCopies;
+                if (billed < 0m) billed = 0m;
+                effUnit = billed > 0m ? Math.Round(gross / billed, 6) : 0m;
             }
             else
             {
-                decimal c = usage * ln.Rate;
-                if (c < ln.MinCharges) c = ln.MinCharges;
-                ln.Charge = c;
+                billed = usage - ln.Foc;
+                if (billed < 0m) billed = 0m;
+                effUnit = ln.Rate;
             }
+            ln.BillCopies = billed;
+            ln.EffUnitPrice = effUnit;
+
+            decimal sub = Math.Round(billed * effUnit, 2);
+            decimal charge = ln.RebatePct > 0m ? Math.Round(sub * (1m - ln.RebatePct / 100m), 2) : sub;
+
+            // Minimum-charge floor. A committed minimum still bills even when the allowance covers all usage.
+            if (charge < ln.MinCharges) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
+            else { ln.Charge = charge; ln.UseMin = false; }
         }
 
         /// <summary>
@@ -115,21 +161,41 @@ namespace ServiceContractPhotocopier.Classes
             doc.Remark1 = refDocNo ?? "";
             if (doc.DetailCount > 0) doc.ClearDetails();
 
+            // Each meter line's invoice detail carries its CONTRACT's Department + Project so the invoice
+            // is analysed exactly like the contract it bills. Loaded once per distinct contract.
+            System.Collections.Generic.Dictionary<long, string[]> contractDeptProj = LoadContractDeptProj(db, lines);
+
             foreach (MeterBillLine ln in lines)
             {
-                bool minBilled = ln.UseMin || ln.Rate == 0m || ln.Usage * ln.Rate < ln.MinCharges;
+                string lineDept = "", lineProj = "";
+                string[] dp;
+                if (ln.ContractKey > 0 && contractDeptProj.TryGetValue(ln.ContractKey, out dp))
+                { lineDept = dp[0]; lineProj = dp[1]; }
+
+                // ComputeCharge sets UseMin authoritatively (charge was floored to the minimum).
+                bool minBilled = ln.UseMin;
                 string block = minBilled ? "*** Minimum Charges ***" : ComposeBreakdown(ln, readingDate);
 
-                // Charge row — Qty = RAW usage x Rate (master convention: FOC/rebate shown but never
-                // deducted); minimum-floor lines bill 1 x the minimum, tagged "*** Minimum Charges ***".
+                // Charge row (NET convention): Qty = billed copies (usage - FOC), UnitPrice = the resolved
+                // per-copy price (multi-price tier or flat rate), Rebate % as a line discount — so the line
+                // total = ComputeCharge's NET charge and the invoice matches the grid exactly. Minimum-floor
+                // and flat/rental lines bill 1 x the (already-final) charge.
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
                 if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
                 dtl.Description = ComposeLineDescription(ln);
-                if (minBilled)
+                if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
                 { dtl.Qty = 1m; dtl.UnitPrice = ln.Charge; }
                 else
-                { dtl.Qty = ln.Usage > 0m ? ln.Usage : 1m; dtl.UnitPrice = ln.Usage > 0m ? ln.Rate : ln.Charge; }
+                {
+                    dtl.Qty = ln.BillCopies;
+                    dtl.UnitPrice = ln.EffUnitPrice;
+                    if (ln.RebatePct > 0m) dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
+                }
                 dtl.FurtherDescription = block;
+                // Department + Project = the billed contract's (per line, since a grouped invoice can
+                // span several contracts). Empty contract values leave the detail's defaults untouched.
+                if (!string.IsNullOrEmpty(lineDept)) dtl.DeptNo = lineDept;
+                if (!string.IsNullOrEmpty(lineProj)) dtl.ProjNo = lineProj;
 
                 // Reading text rows — exactly the master's content: Current / Previous / (FOC when >0)
                 // / Usage, each carrying the same block, then a blank separator row. Dates dd/MM/yyyy,
@@ -168,6 +234,30 @@ namespace ServiceContractPhotocopier.Classes
                 dBlank.AccNo = null;
             }
             return doc;
+        }
+
+        // Contract Department + Project for every distinct ContractKey referenced by the lines.
+        // Returns { ContractKey -> [DeptNo, ProjNo] }; contracts with none map to empty strings.
+        private static System.Collections.Generic.Dictionary<long, string[]> LoadContractDeptProj(
+            DBSetting db, List<MeterBillLine> lines)
+        {
+            System.Collections.Generic.Dictionary<long, string[]> map =
+                new System.Collections.Generic.Dictionary<long, string[]>();
+            System.Collections.Generic.HashSet<long> keys = new System.Collections.Generic.HashSet<long>();
+            foreach (MeterBillLine ln in lines) if (ln.ContractKey > 0) keys.Add(ln.ContractKey);
+            if (keys.Count == 0) return map;
+            try
+            {
+                string inList = string.Join(",", new List<long>(keys).ConvertAll(k => k.ToString()).ToArray());
+                System.Data.DataTable dt = db.GetDataTable(
+                    "SELECT ContractKey, ISNULL(DeptNo,'') AS DeptNo, ISNULL(ProjNo,'') AS ProjNo " +
+                    "FROM dbo.zSCP2_Contract WHERE ContractKey IN (" + inList + ")", false);
+                foreach (System.Data.DataRow r in dt.Rows)
+                    map[Convert.ToInt64(r["ContractKey"])] = new string[]
+                    { Convert.ToString(r["DeptNo"]), Convert.ToString(r["ProjNo"]) };
+            }
+            catch { }
+            return map;
         }
 
         // Master convention (verified against v8_atp_main salesinvoiceitem): the line description is

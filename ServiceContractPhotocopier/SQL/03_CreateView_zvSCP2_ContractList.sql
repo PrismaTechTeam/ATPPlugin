@@ -21,6 +21,9 @@ SELECT
 	c.BillingMode,
 	ISNULL(c.StaffCode, '')  AS Agent,
 	ISNULL(c.AreaCode, '')   AS Area,
+	ISNULL(c.DeptNo, '')     AS DeptNo,
+	ISNULL(c.ProjNo, '')     AS ProjNo,
+	ISNULL(c.ReferenceNo, '') AS ReferenceNo,
 	ISNULL(c.Description, '') AS Description,
 	c.Inactive,
 	(SELECT COUNT(*) FROM dbo.zSCP2_Item i WHERE i.ContractKey = c.ContractKey) AS ItemCount

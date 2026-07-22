@@ -61,6 +61,28 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
         public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
 
+        /// <summary>Whether Fetch accepts readings audited AFTER the selected billing day (they show
+        /// a RED Last Audit Date = invoice not created on time). Default true; set false (Meter
+        /// Reading &gt; Setting) to only match readings on/before the billing day.</summary>
+        public const string KEY_INCLUDE_LATE_READINGS = "INCLUDE_LATE_READINGS";
+        public const bool DEFAULT_INCLUDE_LATE_READINGS = true;
+
+        // === Billing-day AUTO-FETCH snapshot (background, Meter Reading > Setting) ===
+
+        /// <summary>Enable the background auto-fetch: on each billing day the readings are snapshotted
+        /// as of the cutoff and LOCKED (no later override).</summary>
+        public const string KEY_AUTO_FETCH_ENABLED = "AUTO_FETCH_ENABLED";
+        public const bool DEFAULT_AUTO_FETCH_ENABLED = false;
+
+        /// <summary>Cutoff TIME (HH:mm) for the auto-fetch snapshot.</summary>
+        public const string KEY_AUTO_FETCH_CUTOFF = "AUTO_FETCH_CUTOFF";
+        public const string DEFAULT_AUTO_FETCH_CUTOFF = "23:59";
+
+        /// <summary>Which day the cutoff falls on: "BEFORE" = day before the billing day (billing day
+        /// 7 → readings up to the 6th 23:59), "ON" = the billing day itself (up to the 7th 23:59).</summary>
+        public const string KEY_AUTO_FETCH_CUTOFF_DAY = "AUTO_FETCH_CUTOFF_DAY";
+        public const string DEFAULT_AUTO_FETCH_CUTOFF_DAY = "BEFORE";
+
         /// <summary>Native Document Numbering Format (DocType IV) used by meter-billing invoices.
         /// Configurable in Service Option; the builder falls back to the IV default when the named
         /// format doesn't exist in dbo.DocNoFormat.</summary>

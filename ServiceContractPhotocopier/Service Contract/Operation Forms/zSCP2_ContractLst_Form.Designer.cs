@@ -26,8 +26,6 @@
         private DevExpress.XtraGrid.Columns.GridColumn ColDebtorCode;
         private DevExpress.XtraGrid.Columns.GridColumn ColDebtorName;
         private DevExpress.XtraGrid.Columns.GridColumn ColContractDate;
-        private DevExpress.XtraGrid.Columns.GridColumn ColStartDate;
-        private DevExpress.XtraGrid.Columns.GridColumn ColExpiryDate;
         private DevExpress.XtraGrid.Columns.GridColumn ColValue;
         private DevExpress.XtraGrid.Columns.GridColumn ColBillingDay;
         private DevExpress.XtraGrid.Columns.GridColumn ColBillingMode;
@@ -37,6 +35,9 @@
         private DevExpress.XtraGrid.Columns.GridColumn ColMonthEnd;
         private DevExpress.XtraGrid.Columns.GridColumn ColAgent;
         private DevExpress.XtraGrid.Columns.GridColumn ColArea;
+        private DevExpress.XtraGrid.Columns.GridColumn ColDept;
+        private DevExpress.XtraGrid.Columns.GridColumn ColProject;
+        private DevExpress.XtraGrid.Columns.GridColumn ColRefNo;
         private DevExpress.XtraGrid.Columns.GridColumn ColDescription;
 
         private void InitializeComponent()
@@ -54,8 +55,6 @@
             this.ColDebtorCode = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColDebtorName = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColContractDate = new DevExpress.XtraGrid.Columns.GridColumn();
-            this.ColStartDate = new DevExpress.XtraGrid.Columns.GridColumn();
-            this.ColExpiryDate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColValue = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBillingDay = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBillingMode = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -65,6 +64,9 @@
             this.ColMonthEnd = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColAgent = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColArea = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColDept = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColProject = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColRefNo = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColDescription = new DevExpress.XtraGrid.Columns.GridColumn();
             ((System.ComponentModel.ISupportInitialize)(this.PanelToolbar)).BeginInit();
             this.PanelToolbar.SuspendLayout();
@@ -164,8 +166,6 @@
                 this.ColDebtorCode,
                 this.ColDebtorName,
                 this.ColContractDate,
-                this.ColStartDate,
-                this.ColExpiryDate,
                 this.ColValue,
                 this.ColBillingDay,
                 this.ColBillingMode,
@@ -175,6 +175,9 @@
                 this.ColMonthEnd,
                 this.ColAgent,
                 this.ColArea,
+                this.ColDept,
+                this.ColProject,
+                this.ColRefNo,
                 this.ColDescription});
             this.GridView.GridControl = this.Grid;
             this.GridView.Name = "GridView";
@@ -220,24 +223,6 @@
             this.ColContractDate.VisibleIndex = 4;
             this.ColContractDate.Width = 100;
             //
-            // ColStartDate
-            //
-            this.ColStartDate.Caption = "Start Date";
-            this.ColStartDate.FieldName = "ServiceStartDate";
-            this.ColStartDate.Name = "ColStartDate";
-            this.ColStartDate.Visible = true;
-            this.ColStartDate.VisibleIndex = 5;
-            this.ColStartDate.Width = 100;
-            //
-            // ColExpiryDate
-            //
-            this.ColExpiryDate.Caption = "Expiry Date";
-            this.ColExpiryDate.FieldName = "ServiceExpiryDate";
-            this.ColExpiryDate.Name = "ColExpiryDate";
-            this.ColExpiryDate.Visible = true;
-            this.ColExpiryDate.VisibleIndex = 6;
-            this.ColExpiryDate.Width = 100;
-            //
             // ColValue
             //
             this.ColValue.Caption = "Contract Value";
@@ -246,7 +231,7 @@
             this.ColValue.FieldName = "ContractValue";
             this.ColValue.Name = "ColValue";
             this.ColValue.Visible = true;
-            this.ColValue.VisibleIndex = 7;
+            this.ColValue.VisibleIndex = 5;
             this.ColValue.Width = 110;
             //
             // ColBillingDay
@@ -255,7 +240,7 @@
             this.ColBillingDay.FieldName = "BillingDay";
             this.ColBillingDay.Name = "ColBillingDay";
             this.ColBillingDay.Visible = true;
-            this.ColBillingDay.VisibleIndex = 8;
+            this.ColBillingDay.VisibleIndex = 6;
             this.ColBillingDay.Width = 80;
             //
             // ColBillingMode
@@ -264,7 +249,7 @@
             this.ColBillingMode.FieldName = "BillingMode";
             this.ColBillingMode.Name = "ColBillingMode";
             this.ColBillingMode.Visible = true;
-            this.ColBillingMode.VisibleIndex = 10;
+            this.ColBillingMode.VisibleIndex = 8;
             this.ColBillingMode.Width = 90;
             //
             // ColItemCount
@@ -273,7 +258,7 @@
             this.ColItemCount.FieldName = "ItemCount";
             this.ColItemCount.Name = "ColItemCount";
             this.ColItemCount.Visible = true;
-            this.ColItemCount.VisibleIndex = 13;
+            this.ColItemCount.VisibleIndex = 14;
             this.ColItemCount.Width = 90;
             //
             // ColInactive
@@ -282,7 +267,7 @@
             this.ColInactive.FieldName = "Inactive";
             this.ColInactive.Name = "ColInactive";
             this.ColInactive.Visible = true;
-            this.ColInactive.VisibleIndex = 15;
+            this.ColInactive.VisibleIndex = 16;
             this.ColInactive.Width = 60;
             //
             // ColContractType
@@ -300,7 +285,7 @@
             this.ColMonthEnd.FieldName = "BillOnMonthEnd";
             this.ColMonthEnd.Name = "ColMonthEnd";
             this.ColMonthEnd.Visible = true;
-            this.ColMonthEnd.VisibleIndex = 9;
+            this.ColMonthEnd.VisibleIndex = 7;
             this.ColMonthEnd.Width = 70;
             //
             // ColAgent
@@ -309,7 +294,7 @@
             this.ColAgent.FieldName = "Agent";
             this.ColAgent.Name = "ColAgent";
             this.ColAgent.Visible = true;
-            this.ColAgent.VisibleIndex = 11;
+            this.ColAgent.VisibleIndex = 9;
             this.ColAgent.Width = 80;
             //
             // ColArea
@@ -318,8 +303,35 @@
             this.ColArea.FieldName = "Area";
             this.ColArea.Name = "ColArea";
             this.ColArea.Visible = true;
-            this.ColArea.VisibleIndex = 12;
+            this.ColArea.VisibleIndex = 10;
             this.ColArea.Width = 80;
+            //
+            // ColDept
+            //
+            this.ColDept.Caption = "Department";
+            this.ColDept.FieldName = "DeptNo";
+            this.ColDept.Name = "ColDept";
+            this.ColDept.Visible = true;
+            this.ColDept.VisibleIndex = 11;
+            this.ColDept.Width = 100;
+            //
+            // ColProject
+            //
+            this.ColProject.Caption = "Project";
+            this.ColProject.FieldName = "ProjNo";
+            this.ColProject.Name = "ColProject";
+            this.ColProject.Visible = true;
+            this.ColProject.VisibleIndex = 12;
+            this.ColProject.Width = 100;
+            //
+            // ColRefNo
+            //
+            this.ColRefNo.Caption = "Reference No";
+            this.ColRefNo.FieldName = "ReferenceNo";
+            this.ColRefNo.Name = "ColRefNo";
+            this.ColRefNo.Visible = true;
+            this.ColRefNo.VisibleIndex = 13;
+            this.ColRefNo.Width = 110;
             //
             // ColDescription
             //
@@ -327,7 +339,7 @@
             this.ColDescription.FieldName = "Description";
             this.ColDescription.Name = "ColDescription";
             this.ColDescription.Visible = true;
-            this.ColDescription.VisibleIndex = 14;
+            this.ColDescription.VisibleIndex = 15;
             this.ColDescription.Width = 180;
             //
             // zSCP2_ContractLst_Form

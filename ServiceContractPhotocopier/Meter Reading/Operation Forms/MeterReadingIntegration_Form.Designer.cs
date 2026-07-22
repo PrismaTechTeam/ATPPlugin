@@ -122,7 +122,7 @@
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelFilter.Location = new System.Drawing.Point(0, 42);
             this.PanelFilter.Name = "PanelFilter";
-            this.PanelFilter.Size = new System.Drawing.Size(1280, 136);
+            this.PanelFilter.Size = new System.Drawing.Size(1280, 164);
             this.PanelFilter.TabIndex = 1;
 
             // ================================================================
@@ -141,7 +141,7 @@
             this.GrpFilter.Controls.Add(this.CmbMonth);
             this.GrpFilter.Location = new System.Drawing.Point(8, 6);
             this.GrpFilter.Name = "GrpFilter";
-            this.GrpFilter.Size = new System.Drawing.Size(494, 124);
+            this.GrpFilter.Size = new System.Drawing.Size(494, 150);
             this.GrpFilter.TabIndex = 0;
             this.GrpFilter.Text = "Filter Options";
             //
@@ -199,13 +199,13 @@
             this.LblMonth.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
             this.LblMonth.Appearance.Options.UseFont = true;
             this.LblMonth.Appearance.Options.UseForeColor = true;
-            this.LblMonth.Location = new System.Drawing.Point(182, 62);
+            this.LblMonth.Location = new System.Drawing.Point(10, 94);
             this.LblMonth.Name = "LblMonth";
             this.LblMonth.Size = new System.Drawing.Size(42, 15);
             this.LblMonth.TabIndex = 5;
             this.LblMonth.Text = "Month:";
             //
-            this.CmbMonth.Location = new System.Drawing.Point(230, 58);
+            this.CmbMonth.Location = new System.Drawing.Point(58, 90);
             this.CmbMonth.Name = "CmbMonth";
             this.CmbMonth.Properties.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.CmbMonth.Properties.Appearance.Options.UseFont = true;
@@ -218,7 +218,7 @@
             //
             this.BtnFilter.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnFilter.Appearance.Options.UseFont = true;
-            this.BtnFilter.Location = new System.Drawing.Point(350, 55);
+            this.BtnFilter.Location = new System.Drawing.Point(350, 87);
             this.BtnFilter.Name = "BtnFilter";
             this.BtnFilter.Size = new System.Drawing.Size(66, 28);
             this.BtnFilter.TabIndex = 7;
@@ -227,7 +227,7 @@
             //
             this.BtnReset.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnReset.Appearance.Options.UseFont = true;
-            this.BtnReset.Location = new System.Drawing.Point(422, 55);
+            this.BtnReset.Location = new System.Drawing.Point(422, 87);
             this.BtnReset.Name = "BtnReset";
             this.BtnReset.Size = new System.Drawing.Size(66, 28);
             this.BtnReset.TabIndex = 8;
@@ -272,7 +272,7 @@
             this.BtnRefresh.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnRefresh.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnRefresh.Appearance.Options.UseFont = true;
-            this.BtnRefresh.Location = new System.Drawing.Point(510, 46);
+            this.BtnRefresh.Location = new System.Drawing.Point(510, 8);
             this.BtnRefresh.Name = "BtnRefresh";
             this.BtnRefresh.Size = new System.Drawing.Size(150, 50);
             this.BtnRefresh.TabIndex = 10;
@@ -284,7 +284,7 @@
             this.BtnFetch.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnFetch.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnFetch.Appearance.Options.UseFont = true;
-            this.BtnFetch.Location = new System.Drawing.Point(666, 46);
+            this.BtnFetch.Location = new System.Drawing.Point(666, 8);
             this.BtnFetch.Name = "BtnFetch";
             this.BtnFetch.Size = new System.Drawing.Size(150, 50);
             this.BtnFetch.TabIndex = 11;
@@ -296,7 +296,7 @@
             this.BtnSelfManualKeyIn.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnSelfManualKeyIn.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnSelfManualKeyIn.Appearance.Options.UseFont = true;
-            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(822, 46);
+            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(822, 8);
             this.BtnSelfManualKeyIn.Name = "BtnSelfManualKeyIn";
             this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(150, 50);
             this.BtnSelfManualKeyIn.TabIndex = 12;
@@ -310,7 +310,7 @@
             this.BtnGenerateInvoice.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnGenerateInvoice.Appearance.Options.UseFont = true;
             this.BtnGenerateInvoice.Appearance.Options.UseForeColor = true;
-            this.BtnGenerateInvoice.Location = new System.Drawing.Point(978, 46);
+            this.BtnGenerateInvoice.Location = new System.Drawing.Point(978, 8);
             this.BtnGenerateInvoice.Name = "BtnGenerateInvoice";
             this.BtnGenerateInvoice.Size = new System.Drawing.Size(150, 50);
             this.BtnGenerateInvoice.TabIndex = 13;

@@ -91,6 +91,14 @@ namespace ServiceContractPhotocopier.Classes
         public const string CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE = nameof(CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE);
         public const string CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE = nameof(CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE);
 
+        // ---- General Setup — strategy ----
+        public const string CMD_SHOW_SCP_SETUP_STRATEGY = nameof(CMD_SHOW_SCP_SETUP_STRATEGY);
+        public const string CMD_OPEN_SCP_SETUP_STRATEGY = nameof(CMD_OPEN_SCP_SETUP_STRATEGY);
+
+        // ---- Rental Maintenance ----
+        public const string CMD_SHOW_SCP_RENTAL_MAINT = nameof(CMD_SHOW_SCP_RENTAL_MAINT);
+        public const string CMD_OPEN_SCP_RENTAL_MAINT = nameof(CMD_OPEN_SCP_RENTAL_MAINT);
+
         // ---- Service Option ----
         public const string CMD_SHOW_SCP_OPTION = nameof(CMD_SHOW_SCP_OPTION);
         public const string CMD_OPEN_SCP_OPTION = nameof(CMD_OPEN_SCP_OPTION);
