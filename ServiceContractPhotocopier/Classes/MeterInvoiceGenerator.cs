@@ -71,7 +71,8 @@ namespace ServiceContractPhotocopier.Classes
                     List<MeterBillLine> billable = new List<MeterBillLine>();
                     List<MeterBillLine> zero = new List<MeterBillLine>();
                     foreach (MeterBillLine ln in j.Lines)
-                        (ln.Charge > 0m ? billable : zero).Add(ln);
+                        // A committed-minimum line stays on the invoice even at RM 0 (transparency).
+                        ((ln.Charge > 0m || ln.AlwaysBill) ? billable : zero).Add(ln);
 
                     if (billable.Count > 0)
                     {

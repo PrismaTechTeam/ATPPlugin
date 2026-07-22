@@ -44,6 +44,11 @@ namespace ServiceContractPhotocopier.Classes
         public decimal EffUnitPrice;       // the resolved per-copy price (multi-price tier, or flat rate)
         public int FocResetCount = 1;      // FOC allowance multiplier = reset periods in this billed span
                                            // (1 = monthly reset on a monthly bill; 4 ≈ weekly reset billed monthly)
+        public bool IsCommittedMin;        // a "MIN ..." committed-minimum meter — bills the TOP-UP to the
+                                           // committed amount over the item's print charges, always shown
+        public decimal CommittedAmount;    // the committed minimum (the MIN meter's Minimum Charges)
+        public decimal PrintedAmount;      // the item's actual print (BK/CL) charges the top-up was measured against
+        public bool AlwaysBill;            // keep this line on the invoice even when its charge is 0 (transparency)
         public DateTime? RentalStartDate;  // n/N anchor
         public int RentalMonths;           // N (0 = open-ended, no n/N text)
         public char RentalBasis = 'A';     // A accrual / P prepayment
@@ -180,7 +185,18 @@ namespace ServiceContractPhotocopier.Classes
 
                 // ComputeCharge sets UseMin authoritatively (charge was floored to the minimum).
                 bool minBilled = ln.UseMin;
-                string block = minBilled ? "*** Minimum Charges ***" : ComposeBreakdown(ln, readingDate);
+                string block;
+                if (ln.IsCommittedMin)
+                    // Committed-minimum meter: show the committed amount, the item's actual print charges,
+                    // and the top-up billed — so the customer sees WHY the amount is what it is (transparency).
+                    block = "*** MINIMUM COMMITTED PRINT CHARGES ***\r\n" +
+                            "Committed Minimum : " + ln.CommittedAmount.ToString("#,##0.00") + "\r\n" +
+                            "Print Charges     : " + ln.PrintedAmount.ToString("#,##0.00") + "\r\n" +
+                            "Top-Up Billed     : " + ln.Charge.ToString("#,##0.00");
+                else if (minBilled)
+                    block = "*** Minimum Charges ***";
+                else
+                    block = ComposeBreakdown(ln, readingDate);
 
                 // Charge row (NET convention): Qty = billed copies (usage - FOC), UnitPrice = the resolved
                 // per-copy price (multi-price tier or flat rate), Rebate % as a line discount — so the line
@@ -206,6 +222,10 @@ namespace ServiceContractPhotocopier.Classes
                 // Reading text rows — exactly the master's content: Current / Previous / (FOC when >0)
                 // / Usage, each carrying the same block, then a blank separator row. Dates dd/MM/yyyy,
                 // readings plain digits (no thousands separators — the master prints "126699").
+                // A committed-minimum meter has no reading, so it skips these (its committed/print/top-up
+                // breakdown is already on the charge row's description).
+                if (!ln.IsCommittedMin)
+                {
                 DateTime curDate = ln.AuditDate ?? readingDate;
                 string curDateStr = curDate.ToString("dd/MM/yyyy");
                 string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "";
@@ -234,6 +254,7 @@ namespace ServiceContractPhotocopier.Classes
                 dUse.Description = "Meter Charges Usage : " + Num(ln.Usage);
                 dUse.FurtherDescription = block;
                 dUse.AccNo = null;
+                }   // end reading rows (skipped for committed-minimum meters)
 
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dBlank = doc.AddDetail();
                 dBlank.Description = "";

@@ -2172,7 +2172,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // Contract flag "Rental separate invoice": flat (rental/min) lines split into their own
                 // job — one extra invoice per group ("Rental- [ref]") instead of riding the meter invoice.
                 bool rentSep = r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]);
-                bool rentalJob = rowFlat && rentSep;
+                // Only actual RENTAL meters split onto the rental-separate invoice — a committed-minimum
+                // ("MIN ...") meter is a print charge and must stay on the meter invoice with BK/CL.
+                bool rentalJob = rowFlat && rentSep && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));
                 if (rentalJob) groupKey += "_R";
                 string refNo = mode == "S" ? S(r["ServiceItemNo"]) : S(r["ContractNo"]);
 
@@ -2205,6 +2207,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
                 if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
                 ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));
+                // Committed-minimum ("MIN ...") meter: bill the TOP-UP to the committed amount over the
+                // item's print charges (computed in ApplyCommittedMin), and always show it (transparency).
+                if (ln.IsFlat && ln.MinCharges > 0m &&
+                    ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(ln.MeterTypeCode))
+                {
+                    ln.IsCommittedMin = true;
+                    ln.CommittedAmount = ln.MinCharges;
+                    ln.AlwaysBill = true;
+                }
                 ln.StrategyCode = S(r["StrategyCode"]);
                 if (r["RentalStartDate"] != DBNull.Value) ln.RentalStartDate = Convert.ToDateTime(r["RentalStartDate"]);
                 ln.RentalMonths = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
@@ -2234,6 +2245,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //   2) WAIVE-TARGET — waives rental when the (net-of-pool) usage charges reach the target.
             ApplyGroupLimit(jobs);
             ApplyWaiveTarget(jobs);
+            ApplyCommittedMin(jobs);   // top up each item's print charges to its committed-minimum meter
 
             // Progress dialog shows WHICH MACHINE(S) are being billed — service item nos, not the contract.
             foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
@@ -2354,6 +2366,48 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
             }
             catch { }   // strategy evaluation must never block invoice generation
+        }
+
+        // COMMITTED MINIMUM ("MIN ...") meters: the master convention puts the committed minimum print charge
+        // on its own meter (rate 0, minimum = committed). It should bill only the TOP-UP that brings the item's
+        // print charges up to the committed minimum — not the full minimum every month. It is ALWAYS shown on
+        // the invoice (top-up 0 when the print charges already meet the minimum) for transparency.
+        //   top-up = max(0, committed − sum of the SAME service item's BK/CL print charges).
+        // Single machine = the item's own BK/CL; group = a ".C" combine item whose BK/CL already hold the
+        // group's combined readings (master .C convention) — the same per-item sum covers both.
+        // Runs last (after group-FOC + waive) so the print charges it measures are final.
+        private void ApplyCommittedMin(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs)
+        {
+            try
+            {
+                // Sum the actual PRINT charges per service item (non-flat BK/CL usage meters).
+                Dictionary<long, decimal> printByItem = new Dictionary<long, decimal>();
+                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
+                    foreach (MeterBillLine l in jb.Lines)
+                        if (!l.IsFlat && (l.ColorLabel == "Black" || l.ColorLabel == "Colour") && l.ItemKey > 0)
+                        {
+                            decimal t;
+                            printByItem.TryGetValue(l.ItemKey, out t);
+                            printByItem[l.ItemKey] = t + l.Charge;
+                        }
+
+                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
+                    foreach (MeterBillLine l in jb.Lines)
+                    {
+                        if (!l.IsCommittedMin) continue;
+                        decimal printed;
+                        printByItem.TryGetValue(l.ItemKey, out printed);
+                        decimal topUp = l.CommittedAmount - printed;
+                        if (topUp < 0m) topUp = 0m;
+                        l.PrintedAmount = printed;
+                        l.Charge = topUp;
+                        l.Foc = 0m;
+                        l.UseMin = false;
+                        l.StrategyNote = "COMMITTED MIN " + l.CommittedAmount.ToString("0.00") + ": printed " +
+                                         printed.ToString("0.00") + " -> top-up " + topUp.ToString("0.00");
+                    }
+            }
+            catch { }   // never block generation
         }
 
         private void ApplyWaiveTarget(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs)

@@ -198,6 +198,16 @@ namespace ServiceContractPhotocopier.Classes
             return c.StartsWith("RA") || c.Contains(".RA") || c.Contains("-RA") || c.Contains(" RA") || c.Contains("RENTAL");
         }
 
+        /// <summary>True if a (flat) meter type code is a COMMITTED-MINIMUM meter — the master convention
+        /// puts the minimum committed print charge on its own meter, e.g. "MIN 1764-12MTH" (rate 0, minimum
+        /// = the committed amount). Such a meter tops the item's print charges up to the committed minimum,
+        /// rather than billing the full minimum every month. Callers also require IsFlatCharge='Y'.</summary>
+        public static bool IsCommittedMinMeterCode(string meterTypeCode)
+        {
+            string c = (meterTypeCode ?? "").Trim().ToUpperInvariant();
+            return c.StartsWith("MIN");
+        }
+
         /// <summary>Parse a comma-separated ItemKey list into the target list (cleared first).</summary>
         public static void ParseItemKeys(string csv, List<long> into)
         {

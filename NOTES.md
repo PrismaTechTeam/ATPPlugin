@@ -871,3 +871,22 @@ the remainder so shares sum exactly to poolUsed); l.Foc = share (REPLACE, not +=
 (order-independent, fair); rebate still applies. Flat-rate meters only — a ladder meter keeps its ladder FOC
 (ComputeCharge ignores ln.Foc when a ladder is present), so don't put ladder meters in a group pool.
 Docs (DhaiDev/ATP-Docs) updated: strategy.md #6 + billing-calculation.md.
+
+## 2026-07-22 — Committed minimum ("MIN" meter) = top-up, always shown (single + group)
+
+User showed the MASTER convention: the committed minimum print charge is a dedicated meter (e.g.
+"MIN 1764-12MTH", rate 0, MinCharges=1764) on the service item. It was wrongly billing the FULL minimum
+every month (flat meter -> AutoFillFlatMeters charge=max(rate,min)=1764) on top of BK/CL.
+
+Fix — the MIN meter now bills a TOP-UP and is always shown (transparency):
+- ScpStrategy.IsCommittedMinMeterCode(code) = code starts with "MIN".
+- Generate loop: flat + MIN pattern + min>0 -> ln.IsCommittedMin, CommittedAmount=MinCharges, AlwaysBill=true;
+  and rentalJob now requires IsRentalMeterCode so MIN stays on the METER invoice (not the rental-separate one).
+- New pass ApplyCommittedMin(jobs) (runs LAST, after group-FOC + waive): printByItem = sum of the item's
+  non-flat BK/CL charges; MIN line Charge = max(0, committed - printed); PrintedAmount stamped.
+  Single = the item's own BK/CL; group = a ".C" combine item whose BK/CL hold combined readings (same sum).
+- MeterInvoiceGenerator routing: (Charge>0 || AlwaysBill) -> billable, so a RM0 top-up MIN line still shows.
+- BuildInvoice: MIN line FurtherDescription = "MINIMUM COMMITTED PRINT CHARGES / Committed / Print Charges /
+  Top-Up Billed"; skips the Current/Previous/Usage reading rows (no reading); Qty 1 x top-up.
+- CAVEAT: if only the MIN meter is selected without its BK/CL, printed reads 0 -> tops up to full committed;
+  select the item's print meters together. Deployed clean. Docs (DhaiDev/ATP-Docs 7f93e62) updated.
