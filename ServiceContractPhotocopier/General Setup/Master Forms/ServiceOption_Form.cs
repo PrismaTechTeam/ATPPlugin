@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 using AutoCount.Authentication;
 using AutoCount.Data;
@@ -67,6 +67,35 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 CmbMeterInvFormat.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_INVOICE_DOCNO_FORMAT);
+                ChkInvDescFromItem.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_DESC_FROM_ITEM);
+
+                // Advanced No. Format by machine status: same IV format list as the default combo.
+                try
+                {
+                    CmbInvFmtOnline.Properties.Items.Clear();
+                    CmbInvFmtOffline.Properties.Items.Clear();
+                    foreach (object it0 in CmbMeterInvFormat.Properties.Items)
+                    {
+                        CmbInvFmtOnline.Properties.Items.Add(it0);
+                        CmbInvFmtOffline.Properties.Items.Add(it0);
+                    }
+                }
+                catch { }
+                ChkInvFmtAdvanced.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ADVANCED, false);
+                CmbInvFmtOnline.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ONLINE, "");
+                CmbInvFmtOffline.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_OFFLINE, "");
+                EventHandler advToggle = delegate
+                {
+                    CmbInvFmtOnline.Enabled = ChkInvFmtAdvanced.Checked;
+                    CmbInvFmtOffline.Enabled = ChkInvFmtAdvanced.Checked;
+                };
+                ChkInvFmtAdvanced.CheckedChanged += advToggle;
+                advToggle(null, EventArgs.Empty);
 
                 LoadApiTab();
             }
@@ -280,6 +309,18 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
                     (CmbMeterInvFormat.Text ?? "").Trim());
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
+                    ChkInvDescFromItem.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ADVANCED,
+                    ChkInvFmtAdvanced.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ONLINE,
+                    (CmbInvFmtOnline.Text ?? "").Trim());
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_OFFLINE,
+                    (CmbInvFmtOffline.Text ?? "").Trim());
 
                 // API tab: upsert the selected profile and make it the active connection.
                 SaveApiTab();

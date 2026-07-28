@@ -1,4 +1,4 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
@@ -6,7 +6,7 @@ GO
 -- Field-level change audit for contracts and their service items / meters. Append-only; NO foreign
 -- keys on purpose (the audit outlives its masters — zSCP2_MeterReadingLog precedent). One SAVE =
 -- one ChangeSetId so the viewer can group a save's rows. ChangeSource: CONTRACT (header save diff),
--- STRATEGY-APPLY (Apply Strategy to Meters), RENTAL (Rental Maintenance), OWNERSHIP (change owner).
+-- STRATEGY-APPLY (legacy pushes from the retired Apply-to-Meters step), RENTAL (Rental Maintenance), OWNERSHIP (change owner).
 CREATE TABLE [dbo].[zSCP2_ContractAudit](
 	[AuditKey]     [bigint] IDENTITY(1,1) NOT NULL,
 	[ContractKey]  [bigint]           NOT NULL,

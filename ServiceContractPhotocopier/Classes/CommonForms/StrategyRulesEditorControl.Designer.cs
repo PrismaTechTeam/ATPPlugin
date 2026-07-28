@@ -76,6 +76,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             int qY1 = 168, qY2 = 200, qY3 = 232;
             Lbl(this.LblTarget, "Target Amount (RM)", pLx, qY1); Spn(this.SpnTarget, pEx, qY1, 130, 2);
             Lbl(this.LblPartialPct, "Partial waive %", pLx, qY2); Spn(this.SpnPartialPct, pEx, qY2, 130, 2);
+            this.SpnPartialPct.Properties.MinValue = 1m;
+            this.SpnPartialPct.Properties.MaxValue = 100m;
             Lbl(this.LblFreeMonths, "Free Months (first N)", pLx, qY1); Spn(this.SpnFreeMonths, pEx, qY1, 130, 0);
             Lbl(this.LblCommit, "Committed Amount (RM)", pLx, qY1); Spn(this.SpnCommit, pEx, qY1, 130, 2);
             Lbl(this.LblFocCopies, "FOC Copies", pLx, qY1); Spn(this.SpnFocCopies, pEx, qY1, 130, 0);
@@ -85,7 +87,12 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             Lbl(this.LblLimitScope, "Limit Scope", pLx, qY1); this.CmbLimitScope.Location = new Point(pEx, qY1); this.CmbLimitScope.Width = 300;
             this.CmbLimitScope.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             Lbl(this.LblLimitQty, "FOC Limit Qty", pLx, qY2); Spn(this.SpnLimitQty, pEx, qY2, 130, 0);
-            Lbl(this.LblTypeHint, "Pick a rule kind to configure its parameters.", pLx, 280); this.LblTypeHint.Width = 480;
+            Lbl(this.LblTypeHint, "Pick a rule kind to configure its parameters.", pLx, 280);
+            // Hint wraps inside the panel instead of running past its right edge (clipped text).
+            this.LblTypeHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.Vertical;
+            this.LblTypeHint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            this.LblTypeHint.Appearance.Options.UseTextOptions = true;
+            this.LblTypeHint.Width = 470;
 
             this.GrpParams.Controls.Add(this.LblRuleKind); this.GrpParams.Controls.Add(this.CmbRuleKind);
             this.GrpParams.Controls.Add(this.LblScope); this.GrpParams.Controls.Add(this.CmbScope);

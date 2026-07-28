@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -52,7 +52,10 @@ namespace ServiceContractPhotocopier.Classes
             DataTable days = _db.GetDataTable(
                 "SELECT DISTINCT COALESCE(i.BillingDayOverride, c.BillingDay) AS d " +
                 "FROM dbo.zSCP2_Item i JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
-                "WHERE i.Inactive='N' AND c.Inactive='N'", false);
+                "WHERE i.Inactive='N' AND c.Inactive='N' " +
+                // Expired machines (expiry before this month) stopped billing — stop fetching them too.
+                "AND (COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) IS NULL " +
+                "  OR COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1))", false);
             bool isBillingDay = false;
             foreach (DataRow r in days.Rows)
             {
@@ -101,6 +104,9 @@ namespace ServiceContractPhotocopier.Classes
                 "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                 "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
                 "WHERE m.MeterRole IN ('BK','CL') AND i.Inactive='N' AND c.Inactive='N' " +
+                // Expired machines (expiry before this month) stopped billing — stop fetching them too.
+                "AND (COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) IS NULL " +
+                "  OR COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) " +
                 "AND (CASE WHEN COALESCE(i.BillingDayOverride, c.BillingDay) > " + monthEnd +
                 " THEN " + monthEnd + " ELSE COALESCE(i.BillingDayOverride, c.BillingDay) END) = " + day, false);
 
@@ -124,24 +130,27 @@ namespace ServiceContractPhotocopier.Classes
                             decimal reading = string.Equals(m["MeterRole"] as string, "CL", StringComparison.OrdinalIgnoreCase)
                                 ? dto.TotalCL : dto.TotalBK;
                             string source = dto.Status == MachineStatus.Online ? "ONLINE" : "OFFLINE";
+                            // Offline monthly-report id — persisted so the invoice RefDocNo can cite it.
+                            string tid = dto.Status == MachineStatus.Online ? "" : ((dto.TrackingId ?? "").Trim());
                             long imk = Convert.ToInt64(m["ItemMeterKey"]);
 
                             // Snapshot + LOCK. Never touches invoiced or already-locked rows.
                             SqlCommand cmd = new SqlCommand(
-                                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, ReadingDate=@dt, Source=@src, " +
+                                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, ReadingDate=@dt, Source=@src, TrackingId=@tid, " +
                                 "LockedAt=GETDATE(), LastModified=GETDATE() " +
                                 "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
                                 "AND InvoicedDocKey IS NULL AND LockedAt IS NULL; " +
                                 "IF @@ROWCOUNT=0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry " +
                                 "  WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
-                                "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,LockedAt) " +
-                                "VALUES (@imk,@yr,@mo,@rd,@dt,@src,GETDATE());", cn, tx);
+                                "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,TrackingId,LockedAt) " +
+                                "VALUES (@imk,@yr,@mo,@rd,@dt,@src,@tid,GETDATE());", cn, tx);
                             cmd.Parameters.AddWithValue("@imk", imk);
                             cmd.Parameters.AddWithValue("@yr", year);
                             cmd.Parameters.AddWithValue("@mo", month);
                             cmd.Parameters.AddWithValue("@rd", reading);
                             cmd.Parameters.AddWithValue("@dt", (object)dto.LastAuditDate ?? DBNull.Value);
                             cmd.Parameters.AddWithValue("@src", source);
+                            cmd.Parameters.AddWithValue("@tid", tid);
                             cmd.ExecuteNonQuery();
 
                             ScpMeterReadingLog.Append(cn, tx, imk, year, month, reading,

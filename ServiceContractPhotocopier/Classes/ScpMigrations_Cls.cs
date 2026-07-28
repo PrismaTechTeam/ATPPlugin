@@ -97,6 +97,8 @@ namespace ServiceContractPhotocopier.Classes
             // Serial No column on provided items. Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_ContractSparePart_v2_SerialNo.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_ItemMeterPrice",        "02_CreateTable_zSCP2_ItemMeterPrice.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_ContractSnapshot",      "02_CreateTable_zSCP2_ContractSnapshot.sql", asm);
             // Multi-machine CSSI: per-unit meters (MachineSerialNo) + MultiMachine flag + widened unique
             // keys. MUST run AFTER the ItemMeter create — a fresh book has no table to ALTER yet.
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v2_MachineSerial.sql", asm);
@@ -140,6 +142,8 @@ namespace ServiceContractPhotocopier.Classes
             // v5: allow Source='INVOICE' — rentals/flat meters are never staged, so the stamp path INSERTs
             // a fresh entry with Source='INVOICE' which the original CHECK rejected (rolled back the stamp).
             RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql", asm);
+            // v6: offline TrackingId persisted with the staged reading (stamped into invoice RefDocNo).
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v6_TrackingId.sql", asm);
             // Plugin document numbering (SC / SI formats + running numbers), seeded past legacy max.
             RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Spare parts / services provided lines under a contract (contract- or item-bound).
@@ -156,6 +160,20 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v5_Strategy.sql", asm);
             // v6: per-contract FOC/Rebate reset period (Monthly default / Weekly / every N days -> accrual).
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v6_FOCReset.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v7_Inactive.sql", asm);
+            // v8: month-end billing retired — legacy day-31/month-end rows become plain day 28.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v8_RetireMonthEnd.sql", asm);
+            // Rental Waive meter types ("(W)" family auto-tagged) + per-meter waive configuration.
+            RunDDL(dbsetting, "02_Update_zSCP_MeterType_v2_RentalWaive.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v5_WaiveConfig.sql", asm);
+            // Per-type default Role (RENTAL/WAIVE/COMMIT/BK/CL/NA) auto-filled on type pick.
+            RunDDL(dbsetting, "02_Update_zSCP_MeterType_v3_DefaultRole.sql", asm);
+            // Role column widened CHAR(2) -> VARCHAR(10) for the new role values.
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v6_WideRole.sql", asm);
+            // Group "machine" per contract (engine-driven .C concept): fleet-total MIN/WAIVE/RENTAL.
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_GroupItem.sql", asm);
+            // Per-machine ONLINE/OFFLINE definition -> advanced invoice number format.
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v9_MachineMode.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent
@@ -176,6 +194,25 @@ namespace ServiceContractPhotocopier.Classes
             {
                 // Non-fatal — seed is best-effort.
                 System.Diagnostics.Debug.WriteLine("ScpMigrations seed failed: " + ex.Message);
+            }
+
+            // === Expiry auto-retire (runs on every plugin load) ===
+            // A contract whose expiry MONTH is completely over flips to Inactive automatically,
+            // stamped "Expired (auto)". The cutoff is the FIRST day of the CURRENT month — never
+            // earlier — so the final month stays billable right up to its billing day. Leftover
+            // un-invoiced readings of an auto-retired contract remain reachable via the Meter
+            // Reading Setting "Include INACTIVE contracts / items".
+            try
+            {
+                dbsetting.ExecuteNonQuery(
+                    "UPDATE dbo.zSCP2_Contract SET Inactive='Y', InactiveDate=ServiceExpiryDate, " +
+                    "InactiveReason='Expired (auto)' " +
+                    "WHERE Inactive='N' AND ServiceExpiryDate IS NOT NULL " +
+                    "AND ServiceExpiryDate < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("ScpMigrations expiry auto-retire failed: " + ex.Message);
             }
 
             return true;

@@ -439,6 +439,7 @@
             // grpItem
             //
             this.grpItem.ItemLinks.Add(this.barEditItem);
+            this.grpItem.ItemLinks.Add(this.barDelItem);
             this.grpItem.Name = "grpItem";
             this.grpItem.Text = "Service Item";
             //
@@ -816,7 +817,7 @@
             //
             // ChkRentalSeparate
             //
-            this.ChkRentalSeparate.Location = new System.Drawing.Point(1145, 246);
+            this.ChkRentalSeparate.Location = new System.Drawing.Point(860, 214);
             this.ChkRentalSeparate.Name = "ChkRentalSeparate";
             this.ChkRentalSeparate.Properties.Caption = "Rental separate invoice";
             this.ChkRentalSeparate.Size = new System.Drawing.Size(180, 20);
@@ -864,7 +865,7 @@
             this.SpnBillingDay.MaximumSize = new System.Drawing.Size(46, 0);
             this.SpnBillingDay.Name = "SpnBillingDay";
             this.SpnBillingDay.Properties.IsFloatValue = false;
-            this.SpnBillingDay.Properties.MaxValue = new decimal(new int[] { 31, 0, 0, 0 });
+            this.SpnBillingDay.Properties.MaxValue = new decimal(new int[] { 28, 0, 0, 0 });
             this.SpnBillingDay.Properties.MinValue = new decimal(new int[] { 1, 0, 0, 0 });
             this.SpnBillingDay.Size = new System.Drawing.Size(46, 20);
             this.SpnBillingDay.TabIndex = 28;

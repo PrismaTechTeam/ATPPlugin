@@ -284,8 +284,6 @@
             this.ColMonthEnd.Caption = "Month End";
             this.ColMonthEnd.FieldName = "BillOnMonthEnd";
             this.ColMonthEnd.Name = "ColMonthEnd";
-            this.ColMonthEnd.Visible = true;
-            this.ColMonthEnd.VisibleIndex = 7;
             this.ColMonthEnd.Width = 70;
             //
             // ColAgent

@@ -112,6 +112,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "        ROW_NUMBER() OVER (PARTITION BY me.ItemMeterKey ORDER BY me.InvoicedAt DESC) AS rn " +
                     "        FROM dbo.zSCP2_MeterEntry me WHERE me.InvoicedDocNo IS NOT NULL AND me.InvoicedDocNo <> '') z2 " +
                     "  WHERE z2.rn = 1) li ON li.ItemMeterKey = m.ItemMeterKey " +
+                    // Same visibility rule as the billing screen: deactivated machines / contracts do
+                    // not bill, so their rental rows are not maintained here either.
+                    "WHERE i.Inactive='N' AND ISNULL(c.Inactive,'N')='N' " +
                     "ORDER BY c.DebtorCode, c.ContractNo, i.ServiceItemNo, m.MeterTypeCode", false);
 
                 // Current period n/N (computed display column; red when overdue via RowCellStyle).

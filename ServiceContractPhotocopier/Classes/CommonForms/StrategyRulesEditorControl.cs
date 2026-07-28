@@ -20,15 +20,22 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         private bool _hasServiceItems = false;   // true = contract mode (service-item binding shown)
         private DataTable _serviceItems;          // ItemKey, ServiceItemNo (contract's items)
 
+        // NOTE: "Initial Meter" and "FOC + Rebate" are intentionally NOT offered here.
+        //  * Initial reading (a used copier moved from customer A to B that already shows 10,000)
+        //    is configured on the meter itself (Initial Meter field in the meter configuration).
+        //  * FOC + Rebate live on the METER too (Free Qty / Rebate % columns, or the multi-price
+        //    ladder's free band) — the meter grid is the billing source of truth.
+        // Their TYPE_* codes stay in ScpStrategy + the SQL CHECK constraints for backward-compat
+        // with legacy rows (which still load, bill and save), but the builder no longer offers them.
         private static readonly string[] TypeCodes = new string[]
         {
             "", ScpStrategy.TYPE_WAIVE_TARGET, ScpStrategy.TYPE_RENTAL_FREE_N, ScpStrategy.TYPE_COMMIT_MIN,
-            ScpStrategy.TYPE_FOC_REBATE, ScpStrategy.TYPE_INITIAL_METER, ScpStrategy.TYPE_LIMIT
+            ScpStrategy.TYPE_LIMIT
         };
         public static readonly string[] TypeNames = new string[]
         {
             "(none)", "Waive Rental - by Target (RM)", "Rental Free - first N months",
-            "Committed Print Charges", "FOC + Rebate", "Initial Meter", "FOC Limit (single/group)"
+            "Committed Print Charges", "FOC Limit (single/group)"
         };
         // Scope only applies to FOC-REBATE (which usage meters get the FOC + rebate). Every other rule
         // kind has an implicit target (WAIVE-TARGET waives the rental, RENTAL-FREE-N -> rental, etc.), so
@@ -96,11 +103,13 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             foreach (string hide in new string[] { "RuleKind", "Scope", "ServiceItemKeys", "TargetAmount", "PartialPct",
                 "FreeMonths", "CommitAmount", "FocCopies", "RebatePct", "NetBilling", "LimitScope", "LimitQty" })
                 if (GridViewRules.Columns[hide] != null) GridViewRules.Columns[hide].Visible = false;
-            SetRuleCap("Seq", "#", 40, 0);
-            SetRuleCap("KindName", "Rule Kind", 180, 1);
-            SetRuleCap("ScopeName", "Applies to", 120, 2);
-            SetRuleCap("ItemName", "Service Item", 150, 3);
-            SetRuleCap("Params", "Parameters", 240, 4);
+            // Auto-width shares these as PROPORTIONS — Parameters carries the longest text
+            // ("Target RM 500.00 / reach 90% waive 90%"), so it gets the dominant share.
+            SetRuleCap("Seq", "#", 35, 0);
+            SetRuleCap("KindName", "Rule Kind", 150, 1);
+            SetRuleCap("ScopeName", "Applies to", 130, 2);
+            SetRuleCap("ItemName", "Service Item", 105, 3);
+            SetRuleCap("Params", "Parameters", 420, 4);
         }
 
         private void SetRuleCap(string field, string caption, int width, int idx)
@@ -246,7 +255,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         private static bool KindUsesScope(string code)
         {
             return code == ScpStrategy.TYPE_WAIVE_TARGET || code == ScpStrategy.TYPE_FOC_REBATE
-                || code == ScpStrategy.TYPE_COMMIT_MIN || code == ScpStrategy.TYPE_INITIAL_METER
+                || code == ScpStrategy.TYPE_COMMIT_MIN
                 || code == ScpStrategy.TYPE_LIMIT;
         }
 
@@ -278,14 +287,14 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             {
                 string s = "Target RM " + D(r, "TargetAmount", "0.00");
                 decimal pp = Dec(r, "PartialPct");
-                if (pp > 0m) s += "  /  reach " + pp.ToString("0.##") + "% waive " + pp.ToString("0.##") + "%";
+                // 100 (and legacy 0) = plain all-or-nothing at target — no partial suffix.
+                if (pp > 0m && pp < 100m) s += "  /  reach " + pp.ToString("0.##") + "% waive " + pp.ToString("0.##") + "%";
                 return s;
             }
             if (t == ScpStrategy.TYPE_RENTAL_FREE_N) return "First " + SV(r, "FreeMonths") + " month(s) free";
             if (t == ScpStrategy.TYPE_COMMIT_MIN) return "Committed RM " + D(r, "CommitAmount", "0.00");
             if (t == ScpStrategy.TYPE_FOC_REBATE)
-                return "FOC " + D(r, "FocCopies", "0") + " / rebate " + D(r, "RebatePct", "0.##") + "%" +
-                       (SV(r, "NetBilling") == "Y" ? "  (NET)" : "  (raw)");
+                return "FOC " + D(r, "FocCopies", "0") + " / rebate " + D(r, "RebatePct", "0.##") + "%";
             if (t == ScpStrategy.TYPE_INITIAL_METER) return "Estimate readings keyed manually";
             if (t == ScpStrategy.TYPE_LIMIT)
                 return (SV(r, "LimitScope") == "G" ? "GROUP pooled" : "Single machine") + " FOC limit " + D(r, "LimitQty", "0");
@@ -320,7 +329,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                 {
                     CmbRuleKind.SelectedIndex = 0; CmbScope.SelectedIndex = 0;
                     ChkAllItems.Checked = true; CmbServiceItems.EditValue = null;
-                    SpnTarget.Value = 0m; SpnPartialPct.Value = 0m; SpnFreeMonths.Value = 0m;
+                    SpnTarget.Value = 0m; SpnPartialPct.Value = 100m; SpnFreeMonths.Value = 0m;
                     SpnCommit.Value = 0m; SpnFocCopies.Value = 0m; SpnRebatePct.Value = 0m;
                     ChkNetBilling.Checked = false; CmbLimitScope.SelectedIndex = 0; SpnLimitQty.Value = 0m;
                     ShowParamFields("");
@@ -332,7 +341,10 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                 ChkAllItems.Checked = csv.Length == 0;
                 CmbServiceItems.EditValue = csv.Length == 0 ? (object)null : csv;
                 SpnTarget.Value = Dec(r, "TargetAmount");
-                SpnPartialPct.Value = Dec(r, "PartialPct");
+                // Partial % range is 1..100; 100 = full waive at target (same as the legacy 0 =
+                // "all-or-nothing", which is mapped up so the clamp never turns it into 1%).
+                decimal pp = Dec(r, "PartialPct");
+                SpnPartialPct.Value = (pp <= 0m || pp > 100m) ? 100m : pp;
                 SpnFreeMonths.Value = Dec(r, "FreeMonths");
                 SpnCommit.Value = Dec(r, "CommitAmount");
                 SpnFocCopies.Value = Dec(r, "FocCopies");
@@ -386,9 +398,16 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             if (r == null) return;
             int ki = CmbRuleKind.SelectedIndex; if (ki < 0) ki = 0;
             int si = CmbScope.SelectedIndex; if (si < 0) si = 2;
-            r["RuleKind"] = TypeCodes[ki];
+            string kind = TypeCodes[ki];
+            // Legacy kinds no longer in the picker (e.g. INITIAL-METER) map to combo index 0 "(none)".
+            // Preserve the row's original kind in that case — otherwise editing ANY field of a legacy
+            // rule would blank its kind and GetRules would silently drop the rule on save. Deliberately
+            // blanking a KNOWN kind (user picks "(none)") still works: KindIndex(existing) != 0 then.
+            string existingKind = SV(r, "RuleKind");
+            if (ki == 0 && existingKind.Length > 0 && KindIndex(existingKind) == 0) kind = existingKind;
+            r["RuleKind"] = kind;
             // Scope applies to every usage-touching kind (all but RENTAL-FREE-N).
-            r["Scope"] = KindUsesScope(TypeCodes[ki]) ? ScopeCodes[si] : "";
+            r["Scope"] = KindUsesScope(kind) ? ScopeCodes[si] : "";
             string csv = "";
             if (_hasServiceItems && !ChkAllItems.Checked && CmbServiceItems.EditValue != null && CmbServiceItems.EditValue != DBNull.Value)
                 csv = CmbServiceItems.EditValue.ToString();
@@ -399,7 +418,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             r["CommitAmount"] = SpnCommit.Value;
             r["FocCopies"] = SpnFocCopies.Value;
             r["RebatePct"] = SpnRebatePct.Value;
-            r["NetBilling"] = ChkNetBilling.Checked ? "Y" : "N";
+            r["NetBilling"] = "Y";   // engine always bills NET; keep the stored flag truthful
             r["LimitScope"] = "G";   // FOC Limit is always group-pooled
             r["LimitQty"] = SpnLimitQty.Value;
             RefreshRuleDisplay(r);
@@ -413,11 +432,10 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             bool freeN = type == ScpStrategy.TYPE_RENTAL_FREE_N;
             bool commit = type == ScpStrategy.TYPE_COMMIT_MIN;
             bool foc = type == ScpStrategy.TYPE_FOC_REBATE;
-            bool init = type == ScpStrategy.TYPE_INITIAL_METER;
             bool limit = type == ScpStrategy.TYPE_LIMIT;
 
             // Scope (BK / CL / BK+CL usage meters) applies to every kind that touches usage meters —
-            // WAIVE-TARGET (which usage COUNTS toward target), FOC-REBATE / COMMIT-MIN / INITIAL-METER /
+            // WAIVE-TARGET (which usage COUNTS toward target), FOC-REBATE / COMMIT-MIN /
             // FOC-LIMIT (which usage meters get filled). Only RENTAL-FREE-N (rental) has no BK/CL scope.
             bool usesScope = KindUsesScope(type);
             LblScope.Visible = CmbScope.Visible = usesScope;
@@ -428,20 +446,20 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             LblCommit.Visible = SpnCommit.Visible = commit;
             LblFocCopies.Visible = SpnFocCopies.Visible = foc;
             LblRebatePct.Visible = SpnRebatePct.Visible = foc;
-            ChkNetBilling.Visible = foc;
+            // NetBilling checkbox retired: the billing engine ALWAYS nets (FOC/rebate really deducted)
+            // — there is no raw mode, so offering a toggle here was a lie. Column kept for compat.
+            ChkNetBilling.Visible = false;
             LblLimitScope.Visible = CmbLimitScope.Visible = false;   // FOC Limit is ALWAYS group-pooled now
             LblLimitQty.Visible = SpnLimitQty.Visible = limit;
             LblTypeHint.Visible = true;
             if (waive)
-                LblTypeHint.Text = "Waive rental when the month's metered charges reach Target. Partial waive %: reach X% of Target → waive X% of rental (0 = all-or-nothing).";
+                LblTypeHint.Text = "Waive rental when the month's metered charges reach Target. Partial waive % (1-100): reach X% of Target → waive X% of rental; 100 = full waive at target.";
             else if (freeN)
                 LblTypeHint.Text = "First N rental periods are free (counts down the rental meter's free months).";
             else if (commit)
                 LblTypeHint.Text = "Committed minimum charge — enforced as the meter's minimum floor.";
             else if (foc)
-                LblTypeHint.Text = "FOC free copies + Rebate %. NET billing deducts them from billed copies (else bills raw usage).";
-            else if (init)
-                LblTypeHint.Text = "Initial Meter: estimate readings are keyed manually in Meter Reading; this rule tags the contract.";
+                LblTypeHint.Text = "FOC free copies + Rebate %. Both are really deducted from the bill (NET) and refresh every FOC reset period.";
             else if (limit)
                 LblTypeHint.Text = "GROUP FOC cap — the whole group shares ONE free-copy pool, accumulated across the contract's machines (via the '.C' combine item). Excess is charged.";
             else
@@ -454,9 +472,9 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             DataRow n = _rules.NewRow();
             n["Seq"] = _rules.Rows.Count + 1;
             n["RuleKind"] = ""; n["Scope"] = ""; n["ServiceItemKeys"] = "";
-            n["TargetAmount"] = 0m; n["PartialPct"] = 0m; n["FreeMonths"] = 0;
+            n["TargetAmount"] = 0m; n["PartialPct"] = 100m; n["FreeMonths"] = 0;
             n["CommitAmount"] = 0m; n["FocCopies"] = 0m; n["RebatePct"] = 0m;
-            n["NetBilling"] = "N"; n["LimitScope"] = "S"; n["LimitQty"] = 0m;
+            n["NetBilling"] = "Y"; n["LimitScope"] = "G"; n["LimitQty"] = 0m;
             RefreshRuleDisplay(n);
             _rules.Rows.Add(n);
             GridViewRules.FocusedRowHandle = _rules.Rows.Count - 1;

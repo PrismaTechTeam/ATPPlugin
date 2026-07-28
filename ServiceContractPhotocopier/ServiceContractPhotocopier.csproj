@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -110,6 +110,10 @@
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="DevExpress.XtraReports.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraReports.v22.2.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
@@ -153,6 +157,36 @@
     </Compile>
     <Compile Include="Classes\CommonForms\AdvanceSearch_Form.Designer.cs">
       <DependentUpon>AdvanceSearch_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\CommitConfig_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\CommitConfig_Form.Designer.cs">
+      <DependentUpon>CommitConfig_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailInvoice_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailInvoice_Form.Designer.cs">
+      <DependentUpon>BulkEmailInvoice_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\CopyMetersTo_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\CopyMetersTo_Form.Designer.cs">
+      <DependentUpon>CopyMetersTo_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\WaiveConfig_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\WaiveConfig_Form.Designer.cs">
+      <DependentUpon>WaiveConfig_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\MultiPricePicker_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\MultiPricePicker_Form.Designer.cs">
+      <DependentUpon>MultiPricePicker_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Data\StockRequestRepository.cs" />
     <Compile Include="Data\PumsTaskLock.cs" />
@@ -776,6 +810,8 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v4_DeptProj.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeter.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ItemMeterPrice.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractSnapshot.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_MeterEntry.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v2.sql" />
     <EmbeddedResource Include="SQL\03_CreateView_zvSCP2_ContractList.sql" />
@@ -799,9 +835,18 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractAudit.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v5_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v6_FOCReset.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v7_Inactive.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v8_RetireMonthEnd.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP_MeterType_v2_RentalWaive.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v5_WaiveConfig.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP_MeterType_v3_DefaultRole.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v4_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v6_TrackingId.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterReadingLog_v4_Strategy.sql" />
     <EmbeddedResource Include="SQL\05_Backfill_zSCP2_ItemMeter_Roles.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP_Mechanic.sql" />
@@ -881,6 +926,21 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Classes\CommonForms\AdvanceSearch_Form.resx">
       <DependentUpon>AdvanceSearch_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\CommitConfig_Form.resx">
+      <DependentUpon>CommitConfig_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\BulkEmailInvoice_Form.resx">
+      <DependentUpon>BulkEmailInvoice_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\CopyMetersTo_Form.resx">
+      <DependentUpon>CopyMetersTo_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\WaiveConfig_Form.resx">
+      <DependentUpon>WaiveConfig_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\MultiPricePicker_Form.resx">
+      <DependentUpon>MultiPricePicker_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceContractType_Form.resx">
       <DependentUpon>ServiceContractType_Form.cs</DependentUpon>

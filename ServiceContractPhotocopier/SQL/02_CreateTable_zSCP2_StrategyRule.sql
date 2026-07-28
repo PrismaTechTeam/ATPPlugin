@@ -1,4 +1,4 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
@@ -6,7 +6,7 @@ GO
 -- Strategy RULE lines (the composable "builder"): a strategy is a header (zSCP2_Strategy) plus any
 -- number of rule lines here. Each line is ONE rule primitive (RuleKind) applied to a Scope of meters,
 -- with its own parameters. A single strategy can mix different kinds AND repeat a kind (e.g. FOC+Rebate
--- once for BK, once for CL). The billing pipeline / "Apply Strategy to Meters" iterate these lines in
+-- once for BK, once for CL). The billing pipeline iterates these lines LIVE at Generate in
 -- Seq order. The header's legacy StrategyType/param columns are now vestigial (kept for compatibility;
 -- new saves write StrategyType='' and carry everything here).
 --

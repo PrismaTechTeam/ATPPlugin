@@ -890,3 +890,420 @@ Fix — the MIN meter now bills a TOP-UP and is always shown (transparency):
   Top-Up Billed"; skips the Current/Previous/Usage reading rows (no reading); Qty 1 x top-up.
 - CAVEAT: if only the MIN meter is selected without its BK/CL, printed reads 0 -> tops up to full committed;
   select the item's print meters together. Deployed clean. Docs (DhaiDev/ATP-Docs 7f93e62) updated.
+
+## 2026-07-22 — Adversarial audit (2 Explore agents): Strategy pipeline + Meter Config -> billing (user: "double and triple confirm 100% completed, not mock")
+
+**Verdict: pipeline is REAL, not mock** — one unified NET engine (ComputeCharge) drives grid AND invoice;
+InitialReading correctly seeds the first bill (machine A->B at 10,000: LastReading NULL -> InitialReading,
+MeterReadingIntegration LoadData; manual entry inherits it too). Ladder/rental/committed-min/staging all traced
+end-to-end with file:line evidence. Live-DB checks: FK_zSCP_MeterTrans repointed to v2 table, MeterEntry Source
+CHECK allows 'INVOICE', 0 meters have both FOCQty>0 AND a ladder, METER_API_MODE=LIVE.
+
+**Defects found and FIXED same day (all deployed):**
+- CRITICAL (D1): FOC Reset never loaded on contract open (controls built AFTER LoadContract; null-guard skipped
+  the bind) -> reopened Weekly contract showed Monthly and the next save WIPED it to M/0. Fix: capture
+  FOCResetUnit/N into fields in LoadContract, bind via ApplyFocResetToUi() at end of BuildStrategyTab (and on
+  post-save reload), _loading-guarded so binding never sets _dirty.
+- HIGH (D2): ApplyGroupLimit pooled ladder meters whose pool share ComputeCharge then IGNORED (ladder branch
+  drops ln.Foc) -> group silently lost free copies. Fix: ladder meters excluded from pool membership.
+- HIGH (M9): doc.Save() and the meter/period stamp are separate transactions; stamp failure left a live
+  UNSTAMPED invoice -> next Generate double-bills. Fix: compensating delete — stamp failure deletes the
+  just-saved invoice (InvoiceCommand.Delete) so the period stays re-generatable; if the delete also fails,
+  ErrorLog carries a CRITICAL "do not re-generate, delete invoice X manually" instruction.
+- MEDIUM (M8): ColorLabel = (Role=="CL") ? Colour : Black -> every NA meter (scan/plotter; 184 usage NA in
+  live book, 12 machines with MIN+NA together) masqueraded as Black and polluted committed-min print sums +
+  BK-scoped strategy passes. Fix: role-aware label (BK->Black, CL->Colour, else "Usage") + explicit BK/CL-only
+  guards in ApplyGroupLimit / ApplyWaiveTarget / (ApplyCommittedMin already filtered).
+- MEDIUM (D3): NetBilling was a dead flag with UI claiming a "raw" mode exists (it never did — engine always
+  NET). Fix: checkbox hidden, "(NET)/(raw)" grid suffix removed, misleading popup deleted, column stored 'Y'.
+- MEDIUM (M4-display): invoice printed the meter's FOCQty even on ladder rows where the engine ignores it.
+  Fix: FOC row + breakdown line 5 now print FOC AS APPLIED (usage − billed copies); breakdown line 11 now
+  carries the MultiPriceCode (was hardcoded blank).
+- MEDIUM (data-wipe guard): LoadContractRules used to swallow errors -> empty grid -> save delete-reinsert
+  WIPED the contract's rules. Fix: loaders (LoadForContracts/LoadContractRules/LoadByCode) now THROW;
+  RefreshStrategyTab catches -> warns + locks editor + _strategyRulesLoadFailed; SaveContractStrategyRules
+  skips the rules table when flagged. Generate call site: strategy pass failure now ABORTS the run with a
+  message (old catch{} silently billed WITHOUT the strategy).
+- LOW (D7): editing any field of a legacy INITIAL-METER rule blanked its kind -> GetRules dropped the rule on
+  save. Fix: WriteEditorToRule preserves an unknown existing kind when the combo sits at "(none)".
+- LOW (D8): LIMIT legacy 'S' rows were inert at generate + Apply pushed FOCQty per-meter. Fix: LIMIT is always
+  group-pooled (generate treats 'S' as group; Apply's single-machine push branch removed); Apply now also
+  SKIPS the FOC push on ladder meters (their FOC lives in the ladder's 0.00 band) with a report note.
+
+**By-design / deferred (NOT bugs):**
+- Push-model (D5): FOC-REBATE / RENTAL-FREE-N / COMMIT-MIN(rule) only take effect after "Apply to Meters" —
+  per the decided model "meter grid 说了算, strategy = 模板+一键填". WAIVE-TARGET / group LIMIT / MIN-meter
+  are evaluated live at Generate.
+- Grid preview vs invoice (D4): the 3 cross-machine passes run at Generate only, so the per-row grid does not
+  preview waives/pool/top-ups. Documented in docs (billing golden rule 5). Possible future: preview column.
+- Per-meter Description column persisted but the invoice uses the meter-type description (dead mirror).
+- No UI validation yet warning when a user sets FOCQty>0 on a ladder meter (engine ignores it; invoice now
+  honest about applied FOC). 0 such rows live today.
+- 25 live flat meters carry NEGATIVE MinimumCharges (e.g. RA-MONTH(W) = -100) -> they bill 0 forever, no
+  entry warning. Data cleanup + entry validation candidate.
+- Audit could not exercise a live save->reopen round-trip for strategy rules (0 strategy rows in AED_ATPTEST —
+  feature not yet used in data); proven by code trace only.
+
+### 2026-07-22 follow-up — Meter Role: NO default, forced explicit choice (user directive)
+User: "default 不要放 NA — default 是空,如果没有填就是错的,目的是不要用户忘记填。"
+- New meter rows (item form grid + contract inline meter panel) now start with Role = EMPTY (was "NA").
+- InferMeterRole extended: BK/CL from code/desc as before, PLUS rental (IsRentalMeterCode) and committed-min
+  (IsCommittedMinMeterCode) types auto-infer "NA"; anything else stays EMPTY.
+- Save validation (RequireMeterRole in zSCP2_Item_Form, internal static): every meter save path now throws on
+  an empty/unknown role — SaveMetersPreservingReadings, contract form InsertMeters, ServiceItemLst insert.
+  NormalizeMeterRole no longer silently coerces unknown -> "NA" (returns "" so validation catches it).
+- Item dialog OK button validates BEFORE closing (otherwise the throw came after the dialog closed and the
+  user's edits were lost). Contract form stays open on save error, so its thrown message suffices there.
+- RentalAssign_Form keeps its hardcoded 'NA' (system-created rental meter — deliberate, not a user grid).
+- Existing DB rows are untouched (BK/CL/NA all valid); no schema change (CHECK already IN ('BK','CL','NA')).
+
+## 2026-07-25 — Strategy push model RETIRED: all rules live at Generate + per-invoice contract snapshot
+User: "apply to meter is not working already... make sure when generate invoice all the contract details
+need to have a snapshot" — the push model meant a forgotten Apply click = a deal that silently never billed,
+and a later strategy edit could not be distinguished from what was billed historically.
+- "Apply Strategy to Meters" REMOVED everywhere (ribbon button + method + tab button earlier). All FOUR
+  rule kinds now act LIVE inside Generate: ApplyGroupLimit -> ApplyRentalFreeN (NEW) -> ApplyWaiveTarget ->
+  ApplyCommittedMin. Strategies loaded ONCE per run and passed into all passes.
+- RENTAL-FREE-N is STATELESS: monthNo = billing period - anchor month + 1 (anchor = RentalStartDate else
+  effective Service Start); months 1..N bill RM0 with note "RENTAL FREE month n/N (strategy)". No FOCQty
+  countdown to corrupt. (Meters still carrying FOCQty free-months from the old push keep working via the
+  flat-meter engine path.)
+- COMMIT-MIN rules act live: per covered item without a MIN meter, a synthetic top-up line is added
+  (Committed/Print/Top-Up block, AlwaysBill, item code blank -> default sales account). MIN-meter items
+  are excluded (no double charge).
+- NEW table zSCP2_ContractSnapshot: one row per generated invoice per contract (period, header flags,
+  SerializeRules text), inserted INSIDE the stamp transaction (MeterInvoiceGenerator). ScpStrategy.
+  SerializeRules added. Snapshot dict built in the form (BuildContractSnapshots) and passed through
+  MeterInvoiceGenerateProgress_Form -> generator.
+- Docs updated across demo (07/08/09), test guide C4, concepts/billing-calculation, modules/strategy,
+  modules/service-contract, modules/service-item-and-meters.
+- Legacy note: audit source STRATEGY-APPLY remains only for historical Change History rows.
+
+## 2026-07-26 — Ribbon adversarial audit (2 agents) + full fix pass
+
+Two Explore agents audited EVERY contract/item ribbon action end-to-end ("是不是假的/不合理/不完整").
+Verdict: no stubs — every button had a real handler — but 20+ real defects. ALL fixed same day:
+
+CRITICAL (both would strand the user):
+- Paste Whole Document header NEVER parsed (off-by-one: required >=13 tokens, copy emits 12) — dead
+  code since birth. Rewrote clipboard as tagged V2 (H/I/M lines, Tsv-escaped, meters + CustomTiers
+  ride along); V1 still accepted.
+- Pasted items kept the SOURCE ServiceItemNo -> UNIQUE KEY violation on every save. All paste paths
+  now force auto-number at save (NewPastedItem: blank no + IsAuto).
+- Failed NEW-contract save poisoned _isNew/_contractKey/d.ItemKey (set inside the tx, never rolled
+  back) -> every retry UPDATEd a dead key and failed forever. BtnSave_Click now snapshots entry
+  state and restores it in catch.
+
+HIGH:
+- Copy-from/clone dropped BillOnMonthEnd; the 28 cap then clamped 31->28 silently = month-end
+  contracts became bill-on-28 forever. Template now copies the flag (+ Dept/Proj/RefNo/Strategy code
+  + contract RULES + FOC reset + RentalSeparate + contract-level spare parts + More Header via
+  deferred ApplyTemplateExtras).
+- "Copy from other Service Contract" was live in EDIT mode -> _items.Clear() would detach every real
+  machine at save. Now NEW-mode only (Enabled gate + handler guard).
+- Item dialog BtnOK mutated the SHARED ItemEditData before the last validation -> a rejected save +
+  Cancel left phantom edits that rode the next contract save. Date validation hoisted BEFORE the
+  first mutation.
+- Deactivation stamps (_inactiveDate/Reason) survived a failed save + untick -> active contract with
+  a deactivation stamp. Stamp now cleared unconditionally when Inactive is unchecked; Cancel at the
+  reason prompt aborts the save (was: proceeded with empty reason).
+- Paste Item Detail mis-mapped its own siblings' TSV (BK meter -> Department etc.). Spreadsheet rows
+  now mapped BY HEADER CAPTION; bare TSV maps only Serial+Description (nothing guessed).
+
+MEDIUM:
+- LoadExtras swallow -> silent wipe of Grade/Note/PM/overrides when hydration failed. Save loop +
+  item-list save now SKIP extras persist when !LoadedCtxValid and tell the user what was kept.
+- Clone dropped per-item date/context overrides (load-snapshot made them look "untouched") — clone
+  now clears the snapshot so every copied value stores explicitly.
+- Item-list Delete: light confirm, no typed-DELETE, orphaned item-bound spare parts. Now two-stage
+  (impact summary with real reading count + typed DELETE) and deletes spare rows in the same tx.
+- Detach / Change Ownership left item-bound spare parts on the OLD contract -> re-keyed to the new
+  contract, or deleted when the machine goes contract-less (ContractKey NOT NULL there).
+- Copy Selected could never copy >1 row (MultiSelect off) -> RowSelect multi-select on.
+- Copy as Spreadsheet exported 9 stale columns of 16 -> full grid column list.
+- Billing-day override cap unified at 1-28 (inline grid + TSV; dialog already 0-28).
+- Paste Whole now confirms before wiping the item list (extra warning in edit mode).
+- Blanking a machine's Service Start/Expiry now snaps the contract date back VISIBLY (blank meant
+  "re-inherit" but looked like "cleared" until reload).
+- RequireMeterRole message now names the service item.
+
+LOW: barAddItem/barDelItem were never linked to the ribbon group (invisible dead buttons) -> linked;
+Demo Fill rng 1..27 -> 1..28 + _loading guard on date fill; audit Cols +InactiveDate/InactiveReason/
+FOCResetUnit/FOCResetN; Generate From Serial summary now warns machines are born with NO meters;
+meter delete + item-dialog Copy From warn about reading-history loss; Copy From picker includes
+contract-less machines + copies meter Description; stale "Apply Strategy to Meters" comments purged
+(code + 3 SQL files); Copy to New warns when unsaved changes won't be included.
+
+ACCEPTED (documented, not fixed): doc numbers burn on failed save (gaps only, no double-burn);
+header-date change doesn't live-refresh inherited item rows until reopen (DB semantics correct);
+"no expiry on this machine" is unrepresentable by design (blank = follow contract).
+
+### 2026-07-26 (later) — RULE REVERSAL: contract copy никогда copies machines
+User clarified (earlier "cssi can't copy" meant "CSSI must NOT be copied" — a rule, not a bug):
+Copy from other / Copy to a new copy the DEAL ONLY (header + strategy rules + provided lines +
+More Header). LoadContractAsTemplateCore now clears _items and loads NO service items — a CSSI is
+one physical machine; machines enter via Quick Add / Attach / Generate From Serial. Copied dialog
+says so explicitly. Copy/Paste Whole Document (clipboard) still carries items+meters — separate
+feature, awaiting the user's ruling. Docs + memory updated.
+- (same day) Clipboard ribbon group HIDDEN on the contract editor (user decision): Copy/Paste Whole
+  Document, Copy Selected, Copy as Spreadsheet, Paste Item Detail retired from UI; handlers kept in
+  code (grpClipboard.Visible=false in ctor). Docs scrubbed (demo/09 + modules/service-contract).
+
+### 2026-07-27 — "Last day of month" RETIRED (user decision)
+User: the stored-31-but-capped-28 contradiction is confusing -> remove the checkbox entirely.
+Billing Day is now a plain 1..28 everywhere. ChkMonthEnd hidden (banner comment in ctor);
+AddContractParams always stores the spinner value + BillOnMonthEnd='N' (column kept, pinned N);
+LoadContract/template clamp legacy >28 to 28; paste ignores the old month-end token; contract
+list "Month End" column hidden. Migration 02_Update_zSCP2_Contract_v8_RetireMonthEnd.sql converts
+legacy rows (contracts >28 -> 28, flag Y -> N, item overrides >28 -> 28) — the billing screen's
+dynamic day buttons lose 30/31 automatically. Docs scrubbed (demo/03, demo/04, test guide B1,
+modules/service-contract). Meter screen's last-day clamp code kept (harmless with clean data).
+- (2026-07-27) RENTAL TRANSPARENCY fixes (user rule: every meter SHOWS; free -> say free, waived ->
+  say waived): (1) detail dialog "Save & Generate Invoice" only ticked rows with CurrentReading>0 —
+  flat/rental rows (reading 0 by design) were silently dropped from the run -> now ticked too;
+  (2) strategy-freed/waived rentals (Charge=0) went the WriteNoCharge route and never printed ->
+  AlwaysBill on RENTAL-FREE-N / full WAIVE / legacy FOC-month + central guard in
+  MeterInvoiceGenerator (IsRental && StrategyNote != ''); (3) MeterBillLine.StrategyNote was never
+  rendered by ScpInvoiceBuilder -> now printed as its own text row under the charge row.
+
+## 2026-07-27 — WAIVE METERS: master's skin, our engine (user decision after long design debate)
+User kept the customer's convention: the waive is a REAL meter (RA-MONTH(W)-xxx, own item code,
+negative line on the invoice) — but the ENGINE now decides each Generate whether it fires:
+- zSCP_MeterType v2: IsRentalWaive flag + "Rental Waive" checkbox in Meter Type maintenance;
+  migration auto-tags the whole "(W)" family (34 types in ATPTEST).
+- zSCP2_ItemMeter v5: per-meter WaiveFirstNMonths / WaiveTargetAmount / WaivePartialPct /
+  WaiveScope. Semantics: 0&0 = ALWAYS waive (legacy master behavior); FirstN = window from
+  RentalStartDate/EffStart; Target = machine's scoped BK/CL charges (partial % band); AND-combined.
+- WaiveConfig_Form (triple) opened by the SAME "..." button as Multi-Price when the row's type is
+  a waive type (contract meter panel + item dialog); the Multi-Price cell displays the deal
+  summary ("WAIVE: 1st 13 mth & hit RM 500 (90%)").
+- Engine: ApplyWaiveMeters pass (after RentalFreeN, before WaiveTarget) — fired -> Charge =
+  -amount(x partial%), AlwaysBill, note printed under the line; silent -> 0 + NO-CHARGE stamp.
+  Waive rows preview 0.00 in the grid (AutoFillFlatMeters) — decision only exists at Generate.
+- Double-waive guard: machines carrying a waive meter are SKIPPED by strategy RENTAL-FREE-N and
+  WAIVE-TARGET (the meter owns the deal); waive lines themselves never enter those passes.
+- IsWaive implies IsFlat even if the type's rental flag is unticked.
+- Plus same-day: invoice line Description now defaults to the STOCK ITEM's description
+  (Plugin Option toggle INVOICE_DESC_FROM_ITEM, default ON) — matches master invoices.
+- (same day) Waive semantics corrected per user: both conditions ticked = SEQUENTIAL, not AND —
+  months 1..N always waived (free window), AFTER the window the usage target takes over
+  ("走完免费就靠 meter 去 waive"). Dialog captions, Summary ("1st N mth then hit RM X"),
+  SQL comment and docs updated.
+- (same day) Meter ROLES expanded per user: BK / CL / RENTAL / WAIVE / COMMIT / NA (both grids;
+  NormalizeMeterRole/RequireMeterRole accept all six; engine unchanged — only BK/CL drive
+  colour billing). zSCP_MeterType v3 adds DefaultRole (Meter Type maintenance combo, shown in
+  its grid); backfilled: WAIVE 34 / RENTAL 160 / COMMIT 28; picking a type auto-fills the row's
+  Role from DefaultRole (name inference stays the fallback; inference now returns RENTAL/WAIVE/
+  COMMIT instead of NA). New guard: a Rental-Waive meter cannot be picked (grid pick-time) nor
+  saved (item dialog + contract save) unless the machine also carries a real RENTAL meter.
+- (same day) Waive-rule guard GENERALIZED to a machine invariant after user caught two holes:
+  (1) type change now refreshes Description + Role from the new type (unless the description was
+  hand-typed — "stock wording" = matches some type's default; hand-picked BK/CL roles never
+  clobbered); (2) ANY action that leaves a waive without a rental is rejected on the spot:
+  picking waive first, re-typing the only rental away, or DELETING the only rental while a waive
+  stays (both meter grids); save-time checks in item dialog + contract save remain the backstop
+  (covers Copy From wholesale replaces too). New rows are removed WHOLE on rejection; existing
+  rows snap back to their original type/description.
+- (same day) Save STAYS OPEN on the contract editor (user decision): the EDIT save now reloads all
+  tabs in place instead of closing; _savedOk redefined to "saved at least once" (eventual close
+  reports DialogResult.OK so listings refresh); the unsaved-changes prompt keys on _dirty ONLY, so
+  post-save edits are still protected on close.
+- (same day) "Copy Meters To..." button on the contract's Meter Configuration bar + new
+  CopyMetersTo_Form triple (left: tick WHICH meters, default all; right: tick target machines +
+  Tick all). Copies in memory (contract Save persists). Never copies identity (InitialReading -> 0,
+  MachineSerialNo -> ''); per-target skips with a counted summary: duplicate meter type, BK/CL
+  role clash, waive-without-rental (non-waive meters copy first so a rental in the same batch
+  satisfies the rule).
+- (same day) FIX: saves died "String or binary data would be truncated ... 'RE'" — MeterRole was
+  CHAR(2) with DEFAULT('NA') + CHECK (BK/CL/NA) + 3 role indexes. Migration v6_WideRole drops all
+  dependents (default found dynamically — auto-named), widens to VARCHAR(10), RTRIMs padded rows,
+  and rebuilds default/check (now all 6 roles)/indexes identically. Create-table script updated to
+  match for fresh books. First attempt missed the default+check ("plugin failed to initialize
+  database schema") — lesson: ALTER COLUMN needs EVERY dependent dropped, not just indexes.
+- (same day) Waive amount convention: NEGATIVE on the meter row (user rule — the row IS the contra,
+  matching the master invoice). Type pick auto-fills -abs(type min) on waive rows; a hand-typed
+  positive Min Charges on a waive row flips sign (both grids); ApplyWaiveMeters is sign-agnostic
+  (Math.Abs) so the fired line always bills minus the magnitude x partial% — the old code required
+  a POSITIVE min and silently never fired on -180.
+- (same day) MIN meter scope config: the "..." button on a committed-minimum row opens
+  CommitConfig_Form (new triple) — pick WHICH print charges count toward the committed amount
+  (BK only / CL only / BK+CL), stored in the shared WaiveScope column (no migration). Engine:
+  ApplyCommittedMin now sums BK/CL print charges per item SPLIT BY COLOUR and the MIN meter's
+  top-up honours its scope (charges 270, committed 300 -> MIN line bills 30). Multi-Price cell on
+  MIN rows displays "MIN: counts BK + CL". Detection = 'MIN' code convention OR DefaultRole COMMIT.
+- (same day) STRATEGY TAB retired from view (user decision): deals live ON meters now (waive
+  meters + config, MIN scope, multi-price), so the tab renamed "FOC Reset" and shows ONLY the FOC
+  Reset controls (template picker / rules editor hidden, NOT deleted — saved rules still load,
+  save, and bill live for legacy contracts; un-hide by removing one block in BuildStrategyTab).
+  NOTE: demo docs (esp. demo/07 Strategy tab page) + modules/strategy.md now tell an outdated
+  story — needs a rewrite around the meter-centric model BEFORE the customer demo.
+- (correction, same day) User wanted the tab GONE entirely, not renamed: _pgStrategy.PageVisible=false.
+  FOC Reset stays wired underneath (loads/saves with the contract, engine reads it); legacy saved
+  rules likewise untouched and still billing. One-line un-hide in BuildStrategyTab.
+- (same day) GROUP DEAL tab (user request — engine-driven version of master's ".C" combined
+  machine): zSCP2_Item v8 adds IsGroupItem. One invisible "group machine" per contract, edited via
+  the standard Service Item dialog from the new "Group Deal" tab (read-only meter summary +
+  "Edit Group Meters..." button; identity auto "GRP-<contract no>", serial "GROUP"). Hidden from
+  the machine grid (numbering stays index-true — group appended LAST) and the Maintain Service
+  Item list; VISIBLE in Meter Reading Integration (its flat lines must bill). Engine: group MIN
+  tops up against the FLEET's scoped BK/CL charge sum (per-contract buckets in ApplyCommittedMin);
+  group WAIVE's target counts the fleet total (ApplyWaiveMeters ContractKey branch); group RENTAL
+  is a plain flat line. All existing guards (waive-needs-rental, scope configs, negative waive)
+  apply to the group machine unchanged. Legacy migrated ".C" items NOT backfilled (their combined
+  readings are hand-keyed — different flow).
+- (same day) Group Deal tab REDONE as an inline-editable meter panel after user rejected the
+  dialog approach ("Edit Group Meters opened the whole create-machine form"): the tab now hosts
+  its own editable grid with the SAME experience as the machine Meter Configuration panel — type
+  SearchLookUp, Role combo, "..." config button (waive/MIN/multi-price), +/- buttons, amber flat
+  rows, waive invariant + delete guards, negative-waive flip. EDIT mode only (+ disabled on NEW
+  contracts; empty-state text says so). The group ItemEditData is auto-created on first "+"
+  (identity GRP-<contract no> / serial GROUP) and saves through the normal item save path.
+- (same day) PERIOD-ANCHORED billing dates (user caught May's invoice dated "today"/July series):
+  InvoiceJob.DocDate = billed period's billing day (genYear/genMonth + row's effective day,
+  clamped to month length) -> invoice date 28/05 lands in the MR2605.* number series; the reading
+  text rows use the same date (API AuditDate still wins). CRITICAL side-fix: zSCP_MeterTrans /
+  MeterEntry / reading-log dates were DateTime.Now — a backdated May billing stamped in July was
+  INVISIBLE to June's baseline query (date-window filter), so June's Last Reading would fall back
+  to the initial reading. All three now stamp the period date (WriteMeterTrans/WriteNoCharge take
+  the job's DocDate). Also same-day: invoice line descriptions confirmed working — the test book's
+  Item master descriptions WERE the long meter text; cleaned the two demo items to master style
+  ("BK COPY + PRINT A4&A3"). Real deployments need an Item.Description cleanup pass.
+- (same day) Invoice detail's native FOC Qty column now carries the APPLIED free copies on usage
+  lines (ladder free band / meter Free Qty = Usage - BillCopies); flat lines stay 0. Also verified
+  on MR2605.0782: period-anchored date 28/05 + May number series + short item descriptions +
+  +180/-180 waive pair + MIN 0.00 line all correct.
+- (same day) ADVANCED invoice numbering by machine status (user request): Plugin Option > Defaults
+  gains "Advanced No. Format by machine status" checkbox + Online/Offline format combos (same IV
+  DocNoFormat list; disabled until ticked). At Generate the builder picks the format per invoice:
+  any ONLINE line -> online format, else any OFFLINE -> offline format, no API status -> the
+  default format. MeterBillLine.MachineStatus carried from the grid's fetch status.
+- (same day) Per-machine ONLINE/OFFLINE definition (user request): zSCP2_Item v9 adds MachineMode
+  (''/ONLINE/OFFLINE). New "Online/Offline" combo column on the contract's machine grid (inline
+  edit -> saved with the contract). The ADVANCED invoice numbering now prefers the DEFINED mode;
+  the live API fetch status is only the fallback when the machine is left undefined.
+- (same day) TrackingId -> invoice Reference No (user request: offline readings carry a tracking
+  id; the generated invoice's Ref No should cite it, comma-joined when one invoice spans several).
+  Chain: MeterEntry v6 migration adds TrackingId NVARCHAR(50) DEFAULT '' -> fetch stamps the
+  OFFLINE report id ("MR-yymmdd-nnn") on the machine's grid rows (online/unmatched = '') ->
+  staged with the reading (UpsertStaging + auto-fetch snapshot both persist it; PrefillFromStaging
+  restores it after reopen) -> MeterBillLine.TrackingId -> per job the DISTINCT ids join with
+  ", " into RefDocNo (IV.RefDocNo is nvarchar(30): only WHOLE ids that fit are joined, never cut
+  mid-id; 2 ids of 13 chars fit). No ids -> the usual CSSI/contract ref stays. Detail-form
+  override keeps the row's id (a corrected number still belongs to that period's report);
+  clear-to-0 wipes it. Remark1 gets the same string (40-char column, fits).
+- (same day) RUN-LOOP GOTCHA (cost one dead relaunch): ATPShadowMain reinstalls the plugin from
+  the PROJECT-ROOT package ServiceContractPhotocopier\ServiceContractPhotocopier.app - NOT
+  bin\Debug\*.app. I packaged AppBuilderCmd output to bin\Debug once; the log still said "Plugin
+  reinstalled OK" but the book kept the OLD bytes (PlugInFiles.FileImage LastWriteTimeUtc showed
+  an 18:32 DLL) and the v6 migration never ran. AppBuilderCmd's output arg MUST be the project-root
+  .app. When in doubt whether fresh code is really running: SELECT LastWriteTimeUtc FROM
+  PlugInFiles WHERE FileName='ServiceContractPhotocopier.dll' and compare to the build time.
+  Side-finding: the 20:56 relaunch had actually deployed the 18:32 build (nothing was lost - no
+  code changed between 18:32 and 20:56), and tonight's build supersedes everything anyway.
+- (same day) DOCS OVERHAUL for the new architecture (user request after compaction: "structure
+  already changed for billing / meter / strategy, big change by docs website"). ATP-Docs pass, all
+  facts re-verified against code first (ApplyWaiveMeters sequential engine, ApplyCommittedMin scope
+  buckets, Group Deal tab EDIT-only + GRP-<no> item, strategy tab PageVisible=false, header Strategy
+  dropdown still present, Strategy Maintenance menu still registered): demo/07 REWRITTEN as "Deal
+  Meters & Group Deal" (slug kept: strategy-tab); modules/strategy.md REWRITTEN (three deal surfaces
+  + legacy rules note); concepts/billing-calculation.md (+waive contra section, MIN scope 270+30=300,
+  transparency golden rule, deals fold-in redrawn); demo/06 (6 roles, type-aware "..." button table,
+  waive/rental guards, Copy Meters To); modules/meter-reading-and-billing.md (outcomes table:
+  RENTAL FREE prints at 0.00, WAIVE FIRED contra pair, legacy WAIVED; new "what the invoice carries"
+  = period-anchored date/series, advanced ONLINE/OFFLINE numbering, desc-from-Item, FOC Qty,
+  TrackingId->Ref No); demo/11 (waive contra samples +180/-180 & partial -162, invoice-details
+  demo table); service-item-and-meters (roles+DefaultRole, Online/Offline field, MIN/copy/group
+  section); service-contract (tabs table Strategy->Group Deal, save keeps form open, deal section);
+  meter-type (+Rental Waive, +Default Role); strategy-maintenance (legacy caution); demo/01/04/05,
+  entities (deal meters + GRP entity); testing guide gets a Stage-C "predates meter-deal
+  architecture" banner (full Stage C rewrite still TODO). npm run build green, zero broken links.
+  ATP-Docs git push still pending (user hasn't asked).
+- (same day) DOCS CUSTOMER-LENS PASS (user: demo is for CUSTOMERS; remove Group Deal - coming soon):
+  purged internal/dev meta from the overhaul ("retired Strategy tab", "legacy", "no separate strategy
+  screen any more", internal catchphrases) -> present-tense product story; "legacy rules" renamed
+  "rule-list contracts" everywhere; demo/07 retitled "Deal Meters - the deal builder"; Group Deal
+  REMOVED from all pages (demo/07+strategy.md sections deleted, contract tabs table row, entities
+  entity row, billing-calculation fleet bullet, demo/01 contract F, demo/11 Group FOC sample+mermaid,
+  service-item group section) and replaced by ONE-LINE "coming soon" notes (demo/07, strategy.md,
+  billing-calculation, entities); demo/08 Change History source list dropped the STRATEGY-APPLY
+  history line; demo/05 .C note neutralized. Build green, links clean, verified in Chrome.
+  NOTE: the Group Deal TAB still exists in the app's contract form - if it must not show at the
+  customer demo, hide it like the Strategy tab (one line: _pgGroup.PageVisible = false). NOT done
+  (needs user's word).
+- (same day) DOCS GUIDE-VOICE PASS (user: the customer READS these pages as their guide - "the
+  promise this module makes / what the customer should take away" is presenter-script speak):
+  demo/01-12 converted from presentation script to user guide. Reader = the dealer's team ("you");
+  their billed clients = "your customer". Renamed/reworded: overview intro ("guided tour", "What the
+  system promises", "A starter set of example contracts", "Reading order", "The 3-minute version");
+  demo/07 opener now addresses the reader + "The four things to remember"; killed every "Demo
+  moment/one-liner/message/tip/prep reminder", "say them out loud", "worth N seconds in the demo",
+  "climax of the demo", "demo reset button between rehearsals", "Live-demo insurance"; demo/12
+  Ctrl+Alt+9/8/0 tip reframed as "Try the whole flow with sample data" (no presenter/rehearsal talk).
+  Build green, verified in Chrome. Memory docs-are-customer-facing updated with the voice rule.
+- 2026-07-28: Contract Detail dialog "Pricing / Deal (effective)" column (user: key-in operator
+  can't see multi-pricing / ladder FOC / deal configs -> confusing). OpenContractDetail now computes
+  per row what ACTUALLY bills: ladder -> "MULTI-PRICE <code>: first N FREE, then 0.xx/copy" (custom
+  '#' ladders shown as "(custom)"); waive -> WaiveConfig_Form.Summary (+ Black/Colour scope); MIN ->
+  "MIN 1,500.00 on BK+CL - tops up only"; rental -> "RENTAL 180.00 flat / month". Plus display
+  overrides on ladder rows: Unit Price cell shows "tiered", FOC Qty cell shows the LADDER's free
+  band (raw meter-row numbers are ignored by the engine there - grid must not contradict Total
+  Charges). New dt cols Deal/HasLadder/LadderFoc; blue-tinted read-only column after Meter Type
+  Name. Also answered the RED Last Audit Date question: red = not yet invoiced + audited after the
+  period's billing day; noted FETCH uses the Month COMBO not the loaded period (grid was May,
+  combo July -> fetch pulled July data onto May view) - offered a guard (auto-Filter/confirm on
+  mismatch), awaiting user's word. Build+repackage(root .app)+relaunch verified (PlugInFiles
+  timestamp = build time).
+- 2026-07-28: DOCS "deal" jargon purge (user: 为什么用 deal 的字眼,没法和 customer 解释): my coined
+  umbrella "deal (meters)" replaced site-wide across 20 files - concrete names first (Waive meter /
+  MIN meter; demo/07 retitled "7 - Waive & MIN Meters - the billing terms"), umbrella = "billing
+  terms" (收费条款, defined in one line at the top of demo/07); "Deal snapshot"->"snapshot of the
+  terms", "deal-copy"->"terms-copy", Group coming-soon notes reworded "group billing terms". Build
+  green. Memory rule added: no invented umbrella jargon in docs.
+- 2026-07-28: RESEARCH - Bulk Email/WhatsApp invoice & SOA in AutoCount source (2 Explore agents,
+  C:\Dev\Autocount): EXISTS: (1) SOA batch email - Debtor/Creditor Statement "Batch Mail" button:
+  one PDF per debtor (BatchMailHelper.PrepareBatchMail), recipient = Debtor.StatementEmail (NOT
+  EmailAddress, no fallback!), FormBatchMail2 grid (editable emails, {Column} merge tokens, one
+  global BCC), MailDispatcher queue + Mail/MailDtl history + Resend in Server Mailing List; SMTP =
+  MailKit via MailServerSetting. (2) Single-doc email from any report preview (SMTP/Outlook,
+  InvoicingHelper.GetEmailAndFaxInfo doc-email -> Debtor.EmailAddress fallback). (3) Single-doc
+  WhatsApp from any report preview ("Send by WhatsApp": PDF -> storage.autocountsoft.com upload ->
+  60-day link -> wa.me deep link, mobile auto-resolved, HARD-GATED Rows.Count==1, human must press
+  send); 23 entry forms also have "Send Location via WhatsApp" (address only). (4) e-Invoice
+  auto-email (MY) is the only scheduled sender. MISSING: bulk invoice email (print listings have
+  zero email code; ReportTool.EmailReport/EmailReportThroughMailingList are public but ZERO call
+  sites - ideal plugin entry points), any bulk WhatsApp, any scheduler. Plugin path for bulk
+  invoice email: reuse FormBatchMail2 + MailDispatcher (public) - render per-invoice PDFs (we
+  know docKey+debtor for every generated meter invoice), group per debtor, hand to FormBatchMail2.
+  Bulk WhatsApp = either semi-auto wa.me loop (still one manual send per chat; can reuse
+  StorageHelper.UploadWhatsAppAccounting) or full-auto via Meta WhatsApp Business Cloud API (WABA
+  account, approved templates, per-message billing) - nothing in AutoCount to reuse for that.
+- 2026-07-28: BULK EMAIL INVOICE built (user: 做一个出来还要可以filter的). New triple
+  "Meter Reading\Operation Forms\BulkEmailInvoice_Form" + menu item "Bulk Email Invoice"
+  (MenuOrder 460, SingleInstanceThreadForm maximized, merged main menu). Filters: date range
+  (default last month 1st -> today), Customer SearchLookUpEdit (all/one), "Meter-billing invoices
+  only" checkbox (EXISTS zSCP2_MeterEntry.InvoicedDocKey; default ON), grid auto-filter row on
+  every column; Cancelled='T' excluded outright. Email source combo: Debtor.EmailAddress (default)
+  or Debtor.StatementEmail (SOA parity); blank-email cells amber. Send: per ticked invoice ->
+  InvoiceListingReport.Create(us).GetReportDataSource(docKey) -> ReportTool.SelectReport("Invoice
+  Document", ds, us, useDefault:true, opt) resolved ONCE, XtraReport reused per doc (DataSource
+  swap + CreateDocument + ExportToPdf(MemoryStream)) -> grouped per debtor into
+  InvoiceBatchMailEntity : BatchMail2Entity {AccNo, CompanyName, DocNos} -> FormBatchMail2
+  (AutoCount native batch dialog: editable emails, one BCC, send queue + Mail/MailDtl history +
+  Server Mailing List resend). {AccNo}/{CompanyName}/{DocNos} tokens via SetConvertMessageHandler.
+  From = dbo.Profile CompanyName/EmailAddress. csproj: + DevExpress.XtraReports.v22.2 reference +
+  triple entries. Built green FIRST compile, root-.app repackaged, relaunched, fresh DLL verified
+  in PlugInFiles; form opens from menu and renders (user already had it open). NOT yet tested
+  end-to-end: SMTP Mail Setting must be configured in the book; test-book meter invoices are dated
+  28/05 (period-anchored) so the default June-1 from-date shows 0 rows - set Date From to May.
+  TODO ideas: entry point on Meter Reading Invoiced tab; per-invoice "emailed" stamp/column.
+- 2026-07-28: Bulk Email Invoice polish: (1) "Email Setting" button opens AutoCount's FormMailSetting
+  (same SMTP store as Batch Mail). (2) UI restyled to house style after user pushback ("ui 有点敷衍"):
+  AutoCount.Controls.PanelHeader green header, grey PanelFilter, GroupControl "Filter Options"
+  (Date From/To + meter-only row, Customer + Filter/Reset row, Email-to row), 150x50 icon action
+  buttons (Select All=AC Approve icon, Email Setting=DX settings svg, Email Selected=red bold + mail
+  svg), grid header styling copied from MeterReadingIntegration, Close button dropped (window X),
+  Reset restores defaults + clears column filters. Deployed via root .app + relaunch. (3) Docs
+  (user request): demo/01 overview monthly-cycle mermaid gains "Bulk Email" node after the invoice +
+  a "Send to customers" row in the staff table; sending-documents.md moved bulk invoice email from
+  Coming Soon into "works today" with a 5-step walk of the new screen; introduction row updated.
+  Docs build green.

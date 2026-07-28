@@ -325,6 +325,206 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
                 PurgeFocusedRow();
                 e.Handled = true;
             }
+
+            // Ctrl+Alt+9 → seed a DEMO batch: 3 Stock Issues + 3 Stock Transfers (one technician
+            // deliberately unknown, "Ahdad-####", to demo the auto-create-location banner).
+            if (e.Control && e.Alt && e.KeyCode == Keys.D9)
+            {
+                SeedDemoBatch();
+                e.Handled = true;
+            }
+
+            // Ctrl+Alt+8 → re-send the LATEST demo batch as change requests: per grid 2 updates
+            // (same id, different qty) + 1 cancel (issue qty 0 / transfer approval No).
+            if (e.Control && e.Alt && e.KeyCode == Keys.D8)
+            {
+                SeedDemoChanges();
+                e.Handled = true;
+            }
+        }
+
+        // ===================== Demo seeding (Ctrl+Alt+9 / Ctrl+Alt+8) =====================
+        // Simulates what the PUMS webhooks would POST, by inserting straight into the same
+        // Z_PumsStockIssue / Z_PumsStockTransfer tables the ATPApi writes to. Items come from the
+        // TC0xx demo items, technicians from real AutoCount Locations (plus one unknown name).
+        // "Delete Test Data" (Ctrl+Alt+0) wipes these like any other request row.
+
+        private static readonly Random _demoRng = new Random();
+
+        private void SeedDemoBatch()
+        {
+            if (_dbSetting == null) return;
+            try
+            {
+                List<string[]> items = new List<string[]>();   // [0]=code [1]=description [2]=uom
+                List<string> locs = new List<string>();
+                List<string> serials = new List<string>();
+                using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(_dbSetting.ConnectionString))
+                {
+                    conn.Open();
+                    using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 9 ItemCode, ISNULL(Description,''), ISNULL(BaseUOM,'UNIT') FROM Item WHERE ItemCode LIKE 'TC0%' ORDER BY ItemCode", conn))
+                    using (System.Data.SqlClient.SqlDataReader r = cmd.ExecuteReader())
+                        while (r.Read()) items.Add(new string[] { r.GetString(0).Trim(), r.GetString(1).Trim(), r.GetString(2).Trim() });
+                    using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 5 Location FROM Location WHERE ISNULL(IsActive,'Y') IN ('Y','T','1','True','true') ORDER BY Location", conn))
+                    using (System.Data.SqlClient.SqlDataReader r = cmd.ExecuteReader())
+                        while (r.Read()) if (!r.IsDBNull(0)) locs.Add(r.GetString(0).Trim());
+                    using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 3 SerialNumber FROM zSCP2_Item WHERE ISNULL(SerialNumber,'') <> '' ORDER BY ItemKey DESC", conn))
+                    using (System.Data.SqlClient.SqlDataReader r = cmd.ExecuteReader())
+                        while (r.Read()) serials.Add(r.GetString(0).Trim());
+                }
+                if (items.Count == 0)
+                {
+                    XtraMessageBox.Show(this, "No TC0xx items found in the Item master — create TC001..TC009 first.",
+                        "Demo Seed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                if (locs.Count == 0) locs.Add("HQ");
+
+                string batch = _demoRng.Next(1000, 10000).ToString();
+                string ghost = "Ahdad-" + _demoRng.Next(1000, 10000);   // NOT in the Location master
+                string[] techs = new string[] { locs[0], locs.Count > 1 ? locs[1] : locs[0], ghost };
+
+                using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(_dbSetting.ConnectionString))
+                {
+                    conn.Open();
+                    for (int i = 0; i < 3; i++)
+                    {
+                        string[] it = items[_demoRng.Next(items.Count)];
+                        using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                            "INSERT INTO Z_PumsStockIssue (StockIssueId, IssueDateTime, StockIssueNo, ReferenceNo, [Description], " +
+                            "SerialNumber, Department, Job, Technician, Location, ItemCode, Quantity, UOM, Status, RawJson) " +
+                            "VALUES (@id, @dt, @no, @refno, @desc, @ser, '', '', @tech, @tech, @item, @qty, @uom, 'New', @raw)", conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", "DEMO-SI-" + batch + "-" + (i + 1));
+                            cmd.Parameters.AddWithValue("@dt", DateTime.Now);
+                            cmd.Parameters.AddWithValue("@no", "DOS-DEMO/" + batch + "-" + (i + 1));
+                            cmd.Parameters.AddWithValue("@refno", "RPS-" + batch + "-" + (i + 1));
+                            cmd.Parameters.AddWithValue("@desc", "Demo stock issue (Ctrl+Alt+9)");
+                            cmd.Parameters.AddWithValue("@ser", i < serials.Count ? serials[i] : "");
+                            cmd.Parameters.AddWithValue("@tech", techs[i]);
+                            cmd.Parameters.AddWithValue("@item", it[0]);
+                            cmd.Parameters.AddWithValue("@qty", (decimal)_demoRng.Next(1, 6));
+                            cmd.Parameters.AddWithValue("@uom", it[2]);
+                            cmd.Parameters.AddWithValue("@raw", "{\"demo\":\"ctrl-alt-9\",\"batch\":\"" + batch + "\"}");
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                    for (int i = 0; i < 3; i++)
+                    {
+                        string[] it = items[_demoRng.Next(items.Count)];
+                        string part = it[1].Length > 0 ? it[0] + " [" + it[1] + "]" : it[0];
+                        using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                            "INSERT INTO Z_PumsStockTransfer (RequestId, DocumentDateTime, Technician, Part, Qty, " +
+                            "TransferType, Unit, Approval, Status, RawJson) " +
+                            "VALUES (@id, @dt, @tech, @part, @qty, @type, @unit, 'Yes', 'New', @raw)", conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", "DEMO-ST-" + batch + "-" + (i + 1));
+                            cmd.Parameters.AddWithValue("@dt", DateTime.Now);
+                            cmd.Parameters.AddWithValue("@tech", techs[i]);
+                            cmd.Parameters.AddWithValue("@part", part);
+                            cmd.Parameters.AddWithValue("@qty", (decimal)_demoRng.Next(1, 6));
+                            cmd.Parameters.AddWithValue("@type", i == 2 ? "OUT" : "IN");
+                            cmd.Parameters.AddWithValue("@unit", it[2]);
+                            cmd.Parameters.AddWithValue("@raw", "{\"demo\":\"ctrl-alt-9\",\"batch\":\"" + batch + "\"}");
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+                LoadGrids();
+                ResetCountdown();
+                XtraMessageBox.Show(this,
+                    "Demo batch " + batch + " seeded: 3 Stock Issues + 3 Stock Transfers (all NEW).\r\n\r\n" +
+                    "Technician '" + ghost + "' does not exist in AutoCount — watch the auto-create banner.\r\n\r\n" +
+                    "Flow: tick + Generate SI/ST first, THEN press Ctrl+Alt+8 to receive the same requests " +
+                    "again as changes (2 updates + 1 cancel per grid).",
+                    "Demo Seed", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(this, "Demo seed failed:\r\n" + ex.Message, "Demo Seed",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Re-send the latest DEMO batch: for each grid the first two ids come back with a DIFFERENT
+        // quantity (→ Update) and the third as a cancel (issue qty 0 / transfer approval No). If the
+        // originals were not generated yet, the module treats a re-send as an in-place override /
+        // hidden cancel — that is the designed pre-generation behavior, so generate first for the
+        // full yellow-Update / cancel demo.
+        private void SeedDemoChanges()
+        {
+            if (_dbSetting == null) return;
+            try
+            {
+                string batch = null;
+                using (System.Data.SqlClient.SqlConnection conn = new System.Data.SqlClient.SqlConnection(_dbSetting.ConnectionString))
+                {
+                    conn.Open();
+                    using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                        "SELECT TOP 1 StockIssueId FROM Z_PumsStockIssue WHERE StockIssueId LIKE 'DEMO-SI-%' ORDER BY AutoKey DESC", conn))
+                    {
+                        object o = cmd.ExecuteScalar();
+                        if (o != null && o != DBNull.Value)
+                        {
+                            string[] parts = o.ToString().Split('-');   // DEMO-SI-<batch>-<n>
+                            if (parts.Length >= 3) batch = parts[2];
+                        }
+                    }
+                    if (batch == null)
+                    {
+                        XtraMessageBox.Show(this, "No demo batch found — press Ctrl+Alt+9 first.",
+                            "Demo Changes", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    for (int i = 1; i <= 3; i++)
+                    {
+                        bool cancel = i == 3;
+                        using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                            "INSERT INTO Z_PumsStockIssue (StockIssueId, IssueDateTime, StockIssueNo, ReferenceNo, [Description], " +
+                            "SerialNumber, Department, Job, Technician, Location, ItemCode, Quantity, UOM, Status, RawJson) " +
+                            "SELECT TOP 1 StockIssueId, GETDATE(), StockIssueNo, ReferenceNo, @desc, SerialNumber, Department, Job, " +
+                            "Technician, Location, ItemCode, " +
+                            (cancel ? "0" : "ISNULL(Quantity,1) + 2") + ", UOM, 'New', @raw " +
+                            "FROM Z_PumsStockIssue WHERE StockIssueId = @id ORDER BY AutoKey DESC", conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", "DEMO-SI-" + batch + "-" + i);
+                            cmd.Parameters.AddWithValue("@desc", cancel ? "Demo CANCEL re-send (Ctrl+Alt+8)" : "Demo UPDATE re-send (Ctrl+Alt+8)");
+                            cmd.Parameters.AddWithValue("@raw", "{\"demo\":\"ctrl-alt-8\",\"batch\":\"" + batch + "\"}");
+                            cmd.ExecuteNonQuery();
+                        }
+                        using (System.Data.SqlClient.SqlCommand cmd = new System.Data.SqlClient.SqlCommand(
+                            "INSERT INTO Z_PumsStockTransfer (RequestId, DocumentDateTime, Technician, Part, Qty, " +
+                            "TransferType, Unit, Approval, Status, RawJson) " +
+                            "SELECT TOP 1 RequestId, GETDATE(), Technician, Part, " +
+                            (cancel ? "Qty" : "ISNULL(Qty,1) + 2") + ", TransferType, Unit, " +
+                            (cancel ? "'No'" : "'Yes'") + ", 'New', @raw " +
+                            "FROM Z_PumsStockTransfer WHERE RequestId = @id ORDER BY AutoKey DESC", conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", "DEMO-ST-" + batch + "-" + i);
+                            cmd.Parameters.AddWithValue("@raw", "{\"demo\":\"ctrl-alt-8\",\"batch\":\"" + batch + "\"}");
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+                LoadGrids();
+                ResetCountdown();
+                XtraMessageBox.Show(this,
+                    "Demo batch " + batch + " re-sent as changes:\r\n" +
+                    "  • Stock Issue: 2 quantity UPDATES + 1 CANCEL (qty 0)\r\n" +
+                    "  • Stock Transfer: 2 quantity UPDATES + 1 CANCEL (approval No)\r\n\r\n" +
+                    "Rows whose SI/ST was already generated show YELLOW (Update) / cancel; " +
+                    "un-generated ones are simply overridden in place (designed pre-generation behavior).",
+                    "Demo Changes", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show(this, "Demo changes failed:\r\n" + ex.Message, "Demo Changes",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // Permanently delete the focused row from the PUMS table; if it already generated an

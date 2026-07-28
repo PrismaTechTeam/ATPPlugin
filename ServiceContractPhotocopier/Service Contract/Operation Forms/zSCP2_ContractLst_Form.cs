@@ -73,8 +73,69 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "ServiceStartDate, ServiceExpiryDate, ContractValue, BillingDay, BillOnMonthEnd, BillingMode, " +
                     "Agent, Area, DeptNo, ProjNo, ReferenceNo, Description, ItemCount, Inactive " +
                     "FROM [dbo].[zvSCP2_ContractList] ORDER BY ContractNo", false);
+                EnsureContractDateColumns();
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
+        }
+
+        // Contract Start / Contract Expiry columns with a traffic-light Expiry (red = expired,
+        // amber = expiring within 30 days, green = active), plus a renewal-reminder count in the
+        // green header. Runs after every load; column creation is once-only.
+        private System.Drawing.Font _expiryBold;
+        private void EnsureContractDateColumns()
+        {
+            if (GridView.Columns.ColumnByFieldName("ServiceStartDate") == null)
+            {
+                DevExpress.XtraGrid.Columns.GridColumn cs = GridView.Columns.AddVisible("ServiceStartDate");
+                cs.Caption = "Contract Start";
+                cs.Width = 95;
+                DevExpress.XtraGrid.Columns.GridColumn cx =
+                    GridView.Columns.ColumnByFieldName("ContractDate");
+                cs.VisibleIndex = cx != null ? cx.VisibleIndex + 1 : 5;
+            }
+            if (GridView.Columns.ColumnByFieldName("ServiceExpiryDate") == null)
+            {
+                DevExpress.XtraGrid.Columns.GridColumn ce = GridView.Columns.AddVisible("ServiceExpiryDate");
+                ce.Caption = "Contract Expiry";
+                ce.Width = 100;
+                DevExpress.XtraGrid.Columns.GridColumn cs2 =
+                    GridView.Columns.ColumnByFieldName("ServiceStartDate");
+                ce.VisibleIndex = cs2 != null ? cs2.VisibleIndex + 1 : 6;
+            }
+            GridView.RowCellStyle -= ContractList_ExpiryCellStyle;   // avoid double-subscribe on Refresh
+            GridView.RowCellStyle += ContractList_ExpiryCellStyle;
+
+            // Renewal reminder: how many ACTIVE contracts expire within the next 30 days.
+            try
+            {
+                int soon = 0;
+                DataTable src = Grid.DataSource as DataTable;
+                if (src != null && src.Columns.Contains("ServiceExpiryDate"))
+                    foreach (DataRow r in src.Rows)
+                    {
+                        if (Convert.ToString(r["Inactive"]) == "Y") continue;
+                        if (r["ServiceExpiryDate"] == DBNull.Value) continue;
+                        DateTime xp = Convert.ToDateTime(r["ServiceExpiryDate"]).Date;
+                        if (xp >= DateTime.Today && xp <= DateTime.Today.AddDays(30)) soon++;
+                    }
+                PanelHeaderTop.Hint = soon > 0
+                    ? "⚠  " + soon + " contract(s) expiring within 30 days — check the amber Contract Expiry dates below."
+                    : "In this window, you can create, modify, or delete service contracts and their service items.";
+            }
+            catch { }
+        }
+
+        private void ContractList_ExpiryCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "ServiceExpiryDate") return;
+            object v = GridView.GetRowCellValue(e.RowHandle, e.Column);
+            if (v == null || v == DBNull.Value) return;
+            DateTime expiry = Convert.ToDateTime(v).Date;
+            if (expiry < DateTime.Today) e.Appearance.ForeColor = System.Drawing.Color.Firebrick;
+            else if (expiry <= DateTime.Today.AddDays(30)) e.Appearance.ForeColor = System.Drawing.Color.DarkOrange;
+            else e.Appearance.ForeColor = System.Drawing.Color.ForestGreen;
+            if (_expiryBold == null) _expiryBold = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+            e.Appearance.Font = _expiryBold;
         }
 
         private DataRow GetSelectedRow()

@@ -61,76 +61,93 @@ namespace ServiceContractPhotocopier.Classes
 
         /// <summary>Effective strategy (the contract's OWN rule lines) per contract for the given keys.
         /// Reads zSCP2_ContractStrategyRule — the per-contract copy, edited on the contract, decoupled from
-        /// the master template once seeded. Contracts with no rules simply have no entry. Never throws.</summary>
+        /// the master template once seeded. Contracts with no rules simply have no entry.
+        /// THROWS on DB failure — swallowing here made billing silently run WITHOUT the strategy
+        /// (a wrong invoice with no error); callers surface the failure and abort instead.</summary>
         public static Dictionary<long, StrategyDef> LoadForContracts(DBSetting db, IEnumerable<long> contractKeys)
         {
             Dictionary<long, StrategyDef> map = new Dictionary<long, StrategyDef>();
             List<string> keys = new List<string>();
             foreach (long k in contractKeys) if (k > 0 && !keys.Contains(k.ToString())) keys.Add(k.ToString());
             if (keys.Count == 0) return map;
-            try
+            DataTable dt = db.GetDataTable(
+                "SELECT ContractKey, Seq, RuleKind, Scope, ServiceItemKeys, TargetAmount, PartialPct, FreeMonths, " +
+                "CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, LimitQty, SeededFromCode " +
+                "FROM dbo.zSCP2_ContractStrategyRule WHERE ContractKey IN (" + string.Join(",", keys.ToArray()) + ") " +
+                "ORDER BY ContractKey, Seq", false);
+            foreach (DataRow r in dt.Rows)
             {
-                DataTable dt = db.GetDataTable(
-                    "SELECT ContractKey, Seq, RuleKind, Scope, ServiceItemKeys, TargetAmount, PartialPct, FreeMonths, " +
-                    "CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, LimitQty, SeededFromCode " +
-                    "FROM dbo.zSCP2_ContractStrategyRule WHERE ContractKey IN (" + string.Join(",", keys.ToArray()) + ") " +
-                    "ORDER BY ContractKey, Seq", false);
-                foreach (DataRow r in dt.Rows)
+                long ck = Convert.ToInt64(r["ContractKey"]);
+                StrategyDef d;
+                if (!map.TryGetValue(ck, out d))
                 {
-                    long ck = Convert.ToInt64(r["ContractKey"]);
-                    StrategyDef d;
-                    if (!map.TryGetValue(ck, out d))
-                    {
-                        d = new StrategyDef();
-                        d.Code = Convert.ToString(r["SeededFromCode"]);
-                        map[ck] = d;
-                    }
-                    d.Rules.Add(ReadRule(r));
+                    d = new StrategyDef();
+                    d.Code = Convert.ToString(r["SeededFromCode"]);
+                    map[ck] = d;
                 }
+                d.Rules.Add(ReadRule(r));
             }
-            catch { }
             return map;
         }
 
-        /// <summary>The contract's own strategy rule lines (for the builder). Never throws.</summary>
+        /// <summary>The contract's own strategy rule lines (for the builder).
+        /// THROWS on DB failure — returning an empty list on error let the Strategy tab render empty
+        /// and the next Save delete-reinsert WIPE the contract's real rules. Callers catch, warn and
+        /// lock the editor instead.</summary>
         public static List<StrategyRule> LoadContractRules(DBSetting db, long contractKey)
         {
             List<StrategyRule> list = new List<StrategyRule>();
             if (contractKey <= 0) return list;
-            try
-            {
-                DataTable dt = db.GetDataTable(
-                    "SELECT Seq, RuleKind, Scope, ServiceItemKeys, TargetAmount, PartialPct, FreeMonths, CommitAmount, " +
-                    "FocCopies, RebatePct, NetBilling, LimitScope, LimitQty " +
-                    "FROM dbo.zSCP2_ContractStrategyRule WHERE ContractKey = " + contractKey + " ORDER BY Seq", false);
-                foreach (DataRow r in dt.Rows) list.Add(ReadRule(r));
-            }
-            catch { }
+            DataTable dt = db.GetDataTable(
+                "SELECT Seq, RuleKind, Scope, ServiceItemKeys, TargetAmount, PartialPct, FreeMonths, CommitAmount, " +
+                "FocCopies, RebatePct, NetBilling, LimitScope, LimitQty " +
+                "FROM dbo.zSCP2_ContractStrategyRule WHERE ContractKey = " + contractKey + " ORDER BY Seq", false);
+            foreach (DataRow r in dt.Rows) list.Add(ReadRule(r));
             return list;
         }
 
-        /// <summary>Loads a single strategy (with rules) by code, or null if not found / inactive.</summary>
+        /// <summary>Loads a single strategy (with rules) by code, or null if not found / inactive.
+        /// THROWS on DB failure (a DB error used to masquerade as "no rules to copy").</summary>
         public static StrategyDef LoadByCode(DBSetting db, string code)
         {
             if (string.IsNullOrEmpty(code)) return null;
-            try
+            DataTable hd = db.GetDataTable(
+                "SELECT StrategyKey, StrategyCode, [Description] FROM dbo.zSCP2_Strategy " +
+                "WHERE StrategyCode = N'" + code.Replace("'", "''") + "' AND Inactive = 'N'", false);
+            if (hd.Rows.Count == 0) return null;
+            long sk = Convert.ToInt64(hd.Rows[0]["StrategyKey"]);
+            StrategyDef d = new StrategyDef();
+            d.Code = Convert.ToString(hd.Rows[0]["StrategyCode"]);
+            d.Description = Convert.ToString(hd.Rows[0]["Description"]);
+            DataTable rl = db.GetDataTable(
+                "SELECT StrategyKey, Seq, RuleKind, Scope, TargetAmount, PartialPct, FreeMonths, " +
+                "CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, LimitQty " +
+                "FROM dbo.zSCP2_StrategyRule WHERE StrategyKey = " + sk + " ORDER BY Seq", false);
+            foreach (DataRow r in rl.Rows) d.Rules.Add(ReadRule(r));
+            return d;
+        }
+
+        /// <summary>Human-readable one-line-per-rule serialization for the per-invoice contract
+        /// snapshot (zSCP2_ContractSnapshot) — proves what the deal was when the invoice was made.</summary>
+        public static string SerializeRules(StrategyDef def)
+        {
+            if (def == null || def.Rules.Count == 0) return "(no strategy rules)";
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (StrategyRule x in def.Rules)
             {
-                DataTable hd = db.GetDataTable(
-                    "SELECT StrategyKey, StrategyCode, [Description] FROM dbo.zSCP2_Strategy " +
-                    "WHERE StrategyCode = N'" + code.Replace("'", "''") + "' AND Inactive = 'N'", false);
-                if (hd.Rows.Count == 0) return null;
-                long sk = Convert.ToInt64(hd.Rows[0]["StrategyKey"]);
-                StrategyDef d = new StrategyDef();
-                d.Code = Convert.ToString(hd.Rows[0]["StrategyCode"]);
-                d.Description = Convert.ToString(hd.Rows[0]["Description"]);
-                DataTable rl = db.GetDataTable(
-                    "SELECT StrategyKey, Seq, RuleKind, Scope, TargetAmount, PartialPct, FreeMonths, " +
-                    "CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, LimitQty " +
-                    "FROM dbo.zSCP2_StrategyRule WHERE StrategyKey = " + sk + " ORDER BY Seq", false);
-                foreach (DataRow r in rl.Rows) d.Rules.Add(ReadRule(r));
-                return d;
+                sb.Append("Rule ").Append(x.Seq).Append(": ").Append(x.Kind);
+                if (!string.IsNullOrEmpty(x.Scope)) sb.Append("  scope=").Append(x.Scope);
+                sb.Append("  items=").Append(x.ServiceItemKeys.Count == 0 ? "ALL" : JoinItemKeys(x.ServiceItemKeys));
+                if (x.Kind == TYPE_WAIVE_TARGET)
+                    sb.Append("  target=").Append(x.TargetAmount.ToString("0.00")).Append("  partial%=").Append(x.PartialPct.ToString("0.##"));
+                else if (x.Kind == TYPE_RENTAL_FREE_N) sb.Append("  freeMonths=").Append(x.FreeMonths);
+                else if (x.Kind == TYPE_COMMIT_MIN) sb.Append("  committed=").Append(x.CommitAmount.ToString("0.00"));
+                else if (x.Kind == TYPE_LIMIT) sb.Append("  limitQty=").Append(x.LimitQty.ToString("0.##"));
+                else if (x.Kind == TYPE_FOC_REBATE)
+                    sb.Append("  foc=").Append(x.FocCopies.ToString("0.##")).Append("  rebate%=").Append(x.RebatePct.ToString("0.##"));
+                sb.AppendLine();
             }
-            catch { return null; }
+            return sb.ToString().TrimEnd();
         }
 
         private static StrategyRule ReadRule(DataRow r)

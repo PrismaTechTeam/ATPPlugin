@@ -16,8 +16,13 @@ namespace ServiceContractPhotocopier.Classes
     /// </summary>
     public static class ScpMultiPrice
     {
-        /// <summary>All tier ladders keyed by MeterMultiPriceCode. Each value is the ascending
-        /// [boundary, unitPrice] rows. Load once per billing run (a per-row SELECT would be too slow).</summary>
+        /// <summary>Ladder-map key for a meter's own per-meter tier override (zSCP2_ItemMeterPrice).</summary>
+        public static string MeterLadderKey(long itemMeterKey) { return "#" + itemMeterKey; }
+
+        /// <summary>All tier ladders keyed by MeterMultiPriceCode, PLUS every per-meter override
+        /// ladder (zSCP2_ItemMeterPrice) keyed "#&lt;ItemMeterKey&gt;" — a meter with an override uses
+        /// that key as its MultiPriceCode so the billing engine needs no special casing. Each value
+        /// is the ascending [boundary, unitPrice] rows. Load once per billing run.</summary>
         public static Dictionary<string, List<decimal[]>> LoadLadders(DBSetting db)
         {
             Dictionary<string, List<decimal[]>> map =
@@ -37,6 +42,20 @@ namespace ServiceContractPhotocopier.Classes
                 }
             }
             catch { }
+            try
+            {
+                DataTable pm = db.GetDataTable(
+                    "SELECT ItemMeterKey, MeterReading, UnitPrice " +
+                    "FROM dbo.zSCP2_ItemMeterPrice ORDER BY ItemMeterKey, MeterReading", false);
+                foreach (DataRow r in pm.Rows)
+                {
+                    string key = MeterLadderKey(Convert.ToInt64(r["ItemMeterKey"]));
+                    List<decimal[]> tiers;
+                    if (!map.TryGetValue(key, out tiers)) { tiers = new List<decimal[]>(); map[key] = tiers; }
+                    tiers.Add(new decimal[] { AsDec(r["MeterReading"]), AsDec(r["UnitPrice"]) });
+                }
+            }
+            catch { }   // pre-migration book: overrides simply absent
             return map;
         }
 
@@ -76,6 +95,24 @@ namespace ServiceContractPhotocopier.Classes
                 if (lastPrice == 0m) freeCopies += remaining;
             }
             return charge;
+        }
+
+        /// <summary>Total FREE copies a tier ladder grants: the summed width of its 0.00-priced
+        /// bands (usually the first band, e.g. "FOC20K" -> 20,000). Used by the meter grids to
+        /// DISPLAY the effective free quantity while a ladder locks the Free Qty cell.</summary>
+        public static decimal LadderFreeCopies(List<decimal[]> tiers)
+        {
+            if (tiers == null || tiers.Count == 0) return 0m;
+            List<decimal[]> sorted = new List<decimal[]>(tiers);
+            sorted.Sort(delegate (decimal[] a, decimal[] b) { return a[0].CompareTo(b[0]); });
+            decimal free = 0m, prev = 0m;
+            foreach (decimal[] t in sorted)
+            {
+                decimal width = t[0] - prev;
+                if (width > 0m && t[1] == 0m) free += width;
+                prev = t[0];
+            }
+            return free;
         }
 
         /// <summary>True when a usable ladder exists for the code.</summary>

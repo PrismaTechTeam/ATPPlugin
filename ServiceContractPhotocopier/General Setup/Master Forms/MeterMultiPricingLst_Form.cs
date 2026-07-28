@@ -54,6 +54,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
                 BtnNew.ImageOptions.Image = img.GetLargeImage_New();
                 BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                BtnCopyNew.ImageOptions.Image = img.GetLargeImage_CopyTo2();
                 BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
                 BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
                 BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
@@ -172,6 +173,21 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private void OnNew(object sender, EventArgs e)
         { ClearDetail(); _isNewRow = true; SetReadOnly(false); TxtCode.Properties.ReadOnly = false; TxtCode.Focus(); }
+
+        // Clone the focused scheme (Description + ALL tier rows) into a NEW one — only the code is
+        // left blank for the user to type. Same behaviour as the Meter Type module's Copy to New.
+        private void OnCopyToNew(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(_selectedCode)) return;   // nothing focused to copy from
+            // Detail (TxtDesc + _dtItems) is already populated from the focused row — keep it,
+            // just detach from the source code and switch to insert mode.
+            _selectedCode = "";
+            _isNewRow = true;
+            TxtCode.Text = "";                                 // the only field NOT copied
+            SetReadOnly(false);
+            TxtCode.Properties.ReadOnly = false;
+            TxtCode.Focus();
+        }
 
         private void OnRefresh(object sender, EventArgs e) { LoadGrid(); ClearDetail(); }
 

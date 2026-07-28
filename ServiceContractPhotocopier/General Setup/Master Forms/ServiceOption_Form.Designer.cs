@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
 using DevExpress.XtraEditors;
 using DevExpress.XtraTab;
@@ -20,6 +20,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private LabelControl LblDefaultStatus, LblDefaultPriority, LblMeterInvFormat;
         private TextEdit TxtDefaultServiceStatus, TxtDefaultAppointmentPriority;
         private ComboBoxEdit CmbMeterInvFormat;
+        private CheckEdit ChkInvDescFromItem;
+        private CheckEdit ChkInvFmtAdvanced;
+        private LabelControl LblInvFmtOnline, LblInvFmtOffline;
+        private ComboBoxEdit CmbInvFmtOnline, CmbInvFmtOffline;
         private LabelControl LblApiProfile, LblApiUrl, LblApiToken, LblApiMode, LblApiTimeout, LblApiHint;
         private ComboBoxEdit CmbApiProfile, CmbApiMode;
         private TextEdit TxtApiBaseUrl, TxtApiToken;
@@ -56,6 +60,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblDefaultStatus = new LabelControl(); this.TxtDefaultServiceStatus = new TextEdit();
             this.LblDefaultPriority = new LabelControl(); this.TxtDefaultAppointmentPriority = new TextEdit();
             this.LblMeterInvFormat = new LabelControl(); this.CmbMeterInvFormat = new ComboBoxEdit();
+            this.ChkInvDescFromItem = new CheckEdit();
+            this.ChkInvFmtAdvanced = new CheckEdit();
+            this.LblInvFmtOnline = new LabelControl(); this.CmbInvFmtOnline = new ComboBoxEdit();
+            this.LblInvFmtOffline = new LabelControl(); this.CmbInvFmtOffline = new ComboBoxEdit();
             this.BtnSave = new SimpleButton(); this.BtnCancel = new SimpleButton();
 
             this.SuspendLayout();
@@ -110,16 +118,28 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.GrpDefaults.Text = "Defaults";
             this.GrpDefaults.Location = new Point(14, 154);
-            this.GrpDefaults.Size = new Size(660, 130);
+            this.GrpDefaults.Size = new Size(660, 190);
             Lbl(this.LblDefaultStatus, "Default Service Status", 16, 32);
             this.TxtDefaultServiceStatus.Location = new Point(190, 30); this.TxtDefaultServiceStatus.Width = 220;
             Lbl(this.LblDefaultPriority, "Default Appt. Priority", 16, 62);
             this.TxtDefaultAppointmentPriority.Location = new Point(190, 60); this.TxtDefaultAppointmentPriority.Width = 220;
             Lbl(this.LblMeterInvFormat, "Meter Invoice No. Format", 16, 92);
             this.CmbMeterInvFormat.Location = new Point(190, 90); this.CmbMeterInvFormat.Width = 220;
+            this.ChkInvDescFromItem.Properties.Caption = "Meter invoice line description from Stock Item (untick = meter type name)";
+            this.ChkInvDescFromItem.Location = new Point(16, 120); this.ChkInvDescFromItem.Width = 620;
+            this.ChkInvFmtAdvanced.Properties.Caption = "Advanced No. Format by machine status:";
+            this.ChkInvFmtAdvanced.Location = new Point(16, 150); this.ChkInvFmtAdvanced.Width = 230;
+            Lbl(this.LblInvFmtOnline, "Online", 252, 154);
+            this.CmbInvFmtOnline.Location = new Point(292, 151); this.CmbInvFmtOnline.Width = 150;
+            Lbl(this.LblInvFmtOffline, "Offline", 452, 154);
+            this.CmbInvFmtOffline.Location = new Point(492, 151); this.CmbInvFmtOffline.Width = 150;
             this.GrpDefaults.Controls.Add(this.LblDefaultStatus); this.GrpDefaults.Controls.Add(this.TxtDefaultServiceStatus);
             this.GrpDefaults.Controls.Add(this.LblDefaultPriority); this.GrpDefaults.Controls.Add(this.TxtDefaultAppointmentPriority);
             this.GrpDefaults.Controls.Add(this.LblMeterInvFormat); this.GrpDefaults.Controls.Add(this.CmbMeterInvFormat);
+            this.GrpDefaults.Controls.Add(this.ChkInvDescFromItem);
+            this.GrpDefaults.Controls.Add(this.ChkInvFmtAdvanced);
+            this.GrpDefaults.Controls.Add(this.LblInvFmtOnline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOnline);
+            this.GrpDefaults.Controls.Add(this.LblInvFmtOffline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOffline);
 
             this.PageServiceOption.Controls.Add(this.GrpGeneral);
             this.PageServiceOption.Controls.Add(this.GrpDefaults);

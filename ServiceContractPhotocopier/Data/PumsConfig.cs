@@ -1,4 +1,4 @@
-using System.Data.SqlClient;
+﻿using System.Data.SqlClient;
 using AutoCount.Data;
 
 namespace ServiceContractPhotocopier.Data
@@ -60,6 +60,10 @@ namespace ServiceContractPhotocopier.Data
         /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
         public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
+        // Show meters of INACTIVE contracts/items on the Meter Reading list (off by default) — used
+        // to review, and if needed bill, the leftover un-invoiced readings of a stopped contract.
+        public const string KEY_INCLUDE_INACTIVE = "INCLUDE_INACTIVE";
+        public const bool DEFAULT_INCLUDE_INACTIVE = false;
 
         /// <summary>Whether Fetch accepts readings audited AFTER the selected billing day (they show
         /// a RED Last Audit Date = invoice not created on time). Default true; set false (Meter
@@ -88,6 +92,19 @@ namespace ServiceContractPhotocopier.Data
         /// format doesn't exist in dbo.DocNoFormat.</summary>
         public const string KEY_METER_INVOICE_DOCNO_FORMAT = "METER_INVOICE_DOCNO_FORMAT";
         public const string DEFAULT_METER_INVOICE_DOCNO_FORMAT = "MR FORMAT";
+
+        // Invoice line description source (user decision 2026-07-27): DEFAULT = the AutoCount stock
+        // item's description (matches the customer's master invoices, e.g. "BK COPY + PRINT A4&A3");
+        // OFF = the meter type name (the old plugin behavior).
+        public const string KEY_INVOICE_DESC_FROM_ITEM = "INVOICE_DESC_FROM_ITEM";
+        public const bool DEFAULT_INVOICE_DESC_FROM_ITEM = true;
+
+        // ADVANCED invoice numbering (user request 2026-07-27): pick a DIFFERENT IV Document
+        // Numbering Format depending on the billed machines' API status — ONLINE machines get one
+        // format, OFFLINE another; rows with no API status fall back to the default format above.
+        public const string KEY_INV_FORMAT_ADVANCED = "INV_FORMAT_ADVANCED";
+        public const string KEY_INV_FORMAT_ONLINE = "INV_FORMAT_ONLINE";
+        public const string KEY_INV_FORMAT_OFFLINE = "INV_FORMAT_OFFLINE";
 
         /// <summary>Reads an int config value, falling back to <paramref name="defaultValue"/> on missing/invalid.</summary>
         public static int GetInt(DBSetting db, string key, int defaultValue)

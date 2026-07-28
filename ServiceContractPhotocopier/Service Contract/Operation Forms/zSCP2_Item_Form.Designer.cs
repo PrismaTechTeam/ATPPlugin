@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.ServiceContract.OperationForms
+﻿namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 {
     partial class zSCP2_Item_Form
     {
@@ -56,8 +56,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColMtRebate;
         private DevExpress.XtraGrid.Columns.GridColumn ColMtFOC;
         private DevExpress.XtraGrid.Columns.GridColumn ColMtInitial;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMtPricePick;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit RepoMeterType;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox RepoMeterRole;
+        private DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit RepoMtPricePick;
         private DevExpress.XtraBars.Ribbon.RibbonControl RibbonCtl;
         private DevExpress.XtraBars.Ribbon.RibbonPage ribbonPageHome;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpSave;
@@ -111,8 +113,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtRebate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColMtFOC = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColMtInitial = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMtPricePick = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoMeterType = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
             this.RepoMeterRole = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            this.RepoMtPricePick = new DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit();
             this.RibbonCtl = new DevExpress.XtraBars.Ribbon.RibbonControl();
             this.barSave = new DevExpress.XtraBars.BarButtonItem();
             this.barClose = new DevExpress.XtraBars.BarButtonItem();
@@ -143,6 +147,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridViewMeters)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMeterType)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMeterRole)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoMtPricePick)).BeginInit();
             this.SuspendLayout();
             //
             // LblServiceItemNo
@@ -228,7 +233,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.SpnBillingDayOverride.Location = new System.Drawing.Point(600, 157);
             this.SpnBillingDayOverride.Name = "SpnBillingDayOverride";
             this.SpnBillingDayOverride.Properties.IsFloatValue = false;
-            this.SpnBillingDayOverride.Properties.MaxValue = new decimal(new int[] { 31, 0, 0, 0 });
+            this.SpnBillingDayOverride.Properties.MaxValue = new decimal(new int[] { 28, 0, 0, 0 });
             this.SpnBillingDayOverride.Properties.MinValue = new decimal(new int[] { 0, 0, 0, 0 });
             this.SpnBillingDayOverride.Size = new System.Drawing.Size(70, 20);
             this.SpnBillingDayOverride.TabIndex = 10;
@@ -462,7 +467,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GridMeters.Name = "GridMeters";
             this.GridMeters.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
                 this.RepoMeterType,
-                this.RepoMeterRole});
+                this.RepoMeterRole,
+                this.RepoMtPricePick});
             this.GridMeters.Size = new System.Drawing.Size(876, 308);
             this.GridMeters.TabIndex = 2;
             this.GridMeters.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
@@ -476,6 +482,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 this.ColMtMin,
                 this.ColMtRate,
                 this.ColMtMulti,
+                this.ColMtPricePick,
                 this.ColMtRebate,
                 this.ColMtFOC,
                 this.ColMtInitial});
@@ -483,6 +490,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GridViewMeters.Name = "GridViewMeters";
             this.GridViewMeters.OptionsView.ShowGroupPanel = false;
             this.GridViewMeters.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(this.GridViewMeters_CellValueChanged);
+            this.GridViewMeters.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(this.GridViewMeters_RowCellStyle);
+            this.GridViewMeters.ShowingEditor += new System.ComponentModel.CancelEventHandler(this.GridViewMeters_ShowingEditor);
+            this.GridViewMeters.CustomColumnDisplayText += new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(this.GridViewMeters_CustomColumnDisplayText);
             //
             // ColMtCode
             //
@@ -496,7 +506,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ColMtRole
             //
-            this.ColMtRole.Caption = "Role (BK/CL)";
+            this.ColMtRole.Caption = "Role";
             this.ColMtRole.ColumnEdit = this.RepoMeterRole;
             this.ColMtRole.FieldName = "MeterRole";
             this.ColMtRole.Name = "ColMtRole";
@@ -517,7 +527,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             //
             // ColMtRate
             //
-            this.ColMtRate.Caption = "Rate";
+            this.ColMtRate.Caption = "Unit Price";
             this.ColMtRate.DisplayFormat.FormatString = "n4";
             this.ColMtRate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             this.ColMtRate.FieldName = "ChargesRate";
@@ -531,9 +541,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtMulti.Caption = "Multi-Price";
             this.ColMtMulti.FieldName = "MeterMultiPriceCode";
             this.ColMtMulti.Name = "ColMtMulti";
+            this.ColMtMulti.OptionsColumn.AllowEdit = false;
             this.ColMtMulti.Visible = true;
             this.ColMtMulti.VisibleIndex = 4;
             this.ColMtMulti.Width = 120;
+            //
+            // ColMtPricePick
+            //
+            this.ColMtPricePick.Caption = " ";
+            this.ColMtPricePick.ColumnEdit = this.RepoMtPricePick;
+            this.ColMtPricePick.FieldName = "PricePickBtn";
+            this.ColMtPricePick.Name = "ColMtPricePick";
+            this.ColMtPricePick.OptionsColumn.AllowSize = false;
+            this.ColMtPricePick.OptionsColumn.ShowCaption = false;
+            this.ColMtPricePick.ShowButtonMode = DevExpress.XtraGrid.Views.Base.ShowButtonModeEnum.ShowAlways;
+            this.ColMtPricePick.UnboundDataType = typeof(string);
+            this.ColMtPricePick.Visible = true;
+            this.ColMtPricePick.VisibleIndex = 5;
+            this.ColMtPricePick.Width = 28;
             //
             // ColMtRebate
             //
@@ -543,7 +568,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtRebate.FieldName = "RebateQtyInPercent";
             this.ColMtRebate.Name = "ColMtRebate";
             this.ColMtRebate.Visible = true;
-            this.ColMtRebate.VisibleIndex = 5;
+            this.ColMtRebate.VisibleIndex = 6;
             this.ColMtRebate.Width = 90;
             //
             // ColMtFOC
@@ -554,7 +579,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtFOC.FieldName = "FOCQty";
             this.ColMtFOC.Name = "ColMtFOC";
             this.ColMtFOC.Visible = true;
-            this.ColMtFOC.VisibleIndex = 6;
+            this.ColMtFOC.VisibleIndex = 7;
             this.ColMtFOC.Width = 90;
             //
             // ColMtInitial
@@ -565,7 +590,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColMtInitial.FieldName = "InitialReading";
             this.ColMtInitial.Name = "ColMtInitial";
             this.ColMtInitial.Visible = true;
-            this.ColMtInitial.VisibleIndex = 7;
+            this.ColMtInitial.VisibleIndex = 8;
             this.ColMtInitial.Width = 110;
             //
             // RepoMeterType
@@ -582,9 +607,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.RepoMeterRole.Items.AddRange(new object[] {
                 "BK",
                 "CL",
+                "RENTAL",
+                "WAIVE",
+                "COMMIT",
                 "NA"});
             this.RepoMeterRole.Name = "RepoMeterRole";
             this.RepoMeterRole.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            //
+            // RepoMtPricePick
+            //
+            this.RepoMtPricePick.AutoHeight = false;
+            this.RepoMtPricePick.Name = "RepoMtPricePick";
+            this.RepoMtPricePick.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.HideTextEditor;
+            this.RepoMtPricePick.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(this.RepoMtPricePick_ButtonClick);
             //
             // RibbonCtl
             //
@@ -696,6 +731,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridViewMeters)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMeterType)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMeterRole)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoMtPricePick)).EndInit();
             this.GrpMeters.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeters)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RibbonCtl)).EndInit();

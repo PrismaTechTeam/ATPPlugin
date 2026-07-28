@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AutoCount.Authentication;
 using AutoCount.Data;
@@ -52,6 +52,19 @@ namespace ServiceContractPhotocopier.Classes
         public DateTime? RentalStartDate;  // n/N anchor
         public int RentalMonths;           // N (0 = open-ended, no n/N text)
         public char RentalBasis = 'A';     // A accrual / P prepayment
+        public string MachineStatus = "";  // API fetch status (ONLINE/OFFLINE/"") — drives the
+                                           // advanced per-status invoice number format
+        public string TrackingId = "";     // offline reading report id ("MR-yymmdd-nnn") — the job's
+                                           // distinct ids become the invoice Reference No
+        public bool IsGroupItem;           // line belongs to the contract's GROUP "machine" — its
+                                           // MIN/WAIVE sums span the WHOLE fleet, not one machine
+        // --- Rental-Waive contra meter (master-style; the engine decides firing at Generate) ---
+        public bool IsWaiveMeter;
+        public int WaiveFirstNMonths;      // 0 = no window condition
+        public decimal WaiveTargetAmount;  // 0 = no usage condition (0 & 0 = ALWAYS waive)
+        public decimal WaivePartialPct = 100m;
+        public string WaiveScope = "BKCL";
+        public DateTime? EffStartDate;     // effective service start (item, else contract) — RENTAL-FREE-N anchor fallback
         public DateTime? LastDate;
         /// <summary>API LastAuditDate of the CURRENT reading — used as the MeterTrans date so the
         /// next period's "Last Read Date" is the real meter-read date (falls back to now if absent).</summary>
@@ -156,6 +169,25 @@ namespace ServiceContractPhotocopier.Classes
                 string fmtName = ServiceContractPhotocopier.Data.PumsConfig.Get(db,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_INVOICE_DOCNO_FORMAT).Trim();
+                // ADVANCED numbering: ONLINE machines -> one format, OFFLINE -> another (a mixed
+                // invoice counts as ONLINE); lines with no API status keep the default format.
+                if (ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                        ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ADVANCED, false))
+                {
+                    bool anyOnline = false, anyOffline = false;
+                    foreach (MeterBillLine l0 in lines)
+                    {
+                        string ms = (l0.MachineStatus ?? "").Trim().ToUpperInvariant();
+                        if (ms.StartsWith("ONLINE")) anyOnline = true;
+                        else if (ms.StartsWith("OFFLINE")) anyOffline = true;
+                    }
+                    string adv = anyOnline
+                        ? ServiceContractPhotocopier.Data.PumsConfig.Get(db, ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ONLINE, "").Trim()
+                        : (anyOffline
+                            ? ServiceContractPhotocopier.Data.PumsConfig.Get(db, ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_OFFLINE, "").Trim()
+                            : "");
+                    if (adv.Length > 0) fmtName = adv;
+                }
                 if (fmtName.Length > 0)
                 {
                     System.Data.DataTable fmt = db.GetDataTable(
@@ -175,6 +207,38 @@ namespace ServiceContractPhotocopier.Classes
             // Each meter line's invoice detail carries its CONTRACT's Department + Project so the invoice
             // is analysed exactly like the contract it bills. Loaded once per distinct contract.
             System.Collections.Generic.Dictionary<long, string[]> contractDeptProj = LoadContractDeptProj(db, lines);
+
+            // Invoice line description source (user decision 2026-07-27): DEFAULT = the AutoCount stock
+            // item's own description (master convention — "BK COPY + PRINT A4&A3"); the Plugin Option
+            // can switch back to the meter type name. One lookup per distinct item code.
+            bool descFromItem = ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_DESC_FROM_ITEM);
+            System.Collections.Generic.Dictionary<string, string> itemDescByCode =
+                new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (descFromItem)
+            {
+                System.Collections.Generic.List<string> codes = new System.Collections.Generic.List<string>();
+                foreach (MeterBillLine l0 in lines)
+                    if (!string.IsNullOrEmpty(l0.ACItemCode) && !codes.Contains(l0.ACItemCode)) codes.Add(l0.ACItemCode);
+                if (codes.Count > 0)
+                {
+                    System.Text.StringBuilder inList = new System.Text.StringBuilder();
+                    foreach (string c in codes)
+                    {
+                        if (inList.Length > 0) inList.Append(",");
+                        inList.Append("N'").Append(c.Replace("'", "''")).Append("'");
+                    }
+                    try
+                    {
+                        System.Data.DataTable it = db.GetDataTable(
+                            "SELECT ItemCode, ISNULL(Description,'') AS Description FROM dbo.Item WHERE ItemCode IN (" + inList + ")", false);
+                        foreach (System.Data.DataRow r in it.Rows)
+                            itemDescByCode[Convert.ToString(r["ItemCode"])] = Convert.ToString(r["Description"]).Trim();
+                    }
+                    catch { }
+                }
+            }
 
             foreach (MeterBillLine ln in lines)
             {
@@ -204,7 +268,12 @@ namespace ServiceContractPhotocopier.Classes
                 // and flat/rental lines bill 1 x the (already-final) charge.
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
                 if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
-                dtl.Description = ComposeLineDescription(ln);
+                string itemMasterDesc;
+                dtl.Description = descFromItem && !string.IsNullOrEmpty(ln.ACItemCode)
+                        && itemDescByCode.TryGetValue(ln.ACItemCode, out itemMasterDesc)
+                        && itemMasterDesc.Length > 0
+                    ? itemMasterDesc                    // master convention: the stock item's description
+                    : ComposeLineDescription(ln);       // fallback / option OFF: meter type name
                 if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
                 { dtl.Qty = 1m; dtl.UnitPrice = ln.Charge; }
                 else
@@ -213,11 +282,31 @@ namespace ServiceContractPhotocopier.Classes
                     dtl.UnitPrice = ln.EffUnitPrice;
                     if (ln.RebatePct > 0m) dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
                 }
+                // AutoCount's native FOC Qty column carries the free copies actually APPLIED to this
+                // bill (user request): the ladder's free band or the meter's Free Qty allowance.
+                // Flat lines (rental / waive / MIN) have no copies to give free.
+                if (!ln.IsFlat)
+                {
+                    decimal focCol = ln.Usage - ln.BillCopies;
+                    if (focCol < 0m) focCol = 0m;
+                    if (focCol > 0m) dtl.FOCQty = focCol;
+                }
                 dtl.FurtherDescription = block;
                 // Department + Project = the billed contract's (per line, since a grouped invoice can
                 // span several contracts). Empty contract values leave the detail's defaults untouched.
                 if (!string.IsNullOrEmpty(lineDept)) dtl.DeptNo = lineDept;
                 if (!string.IsNullOrEmpty(lineProj)) dtl.ProjNo = lineProj;
+
+                // Strategy outcome ("RENTAL FREE month 1/1 (strategy)", "WAIVED: charges >= target",
+                // "PARTIAL WAIVE 90%: ...") — its own text row directly under the charge row, so the
+                // CUSTOMER sees why a rental is 0.00 or reduced (user transparency rule).
+                if (!string.IsNullOrEmpty(ln.StrategyNote))
+                {
+                    AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dNote = doc.AddDetail();
+                    dNote.Description = ln.StrategyNote;
+                    dNote.FurtherDescription = block;
+                    dNote.AccNo = null;
+                }
 
                 // Reading text rows — exactly the master's content: Current / Previous / (FOC when >0)
                 // / Usage, each carrying the same block, then a blank separator row. Dates dd/MM/yyyy,
@@ -242,10 +331,16 @@ namespace ServiceContractPhotocopier.Classes
                 dPrev.FurtherDescription = block;
                 dPrev.AccNo = null;
 
-                if (ln.Foc > 0m)
+                // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free
+                // band (usage − billed copies) — its FOCQty column is ignored by the engine, so printing
+                // the raw column here used to show a FOC that was never deducted. Flat (rental) lines
+                // keep the column value (= free months).
+                decimal focApplied = ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies);
+                if (focApplied < 0m) focApplied = 0m;
+                if (focApplied > 0m)
                 {
                     AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dFoc = doc.AddDetail();
-                    dFoc.Description = "Meter FOC Qty : " + Num(ln.Foc);
+                    dFoc.Description = "Meter FOC Qty : " + Num(focApplied);
                     dFoc.FurtherDescription = block;
                     dFoc.AccNo = null;
                 }
@@ -312,17 +407,24 @@ namespace ServiceContractPhotocopier.Classes
             sb.AppendLine("1. Mt Type; 2. Mt Name; 3. Min Chrg; 4. Chrg Rate; 5. FOC Qty; 6. Rebate %; " +
                           "7. Last Reading Date; 8. Last Reading Mt; 9. Mt Usage; 10. Total Chrg; 11. Multi Price; " +
                           "12. Rebate Qty; 13. Current Reading Date; 14. Last Reading Short Date; 15. Current Reading Short Date");
+            // FOC as APPLIED (ladder free band / reset-scaled column), consistent with the FOC text row.
+            decimal focShown = ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies);
+            if (focShown < 0m) focShown = 0m;
             sb.AppendLine(ln.MeterTypeCode);
             sb.AppendLine(ComposeLineDescription(ln));
             sb.AppendLine(Num(ln.MinCharges));
             sb.AppendLine(Num(ln.Rate));
-            sb.AppendLine(Num(ln.Foc));
+            sb.AppendLine(Num(focShown));
             sb.AppendLine(Num(ln.RebatePct));
             sb.AppendLine(lastLong);
             sb.AppendLine(Num(ln.Last));
             sb.AppendLine(Num(ln.Usage));
             sb.AppendLine(Num(ln.Charge));
-            sb.AppendLine("");                       // multi price
+            // multi price: per-meter override ladders are keyed '#<meterkey>' internally — print
+            // the customer-friendly "(Custom)" instead of the raw key.
+            string mpShown = ln.MultiPriceCode ?? "";
+            if (mpShown.StartsWith("#")) mpShown = "(Custom)";
+            sb.AppendLine(mpShown);
             sb.AppendLine("0");                      // rebate qty
             sb.AppendLine(LongDate(cur, en));
             sb.AppendLine(lastShort);

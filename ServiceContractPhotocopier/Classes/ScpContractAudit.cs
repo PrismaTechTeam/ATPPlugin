@@ -26,11 +26,11 @@ namespace ServiceContractPhotocopier.Classes
             "ContractNo","ContractTypeCode","DebtorCode","ContractDate",
             "ServiceStartDate","ServiceExpiryDate","ContractValue","BillingDay","BillOnMonthEnd","BillingMode",
             "Address1","Attention","Phone","TermCode","AreaCode","StaffCode","ReferenceNo","Description",
-            "Remark1","Remark2","Note","DeptNo","ProjNo","Inactive",
+            "Remark1","Remark2","Note","DeptNo","ProjNo","Inactive","InactiveDate","InactiveReason",
             "City","PostalCode","State","Country","Fax","Ref1","Ref2","Ref3","Ref4",
             "DelBranchCode","DelBranchName","DelAddress","DelCity","DelPostalCode","DelState","DelCountry",
             "DelPhone","DelFax","DelEmail","DelContactPerson",
-            "StrategyCode","RentalSeparateInvoice"
+            "StrategyCode","RentalSeparateInvoice","FOCResetUnit","FOCResetN"
         };
 
         /// <summary>Reads the audited columns of one contract as normalised strings (dates yyyy-MM-dd,

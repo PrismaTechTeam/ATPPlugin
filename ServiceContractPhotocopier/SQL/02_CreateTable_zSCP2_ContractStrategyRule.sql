@@ -1,4 +1,4 @@
-SET ANSI_NULLS ON
+﻿SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
@@ -6,7 +6,8 @@ GO
 -- The contract's OWN copy of strategy rules ("template -> instance"): picking a Strategy code on a
 -- contract COPIES that master template's rule lines (zSCP2_StrategyRule) into here, keyed by ContractKey.
 -- Afterwards the contract edits ITS rules freely (add/delete/reorder/params) WITHOUT touching the master
--- template. The Meter Reading billing pipeline and "Apply Strategy to Meters" read THESE rows, not the
+-- template. The Meter Reading billing pipeline reads THESE rows LIVE at Generate (the old
+-- "Apply Strategy to Meters" push step is retired), not the
 -- master. Mirrors zSCP2_StrategyRule's columns plus:
 --   ContractKey     : owning contract (FK + ON DELETE CASCADE — rules die with the contract).
 --   ServiceItemKeys : comma-separated zSCP2_Item.ItemKey list the rule applies to; '' (empty) = ALL

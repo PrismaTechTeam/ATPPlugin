@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Drawing;
 using System.Windows.Forms;
@@ -19,6 +19,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DataTable _dt;
         private AutoCount.Data.DBSetting _db;
         private long _contractKey;
+        // Tier ladders (schemes + per-meter '#key' overrides) so the live preview uses the SAME
+        // engine as the main grid and the invoice — never a private flat-rate approximation.
+        private System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<decimal[]>> _ladders;
         // GENERATED INVOICE section (code-built, docked bottom)
         private DevExpress.XtraEditors.GroupControl _grpInv;
         private DevExpress.XtraGrid.GridControl _gridInv;
@@ -49,6 +52,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             _db = db;
             _contractKey = contractKey;
+            try { _ladders = ServiceContractPhotocopier.Classes.ScpMultiPrice.LoadLadders(db); } catch { }
             BuildGeneratedInvoiceSection();
             LoadGeneratedInvoices();
 
@@ -183,6 +187,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("MeterType", "Meter Type", 115);
             SetCol("Role", "Meter", 85);
             SetCol("MeterTypeName", "Meter Type Name", 150);
+            // The EFFECTIVE deal per meter — ladder / waive config / MIN scope / rental — so the
+            // key-in operator sees what actually bills, not just the raw meter-row numbers.
+            SetCol("Deal", "Pricing / Deal (effective)", 215);
+            GridColumn dealCol = this.GridViewDetail.Columns["Deal"];
+            if (dealCol != null)
+            {
+                GridColumn afterCol = this.GridViewDetail.Columns["MeterTypeName"];
+                if (afterCol != null) dealCol.VisibleIndex = afterCol.VisibleIndex + 1;
+                dealCol.AppearanceCell.ForeColor = Color.FromArgb(21, 101, 192);
+                dealCol.AppearanceCell.Options.UseForeColor = true;
+            }
+            if (this.GridViewDetail.Columns["HasLadder"] != null) this.GridViewDetail.Columns["HasLadder"].Visible = false;
+            if (this.GridViewDetail.Columns["LadderFoc"] != null) this.GridViewDetail.Columns["LadderFoc"].Visible = false;
             SetNum("MinCharges", "Min. Charges", 85, "n2");
             SetNum("UnitPrice", "Unit Price", 80, "n4");
             SetNum("FOCQty", "FOC Qty", 70, "n0");
@@ -212,6 +229,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             // Computation-only column stays hidden.
             if (this.GridViewDetail.Columns["UseMin"] != null) this.GridViewDetail.Columns["UseMin"].Visible = false;
+            // Ladder rows: the raw Unit Price / FOC Qty do NOT bill — display the ladder's
+            // numbers in their place (same idea as the contract's meter grid).
+            this.GridViewDetail.CustomColumnDisplayText +=
+                new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(Detail_ColumnDisplayText);
             // Recompute on commit (cell leave / checkbox toggle)...
             this.GridViewDetail.CellValueChanged +=
                 new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(Detail_CellValueChanged);
@@ -238,6 +259,25 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 acc.ColumnEdit = this.RepoCheck;
                 acc.OptionsColumn.AllowEdit = true;
                 acc.OptionsColumn.ReadOnly = false;
+            }
+        }
+
+        // With a multi-price ladder the meter row's raw Unit Price / FOC Qty are ignored by the
+        // engine — show "tiered" and the ladder's free band instead, so the grid never contradicts
+        // the computed Total Charges.
+        private void Detail_ColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column == null || e.ListSourceRowIndex < 0) return;
+            System.Data.DataTable src = this.GridDetail.DataSource as System.Data.DataTable;
+            if (src == null || e.ListSourceRowIndex >= src.Rows.Count) return;
+            if (!src.Columns.Contains("HasLadder")) return;
+            System.Data.DataRow d = src.Rows[e.ListSourceRowIndex];
+            if (d["HasLadder"] == DBNull.Value || !Convert.ToBoolean(d["HasLadder"])) return;
+            if (e.Column.FieldName == "UnitPrice") e.DisplayText = "tiered";
+            else if (e.Column.FieldName == "FOCQty")
+            {
+                decimal lf = d["LadderFoc"] == DBNull.Value ? 0m : Convert.ToDecimal(d["LadderFoc"]);
+                e.DisplayText = lf.ToString("n0");
             }
         }
 
@@ -319,25 +359,35 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         // Mirrors the main grid's Recalc: effective reading = API value when accepted, else the
-        // manual one; usage - FOC - rebate x rate, floored at the minimum charge.
-        private static void RecalcDetail(DataRow d)
+        // manual one. Charge comes from the ONE billing engine (ComputeCharge: NET FOC + rebate,
+        // multi-price ladder incl. per-meter overrides, FOC-reset accrual, min floor) — a private
+        // flat-rate formula here used to preview ladder meters wrongly.
+        private void RecalcDetail(DataRow d)
         {
             decimal fv = DV(d["FetchedReading"]), cv = DV(d["CurrentReading"]);
             bool accept = d["AcceptFetched"] != DBNull.Value && Convert.ToBoolean(d["AcceptFetched"]);
             ComputeUsageCharge(d, (accept && fv > 0m) ? fv : cv);
         }
 
-        private static void ComputeUsageCharge(DataRow d, decimal cur)
+        private void ComputeUsageCharge(DataRow d, decimal cur)
         {
-            decimal last = DV(d["LastReading"]);
-            decimal usage = cur - last; if (usage < 0m) usage = 0m;
-            decimal billable = usage - DV(d["FOCQty"]); if (billable < 0m) billable = 0m;
-            decimal rebate = DV(d["RebatePct"]); if (rebate > 0m) billable = billable * (1m - rebate / 100m);
-            decimal rate = DV(d["UnitPrice"]); decimal min = DV(d["MinCharges"]);
+            ServiceContractPhotocopier.Classes.MeterBillLine ln = new ServiceContractPhotocopier.Classes.MeterBillLine();
+            ln.Last = DV(d["LastReading"]);
+            ln.Current = cur;
+            ln.Rate = DV(d["UnitPrice"]);
+            ln.MinCharges = DV(d["MinCharges"]);
+            ln.Foc = DV(d["FOCQty"]);
+            ln.RebatePct = DV(d["RebatePct"]);
+            ln.MultiPriceCode = d.Table.Columns.Contains("MultiPriceCode") && d["MultiPriceCode"] != DBNull.Value
+                ? Convert.ToString(d["MultiPriceCode"]) : "";
+            ln.FocResetCount = d.Table.Columns.Contains("FocResetCount") && d["FocResetCount"] != DBNull.Value
+                ? Convert.ToInt32(d["FocResetCount"]) : 1;
+            ln.IsFlat = d.Table.Columns.Contains("IsFlat") && d["IsFlat"] != DBNull.Value && Convert.ToBoolean(d["IsFlat"]);
+            ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
+            // Same UseMin override the generate loop applies (meter flagged "always bill the minimum").
             bool useMin = d["UseMin"] != DBNull.Value && Convert.ToBoolean(d["UseMin"]);
-            decimal charge = useMin ? min : (billable * rate < min ? min : billable * rate);
-            d["MeterUsage"] = usage;
-            d["TotalCharges"] = charge;
+            d["MeterUsage"] = ln.Usage;
+            d["TotalCharges"] = useMin ? ln.MinCharges : ln.Charge;
         }
 
         private static decimal DV(object v)

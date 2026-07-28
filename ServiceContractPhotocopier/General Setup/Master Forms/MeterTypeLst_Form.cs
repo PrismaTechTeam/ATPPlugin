@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Windows.Forms;
 using AutoCount.Authentication;
@@ -86,6 +86,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtFOCQty.Properties.ReadOnly = ro;
             ChkInactive.Properties.ReadOnly = ro;
             ChkFlatCharge.Properties.ReadOnly = ro;
+            ChkRentalWaive.Properties.ReadOnly = ro;
+            CmbDefaultRole.Properties.ReadOnly = ro;
         }
 
         private void LoadGrid()
@@ -94,7 +96,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             {
                 GridMT.DataSource = _dbSetting.GetDataTable(
                     "SELECT MeterTypeKey, MeterTypeCode, [Description], StockCode, MeterMultiPriceCode, " +
-                    "ChargesRate, MinimumCharges, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge, Inactive " +
+                    "ChargesRate, MinimumCharges, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge, ISNULL(IsRentalWaive,'N') AS IsRentalWaive, ISNULL(DefaultRole,'') AS DefaultRole, Inactive " +
                     "FROM [dbo].[zSCP_MeterType] ORDER BY MeterTypeCode", false);
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
@@ -118,6 +120,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtFOCQty.Text = D(row, "FOCQty", "0.00");
             ChkInactive.Checked = V(row, "Inactive") == "Y";
             ChkFlatCharge.Checked = V(row, "IsFlatCharge") == "Y";
+            ChkRentalWaive.Checked = V(row, "IsRentalWaive") == "Y";
+            CmbDefaultRole.Text = V(row, "DefaultRole");
             SetReadOnly(true);
             SetEditMode(false);
         }
@@ -131,6 +135,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtRebateQty.Text = "0.00"; TxtFOCQty.Text = "0.00";
             ChkInactive.Checked = false;
             ChkFlatCharge.Checked = false;
+            ChkRentalWaive.Checked = false;
+            CmbDefaultRole.Text = "";
             SetReadOnly(true);
         }
 
@@ -156,6 +162,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             TxtFOCQty.Text = D(row, "FOCQty", "0.00");
             ChkInactive.Checked = V(row, "Inactive") == "Y";
             ChkFlatCharge.Checked = V(row, "IsFlatCharge") == "Y";
+            ChkRentalWaive.Checked = V(row, "IsRentalWaive") == "Y";
+            CmbDefaultRole.Text = V(row, "DefaultRole");
             SetReadOnly(false);
             TxtCode.Properties.ReadOnly = false;
             SetEditMode(true);
@@ -180,12 +188,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 decimal.TryParse(TxtRebateQty.Text, out rq); decimal.TryParse(TxtFOCQty.Text, out fq);
                 string ia = ChkInactive.Checked ? "Y" : "N";
                 string fc = ChkFlatCharge.Checked ? "Y" : "N";
+                string rw = ChkRentalWaive.Checked ? "Y" : "N";
+                string drl = SQLString((CmbDefaultRole.Text ?? "").Trim().ToUpperInvariant());
                 if (_isNewRow || _selectedKey == 0)
-                    _dbSetting.ExecuteNonQuery("INSERT INTO [dbo].[zSCP_MeterType] (MeterTypeCode,[Description],StockCode,MeterMultiPriceCode,MinimumCharges,ChargesRate,RebateQtyInPercent,FOCQty,IsFlatCharge,Inactive) VALUES " +
-                        "(N'" + c + "',N'" + d + "',N'" + s + "',N'" + m + "'," + mc.ToString("0.00") + "," + cr.ToString("0.000000") + "," + rq.ToString("0.00") + "," + fq.ToString("0.00") + ",'" + fc + "','" + ia + "')");
+                    _dbSetting.ExecuteNonQuery("INSERT INTO [dbo].[zSCP_MeterType] (MeterTypeCode,[Description],StockCode,MeterMultiPriceCode,MinimumCharges,ChargesRate,RebateQtyInPercent,FOCQty,IsFlatCharge,IsRentalWaive,DefaultRole,Inactive) VALUES " +
+                        "(N'" + c + "',N'" + d + "',N'" + s + "',N'" + m + "'," + mc.ToString("0.00") + "," + cr.ToString("0.000000") + "," + rq.ToString("0.00") + "," + fq.ToString("0.00") + ",'" + fc + "','" + rw + "',N'" + drl + "','" + ia + "')");
                 else
                     _dbSetting.ExecuteNonQuery("UPDATE [dbo].[zSCP_MeterType] SET [Description]=N'" + d + "',StockCode=N'" + s + "',MeterMultiPriceCode=N'" + m + "'," +
-                        "MinimumCharges=" + mc.ToString("0.00") + ",ChargesRate=" + cr.ToString("0.000000") + ",RebateQtyInPercent=" + rq.ToString("0.00") + ",FOCQty=" + fq.ToString("0.00") + ",IsFlatCharge='" + fc + "',Inactive='" + ia + "',LastModified=GETDATE() WHERE MeterTypeKey=" + _selectedKey);
+                        "MinimumCharges=" + mc.ToString("0.00") + ",ChargesRate=" + cr.ToString("0.000000") + ",RebateQtyInPercent=" + rq.ToString("0.00") + ",FOCQty=" + fq.ToString("0.00") + ",IsFlatCharge='" + fc + "',IsRentalWaive='" + rw + "',DefaultRole=N'" + drl + "',Inactive='" + ia + "',LastModified=GETDATE() WHERE MeterTypeKey=" + _selectedKey);
                 _isNewRow = false;
                 LoadGrid();
                 SetReadOnly(true);

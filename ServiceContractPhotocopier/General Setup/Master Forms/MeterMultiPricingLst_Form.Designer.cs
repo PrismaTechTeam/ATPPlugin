@@ -14,7 +14,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private AutoCount.Controls.PanelHeader PanelHeaderTop;
         private PanelControl PanelToolbar;
-        private SimpleButton BtnNew, BtnEdit, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
+        private SimpleButton BtnNew, BtnEdit, BtnCopyNew, BtnSave, BtnCancel, BtnDelete, BtnRefresh, BtnExit;
         private GridControl GridMP; private GridView GridViewMP;
         private LabelControl LblCode, LblDesc;
         private TextEdit TxtCode, TxtDesc;
@@ -26,7 +26,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         {
             this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
             this.PanelToolbar = new PanelControl();
-            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton();
+            this.BtnNew = new SimpleButton(); this.BtnEdit = new SimpleButton(); this.BtnCopyNew = new SimpleButton();
             this.BtnSave = new SimpleButton(); this.BtnCancel = new SimpleButton();
             this.BtnDelete = new SimpleButton(); this.BtnRefresh = new SimpleButton(); this.BtnExit = new SimpleButton();
             this.GridMP = new GridControl(); this.GridViewMP = new GridView();
@@ -54,12 +54,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.PanelToolbar.Size = new Size(1050, 62);
             Tb(this.BtnNew, "New", 8, 6, 86); this.BtnNew.Click += new System.EventHandler(this.OnNew);
             Tb(this.BtnEdit, "Edit", 98, 6, 86); this.BtnEdit.Click += new System.EventHandler(this.OnEdit);
-            Tb(this.BtnSave, "Save", 188, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
-            Tb(this.BtnCancel, "Cancel", 278, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
-            Tb(this.BtnDelete, "Delete", 368, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
-            Tb(this.BtnRefresh, "Refresh", 458, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
-            Tb(this.BtnExit, "Exit (F2)", 556, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
+            Tb(this.BtnCopyNew, "Copy to New", 188, 6, 120); this.BtnCopyNew.Click += new System.EventHandler(this.OnCopyToNew);
+            Tb(this.BtnSave, "Save", 312, 6, 86); this.BtnSave.Click += new System.EventHandler(this.OnSave);
+            Tb(this.BtnCancel, "Cancel", 402, 6, 86); this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
+            Tb(this.BtnDelete, "Delete", 492, 6, 86); this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
+            Tb(this.BtnRefresh, "Refresh", 588, 6, 92); this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
+            Tb(this.BtnExit, "Exit (F2)", 684, 6, 92); this.BtnExit.Click += new System.EventHandler(this.OnExit);
             this.PanelToolbar.Controls.Add(this.BtnNew); this.PanelToolbar.Controls.Add(this.BtnEdit);
+            this.PanelToolbar.Controls.Add(this.BtnCopyNew);
             this.PanelToolbar.Controls.Add(this.BtnSave); this.PanelToolbar.Controls.Add(this.BtnCancel);
             this.PanelToolbar.Controls.Add(this.BtnDelete); this.PanelToolbar.Controls.Add(this.BtnRefresh);
             this.PanelToolbar.Controls.Add(this.BtnExit);

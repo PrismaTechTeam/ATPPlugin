@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid;
@@ -18,9 +18,13 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private GridControl GridMT; private GridView GridViewMT;
         private GroupControl GrpDetail;
         private LabelControl LblCode, LblDesc, LblStock, LblMultiPrice, LblMinCharges, LblChargesRate, LblRebateQty, LblFOCQty;
-        private TextEdit TxtCode, TxtDesc, TxtStockCode, TxtMultiPriceCode, TxtMinCharges, TxtChargesRate, TxtRebateQty, TxtFOCQty;
+        private TextEdit TxtCode, TxtStockCode, TxtMultiPriceCode, TxtMinCharges, TxtChargesRate, TxtRebateQty, TxtFOCQty;
+        private MemoEdit TxtDesc;
         private CheckEdit ChkInactive;
         private CheckEdit ChkFlatCharge;
+        private CheckEdit ChkRentalWaive;
+        private LabelControl LblDefaultRole;
+        private ComboBoxEdit CmbDefaultRole;
 
         private void InitializeComponent()
         {
@@ -33,7 +37,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GridMT = new GridControl(); this.GridViewMT = new GridView();
             this.GrpDetail = new GroupControl();
             this.LblCode = new LabelControl(); this.TxtCode = new TextEdit();
-            this.LblDesc = new LabelControl(); this.TxtDesc = new TextEdit();
+            this.LblDesc = new LabelControl(); this.TxtDesc = new MemoEdit();
             this.LblStock = new LabelControl(); this.TxtStockCode = new TextEdit();
             this.LblMultiPrice = new LabelControl(); this.TxtMultiPriceCode = new TextEdit();
             this.LblMinCharges = new LabelControl(); this.TxtMinCharges = new TextEdit();
@@ -42,6 +46,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblFOCQty = new LabelControl(); this.TxtFOCQty = new TextEdit();
             this.ChkInactive = new CheckEdit();
             this.ChkFlatCharge = new CheckEdit();
+            this.ChkRentalWaive = new CheckEdit();
+            this.LblDefaultRole = new LabelControl();
+            this.CmbDefaultRole = new ComboBoxEdit();
 
             this.SuspendLayout();
             this.Text = "Meter Type"; this.ClientSize = new Size(1050, 720);
@@ -80,6 +87,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(this.GridViewMT, "StockCode", "Stock Code", 130); AddCol(this.GridViewMT, "MeterMultiPriceCode", "Multi Price Code", 140);
             AddCol(this.GridViewMT, "ChargesRate", "Charges Rate", 100); AddCol(this.GridViewMT, "MinimumCharges", "Min. Charges", 100);
             AddCol(this.GridViewMT, "RebateQtyInPercent", "Rebate Qty (%)", 100); AddCol(this.GridViewMT, "FOCQty", "FOC (Qty)", 80);
+            AddCol(this.GridViewMT, "DefaultRole", "Default Role", 90);
             AddCol(this.GridViewMT, "Inactive", "Inactive", 60);
 
             this.GrpDetail.Text = "Detail"; this.GrpDetail.Location = new Point(14, 396); this.GrpDetail.Size = new Size(1020, 310);
@@ -87,15 +95,23 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             int lX = 14, eX = 170, eW = 300; int y = 28, gap = 26;
             Lbl(this.LblCode, "Meter Type Code", lX, y); this.TxtCode.Location = new Point(eX, y); this.TxtCode.Width = eW;
-            this.ChkInactive.Properties.Caption = "Inactive"; this.ChkInactive.Location = new Point(eX + eW + 20, y);
-            this.ChkFlatCharge.Properties.Caption = "Flat charge (Rental) - no meter reading";
-            this.ChkFlatCharge.Location = new Point(eX + eW + 20, y + 26); this.ChkFlatCharge.Width = 300; y += gap;
+            // Both checkboxes share the Code row so the (taller) Description memo below never overlaps them.
+            this.ChkInactive.Properties.Caption = "Inactive"; this.ChkInactive.Location = new Point(eX + eW + 20, y); this.ChkInactive.Width = 90;
+            this.ChkFlatCharge.Properties.Caption = "Is Rental";
+            this.ChkFlatCharge.Location = new Point(eX + eW + 115, y); this.ChkFlatCharge.Width = 85;
+            this.ChkRentalWaive.Properties.Caption = "Rental Waive";
+            this.ChkRentalWaive.Location = new Point(eX + eW + 205, y); this.ChkRentalWaive.Width = 105; y += gap;
 
-            Lbl(this.LblDesc, "Description", lX, y); this.TxtDesc.Location = new Point(eX, y); this.TxtDesc.Width = 560; y += gap;
+            // Multiline description — MemoEdit, 3 lines tall, full width.
+            Lbl(this.LblDesc, "Description", lX, y); this.TxtDesc.Location = new Point(eX, y); this.TxtDesc.Size = new Size(560, 62); y += 62 + 8;
 
             Lbl(this.LblStock, "Service/Stock Item", lX, y); this.TxtStockCode.Location = new Point(eX, y); this.TxtStockCode.Width = eW; y += gap;
 
-            Lbl(this.LblMultiPrice, "Meter Multi Price Code", lX, y); this.TxtMultiPriceCode.Location = new Point(eX, y); this.TxtMultiPriceCode.Width = eW; y += gap;
+            Lbl(this.LblMultiPrice, "Meter Multi Price Code", lX, y); this.TxtMultiPriceCode.Location = new Point(eX, y); this.TxtMultiPriceCode.Width = eW;
+            Lbl(this.LblDefaultRole, "Default Role", eX + eW + 20, y);
+            this.CmbDefaultRole.Location = new Point(eX + eW + 115, y); this.CmbDefaultRole.Width = 120;
+            this.CmbDefaultRole.Properties.Items.AddRange(new object[] { "", "BK", "CL", "RENTAL", "WAIVE", "COMMIT", "NA" });
+            this.CmbDefaultRole.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor; y += gap;
 
             Lbl(this.LblChargesRate, "Charges Rate (Base UOM)", lX, y); this.TxtChargesRate.Location = new Point(eX, y); this.TxtChargesRate.Width = 150; y += gap;
 
@@ -107,6 +123,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.GrpDetail.Controls.Add(this.LblCode); this.GrpDetail.Controls.Add(this.TxtCode); this.GrpDetail.Controls.Add(this.ChkInactive);
             this.GrpDetail.Controls.Add(this.ChkFlatCharge);
+            this.GrpDetail.Controls.Add(this.ChkRentalWaive);
+            this.GrpDetail.Controls.Add(this.LblDefaultRole); this.GrpDetail.Controls.Add(this.CmbDefaultRole);
             this.GrpDetail.Controls.Add(this.LblDesc); this.GrpDetail.Controls.Add(this.TxtDesc);
             this.GrpDetail.Controls.Add(this.LblStock); this.GrpDetail.Controls.Add(this.TxtStockCode);
             this.GrpDetail.Controls.Add(this.LblMultiPrice); this.GrpDetail.Controls.Add(this.TxtMultiPriceCode);

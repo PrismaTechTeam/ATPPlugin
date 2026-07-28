@@ -1,5 +1,5 @@
 
-$connStr = "Server=192.168.1.191;Database=AED_ATPTEST;User Id=sa;Password=rs6663;TrustServerCertificate=True;"
+$connStr = "Server=(local);Database=AED_ATPTEST;User Id=sa;Password=rs6663;TrustServerCertificate=True;"
 while ($true) {
     try {
         $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)

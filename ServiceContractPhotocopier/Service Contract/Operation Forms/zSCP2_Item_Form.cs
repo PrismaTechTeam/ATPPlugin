@@ -26,6 +26,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public DataTable Meters;          // schema = CreateMetersTable()
         public DataTable ItemCodes;       // schema = CreateItemCodesTable()
         public DataTable SpareParts;      // schema = zSCP2_Contract_Form.CreateSparePartsTable(); item-bound spare parts
+        public bool IsGroupItem;          // the contract's invisible GROUP "machine" (fleet-total deals)
+        public string MachineMode = "";   // DEFINED ONLINE/OFFLINE ('' = undefined) — drives the
+                                          // advanced invoice number format (fetch status = fallback)
 
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";
@@ -180,6 +183,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             dt.Columns.Add("RebateQtyInPercent", typeof(decimal));
             dt.Columns.Add("FOCQty", typeof(decimal));
             dt.Columns.Add("InitialReading", typeof(decimal));
+            // Per-meter tier override, serialized "boundary|price;boundary|price;..." (invariant).
+            // "" = none (the scheme code alone applies). Persisted to zSCP2_ItemMeterPrice on save.
+            dt.Columns.Add("CustomTiers", typeof(string));
+            // Per-meter WAIVE configuration (Rental-Waive meter types only). FirstN=0 & Target=0
+            // -> ALWAYS waive; both set -> SEQUENTIAL (free window first, then by target).
+            // The billing engine decides at Generate.
+            dt.Columns.Add("WaiveFirstNMonths", typeof(int));
+            dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
+            dt.Columns.Add("WaivePartialPct", typeof(decimal));
+            dt.Columns.Add("WaiveScope", typeof(string));
             return dt;
         }
 
@@ -197,6 +210,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void OnFormLoad(object sender, EventArgs e)
         {
             if (_db == null || _data == null) return;
+
+            // Window title tells the mode at a glance: NEW machine vs EDIT of an existing one.
+            this.Text = _data.ItemKey > 0
+                ? "Service Item — EDIT  ·  " + (string.IsNullOrEmpty(_data.ServiceItemNo) ? ("#" + _data.ItemKey) : _data.ServiceItemNo)
+                : "Service Item — NEW";
 
             LblBillDayHint.Text = "0 = follow contract day (" + _contractBillingDay + ")";
 
@@ -415,13 +433,257 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 _meterTypeLookup = _db.GetDataTable(
                     "SELECT MeterTypeCode, Description, MinimumCharges, ChargesRate, " +
-                    "MeterMultiPriceCode, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge " +
+                    "MeterMultiPriceCode, RebateQtyInPercent, FOCQty, ISNULL(IsFlatCharge,'N') AS IsFlatCharge, " +
+                    "ISNULL(IsRentalWaive,'N') AS IsRentalWaive, ISNULL(DefaultRole,'') AS DefaultRole " +
                     "FROM [dbo].[zSCP_MeterType] WHERE Inactive='N' ORDER BY MeterTypeCode", false);
             }
             catch { _meterTypeLookup = new DataTable(); }
             RepoMeterType.DataSource = _meterTypeLookup;
             RepoMeterType.DisplayMember = "MeterTypeCode";
             RepoMeterType.ValueMember = "MeterTypeCode";
+            ApplyPricePickIcon();
+        }
+
+        // Price glyph on the caption-less multi-price button column (cosmetic; ellipsis fallback).
+        private void ApplyPricePickIcon()
+        {
+            try
+            {
+                System.Drawing.Image priceImg =
+                    DevExpress.Images.ImageResourceCache.Default.GetImage("images/business objects/bo_price_16x16.png");
+                if (priceImg != null && RepoMtPricePick.Buttons.Count > 0)
+                {
+                    RepoMtPricePick.Buttons[0].Kind = DevExpress.XtraEditors.Controls.ButtonPredefines.Glyph;
+                    RepoMtPricePick.Buttons[0].ImageOptions.Image = priceImg;
+                }
+                if (RepoMtPricePick.Buttons.Count > 0)
+                    RepoMtPricePick.Buttons[0].ToolTip = "Pick / edit the Multi-Price tier ladder for this meter";
+            }
+            catch { }
+        }
+
+        // Price button on a meter row: pick a Multi-Price scheme + view/override its tier ladder.
+        // The dialog validates the billing traps (last bracket unlimited; 0.00 free band vs Free
+        // Qty conflict) and reports when Free Qty must be zeroed. _meters.RowChanged marks dirty.
+        private bool IsWaiveType(string meterTypeCode)
+        {
+            if (_meterTypeLookup == null || !_meterTypeLookup.Columns.Contains("IsRentalWaive") || string.IsNullOrEmpty(meterTypeCode)) return false;
+            DataRow[] f = _meterTypeLookup.Select("MeterTypeCode='" + meterTypeCode.Replace("'", "''") + "'");
+            return f.Length > 0 && Convert.ToString(f[0]["IsRentalWaive"]) == "Y";
+        }
+
+        // Committed-minimum (MIN) meter type — by code convention or the type's Default Role.
+        private bool IsCommitTypeLk(string meterTypeCode)
+        {
+            if (string.IsNullOrEmpty(meterTypeCode)) return false;
+            if (ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(meterTypeCode)) return true;
+            if (_meterTypeLookup == null || !_meterTypeLookup.Columns.Contains("DefaultRole")) return false;
+            DataRow[] f = _meterTypeLookup.Select("MeterTypeCode='" + meterTypeCode.Replace("'", "''") + "'");
+            return f.Length > 0 && Convert.ToString(f[0]["DefaultRole"]).Trim().ToUpperInvariant() == "COMMIT";
+        }
+
+        // Flat-charge meter type (rental / committed-minimum) — no reading, no per-copy ladder.
+        private bool IsFlatTypeLk(string meterTypeCode)
+        {
+            if (_meterTypeLookup == null || !_meterTypeLookup.Columns.Contains("IsFlatCharge") || string.IsNullOrEmpty(meterTypeCode)) return false;
+            DataRow[] f = _meterTypeLookup.Select("MeterTypeCode='" + meterTypeCode.Replace("'", "''") + "'");
+            return f.Length > 0 && Convert.ToString(f[0]["IsFlatCharge"]) == "Y";
+        }
+
+        // True when the machine's meter set violates "a waive needs a rental".
+        private bool WaiveRuleBrokenI()
+        {
+            if (_meters == null) return false;
+            bool hasWaive = false, hasRent = false;
+            foreach (DataRow r in _meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+                if (t.Length == 0) continue;
+                if (IsWaiveType(t)) hasWaive = true;
+                else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) hasRent = true;
+            }
+            return hasWaive && !hasRent;
+        }
+
+        // Would removing THIS rental row leave a waive meter behind with no rental?
+        private bool DeleteWouldOrphanWaiveI(DataRow removing)
+        {
+            if (_meters == null) return false;
+            bool hasWaive = false, otherRent = false;
+            foreach (DataRow r in _meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted || ReferenceEquals(r, removing)) continue;
+                string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+                if (t.Length == 0) continue;
+                if (IsWaiveType(t)) hasWaive = true;
+                else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) otherRent = true;
+            }
+            return hasWaive && !otherRent;
+        }
+
+        // Stock wording check: the text equals some meter type's default description.
+        private bool IsTypeDefaultDescription(string desc)
+        {
+            if (_meterTypeLookup == null || string.IsNullOrEmpty(desc)) return false;
+            foreach (DataRow t in _meterTypeLookup.Rows)
+                if (string.Equals(Convert.ToString(t["Description"]).Trim(), desc, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        // True when the machine already carries a real RENTAL meter (RA-* flat that is NOT a waive).
+        private bool MetersHaveRental()
+        {
+            if (_meters == null) return false;
+            foreach (DataRow r in _meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+                if (t.Length == 0) continue;
+                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t) && !IsWaiveType(t)) return true;
+            }
+            return false;
+        }
+
+        private void RepoMtPricePick_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            GridViewMeters.CloseEditor();
+            DataRow r = GridViewMeters.GetFocusedDataRow();
+            if (r == null) return;
+            // On a RENTAL-WAIVE meter the same button opens the WAIVE configuration instead —
+            // window / target conditions the engine evaluates at every Generate.
+            string mtType = r["MeterTypeCode"] == DBNull.Value ? "" : Convert.ToString(r["MeterTypeCode"]).Trim();
+            if (IsWaiveType(mtType))
+            {
+                int wn0 = r.Table.Columns.Contains("WaiveFirstNMonths") && r["WaiveFirstNMonths"] != DBNull.Value ? Convert.ToInt32(r["WaiveFirstNMonths"]) : 0;
+                decimal wt0 = r.Table.Columns.Contains("WaiveTargetAmount") && r["WaiveTargetAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaiveTargetAmount"]) : 0m;
+                decimal wp0 = r.Table.Columns.Contains("WaivePartialPct") && r["WaivePartialPct"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialPct"]) : 100m;
+                string ws0 = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]) : "BKCL";
+                using (ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form wdlg =
+                    new ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form(mtType, wn0, wt0, wp0, ws0))
+                {
+                    if (wdlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
+                    r["WaiveFirstNMonths"] = wdlg.FirstNMonths;
+                    r["WaiveTargetAmount"] = wdlg.TargetAmount;
+                    r["WaivePartialPct"] = wdlg.PartialPct;
+                    r["WaiveScope"] = wdlg.Scope;
+                    GridViewMeters.RefreshData();
+                }
+                return;
+            }
+            // Committed-minimum (MIN) meter: the button configures WHICH print charges count
+            // toward the committed amount (BK / CL / both). The top-up maths runs at Generate.
+            if (IsCommitTypeLk(mtType))
+            {
+                decimal camt = Math.Abs(r["MinimumCharges"] == DBNull.Value ? 0m : Convert.ToDecimal(r["MinimumCharges"]));
+                string cs0 = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]) : "BKCL";
+                using (ServiceContractPhotocopier.Classes.CommonForms.CommitConfig_Form cdlg =
+                    new ServiceContractPhotocopier.Classes.CommonForms.CommitConfig_Form(mtType, camt, cs0))
+                {
+                    if (cdlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
+                    r["WaiveScope"] = cdlg.Scope;
+                    GridViewMeters.RefreshData();
+                }
+                return;
+            }
+            // Plain RENTAL meters have no per-copy ladder — the Multi-Price dialog is meaningless
+            // there, so the button is a silent no-op.
+            if (IsFlatTypeLk(mtType)) return;
+            string cur = r["MeterMultiPriceCode"] == DBNull.Value ? "" : Convert.ToString(r["MeterMultiPriceCode"]).Trim();
+            string curCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
+                ? Convert.ToString(r["CustomTiers"]) : "";
+            decimal foc = r["FOCQty"] == DBNull.Value ? 0m : Convert.ToDecimal(r["FOCQty"]);
+            using (ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form dlg =
+                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc))
+            {
+                if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
+                r["MeterMultiPriceCode"] = dlg.SelectedCode;
+                r["CustomTiers"] = dlg.CustomCsv;
+                _ladderFocCache.Clear();   // scheme tiers may have changed elsewhere — recompute displays
+                GridViewMeters.RefreshData();
+            }
+        }
+
+        // A ladder governs the row when a scheme code is picked OR per-meter override tiers exist.
+        private bool MeterRowHasLadder(int rowHandle)
+        {
+            string code = Convert.ToString(GridViewMeters.GetRowCellValue(rowHandle, "MeterMultiPriceCode"));
+            string custom = Convert.ToString(GridViewMeters.GetRowCellValue(rowHandle, "CustomTiers"));
+            return !string.IsNullOrEmpty(code) || !string.IsNullOrEmpty(custom);
+        }
+
+        // Unit Price and Free Qty are DEAD while a ladder is in effect — grey both out
+        // (the ladder prices the copies AND carries the free band).
+        private void GridViewMeters_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column == null || (e.Column.FieldName != "ChargesRate" && e.Column.FieldName != "FOCQty")
+                || !MeterRowHasLadder(e.RowHandle)) return;
+            e.Appearance.BackColor = System.Drawing.Color.Gainsboro;
+            e.Appearance.ForeColor = System.Drawing.Color.Gray;
+            e.Appearance.Options.UseBackColor = true;
+            e.Appearance.Options.UseForeColor = true;
+        }
+
+        // ...and not editable (change pricing through the price button instead).
+        private void GridViewMeters_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (GridViewMeters.FocusedColumn != null
+                && (GridViewMeters.FocusedColumn.FieldName == "ChargesRate" || GridViewMeters.FocusedColumn.FieldName == "FOCQty")
+                && MeterRowHasLadder(GridViewMeters.FocusedRowHandle))
+                e.Cancel = true;
+        }
+
+        // Ladder free copies per scheme code (SELECT once, then cached; cleared after the picker runs).
+        private readonly System.Collections.Generic.Dictionary<string, decimal> _ladderFocCache =
+            new System.Collections.Generic.Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+        private decimal LadderFocFor(string code, string customCsv)
+        {
+            if (!string.IsNullOrEmpty(customCsv))
+                return ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(ParseTiersCsv(customCsv));
+            if (string.IsNullOrEmpty(code)) return 0m;
+            decimal cached;
+            if (_ladderFocCache.TryGetValue(code, out cached)) return cached;
+            decimal foc = 0m;
+            try
+            {
+                DataTable dt = _db.GetDataTable(
+                    "SELECT MeterReading, UnitPrice FROM [dbo].[zSCP_MeterMultiPriceItem] " +
+                    "WHERE MeterMultiPriceCode = N'" + code.Replace("'", "''") + "' ORDER BY MeterReading", false);
+                System.Collections.Generic.List<decimal[]> tiers = new System.Collections.Generic.List<decimal[]>();
+                foreach (DataRow t in dt.Rows)
+                    tiers.Add(new decimal[] {
+                        t["MeterReading"] == DBNull.Value ? 0m : Convert.ToDecimal(t["MeterReading"]),
+                        t["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(t["UnitPrice"]) });
+                foc = ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(tiers);
+            }
+            catch { }
+            _ladderFocCache[code] = foc;
+            return foc;
+        }
+
+        // Multi-Price cell text: scheme code / "code (Modified)" / "(Custom)" / "".
+        // Free Qty cell text while a ladder is active: the LADDER's free quantity (display only —
+        // the stored per-meter Free Qty is untouched and returns when the ladder is cleared).
+        private void GridViewMeters_CustomColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column == null || e.ListSourceRowIndex < 0) return;
+            bool wantMulti = e.Column.FieldName == "MeterMultiPriceCode";
+            bool wantFoc = e.Column.FieldName == "FOCQty";
+            if (!wantMulti && !wantFoc) return;
+            if (_meters == null || e.ListSourceRowIndex >= _meters.DefaultView.Count) return;
+            DataRow r = _meters.DefaultView[e.ListSourceRowIndex].Row;
+            string code = r["MeterMultiPriceCode"] == DBNull.Value ? "" : Convert.ToString(r["MeterMultiPriceCode"]).Trim();
+            string custom = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
+                ? Convert.ToString(r["CustomTiers"]) : "";
+            if (wantMulti)
+            {
+                if (custom.Length > 0) e.DisplayText = code.Length == 0 ? "(Custom)" : code + " (Modified)";
+                else e.DisplayText = code;
+                return;
+            }
+            if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty
+            e.DisplayText = LadderFocFor(code, custom).ToString("#,##0.##");
         }
 
         private void LoadItemLookup()
@@ -565,6 +827,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _chkMultiMachine.Size = new System.Drawing.Size(280, 20);
             GrpMeters.Controls.Add(_chkMultiMachine);
             _chkMultiMachine.BringToFront();
+            // ══════════════ DESIGN DISCARDED (2026-07-24, user decision) ══════════════
+            // The "multi-machine CSSI" idea (ONE service item carrying SEVERAL physical units,
+            // meters assigned per provided-unit serial) is ABANDONED: one CSSI = ONE machine.
+            // The checkbox is HIDDEN, not removed — items already saved with per-unit serials
+            // (MachineSerialNo set / MultiMachine=Y) still load, display and bill unchanged.
+            // Do NOT resurface this checkbox or extend the per-unit meter design.
+            _chkMultiMachine.Visible = false;
 
             // Meter Type maintenance shortcut: create/edit meter types without leaving the item, then
             // the Meter Type dropdown refreshes with the new rows.
@@ -728,7 +997,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 machineSerial = drv == null ? "" : ((drv.Row["SerialNumber"] as string) ?? "").Trim();
             }
             DataRow r = _meters.NewRow();
-            r["MeterRole"] = "NA";
+            r["MeterRole"] = "";   // NO default — the user must pick BK / CL / NA (save blocks an empty role)
             r["Description"] = "";
             r["MachineSerialNo"] = machineSerial;
             r["MinimumCharges"] = 0m;
@@ -737,13 +1006,41 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             r["RebateQtyInPercent"] = 0m;
             r["FOCQty"] = 0m;
             r["InitialReading"] = 0m;
+            r["CustomTiers"] = "";
+            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialPct"] = 100m; r["WaiveScope"] = "BKCL";
             _meters.Rows.Add(r);
         }
 
         private void BtnDelMeter_Click(object sender, EventArgs e)
         {
             int rh = GridViewMeters.FocusedRowHandle;
-            if (rh >= 0) GridViewMeters.DeleteRow(rh);
+            if (rh < 0) return;
+            DataRowView drvDel = GridViewMeters.GetRow(rh) as DataRowView;
+            string delType = drvDel == null || drvDel.Row["MeterTypeCode"] == DBNull.Value ? "" : drvDel.Row["MeterTypeCode"].ToString().Trim();
+            // Deleting the machine's only RENTAL while a WAIVE stays would break the waive rule.
+            if (delType.Length > 0 && !IsWaiveType(delType)
+                && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(delType)
+                && DeleteWouldOrphanWaiveI(drvDel.Row))
+            {
+                XtraMessageBox.Show("This machine still has a RENTAL WAIVE meter — remove the waive line first " +
+                    "(or keep a rental meter). A waive needs a rent to waive.", "Remove Meter");
+                return;
+            }
+            // Removing a meter from a SAVED machine deletes that meter's whole reading history at save
+            // (zSCP_MeterTrans / zSCP2_MeterEntry cascade on zSCP2_ItemMeter). The contract's meter
+            // panel already warns for exactly this — the dialog must not be the silent path.
+            if (_data != null && _data.ItemKey > 0)
+            {
+                DataRowView drv = GridViewMeters.GetRow(rh) as DataRowView;
+                string mt = drv == null || drv.Row["MeterTypeCode"] == DBNull.Value ? "" : drv.Row["MeterTypeCode"].ToString();
+                bool unsavedRow = drv != null && drv.Row.RowState == DataRowState.Added;
+                if (!unsavedRow && mt.Length > 0 &&
+                    XtraMessageBox.Show("Remove meter '" + mt + "'?\r\n\r\nWhen you save, this meter AND its meter " +
+                        "reading history (all readings + billing log for this counter) are permanently deleted.",
+                        "Remove Meter", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    return;
+            }
+            GridViewMeters.DeleteRow(rh);
         }
 
         // "Meter Types..." — open the Meter Type maintenance module; when it closes, reload the
@@ -773,22 +1070,64 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (string.IsNullOrEmpty(type)) return;
             DataRow[] f = _meterTypeLookup.Select("MeterTypeCode='" + type.Replace("'", "''") + "'");
             if (f.Length == 0 || Convert.ToString(f[0]["IsFlatCharge"]) != "Y") return;
+            // ForeColor pinned too — the focused row's white text disappears on the pale amber.
             e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 248, 225);
+            e.Appearance.ForeColor = System.Drawing.Color.Black;
             e.Appearance.Options.UseBackColor = true;
+            e.Appearance.Options.UseForeColor = true;
         }
 
         private void GridViewMeters_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
+            if (e.Column != null && e.Column.FieldName == "MinimumCharges")
+            {
+                // Waive rows keep their amount NEGATIVE (the contra) — a positive entry flips.
+                try
+                {
+                    string rowType = Convert.ToString(GridViewMeters.GetRowCellValue(e.RowHandle, "MeterTypeCode")).Trim();
+                    decimal mv = e.Value == null || e.Value == DBNull.Value ? 0m : Convert.ToDecimal(e.Value);
+                    if (mv > 0m && IsWaiveType(rowType))
+                        GridViewMeters.SetRowCellValue(e.RowHandle, "MinimumCharges", -mv);
+                }
+                catch { }
+            }
             if (e.Column == null || e.Column.FieldName != "MeterTypeCode" || _meterTypeLookup == null) return;
             string code = e.Value == null ? "" : e.Value.ToString();
             DataRow[] found = _meterTypeLookup.Select("MeterTypeCode='" + code.Replace("'", "''") + "'");
             if (found.Length == 0) return;
             DataRow m = found[0];
             int rh = e.RowHandle;
+            // MACHINE INVARIANT: a RENTAL WAIVE meter requires a real RENTAL meter. ANY type change
+            // that breaks it is rejected on the spot — picking a waive first, OR re-typing the only
+            // rental away while a waive stays. A fresh row is removed WHOLE (no half-filled ghost);
+            // an existing row snaps back to its original type (deleting it would kill its readings).
+            if (WaiveRuleBrokenI())
+            {
+                XtraMessageBox.Show("A RENTAL WAIVE meter needs a RENTAL meter on the same machine.\r\n" +
+                    "Add/keep the rent line first (or remove the waive line).", "Meter");
+                DataRow grw = GridViewMeters.GetDataRow(rh);
+                if (grw != null && grw.RowState == DataRowState.Added)
+                    GridViewMeters.DeleteRow(rh);
+                else if (grw != null)
+                {
+                    grw["MeterTypeCode"] = grw["MeterTypeCode", DataRowVersion.Original];
+                    grw["Description"] = grw["Description", DataRowVersion.Original];
+                }
+                GridViewMeters.RefreshData();
+                return;
+            }
+            // Re-picking a type refreshes the Description too — UNLESS the user hand-typed their own
+            // (text matching some type's default is stock wording, not a customization).
             object curDesc = GridViewMeters.GetRowCellValue(rh, "Description");
-            if (curDesc == null || curDesc == DBNull.Value || curDesc.ToString().Trim().Length == 0)
+            string curDescS = curDesc == null || curDesc == DBNull.Value ? "" : curDesc.ToString().Trim();
+            if (curDescS.Length == 0 || IsTypeDefaultDescription(curDescS))
                 GridViewMeters.SetRowCellValue(rh, "Description", m.Table.Columns.Contains("Description") ? m["Description"] : "");
-            GridViewMeters.SetRowCellValue(rh, "MinimumCharges", m["MinimumCharges"]);
+            // Waive types carry their amount NEGATIVE on the machine (the contra line).
+            if (IsWaiveType(code))
+                GridViewMeters.SetRowCellValue(rh, "MinimumCharges",
+                    -Math.Abs(m["MinimumCharges"] == DBNull.Value ? 0m : Convert.ToDecimal(m["MinimumCharges"])));
+            else
+                GridViewMeters.SetRowCellValue(rh, "MinimumCharges", m["MinimumCharges"]);
             GridViewMeters.SetRowCellValue(rh, "ChargesRate", m["ChargesRate"]);
             GridViewMeters.SetRowCellValue(rh, "MeterMultiPriceCode", m["MeterMultiPriceCode"]);
             GridViewMeters.SetRowCellValue(rh, "RebateQtyInPercent", m["RebateQtyInPercent"]);
@@ -797,9 +1136,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // role or the Meter Reading fetch skips them).
             object curRole = GridViewMeters.GetRowCellValue(rh, "MeterRole");
             string curRoleS = curRole == null ? "" : curRole.ToString().Trim().ToUpperInvariant();
-            if (curRoleS == "" || curRoleS == "NA")
+            if (curRoleS == "" || curRoleS == "NA" || curRoleS == "RENTAL" || curRoleS == "WAIVE" || curRoleS == "COMMIT")
             {
-                string inferred = zSCP2_Contract_Form.InferMeterRole(code, m.Table.Columns.Contains("Description") ? Convert.ToString(m["Description"]) : "");
+                string defRole = m.Table.Columns.Contains("DefaultRole") ? Convert.ToString(m["DefaultRole"]).Trim().ToUpperInvariant() : "";
+                string inferred = defRole.Length > 0 ? defRole
+                    : zSCP2_Contract_Form.InferMeterRole(code, m.Table.Columns.Contains("Description") ? Convert.ToString(m["Description"]) : "");
                 if (inferred.Length > 0) GridViewMeters.SetRowCellValue(rh, "MeterRole", inferred);
             }
         }
@@ -815,6 +1156,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { XtraMessageBox.Show("Service Item No is required.", "Validation"); return; }
             if (string.IsNullOrWhiteSpace(TxtSerial.Text))
             { XtraMessageBox.Show("Machine Serial No is required (it is the key the meter API matches on).", "Validation"); return; }
+
+            // Every meter row must carry an EXPLICIT Role — there is deliberately no default, so a
+            // forgotten role is caught HERE while the dialog is still open (the DB save would reject
+            // it anyway, but by then the dialog is closed and the edits would be lost).
+            if (_meters != null)
+            {
+                foreach (DataRow mr in _meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    string mtype = (mr["MeterTypeCode"] == DBNull.Value ? "" : Convert.ToString(mr["MeterTypeCode"])).Trim();
+                    if (mtype.Length == 0) continue;
+                    string mrole = (mr["MeterRole"] == DBNull.Value ? "" : Convert.ToString(mr["MeterRole"])).Trim().ToUpperInvariant();
+                    if (mrole != "BK" && mrole != "CL" && mrole != "NA"
+                        && mrole != "RENTAL" && mrole != "WAIVE" && mrole != "COMMIT")
+                    {
+                        XtraMessageBox.Show(
+                            "Meter '" + mtype + "' has NO Role.\r\n\r\nPick BK (black), CL (colour), RENTAL, " +
+                            "WAIVE, COMMIT or NA on the meter row — the role decides Black/Colour " +
+                            "billing, strategy scopes and the reading fetch.", "Validation");
+                        return;
+                    }
+                }
+            }
             if (_standalone && SelectedContractKey == 0 && SelectedDebtorCode.Length == 0)
             { XtraMessageBox.Show("Pick a Contract No, or pick a Customer (a new contract is then created).", "Validation"); return; }
 
@@ -898,6 +1262,35 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (kv.Value > 1)
                 { XtraMessageBox.Show("Only one meter can be tagged Colour (CL)" + (multi ? " per machine ('" + kv.Key + "')" : "") + ".", "Validation"); return; }
 
+            // A waive contra without a rental meter would credit money from nowhere — block it.
+            {
+                bool hasWaive = false, hasRent = false;
+                foreach (DataRow wr in _meters.Rows)
+                {
+                    if (wr.RowState == DataRowState.Deleted) continue;
+                    string wt = Convert.ToString(wr["MeterTypeCode"]).Trim();
+                    if (wt.Length == 0) continue;
+                    if (IsWaiveType(wt)) hasWaive = true;
+                    else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(wt)) hasRent = true;
+                }
+                if (hasWaive && !hasRent)
+                {
+                    XtraMessageBox.Show("A RENTAL WAIVE meter needs a RENTAL meter on the same machine — " +
+                        "add the rent line first.", "Validation");
+                    return;
+                }
+            }
+
+            // LAST validation BEFORE the first _data mutation: _data IS the caller's live item (shared
+            // by reference), so any early-return below this point would leave phantom edits that ride
+            // the next contract save even after the user cancels this dialog.
+            DateTime? vStart = _dtStart != null && _dtStart.EditValue != null && _dtStart.EditValue != DBNull.Value
+                ? (DateTime?)Convert.ToDateTime(_dtStart.EditValue) : null;
+            DateTime? vExpiry = _dtExpiry != null && _dtExpiry.EditValue != null && _dtExpiry.EditValue != DBNull.Value
+                ? (DateTime?)Convert.ToDateTime(_dtExpiry.EditValue) : null;
+            if (vStart.HasValue && vExpiry.HasValue && vExpiry.Value < vStart.Value)
+            { XtraMessageBox.Show("Service expiry date cannot be earlier than the start date.", "Validation"); return; }
+
             _data.ServiceItemNo = TxtServiceItemNo.Text.Trim();
             // Number still shows the auto-preview & the user didn't type their own -> reserve a real one at insert.
             _data.ServiceItemNoIsAuto = (!string.IsNullOrEmpty(_autoPeekNo) && _data.ServiceItemNo == _autoPeekNo);
@@ -932,10 +1325,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _data.Phone = _txtPhone != null ? _txtPhone.Text.Trim() : "";
             _data.TermCode = _txtTerm != null ? _txtTerm.Text.Trim() : "";
             _data.AreaCode = _txtArea != null ? _txtArea.Text.Trim() : "";
-            if (_dtStart != null) _data.ServiceStartDate = _dtStart.EditValue == null || _dtStart.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_dtStart.EditValue);
-            if (_dtExpiry != null) _data.ServiceExpiryDate = _dtExpiry.EditValue == null || _dtExpiry.EditValue == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(_dtExpiry.EditValue);
-            if (_data.ServiceStartDate.HasValue && _data.ServiceExpiryDate.HasValue && _data.ServiceExpiryDate.Value < _data.ServiceStartDate.Value)
-            { XtraMessageBox.Show("Service expiry date cannot be earlier than the start date.", "Validation"); return; }
+            if (_dtStart != null) _data.ServiceStartDate = vStart;    // validated BEFORE the mutation block above
+            if (_dtExpiry != null) _data.ServiceExpiryDate = vExpiry;
             foreach (System.Collections.Generic.KeyValuePair<string, DevExpress.XtraEditors.TextEdit> kv in _imh)
                 _data.MoreHeader[kv.Key] = (kv.Value.Text ?? "").Trim();
             if (_imhDelAddress != null) _data.MoreHeader["DelAddress"] = _imhDelAddress.Text ?? "";
@@ -1086,21 +1477,36 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     _itemCodes.Rows.Add(nr);
                 }
 
+                // Replacing the meters of a SAVED machine drops the vanished meters' reading history at
+                // save — same warning as a manual meter delete, before anything is touched.
+                if (_data != null && _data.ItemKey > 0 && _meters.Rows.Count > 0 &&
+                    XtraMessageBox.Show("Copy From REPLACES this machine's current meters. Meters that disappear " +
+                        "lose their reading history when you save. Continue?", "Copy From",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    return;
+
                 _meters.Rows.Clear();
                 DataTable mt = _db.GetDataTable(
-                    "SELECT MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                    "RebateQtyInPercent, FOCQty FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + key + " ORDER BY ItemMeterKey", false);
+                    "SELECT ItemMeterKey, MeterTypeCode, MeterRole, [Description], MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
+                    "RebateQtyInPercent, FOCQty, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialPct, WaiveScope " +
+                    "FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + key + " ORDER BY ItemMeterKey", false);
                 foreach (DataRow s in mt.Rows)
                 {
                     DataRow nr = _meters.NewRow();
                     nr["MeterTypeCode"] = s["MeterTypeCode"];
                     nr["MeterRole"] = s["MeterRole"];
+                    nr["Description"] = s["Description"];
                     nr["MinimumCharges"] = s["MinimumCharges"];
                     nr["ChargesRate"] = s["ChargesRate"];
                     nr["MeterMultiPriceCode"] = s["MeterMultiPriceCode"];
                     nr["RebateQtyInPercent"] = s["RebateQtyInPercent"];
                     nr["FOCQty"] = s["FOCQty"];
                     nr["InitialReading"] = 0m;    // unique per physical machine — starts fresh
+                    nr["CustomTiers"] = LoadCustomTiersCsv(_db, Convert.ToInt64(s["ItemMeterKey"]));   // the deal's own ladder copies too
+                    nr["WaiveFirstNMonths"] = s["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(s["WaiveFirstNMonths"]);
+                    nr["WaiveTargetAmount"] = s["WaiveTargetAmount"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaiveTargetAmount"]);
+                    nr["WaivePartialPct"] = s["WaivePartialPct"] == DBNull.Value ? 100m : Convert.ToDecimal(s["WaivePartialPct"]);
+                    nr["WaiveScope"] = s["WaiveScope"] == DBNull.Value ? "BKCL" : Convert.ToString(s["WaiveScope"]);
                     _meters.Rows.Add(nr);
                 }
 
@@ -1119,7 +1525,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 dt = _db.GetDataTable(
                     "SELECT i.ItemKey, i.ServiceItemNo, i.SerialNumber, ISNULL(d.CompanyName,'') AS CompanyName " +
                     "FROM [dbo].[zSCP2_Item] i " +
-                    "JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                    "LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +   // contract-less machines are copy sources too
                     "LEFT JOIN [dbo].[Debtor] d ON d.AccNo = c.DebtorCode " +
                     "ORDER BY i.ServiceItemNo", false);
             }
@@ -1559,7 +1965,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // Context fields (ContractType/Agent/dates/address/…) fall back to the parent contract when the
                 // item hasn't overridden them, so legacy items and items-under-a-contract show the contract's data.
                 // Reference No stays item-specific (a per-document reference), never inherited.
-                string iMh = "i.[" + string.Join("], i.[", _imhCols) + "]";
+                // More Header columns inherit the SAME way — previously they read only i.[col], so an item
+                // with no own values showed an EMPTY More Header while its contract's tab was full.
+                System.Text.StringBuilder mh = new System.Text.StringBuilder();
+                foreach (string cCol in _imhCols)
+                {
+                    if (mh.Length > 0) mh.Append(", ");
+                    mh.Append("COALESCE(NULLIF(i.[").Append(cCol).Append("],''), c.[").Append(cCol).Append("], '') AS [").Append(cCol).Append("]");
+                }
+                string iMh = mh.ToString();
                 DataTable dt = db.GetDataTable(
                     "SELECT i.ItemCode, i.GradeCode, i.PurchaseDate, i.ServiceTypeCode, i.Note, i.Remark1, i.Remark2, " + iMh +
                     ", i.ReferenceNo AS ReferenceNo" +
@@ -1610,7 +2024,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 data.PMDept = AsS(r["PMDept"]); data.PMJob = AsS(r["PMJob"]); data.PMLocation = AsS(r["PMLocation"]);
                 data.MultiMachine = AsS(r["MultiMachine"]) == "Y";
             }
-            catch { }
+            catch
+            {
+                // LoadedCtxValid stays false: the contract save loop SKIPS PersistItemExtras for this
+                // item — persisting the empty defaults here would silently wipe its Grade / Note / PM /
+                // date + context overrides. (The save surfaces a "kept unchanged" note when it skips.)
+                data.LoadedCtxValid = false;
+            }
         }
 
         private static string AsS(object o) { return (o == null || o == DBNull.Value) ? "" : o.ToString(); }
@@ -1876,6 +2296,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     string type = r["MeterTypeCode"] == null ? "" : r["MeterTypeCode"].ToString().Trim();
                     if (type.Length == 0) continue;
                     string role = NormalizeMeterRole(r["MeterRole"]);
+                    RequireMeterRole(role, type, d.ServiceItemNo);   // empty role -> throw, tx rolls back, nothing saved
                     string mser = r.Table.Columns.Contains("MachineSerialNo")
                         ? ((r["MachineSerialNo"] as string) ?? "").Trim() : "";
 
@@ -1892,12 +2313,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         { hit = Convert.ToInt64(e["ItemMeterKey"]); hitRow = e; break; }
                     }
 
+                    string tiersCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
+                        ? Convert.ToString(r["CustomTiers"]) : "";
                     if (hit > 0)
                     {
                         pool.Remove(hitRow);
                         using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
                             "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, [Description]=@desc, MinimumCharges=@min, ChargesRate=@rate, " +
                             "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
+                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialPct=@wp, WaiveScope=@ws, " +
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
                             up.Parameters.AddWithValue("@role", role);
@@ -1905,21 +2329,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             up.Parameters.AddWithValue("@mk", hit);
                             up.ExecuteNonQuery();
                         }
+                        SaveCustomTiers(conn, tx, hit, tiersCsv);
                         keep.Add(hit);
                     }
                     else
                     {
                         using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
                             "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, " +
-                            "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                            "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, " +
+                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialPct, WaiveScope, LastModified) " +
+                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wp,@ws,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
                         {
                             ins.Parameters.AddWithValue("@ik", itemKey);
                             ins.Parameters.AddWithValue("@type", type);
                             ins.Parameters.AddWithValue("@role", role);
                             ins.Parameters.AddWithValue("@mser", mser);
                             AddMeterRowParams(ins, r);
-                            keep.Add(Convert.ToInt64(ins.ExecuteScalar()));
+                            long newKey = Convert.ToInt64(ins.ExecuteScalar());
+                            SaveCustomTiers(conn, tx, newKey, tiersCsv);
+                            keep.Add(newKey);
                         }
                     }
                 }
@@ -1935,10 +2363,91 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
         }
 
+        // BK / CL / NA pass through; empty or unknown returns "" so the save VALIDATION rejects it.
+        // (The old version silently defaulted unknown to "NA" — a forgotten role then quietly broke
+        // Black/Colour billing and the API fetch. The user must pick the role consciously.)
         private static string NormalizeMeterRole(object roleValue)
         {
-            string role = (roleValue == null || roleValue == DBNull.Value) ? "NA" : roleValue.ToString().Trim().ToUpperInvariant();
-            return (role == "BK" || role == "CL") ? role : "NA";
+            string role = (roleValue == null || roleValue == DBNull.Value) ? "" : roleValue.ToString().Trim().ToUpperInvariant();
+            return (role == "BK" || role == "CL" || role == "NA"
+                 || role == "RENTAL" || role == "WAIVE" || role == "COMMIT") ? role : "";
+        }
+
+        // ===== Per-meter multi-price tier override (zSCP2_ItemMeterPrice) =====
+        // Serialized in the Meters DataTable's "CustomTiers" column as "boundary|price;boundary|price"
+        // (invariant culture). "" = no override — the meter's MeterMultiPriceCode scheme (if any) applies.
+
+        /// <summary>The meter's override tiers as CSV ("" when none).</summary>
+        internal static string LoadCustomTiersCsv(AutoCount.Data.DBSetting db, long itemMeterKey)
+        {
+            if (itemMeterKey <= 0) return "";
+            try
+            {
+                DataTable dt = db.GetDataTable(
+                    "SELECT MeterReading, UnitPrice FROM [dbo].[zSCP2_ItemMeterPrice] " +
+                    "WHERE ItemMeterKey=" + itemMeterKey + " ORDER BY MeterReading", false);
+                System.Collections.Generic.List<string> parts = new System.Collections.Generic.List<string>();
+                foreach (DataRow r in dt.Rows)
+                    parts.Add(Convert.ToDecimal(r["MeterReading"]).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                        + "|" + Convert.ToDecimal(r["UnitPrice"]).ToString("0.######", System.Globalization.CultureInfo.InvariantCulture));
+                return string.Join(";", parts.ToArray());
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>Replace the meter's override tiers from CSV (inside the caller's save transaction).</summary>
+        internal static void SaveCustomTiers(System.Data.SqlClient.SqlConnection conn,
+            System.Data.SqlClient.SqlTransaction tx, long itemMeterKey, string csv)
+        {
+            using (System.Data.SqlClient.SqlCommand del = new System.Data.SqlClient.SqlCommand(
+                "DELETE FROM [dbo].[zSCP2_ItemMeterPrice] WHERE ItemMeterKey=@mk", conn, tx))
+            { del.Parameters.AddWithValue("@mk", itemMeterKey); del.ExecuteNonQuery(); }
+            foreach (decimal[] t in ParseTiersCsv(csv))
+            {
+                using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
+                    "INSERT INTO [dbo].[zSCP2_ItemMeterPrice] (ItemMeterKey, MeterReading, UnitPrice) VALUES (@mk,@mr,@up)", conn, tx))
+                {
+                    ins.Parameters.AddWithValue("@mk", itemMeterKey);
+                    ins.Parameters.AddWithValue("@mr", t[0]);
+                    ins.Parameters.AddWithValue("@up", t[1]);
+                    ins.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>"boundary|price;boundary|price" -&gt; [boundary, price] rows (bad parts skipped).</summary>
+        internal static System.Collections.Generic.List<decimal[]> ParseTiersCsv(string csv)
+        {
+            System.Collections.Generic.List<decimal[]> rows = new System.Collections.Generic.List<decimal[]>();
+            if (string.IsNullOrEmpty(csv)) return rows;
+            foreach (string part in csv.Split(';'))
+            {
+                string[] ab = part.Split('|');
+                if (ab.Length != 2) continue;
+                decimal mr, up;
+                if (decimal.TryParse(ab[0], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out mr) &&
+                    decimal.TryParse(ab[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out up) &&
+                    mr > 0m)
+                    rows.Add(new decimal[] { mr, up });
+            }
+            return rows;
+        }
+
+        /// <summary>Throws when a meter row's role is not an explicit BK / CL / NA — called by every
+        /// meter save path so an empty role can never reach the DB.</summary>
+        internal static void RequireMeterRole(string role, string meterTypeCode)
+        { RequireMeterRole(role, meterTypeCode, null); }
+
+        internal static void RequireMeterRole(string role, string meterTypeCode, string serviceItemNo)
+        {
+            if (role == "BK" || role == "CL" || role == "NA"
+                || role == "RENTAL" || role == "WAIVE" || role == "COMMIT") return;
+            string who = string.IsNullOrEmpty(serviceItemNo) ? "" : "Service item '" + serviceItemNo + "': ";
+            throw new ApplicationException(
+                who + "Meter '" + meterTypeCode + "' has NO Role.\r\n\r\n" +
+                "Pick BK (black), CL (colour), RENTAL, WAIVE, COMMIT or NA on the meter row — " +
+                "the role decides Black/Colour billing, strategy scopes and the reading fetch. " +
+                "Nothing was saved.");
         }
 
         private static void AddMeterRowParams(System.Data.SqlClient.SqlCommand cmd, DataRow r)
@@ -1951,6 +2460,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@reb", r["RebateQtyInPercent"] == DBNull.Value ? (object)0m : r["RebateQtyInPercent"]);
             cmd.Parameters.AddWithValue("@foc", r["FOCQty"] == DBNull.Value ? (object)0m : r["FOCQty"]);
             cmd.Parameters.AddWithValue("@init", r["InitialReading"] == DBNull.Value ? (object)0m : r["InitialReading"]);
+            cmd.Parameters.AddWithValue("@wn", r.Table.Columns.Contains("WaiveFirstNMonths") && r["WaiveFirstNMonths"] != DBNull.Value ? Convert.ToInt32(r["WaiveFirstNMonths"]) : 0);
+            cmd.Parameters.AddWithValue("@wt", r.Table.Columns.Contains("WaiveTargetAmount") && r["WaiveTargetAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaiveTargetAmount"]) : 0m);
+            cmd.Parameters.AddWithValue("@wp", r.Table.Columns.Contains("WaivePartialPct") && r["WaivePartialPct"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialPct"]) : 100m);
+            string wsv = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]).Trim() : "";
+            cmd.Parameters.AddWithValue("@ws", wsv.Length > 0 ? (object)wsv : (object)"BKCL");
         }
 
         // Decide what a context column actually stores. Unbound item: the value as typed. Bound item:
@@ -2099,6 +2613,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             else cmd.Parameters.AddWithValue("@d", debtorCode ?? "");
                             cmd.Parameters.AddWithValue("@ik", _data.ItemKey);
                             cmd.ExecuteNonQuery();
+                        }
+                        // Item-bound provided lines follow the machine: re-keyed to the new contract, or
+                        // removed when the machine goes contract-less (ContractKey is NOT NULL on that
+                        // table) — otherwise the OLD contract keeps showing lines of a machine it lost.
+                        using (System.Data.SqlClient.SqlCommand sp = new System.Data.SqlClient.SqlCommand(
+                            toContract
+                                ? "UPDATE [dbo].[zSCP2_ContractSparePart] SET ContractKey=@ck, LastModified=GETDATE() WHERE ItemKey=@ik"
+                                : "DELETE FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=@ik", cn, tx))
+                        {
+                            if (toContract) sp.Parameters.AddWithValue("@ck", contractKey);
+                            sp.Parameters.AddWithValue("@ik", _data.ItemKey);
+                            sp.ExecuteNonQuery();
                         }
                         changed = RecordDebtorHistory(cn, tx, _data, _data.ItemKey);
                         tx.Commit();

@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[zSCP2_ItemMeter](
 	[ItemMeterKey]        [bigint] IDENTITY(1,1) NOT NULL,
 	[ItemKey]             [bigint]       NOT NULL,
 	[MeterTypeCode]       [nvarchar](20) NOT NULL,
-	[MeterRole]           [char](2)      NOT NULL DEFAULT('NA'),
+	[MeterRole]           [varchar](10)  NOT NULL DEFAULT('NA'),
 	[MinimumCharges]      [decimal](20,2) NOT NULL DEFAULT(0),
 	[ChargesRate]         [decimal](20,6) NOT NULL DEFAULT(0),
 	[MeterMultiPriceCode] [nvarchar](20) NOT NULL DEFAULT(''),
@@ -25,7 +25,7 @@ CREATE TABLE [dbo].[zSCP2_ItemMeter](
        REFERENCES [dbo].[zSCP2_Item]([ItemKey]) ON DELETE CASCADE,
  CONSTRAINT [FK_zSCP2_ItemMeter_MeterType] FOREIGN KEY ([MeterTypeCode])
        REFERENCES [dbo].[zSCP_MeterType]([MeterTypeCode]),
- CONSTRAINT [CK_zSCP2_ItemMeter_Role]      CHECK ([MeterRole] IN ('BK','CL','NA'))
+ CONSTRAINT [CK_zSCP2_ItemMeter_Role]      CHECK ([MeterRole] IN ('BK','CL','NA','RENTAL','WAIVE','COMMIT'))
 ) ON [PRIMARY]
 GO
 -- At most one BK and one CL per machine (NA rows unlimited).

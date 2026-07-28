@@ -72,12 +72,38 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (row == null) return;
             long itemKey = Convert.ToInt64(row["ItemKey"]);
             string no = row["ServiceItemNo"] == null ? "" : row["ServiceItemNo"].ToString();
-            if (XtraMessageBox.Show("Delete service item '" + no + "' and its meter configuration?\r\n" +
-                    "Its meter readings will be removed too. The contract itself is kept.",
-                    "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            string serial = row.Table.Columns.Contains("SerialNumber") && row["SerialNumber"] != DBNull.Value
+                ? row["SerialNumber"].ToString() : "";
+            // Same two-stage flow as the contract editor's delete: an impact summary (with the real
+            // reading count), then a typed confirmation — a machine's whole reading history dies here.
+            int readings = 0;
             try
             {
-                _dbSetting.ExecuteNonQuery("DELETE FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey);
+                object o = _dbSetting.ExecuteScalar(
+                    "SELECT COUNT(*) FROM dbo.zSCP2_MeterEntry en " +
+                    "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = en.ItemMeterKey WHERE m.ItemKey = " + itemKey);
+                readings = o == null || o == DBNull.Value ? 0 : Convert.ToInt32(o);
+            }
+            catch { }
+            if (XtraMessageBox.Show("Delete service item '" + no + "'" +
+                    (serial.Length > 0 ? " (serial " + serial + ")" : "") + "?\r\n\r\n" +
+                    "This PERMANENTLY deletes the machine, its meter configuration, its provided-item lines and " +
+                    (readings > 0 ? "its " + readings + " meter reading record(s) (incl. the billing log)."
+                                  : "its reading history.") +
+                    "\r\nThe contract itself is kept.",
+                    "Delete Service Item", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            string typed = DevExpress.XtraEditors.XtraInputBox.Show(
+                "This cannot be undone. Type DELETE to confirm:", "Delete Service Item", "");
+            if (typed == null || typed.Trim().ToUpperInvariant() != "DELETE") return;
+            try
+            {
+                // Item-bound provided lines have no FK (multiple-cascade-path limitation) — removed in
+                // the same transaction so they never linger as zombie lines on the contract.
+                _dbSetting.ExecuteNonQuery(
+                    "BEGIN TRY BEGIN TRAN; " +
+                    "DELETE FROM [dbo].[zSCP2_ContractSparePart] WHERE ItemKey=" + itemKey + "; " +
+                    "DELETE FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + itemKey + "; " +
+                    "COMMIT; END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK; THROW; END CATCH");
                 LoadGrid();
             }
             catch (Exception ex) { XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error"); }
@@ -168,7 +194,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         InsertItemCodeRows(cn, tx, d, d.ItemKey);
 
                         zSCP2_Contract_Form.SaveItemSpareParts(cn, tx, d, d.ItemKey, contractKey);
-                        zSCP2_Item_Form.PersistItemExtras(cn, tx, d, d.ItemKey);
+                        // Extras hydrate in LoadOneItem/LoadExtras; if that failed, persisting the empty
+                        // defaults would wipe the item's Grade/Note/PM/context overrides — skip instead.
+                        if (d.LoadedCtxValid) zSCP2_Item_Form.PersistItemExtras(cn, tx, d, d.ItemKey);
                         tx.Commit();
                     }
                     catch { tx.Rollback(); throw; }
@@ -294,7 +322,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             DataTable mt = _dbSetting.GetDataTable(
-                "SELECT MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
+                "SELECT ItemMeterKey, MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
                 "RebateQtyInPercent, FOCQty FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + itemKey + " ORDER BY ItemMeterKey", false);
             foreach (DataRow s in mt.Rows)
             {
@@ -307,6 +335,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 nr["RebateQtyInPercent"] = s["RebateQtyInPercent"];
                 nr["FOCQty"] = s["FOCQty"];
                 nr["InitialReading"] = 0m;
+                nr["CustomTiers"] = zSCP2_Item_Form.LoadCustomTiersCsv(_dbSetting, Convert.ToInt64(s["ItemMeterKey"]));
                 d.Meters.Rows.Add(nr);
             }
             d.Meters.AcceptChanges();
@@ -396,13 +425,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     if (r.RowState == DataRowState.Deleted) continue;
                     string code = r["MeterTypeCode"] == null ? "" : r["MeterTypeCode"].ToString().Trim();
                     if (code.Length == 0) continue;
-                    string role = r["MeterRole"] == null ? "NA" : r["MeterRole"].ToString().Trim().ToUpperInvariant();
-                    if (role != "BK" && role != "CL") role = "NA";
+                    string role = r["MeterRole"] == null ? "" : r["MeterRole"].ToString().Trim().ToUpperInvariant();
+                    zSCP2_Item_Form.RequireMeterRole(role, code);   // no silent "NA" default — empty role blocks the save
                     using (SqlCommand cmd = new SqlCommand(
                         "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
                         "(ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
                         " RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                        "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE());", cn, tx))
+                        "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
                     {
                         cmd.Parameters.AddWithValue("@ik", itemKey);
                         cmd.Parameters.AddWithValue("@code", code);
@@ -415,7 +444,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         cmd.Parameters.AddWithValue("@rebate", Dec(r["RebateQtyInPercent"]));
                         cmd.Parameters.AddWithValue("@foc", Dec(r["FOCQty"]));
                         cmd.Parameters.AddWithValue("@init", Dec(r["InitialReading"]));
-                        cmd.ExecuteNonQuery();
+                        long newMeterKey = Convert.ToInt64(cmd.ExecuteScalar());
+                        string tiersCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
+                            ? Convert.ToString(r["CustomTiers"]) : "";
+                        zSCP2_Item_Form.SaveCustomTiers(cn, tx, newMeterKey, tiersCsv);
                     }
                 }
             }
@@ -486,7 +518,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "i.DepartmentCode, i.JobCode AS ProjNo, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS BillingDay, c.BillingMode, " +
                     "bk.MeterTypeCode AS BlackMeter, cl.MeterTypeCode AS ColourMeter, " +
-                    "COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS ServiceExpiryDate, i.Inactive, c.ContractKey " +
+                    "COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS ServiceExpiryDate, " +
+                    // EFFECTIVE inactive: a machine whose CONTRACT is deactivated will not bill either —
+                    // showing the item's own 'N' there used to look active while billing had stopped.
+                    "CASE WHEN ISNULL(c.Inactive,'N')='Y' THEN 'Y (contract)' WHEN i.Inactive='Y' THEN 'Y' ELSE '' END AS Inactive, " +
+                    "c.ContractKey " +
                     "FROM [dbo].[zSCP2_Item] i " +
                     "LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
                     "LEFT JOIN [dbo].[Debtor] d ON d.AccNo = COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')) " +
@@ -494,6 +530,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     // multiply the item's row once per meter.
                     "LEFT JOIN (SELECT ItemKey, MIN(MeterTypeCode) AS MeterTypeCode FROM [dbo].[zSCP2_ItemMeter] WHERE MeterRole='BK' GROUP BY ItemKey) bk ON bk.ItemKey = i.ItemKey " +
                     "LEFT JOIN (SELECT ItemKey, MIN(MeterTypeCode) AS MeterTypeCode FROM [dbo].[zSCP2_ItemMeter] WHERE MeterRole='CL' GROUP BY ItemKey) cl ON cl.ItemKey = i.ItemKey " +
+                    "WHERE ISNULL(i.IsGroupItem,'N') = 'N' " +   // group "machines" live on their contract's Group Deal tab
                     "ORDER BY i.ServiceItemNo", false);
                 Grid.DataSource = dt;
 
@@ -534,7 +571,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 Cfg("Phone", "Phone", 100, 19);
                 Cfg("DepartmentCode", "Department", 90, 20);
                 Cfg("ProjNo", "Project", 90, 21);
-                Cfg("Inactive", "Inactive", 60, 22);
+                Cfg("Inactive", "Inactive", 90, 22);
                 GridColumn ck = GridView.Columns["ContractKey"];
                 if (ck != null) ck.Visible = false;
                 GridColumn ik = GridView.Columns["ItemKey"];
@@ -569,7 +606,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             object v = GridView.GetRowCellValue(e.RowHandle, e.Column);
             if (v == null || v == DBNull.Value) return;
             DateTime expiry = Convert.ToDateTime(v);
-            e.Appearance.ForeColor = expiry.Date < DateTime.Today ? _expiredRed : _activeGreen;
+            // Traffic light: red = expired · amber = expiring within 30 days · green = active.
+            if (expiry.Date < DateTime.Today) e.Appearance.ForeColor = _expiredRed;
+            else if (expiry.Date <= DateTime.Today.AddDays(30)) e.Appearance.ForeColor = System.Drawing.Color.DarkOrange;
+            else e.Appearance.ForeColor = _activeGreen;
             if (_boldFont == null)
                 _boldFont = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
             e.Appearance.Font = _boldFont;
