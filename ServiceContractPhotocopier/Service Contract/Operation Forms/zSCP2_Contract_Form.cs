@@ -464,6 +464,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LkDebtorCode.Properties.DataSource = _debtorLookup;
             LkDebtorCode.Properties.DisplayMember = "AccNo";
             LkDebtorCode.Properties.ValueMember = "AccNo";
+            // Demo 28/07 #26: the closed editor showed only the CODE — render "code — company
+            // name" so the customer is identifiable right on the header (stored value stays the
+            // code; the popup already shows both columns).
+            LkDebtorCode.Properties.CustomDisplayText +=
+                new DevExpress.XtraEditors.Controls.CustomDisplayTextEventHandler(LkDebtorCode_CustomDisplayText);
             // SearchLookUpEdit shows its columns through the popup GridView — show ONLY Code + Company
             // Name. AutoPopulateColumns must be OFF: the popup binds lazily, and a later auto-populate
             // would resurrect every Debtor column (PopulateColumns() here ran before binding = no-op).
@@ -486,6 +491,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // Contract Type dropdown: values come from Service Contract Type Maintenance
         // (zSCP_LK_ServiceContractType). Stores the CODE by value, so contracts already referencing a
         // type keep working even if the type's description changes (no hard FK; matched by code).
+        private void LkDebtorCode_CustomDisplayText(object sender, DevExpress.XtraEditors.Controls.CustomDisplayTextEventArgs e)
+        {
+            if (e.Value == null || e.Value == DBNull.Value || _debtorLookup == null) return;
+            string code = e.Value.ToString().Trim();
+            if (code.Length == 0) return;
+            foreach (DataRow r in _debtorLookup.Rows)
+                if (string.Equals(Convert.ToString(r["AccNo"]), code, StringComparison.OrdinalIgnoreCase))
+                {
+                    string name = Convert.ToString(r["CompanyName"]).Trim();
+                    if (name.Length > 0) e.DisplayText = code + " — " + name;
+                    return;
+                }
+        }
+
         private void LoadContractTypeLookup()
         {
             DataTable dt;

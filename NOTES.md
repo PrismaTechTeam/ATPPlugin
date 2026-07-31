@@ -1322,3 +1322,10 @@ negative line on the invoice) — but the ENGINE now decides each Generate wheth
   PENDING, rental separate invoice date PENDING, rebate % -> RM, branch/location per machine,
   DO available-serial/outstanding control, email/SOA template code per contract, contract months
   auto-expiry, lock tax period verify.
+- 2026-07-31: Demo checklist BATCH 1 done (4/17): #3b double-click in Meter Reading Integration
+  opens SINGLE machine detail (OpenContractDetail gained itemKey/serviceItemNo, rows filtered,
+  title "SC x - CSSI y"); #4 tracking-id inheritance (tidByItem map from grid; flat-only/_R jobs
+  fall back to their machine's offline id before RefDocNo join); #26 contract Debtor editor
+  CustomDisplayText renders "code - company name"; #7 docs flowcharts gained the PUMS approve
+  step (demo/12 + overview; approvals live in PUMS, AutoCount only generates). Deployed via root
+  .app + relaunch; checklist page ticked to 4/17 and pushed (52082ed).

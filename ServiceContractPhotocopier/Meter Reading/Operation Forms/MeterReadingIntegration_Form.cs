@@ -404,7 +404,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
                 return;
             }
-            OpenContractDetail(D64(r["ContractKey"]), S(r["ContractNo"]), S(r["Customer"]));
+            // Demo 28/07 #3b: double-clicking a row opens THAT machine only — not the whole
+            // contract's machines grouped together.
+            OpenContractDetail(D64(r["ContractKey"]), S(r["ContractNo"]), S(r["Customer"]),
+                D64(r["ItemKey"]), S(r["ServiceItemNo"]));
         }
 
         // Open an invoice in AutoCount's native Invoice entry form by its document number
@@ -1965,12 +1968,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // with its saved/manual Current vs the freshly-Fetched value; the user ticks "Accept fetched"
         // to override (typically to resolve a conflict). On OK we persist the accepted values to
         // staging (source ONLINE/OFFLINE) and update the grid in place.
-        private void OpenContractDetail(long contractKey, string contractNo, string customer)
+        private void OpenContractDetail(long contractKey, string contractNo, string customer,
+            long itemKey, string serviceItemNo)
         {
             if (_dtGrid == null) return;
             List<DataRow> rows = new List<DataRow>();
             foreach (DataRow r in _dtGrid.Rows)
-                if (D64(r["ContractKey"]) == contractKey) rows.Add(r);
+            {
+                if (D64(r["ContractKey"]) != contractKey) continue;
+                // #3b: when opened from a machine's row, show only THAT machine's meters.
+                if (itemKey > 0 && D64(r["ItemKey"]) != itemKey) continue;
+                rows.Add(r);
+            }
             if (rows.Count == 0) return;
 
             DataTable dt = new DataTable();
@@ -2085,7 +2094,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
 
             bool genReq = false;
-            using (MeterReadingDetail_Form f = new MeterReadingDetail_Form(contractNo, customer, dt, _dbSetting, contractKey))
+            string dlgTitle = itemKey > 0 ? contractNo + "   ·   " + serviceItemNo : contractNo;
+            using (MeterReadingDetail_Form f = new MeterReadingDetail_Form(dlgTitle, customer, dt, _dbSetting, contractKey))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
                 genReq = f.GenerateRequested;
@@ -2481,12 +2491,25 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // has one, the invoice's Reference No becomes the job's DISTINCT ids, comma-joined in line
             // order ("MR-260724-041, MR-260724-052"). IV.RefDocNo is nvarchar(30): only as many WHOLE
             // ids as fit are joined — an id is never cut in half. No ids -> the usual CSSI/contract ref.
+            // Demo 28/07 #4: only BK/CL rows are staged with a TrackingId, so a rental-separate
+            // ("_R") or flat-only job carried none even when the SAME machine's offline report id
+            // was sitting on its usage rows — every line falls back to its MACHINE's id.
+            Dictionary<long, string> tidByItem = new Dictionary<long, string>();
+            foreach (DataRow tidRow in _dtGrid.Rows)
+            {
+                string tidCell = S(tidRow["TrackingId"]).Trim();
+                if (tidCell.Length == 0) continue;
+                long tidItem = D64(tidRow["ItemKey"]);
+                if (!tidByItem.ContainsKey(tidItem)) tidByItem[tidItem] = tidCell;
+            }
             foreach (MeterInvoiceGenerator.InvoiceJob jbT in jobs.Values)
             {
                 List<string> tids = new List<string>();
                 foreach (MeterBillLine lT in jbT.Lines)
                 {
                     string tid = (lT.TrackingId ?? "").Trim();
+                    if (tid.Length == 0) tidByItem.TryGetValue(lT.ItemKey, out tid);
+                    tid = (tid ?? "").Trim();
                     if (tid.Length > 0 && !tids.Contains(tid)) tids.Add(tid);
                 }
                 if (tids.Count == 0) continue;
