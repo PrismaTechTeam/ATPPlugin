@@ -68,6 +68,15 @@
         private DevExpress.XtraEditors.SearchLookUpEdit SluStrategy;
         private DevExpress.XtraGrid.Views.Grid.GridView SluStrategyView;
         private DevExpress.XtraEditors.CheckEdit ChkRentalSeparate;
+        private DevExpress.XtraEditors.GroupControl GrpBilling;
+        private DevExpress.XtraEditors.LabelControl LblRentalDay;
+        private DevExpress.XtraEditors.SpinEdit SpnRentalDay;
+        private DevExpress.XtraEditors.LabelControl LblInvoiceTemplate;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluInvoiceTemplate;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluInvoiceTemplateView;
+        private DevExpress.XtraEditors.CheckEdit ChkGenerateSOA;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluSOATemplate;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluSOATemplateView;
         private DevExpress.XtraEditors.LabelControl LblStaff;
         private DevExpress.XtraEditors.SearchLookUpEdit SluAgent;
         private DevExpress.XtraGrid.Views.Grid.GridView SluAgentView;
@@ -185,6 +194,15 @@
             this.SluStrategy = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluStrategyView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.ChkRentalSeparate = new DevExpress.XtraEditors.CheckEdit();
+            this.GrpBilling = new DevExpress.XtraEditors.GroupControl();
+            this.LblRentalDay = new DevExpress.XtraEditors.LabelControl();
+            this.SpnRentalDay = new DevExpress.XtraEditors.SpinEdit();
+            this.LblInvoiceTemplate = new DevExpress.XtraEditors.LabelControl();
+            this.SluInvoiceTemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluInvoiceTemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.ChkGenerateSOA = new DevExpress.XtraEditors.CheckEdit();
+            this.SluSOATemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluSOATemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblStaff = new DevExpress.XtraEditors.LabelControl();
             this.SluAgent = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluAgentView = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -268,6 +286,14 @@
             ((System.ComponentModel.ISupportInitialize)(this.SluStrategy.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluStrategyView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkRentalSeparate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpBilling)).BeginInit();
+            this.GrpBilling.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnRentalDay.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplateView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateSOA.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplateView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluAgent.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluAgentView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).BeginInit();
@@ -505,18 +531,13 @@
             this.PanelHeaderFields.Controls.Add(this.TxtArea);
             this.PanelHeaderFields.Controls.Add(this.LblStaff);
             this.PanelHeaderFields.Controls.Add(this.SluAgent);
-            this.PanelHeaderFields.Controls.Add(this.LblBillDay);
-            this.PanelHeaderFields.Controls.Add(this.SpnBillingDay);
-            this.PanelHeaderFields.Controls.Add(this.LblBillMode);
-            this.PanelHeaderFields.Controls.Add(this.ChkBillGroup);
-            this.PanelHeaderFields.Controls.Add(this.ChkBillSeparate);
+            this.PanelHeaderFields.Controls.Add(this.GrpBilling);
             this.PanelHeaderFields.Controls.Add(this.LblDesc);
             this.PanelHeaderFields.Controls.Add(this.TxtDescription);
             this.PanelHeaderFields.Controls.Add(this.ChkInactive);
             this.PanelHeaderFields.Controls.Add(this.ChkMonthEnd);
             this.PanelHeaderFields.Controls.Add(this.LblStrategy);
             this.PanelHeaderFields.Controls.Add(this.SluStrategy);
-            this.PanelHeaderFields.Controls.Add(this.ChkRentalSeparate);
             this.PanelHeaderFields.Controls.Add(this.LblRefNo);
             this.PanelHeaderFields.Controls.Add(this.TxtRefNo);
             this.PanelHeaderFields.Controls.Add(this.LblDept);
@@ -817,10 +838,10 @@
             //
             // ChkRentalSeparate
             //
-            this.ChkRentalSeparate.Location = new System.Drawing.Point(860, 214);
+            this.ChkRentalSeparate.Location = new System.Drawing.Point(12, 83);
             this.ChkRentalSeparate.Name = "ChkRentalSeparate";
             this.ChkRentalSeparate.Properties.Caption = "Rental separate invoice";
-            this.ChkRentalSeparate.Size = new System.Drawing.Size(180, 20);
+            this.ChkRentalSeparate.Size = new System.Drawing.Size(170, 20);
             this.ChkRentalSeparate.TabIndex = 44;
             //
             // LblStaff
@@ -849,10 +870,98 @@
             this.SluAgentView.OptionsSelection.EnableAppearanceFocusedCell = false;
             this.SluAgentView.OptionsView.ShowGroupPanel = false;
             //
+            // GrpBilling
+            //
+            this.GrpBilling.Controls.Add(this.LblBillDay);
+            this.GrpBilling.Controls.Add(this.SpnBillingDay);
+            this.GrpBilling.Controls.Add(this.LblBillMode);
+            this.GrpBilling.Controls.Add(this.ChkBillGroup);
+            this.GrpBilling.Controls.Add(this.ChkBillSeparate);
+            this.GrpBilling.Controls.Add(this.ChkRentalSeparate);
+            this.GrpBilling.Controls.Add(this.LblRentalDay);
+            this.GrpBilling.Controls.Add(this.SpnRentalDay);
+            this.GrpBilling.Controls.Add(this.LblInvoiceTemplate);
+            this.GrpBilling.Controls.Add(this.SluInvoiceTemplate);
+            this.GrpBilling.Controls.Add(this.ChkGenerateSOA);
+            this.GrpBilling.Controls.Add(this.SluSOATemplate);
+            this.GrpBilling.Location = new System.Drawing.Point(860, 96);
+            this.GrpBilling.Name = "GrpBilling";
+            this.GrpBilling.Size = new System.Drawing.Size(600, 172);
+            this.GrpBilling.TabIndex = 45;
+            this.GrpBilling.Text = "Billing";
+            //
+            // LblRentalDay
+            //
+            this.LblRentalDay.Location = new System.Drawing.Point(230, 87);
+            this.LblRentalDay.Name = "LblRentalDay";
+            this.LblRentalDay.Size = new System.Drawing.Size(74, 13);
+            this.LblRentalDay.Text = "Rental inv. day";
+            //
+            // SpnRentalDay
+            //
+            this.SpnRentalDay.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
+            this.SpnRentalDay.Location = new System.Drawing.Point(320, 84);
+            this.SpnRentalDay.Name = "SpnRentalDay";
+            this.SpnRentalDay.Properties.IsFloatValue = false;
+            this.SpnRentalDay.Properties.MaxValue = new decimal(new int[] { 28, 0, 0, 0 });
+            this.SpnRentalDay.Size = new System.Drawing.Size(52, 20);
+            this.SpnRentalDay.TabIndex = 46;
+            //
+            // LblInvoiceTemplate
+            //
+            this.LblInvoiceTemplate.Location = new System.Drawing.Point(12, 115);
+            this.LblInvoiceTemplate.Name = "LblInvoiceTemplate";
+            this.LblInvoiceTemplate.Size = new System.Drawing.Size(84, 13);
+            this.LblInvoiceTemplate.Text = "Invoice Template";
+            //
+            // SluInvoiceTemplate
+            //
+            this.SluInvoiceTemplate.Location = new System.Drawing.Point(110, 112);
+            this.SluInvoiceTemplate.Name = "SluInvoiceTemplate";
+            this.SluInvoiceTemplate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluInvoiceTemplate.Properties.NullText = "(default layout)";
+            this.SluInvoiceTemplate.Properties.PopupView = this.SluInvoiceTemplateView;
+            this.SluInvoiceTemplate.Size = new System.Drawing.Size(260, 20);
+            this.SluInvoiceTemplate.TabIndex = 47;
+            //
+            // SluInvoiceTemplateView
+            //
+            this.SluInvoiceTemplateView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluInvoiceTemplateView.Name = "SluInvoiceTemplateView";
+            this.SluInvoiceTemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluInvoiceTemplateView.OptionsView.ShowGroupPanel = false;
+            //
+            // ChkGenerateSOA
+            //
+            this.ChkGenerateSOA.Location = new System.Drawing.Point(12, 139);
+            this.ChkGenerateSOA.Name = "ChkGenerateSOA";
+            this.ChkGenerateSOA.Properties.Caption = "Generate SOA";
+            this.ChkGenerateSOA.Size = new System.Drawing.Size(96, 20);
+            this.ChkGenerateSOA.TabIndex = 48;
+            //
+            // SluSOATemplate
+            //
+            this.SluSOATemplate.Location = new System.Drawing.Point(110, 140);
+            this.SluSOATemplate.Name = "SluSOATemplate";
+            this.SluSOATemplate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluSOATemplate.Properties.NullText = "(default layout)";
+            this.SluSOATemplate.Properties.PopupView = this.SluSOATemplateView;
+            this.SluSOATemplate.Size = new System.Drawing.Size(260, 20);
+            this.SluSOATemplate.TabIndex = 49;
+            //
+            // SluSOATemplateView
+            //
+            this.SluSOATemplateView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluSOATemplateView.Name = "SluSOATemplateView";
+            this.SluSOATemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluSOATemplateView.OptionsView.ShowGroupPanel = false;
+            //
             // LblBillDay
             //
             this.LblBillDay.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
-            this.LblBillDay.Location = new System.Drawing.Point(12, 217);
+            this.LblBillDay.Location = new System.Drawing.Point(12, 31);
             this.LblBillDay.Name = "LblBillDay";
             this.LblBillDay.Size = new System.Drawing.Size(54, 13);
             this.LblBillDay.TabIndex = 27;
@@ -861,7 +970,7 @@
             // SpnBillingDay
             //
             this.SpnBillingDay.EditValue = new decimal(new int[] { 1, 0, 0, 0 });
-            this.SpnBillingDay.Location = new System.Drawing.Point(100, 214);
+            this.SpnBillingDay.Location = new System.Drawing.Point(110, 28);
             this.SpnBillingDay.MaximumSize = new System.Drawing.Size(46, 0);
             this.SpnBillingDay.Name = "SpnBillingDay";
             this.SpnBillingDay.Properties.IsFloatValue = false;
@@ -873,7 +982,7 @@
             // LblBillMode
             //
             this.LblBillMode.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
-            this.LblBillMode.Location = new System.Drawing.Point(310, 217);
+            this.LblBillMode.Location = new System.Drawing.Point(230, 31);
             this.LblBillMode.Name = "LblBillMode";
             this.LblBillMode.Size = new System.Drawing.Size(63, 13);
             this.LblBillMode.TabIndex = 29;
@@ -881,7 +990,7 @@
             //
             // ChkBillGroup
             //
-            this.ChkBillGroup.Location = new System.Drawing.Point(390, 214);
+            this.ChkBillGroup.Location = new System.Drawing.Point(310, 27);
             this.ChkBillGroup.Name = "ChkBillGroup";
             this.ChkBillGroup.Properties.Caption = "One invoice (group whole contract)";
             this.ChkBillGroup.Size = new System.Drawing.Size(230, 20);
@@ -889,7 +998,7 @@
             //
             // ChkBillSeparate
             //
-            this.ChkBillSeparate.Location = new System.Drawing.Point(620, 214);
+            this.ChkBillSeparate.Location = new System.Drawing.Point(310, 55);
             this.ChkBillSeparate.Name = "ChkBillSeparate";
             this.ChkBillSeparate.Properties.Caption = "Separate invoice per service item";
             this.ChkBillSeparate.Size = new System.Drawing.Size(230, 20);
@@ -1396,6 +1505,15 @@
             ((System.ComponentModel.ISupportInitialize)(this.SluStrategy.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluStrategyView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkRentalSeparate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnRentalDay.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplateView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateSOA.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplateView)).EndInit();
+            this.GrpBilling.ResumeLayout(false);
+            this.GrpBilling.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpBilling)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluAgent.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluAgentView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).EndInit();

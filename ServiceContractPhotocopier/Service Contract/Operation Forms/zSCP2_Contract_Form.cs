@@ -111,9 +111,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LoadMoreHeader();
             BuildStrategyTab();
             BuildGroupTab();
-            BuildRentalDayControls();
-            BuildReportTemplateControls();
-            BuildBillingGroup();
+            InitBillingHeaderData();
             BuildBillingHistoryTab();
             BuildChangeHistoryTab();
             ApplyTemplateExtras();   // clone-at-open: spare parts / rules / More Header now have their tabs
@@ -430,52 +428,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.EditValueChanged += h;
             SluStrategy.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
-            if (_spnRentalDay != null) _spnRentalDay.EditValueChanged += h;
-            if (_sluInvTpl != null) _sluInvTpl.EditValueChanged += h;
-            if (_chkGenSOA != null) _chkGenSOA.EditValueChanged += h;
-            if (_sluSOATpl != null) _sluSOATpl.EditValueChanged += h;
+            if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
+            if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValueChanged += h;
+            if (ChkGenerateSOA != null) ChkGenerateSOA.EditValueChanged += h;
+            if (SluSOATemplate != null) SluSOATemplate.EditValueChanged += h;
         }
 
-        // Demo 28/07 #18: the rental-separate invoice's OWN billing day ("rental 是跟头标的").
-        // 0 = follow the meter invoice date; 1-28 = date the Rental- invoice on this day (accrual
-        // rentals in the billing month, prepayment rentals in the NEXT month). Created in code —
-        // the strict designer stays untouched.
-        private DevExpress.XtraEditors.LabelControl _lblRentalDay;
-        private DevExpress.XtraEditors.SpinEdit _spnRentalDay;
+        // Demo 28/07 #18: the rental-separate invoice's OWN billing day. The control lives in
+        // the DESIGNER (GrpBilling) now; InitBillingHeaderData wires value + enable gating.
         private int _loadedRentalDay;
-
-        private void BuildRentalDayControls()
-        {
-            _lblRentalDay = new DevExpress.XtraEditors.LabelControl();
-            _lblRentalDay.Text = "Rental inv. day";
-            _lblRentalDay.Location = new System.Drawing.Point(1050, 217);
-            PanelHeaderFields.Controls.Add(_lblRentalDay);
-            _spnRentalDay = new DevExpress.XtraEditors.SpinEdit();
-            _spnRentalDay.Location = new System.Drawing.Point(1130, 214);
-            _spnRentalDay.Size = new System.Drawing.Size(52, 20);
-            _spnRentalDay.Properties.IsFloatValue = false;
-            _spnRentalDay.Properties.MinValue = 0;
-            _spnRentalDay.Properties.MaxValue = 28;
-            _spnRentalDay.Value = _loadedRentalDay;
-            _spnRentalDay.ToolTip = "0 = rental rides the meter invoice date.\r\n" +
-                "1-28 = the separate Rental- invoice is dated on THIS day: accrual rentals in the " +
-                "billing month, prepayment rentals in the NEXT month (June run -> July 1 rental).";
-            PanelHeaderFields.Controls.Add(_spnRentalDay);
-            _spnRentalDay.Enabled = ChkRentalSeparate.Checked;
-            ChkRentalSeparate.CheckedChanged += delegate { _spnRentalDay.Enabled = ChkRentalSeparate.Checked; };
-        }
 
         // Demo 28/07 #9c: per-contract report templates — a 60-month deal agrees its paperwork
         // ONCE, so the contract remembers WHICH invoice layout (and optionally which SOA layout)
         // this customer receives; Bulk Email Invoice then picks it automatically. AutoCount
         // identifies report designs by NAME only (no separate code) — a renamed/deleted design is
         // flagged "MISSING?" here and billing falls back to the default layout instead of failing.
-        private DevExpress.XtraEditors.LabelControl _lblInvTpl;
-        private DevExpress.XtraEditors.SearchLookUpEdit _sluInvTpl;
-        private DevExpress.XtraGrid.Views.Grid.GridView _sluInvTplView;
-        private DevExpress.XtraEditors.CheckEdit _chkGenSOA;
-        private DevExpress.XtraEditors.SearchLookUpEdit _sluSOATpl;
-        private DevExpress.XtraGrid.Views.Grid.GridView _sluSOATplView;
         private string _loadedInvRpt = "", _loadedSOARpt = "";
         private bool _loadedGenSOA;
 
@@ -485,40 +452,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return ed.EditValue == null || ed.EditValue == DBNull.Value ? "" : ed.EditValue.ToString().Trim();
         }
 
-        private void BuildReportTemplateControls()
-        {
-            _lblInvTpl = new DevExpress.XtraEditors.LabelControl();
-            _lblInvTpl.Text = "Invoice Template";
-            _lblInvTpl.Location = new System.Drawing.Point(1200, 217);
-            PanelHeaderFields.Controls.Add(_lblInvTpl);
-            _sluInvTplView = new DevExpress.XtraGrid.Views.Grid.GridView();
-            _sluInvTpl = new DevExpress.XtraEditors.SearchLookUpEdit();
-            ConfigureTplLookup(_sluInvTpl, _sluInvTplView, "Invoice Document", _loadedInvRpt);
-            _sluInvTpl.Location = new System.Drawing.Point(1295, 214);
-            _sluInvTpl.Size = new System.Drawing.Size(235, 20);
-            _sluInvTpl.ToolTip = "The AutoCount report design used for THIS contract's invoices " +
-                "(bulk email / preview). Empty = the book's default Invoice Document layout.";
-            PanelHeaderFields.Controls.Add(_sluInvTpl);
-
-            _chkGenSOA = new DevExpress.XtraEditors.CheckEdit();
-            _chkGenSOA.Properties.Caption = "Generate SOA";
-            _chkGenSOA.Location = new System.Drawing.Point(1196, 244);
-            _chkGenSOA.Size = new System.Drawing.Size(96, 20);
-            _chkGenSOA.Checked = _loadedGenSOA;
-            _chkGenSOA.ToolTip = "This customer receives a Statement of Account each cycle " +
-                "(sent via A/R > Debtor Statement > Batch Mail).";
-            PanelHeaderFields.Controls.Add(_chkGenSOA);
-            _sluSOATplView = new DevExpress.XtraGrid.Views.Grid.GridView();
-            _sluSOATpl = new DevExpress.XtraEditors.SearchLookUpEdit();
-            ConfigureTplLookup(_sluSOATpl, _sluSOATplView, "Debtor Statement", _loadedSOARpt);
-            _sluSOATpl.Location = new System.Drawing.Point(1295, 246);
-            _sluSOATpl.Size = new System.Drawing.Size(235, 20);
-            _sluSOATpl.ToolTip = "The Debtor Statement report design for this customer's SOA. " +
-                "Empty = the default statement layout.";
-            PanelHeaderFields.Controls.Add(_sluSOATpl);
-            _sluSOATpl.Enabled = _chkGenSOA.Checked;
-            _chkGenSOA.CheckedChanged += delegate { _sluSOATpl.Enabled = _chkGenSOA.Checked; };
-        }
 
         // Searchable popup listing every report DESIGN of the type (System + User rows straight
         // from AutoCount's report registry). A saved name that no longer exists is kept visible as
@@ -555,43 +488,27 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ed.EditValue = string.IsNullOrEmpty(savedName) ? null : (object)savedName;
         }
 
-        // User request 31/07: every billing-related setting lives in ONE visual "Billing" group —
-        // Billing Day · Billing Mode (group whole contract / separate per service item) · Rental
-        // separate invoice + its day · Invoice Template · Generate SOA + its template. The existing
-        // designer controls are REPARENTED into a code-created GroupControl (strict designer file
-        // untouched); the Description/Inactive row drops below it and the header panel grows.
-        private DevExpress.XtraEditors.GroupControl _grpBilling;
-
-        private void BuildBillingGroup()
+        // The billing header controls live in the DESIGNER now (user request 31/07 — the layout
+        // is arranged in Design view); this only wires DATA, tooltips and enable gating.
+        private void InitBillingHeaderData()
         {
-            // Compact box in the header's EMPTY right area (below Department/Project/Reference No)
-            // instead of a full-width strip — the header keeps its height and Description stays put.
-            _grpBilling = new DevExpress.XtraEditors.GroupControl();
-            _grpBilling.Text = "Billing";
-            _grpBilling.Location = new System.Drawing.Point(860, 96);
-            _grpBilling.Size = new System.Drawing.Size(600, 172);
-            PanelHeaderFields.Controls.Add(_grpBilling);
-
-            MoveIntoBillingGroup(LblBillDay, 12, 31);
-            MoveIntoBillingGroup(SpnBillingDay, 110, 28);
-            MoveIntoBillingGroup(LblBillMode, 230, 31);
-            MoveIntoBillingGroup(ChkBillGroup, 310, 27);
-            MoveIntoBillingGroup(ChkBillSeparate, 310, 55);
-            ChkRentalSeparate.Width = 170;
-            MoveIntoBillingGroup(ChkRentalSeparate, 12, 83);
-            if (_lblRentalDay != null) MoveIntoBillingGroup(_lblRentalDay, 230, 87);
-            if (_spnRentalDay != null) MoveIntoBillingGroup(_spnRentalDay, 320, 84);
-            if (_lblInvTpl != null) MoveIntoBillingGroup(_lblInvTpl, 12, 115);
-            if (_sluInvTpl != null) { _sluInvTpl.Width = 260; MoveIntoBillingGroup(_sluInvTpl, 110, 112); }
-            if (_chkGenSOA != null) MoveIntoBillingGroup(_chkGenSOA, 12, 139);
-            if (_sluSOATpl != null) { _sluSOATpl.Width = 260; MoveIntoBillingGroup(_sluSOATpl, 110, 140); }
-        }
-
-        private void MoveIntoBillingGroup(System.Windows.Forms.Control c, int x, int y)
-        {
-            _grpBilling.Controls.Add(c);   // reparents away from PanelHeaderFields
-            c.Location = new System.Drawing.Point(x, y);
-            c.BringToFront();
+            SpnRentalDay.Value = _loadedRentalDay;
+            SpnRentalDay.Enabled = ChkRentalSeparate.Checked;
+            ChkRentalSeparate.CheckedChanged += delegate { SpnRentalDay.Enabled = ChkRentalSeparate.Checked; };
+            SpnRentalDay.ToolTip = "0 = rental rides the meter invoice date.\r\n" +
+                "1-28 = the separate Rental- invoice is dated on THIS day: accrual rentals in the " +
+                "billing month, prepayment rentals in the NEXT month (June run -> July 1 rental).";
+            ConfigureTplLookup(SluInvoiceTemplate, SluInvoiceTemplateView, "Invoice Document", _loadedInvRpt);
+            ConfigureTplLookup(SluSOATemplate, SluSOATemplateView, "Debtor Statement", _loadedSOARpt);
+            SluInvoiceTemplate.ToolTip = "The AutoCount report design used for THIS contract's invoices " +
+                "(bulk email / preview). Empty = the book's default Invoice Document layout.";
+            ChkGenerateSOA.Checked = _loadedGenSOA;
+            ChkGenerateSOA.ToolTip = "This customer receives a Statement of Account each cycle " +
+                "(sent via A/R > Debtor Statement > Batch Mail).";
+            SluSOATemplate.Enabled = ChkGenerateSOA.Checked;
+            ChkGenerateSOA.CheckedChanged += delegate { SluSOATemplate.Enabled = ChkGenerateSOA.Checked; };
+            SluSOATemplate.ToolTip = "The Debtor Statement report design for this customer's SOA. " +
+                "Empty = the default statement layout.";
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
@@ -1080,13 +997,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
-            if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
+            if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;
             _loadedInvRpt = r.Table.Columns.Contains("InvoiceReportName") ? AsStr(r["InvoiceReportName"]).Trim() : "";
             _loadedGenSOA = r.Table.Columns.Contains("GenerateSOA") && AsStr(r["GenerateSOA"]) == "Y";
             _loadedSOARpt = r.Table.Columns.Contains("SOAReportName") ? AsStr(r["SOAReportName"]).Trim() : "";
-            if (_sluInvTpl != null) _sluInvTpl.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
-            if (_chkGenSOA != null) _chkGenSOA.Checked = _loadedGenSOA;
-            if (_sluSOATpl != null) _sluSOATpl.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
+            if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
+            if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
             // called both here (post-save reload, controls exist) and at the end of BuildStrategyTab
@@ -4315,10 +4232,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@note", (object)(TxtNote.Text ?? ""));
             cmd.Parameters.AddWithValue("@strategy", SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
-            cmd.Parameters.AddWithValue("@rentday", _spnRentalDay != null ? (object)(int)_spnRentalDay.Value : (object)_loadedRentalDay);
-            cmd.Parameters.AddWithValue("@invrpt", TplVal(_sluInvTpl, _loadedInvRpt));
-            cmd.Parameters.AddWithValue("@gensoa", _chkGenSOA != null ? (_chkGenSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
-            cmd.Parameters.AddWithValue("@soarpt", TplVal(_sluSOATpl, _loadedSOARpt));
+            cmd.Parameters.AddWithValue("@rentday", SpnRentalDay != null ? (object)(int)SpnRentalDay.Value : (object)_loadedRentalDay);
+            cmd.Parameters.AddWithValue("@invrpt", TplVal(SluInvoiceTemplate, _loadedInvRpt));
+            cmd.Parameters.AddWithValue("@gensoa", ChkGenerateSOA != null ? (ChkGenerateSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
+            cmd.Parameters.AddWithValue("@soarpt", TplVal(SluSOATemplate, _loadedSOARpt));
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -4647,10 +4564,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(Tsv(TxtRefNo.Text)).Append('\t').Append(Tsv(TxtRemark1.Text)).Append('\t')
               .Append(Tsv(TxtRemark2.Text)).Append('\t').Append(Tsv(TxtNote.Text)).Append('\t')
               .Append(ChkRentalSeparate.Checked ? "Y" : "N").Append('\t')
-              .Append(_spnRentalDay != null ? ((int)_spnRentalDay.Value).ToString() : "0").Append('\t')
-              .Append(Tsv(TplVal(_sluInvTpl, _loadedInvRpt))).Append('\t')
-              .Append(_chkGenSOA != null && _chkGenSOA.Checked ? "Y" : "N").Append('\t')
-              .Append(Tsv(TplVal(_sluSOATpl, _loadedSOARpt))).AppendLine();
+              .Append(SpnRentalDay != null ? ((int)SpnRentalDay.Value).ToString() : "0").Append('\t')
+              .Append(Tsv(TplVal(SluInvoiceTemplate, _loadedInvRpt))).Append('\t')
+              .Append(ChkGenerateSOA != null && ChkGenerateSOA.Checked ? "Y" : "N").Append('\t')
+              .Append(Tsv(TplVal(SluSOATemplate, _loadedSOARpt))).AppendLine();
             foreach (ItemEditData d in _items)
             {
                 sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
@@ -4792,11 +4709,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         TxtRemark2.Text = At(p, 18); TxtNote.Text = At(p, 19);
                         ChkRentalSeparate.Checked = At(p, 20) == "Y";
                         int rdClip;
-                        if (_spnRentalDay != null && int.TryParse(At(p, 21), out rdClip))
-                            _spnRentalDay.Value = Math.Max(0, Math.Min(28, rdClip));
-                        if (_sluInvTpl != null && At(p, 22).Length > 0) _sluInvTpl.EditValue = At(p, 22);
-                        if (_chkGenSOA != null) _chkGenSOA.Checked = At(p, 23) == "Y";
-                        if (_sluSOATpl != null && At(p, 24).Length > 0) _sluSOATpl.EditValue = At(p, 24);
+                        if (SpnRentalDay != null && int.TryParse(At(p, 21), out rdClip))
+                            SpnRentalDay.Value = Math.Max(0, Math.Min(28, rdClip));
+                        if (SluInvoiceTemplate != null && At(p, 22).Length > 0) SluInvoiceTemplate.EditValue = At(p, 22);
+                        if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = At(p, 23) == "Y";
+                        if (SluSOATemplate != null && At(p, 24).Length > 0) SluSOATemplate.EditValue = At(p, 24);
                     }
                 }
                 else if (p[0] == "I") { last = ItemFromTsv(p, 1); _items.Add(last); }
@@ -5003,13 +4920,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
-            if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
+            if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;
             _loadedInvRpt = r.Table.Columns.Contains("InvoiceReportName") ? AsStr(r["InvoiceReportName"]).Trim() : "";
             _loadedGenSOA = r.Table.Columns.Contains("GenerateSOA") && AsStr(r["GenerateSOA"]) == "Y";
             _loadedSOARpt = r.Table.Columns.Contains("SOAReportName") ? AsStr(r["SOAReportName"]).Trim() : "";
-            if (_sluInvTpl != null) _sluInvTpl.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
-            if (_chkGenSOA != null) _chkGenSOA.Checked = _loadedGenSOA;
-            if (_sluSOATpl != null) _sluSOATpl.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
+            if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
+            if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;
                 ApplyFocResetToUi();   // no-op before the strategy tab exists; re-applied by OnFormLoad
