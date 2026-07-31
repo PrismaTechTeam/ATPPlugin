@@ -113,6 +113,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             BuildGroupTab();
             BuildRentalDayControls();
             BuildReportTemplateControls();
+            BuildBillingGroup();
             BuildBillingHistoryTab();
             BuildChangeHistoryTab();
             ApplyTemplateExtras();   // clone-at-open: spare parts / rules / More Header now have their tabs
@@ -552,6 +553,53 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ctp.Caption = "Type"; ctp.Width = 150;
             view.OptionsView.ShowAutoFilterRow = true;
             ed.EditValue = string.IsNullOrEmpty(savedName) ? null : (object)savedName;
+        }
+
+        // User request 31/07: every billing-related setting lives in ONE visual "Billing" group —
+        // Billing Day · Billing Mode (group whole contract / separate per service item) · Rental
+        // separate invoice + its day · Invoice Template · Generate SOA + its template. The existing
+        // designer controls are REPARENTED into a code-created GroupControl (strict designer file
+        // untouched); the Description/Inactive row drops below it and the header panel grows.
+        private DevExpress.XtraEditors.GroupControl _grpBilling;
+
+        private void BuildBillingGroup()
+        {
+            _grpBilling = new DevExpress.XtraEditors.GroupControl();
+            _grpBilling.Text = "Billing";
+            _grpBilling.Location = new System.Drawing.Point(8, 206);
+            _grpBilling.Size = new System.Drawing.Size(1644, 58);
+            PanelHeaderFields.Controls.Add(_grpBilling);
+
+            MoveIntoBillingGroup(LblBillDay, 12, 31);
+            MoveIntoBillingGroup(SpnBillingDay, 78, 28);
+            MoveIntoBillingGroup(LblBillMode, 152, 31);
+            MoveIntoBillingGroup(ChkBillGroup, 224, 27);
+            MoveIntoBillingGroup(ChkBillSeparate, 454, 27);
+            ChkRentalSeparate.Width = 158;
+            MoveIntoBillingGroup(ChkRentalSeparate, 684, 27);
+            if (_lblRentalDay != null) MoveIntoBillingGroup(_lblRentalDay, 850, 31);
+            if (_spnRentalDay != null) MoveIntoBillingGroup(_spnRentalDay, 938, 28);
+            if (_lblInvTpl != null) MoveIntoBillingGroup(_lblInvTpl, 1005, 31);
+            if (_sluInvTpl != null) { _sluInvTpl.Width = 200; MoveIntoBillingGroup(_sluInvTpl, 1098, 28); }
+            if (_chkGenSOA != null) MoveIntoBillingGroup(_chkGenSOA, 1310, 27);
+            if (_sluSOATpl != null) { _sluSOATpl.Width = 200; MoveIntoBillingGroup(_sluSOATpl, 1412, 28); }
+
+            // The Description/Inactive row moves below the group; the docked header panel grows so
+            // the tab control underneath just shifts down.
+            LblDesc.Location = new System.Drawing.Point(12, 273);
+            TxtDescription.Location = new System.Drawing.Point(100, 270);
+            ChkInactive.Location = new System.Drawing.Point(720, 270);
+            if (_lblInactiveInfo != null)
+                _lblInactiveInfo.Location = new System.Drawing.Point(
+                    ChkInactive.Location.X + ChkInactive.Width + 8, ChkInactive.Location.Y + 2);
+            PanelHeaderFields.Height = 300;
+        }
+
+        private void MoveIntoBillingGroup(System.Windows.Forms.Control c, int x, int y)
+        {
+            _grpBilling.Controls.Add(c);   // reparents away from PanelHeaderFields
+            c.Location = new System.Drawing.Point(x, y);
+            c.BringToFront();
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
