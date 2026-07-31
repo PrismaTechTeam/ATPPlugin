@@ -62,7 +62,8 @@ namespace ServiceContractPhotocopier.Classes
         public bool IsWaiveMeter;
         public int WaiveFirstNMonths;      // 0 = no window condition
         public decimal WaiveTargetAmount;  // 0 = no usage condition (0 & 0 = ALWAYS waive)
-        public decimal WaivePartialPct = 100m;
+        public decimal WaivePartialThreshold;  // partial band (RM, demo 28/07 #24): charges reach RM X...
+        public decimal WaivePartialAmount;     // ...-> waive RM Y off the rental (0/0 = no partial band)
         public string WaiveScope = "BKCL";
         public DateTime? EffStartDate;     // effective service start (item, else contract) — RENTAL-FREE-N anchor fallback
         public DateTime? LastDate;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Drawing;
@@ -1531,8 +1531,10 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
 
         private void BtnSettings_Click(object sender, EventArgs e)
         {
+            // Demo 28/07 #27: a saved default location must show its effect IMMEDIATELY — the
+            // transfer grid's From/To columns are computed from it at load, so reload on OK.
             using (StockRequestSettings_Form dlg = new StockRequestSettings_Form(_dbSetting))
-                dlg.ShowDialog(this);
+                if (dlg.ShowDialog(this) == DialogResult.OK) LoadGrids();
         }
 
         private void BtnViewLog_Click(object sender, EventArgs e)

@@ -12,24 +12,28 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
     ///   • "First N months"              = months 1..N always waived (anchor: rental start, else
     ///                                     the machine's effective service start); then it retires
     ///   • "Print charges hit target"    = fires when the MACHINE's scoped BK/CL charges reach the
-    ///                                     target (the partial % band gives a partial contra)
+    ///                                     target; the optional PARTIAL band (both in RM, demo
+    ///                                     28/07 #24) fires when charges reach a LOWER RM threshold
+    ///                                     and waives a FIXED RM amount instead of the whole rent
     ///   • Both ticked (SEQUENTIAL)      = free window FIRST, and AFTER it the target takes over —
     ///                                     "走完免费就靠 meter 去 waive".
     /// The dialog only edits values on the meter ROW — persisting rides the contract/item save.
     /// </summary>
     public partial class WaiveConfig_Form : XtraForm
     {
-        public int FirstNMonths;        // 0 = no window condition
-        public decimal TargetAmount;    // 0 = no usage condition
-        public decimal PartialPct = 100m;
-        public string Scope = "BKCL";   // BKCL / BK / CL
+        public int FirstNMonths;            // 0 = no window condition
+        public decimal TargetAmount;        // 0 = no usage condition
+        public decimal PartialThreshold;    // 0 = no partial band; RM the charges must reach
+        public decimal PartialAmount;       // RM waived off the rental when the partial band fires
+        public string Scope = "BKCL";       // BKCL / BK / CL
 
         public WaiveConfig_Form()
         {
             InitializeComponent();
         }
 
-        public WaiveConfig_Form(string meterTypeCode, int firstN, decimal target, decimal partialPct, string scope)
+        public WaiveConfig_Form(string meterTypeCode, int firstN, decimal target,
+            decimal partialThreshold, decimal partialAmount, string scope)
             : this()
         {
             LblMeter.Text = "Waive meter:  " + (meterTypeCode ?? "");
@@ -37,7 +41,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             SpnFirstN.Value = firstN > 0 ? firstN : 12;
             ChkTarget.Checked = target > 0m;
             SpnTarget.Value = target > 0m ? target : 500m;
-            SpnPartial.Value = partialPct >= 1m && partialPct <= 100m ? partialPct : 100m;
+            SpnPartialTh.Value = partialThreshold > 0m ? partialThreshold : 0m;
+            SpnPartialAmt.Value = partialAmount > 0m ? partialAmount : 0m;
             string sc = (scope ?? "").Trim().ToUpperInvariant();
             CmbScope.SelectedIndex = sc == "BK" ? 1 : (sc == "CL" ? 2 : 0);
             ChkFirstN.CheckedChanged += new EventHandler(Conditions_Changed);
@@ -49,7 +54,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         {
             SpnFirstN.Enabled = ChkFirstN.Checked;
             SpnTarget.Enabled = ChkTarget.Checked;
-            SpnPartial.Enabled = ChkTarget.Checked;
+            SpnPartialTh.Enabled = ChkTarget.Checked;
+            SpnPartialAmt.Enabled = ChkTarget.Checked;
             CmbScope.Enabled = ChkTarget.Checked;
             LblAlways.Visible = !ChkFirstN.Checked && !ChkTarget.Checked;
         }
@@ -60,9 +66,22 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             { XtraMessageBox.Show("First N months must be at least 1.", "Validation"); return; }
             if (ChkTarget.Checked && SpnTarget.Value <= 0m)
             { XtraMessageBox.Show("Target amount must be more than 0.", "Validation"); return; }
+            if (ChkTarget.Checked && ((SpnPartialTh.Value > 0m) != (SpnPartialAmt.Value > 0m)))
+            {
+                XtraMessageBox.Show("Partial waive needs BOTH amounts: the RM the charges must " +
+                    "reach AND the RM to waive.\r\nLeave both 0 for no partial band.", "Validation");
+                return;
+            }
+            if (ChkTarget.Checked && SpnPartialTh.Value >= SpnTarget.Value && SpnPartialTh.Value > 0m)
+            {
+                XtraMessageBox.Show("The partial threshold must be BELOW the full target " +
+                    "(reaching the target already waives the whole rental).", "Validation");
+                return;
+            }
             FirstNMonths = ChkFirstN.Checked ? (int)SpnFirstN.Value : 0;
             TargetAmount = ChkTarget.Checked ? SpnTarget.Value : 0m;
-            PartialPct = ChkTarget.Checked ? SpnPartial.Value : 100m;
+            PartialThreshold = ChkTarget.Checked ? SpnPartialTh.Value : 0m;
+            PartialAmount = ChkTarget.Checked ? SpnPartialAmt.Value : 0m;
             Scope = CmbScope.SelectedIndex == 1 ? "BK" : (CmbScope.SelectedIndex == 2 ? "CL" : "BKCL");
             this.DialogResult = DialogResult.OK;
             this.Close();
@@ -75,8 +94,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         }
 
         /// <summary>Short grid caption for a waive config, e.g. "WAIVE: always" /
-        /// "WAIVE: 1st 13 mth" / "WAIVE: hit RM 500 (90%)" / combined.</summary>
-        public static string Summary(int firstN, decimal target, decimal partialPct)
+        /// "WAIVE: 1st 13 mth" / "WAIVE: hit RM 500 (or RM 405 -> RM 162 off)" / combined.</summary>
+        public static string Summary(int firstN, decimal target, decimal partialThreshold, decimal partialAmount)
         {
             if (firstN <= 0 && target <= 0m) return "WAIVE: always";
             string s = "WAIVE:";
@@ -85,7 +104,9 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             {
                 if (firstN > 0) s += " then";
                 s += " hit RM " + target.ToString("0.##");
-                if (partialPct > 0m && partialPct < 100m) s += " (" + partialPct.ToString("0.##") + "%)";
+                if (partialThreshold > 0m && partialAmount > 0m)
+                    s += " (or RM " + partialThreshold.ToString("0.##") +
+                         " -> RM " + partialAmount.ToString("0.##") + " off)";
             }
             return s;
         }

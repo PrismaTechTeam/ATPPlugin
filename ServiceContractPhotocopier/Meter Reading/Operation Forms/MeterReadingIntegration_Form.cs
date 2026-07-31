@@ -51,6 +51,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             "Almost there - finishing up..."
         };
         private SimpleButton _btnSetting;
+        private SimpleButton _btnMonthOverview;
 
         public MeterReadingIntegration_Form()
         {
@@ -301,6 +302,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi2, dpi2)).GetLargeImage_Options());
             }
             catch { }
+
+            // Demo 28/07 #1b: "Month Overview" — how many machines bill on each day of the
+            // selected month and how many are already invoiced (created in code, strict designer).
+            _btnMonthOverview = new SimpleButton();
+            _btnMonthOverview.Text = "Month Overview";
+            _btnMonthOverview.Location = new Point(350, 119);
+            _btnMonthOverview.Size = new Size(138, 28);
+            _btnMonthOverview.Click += new EventHandler(BtnMonthOverview_Click);
+            this.GrpFilter.Controls.Add(_btnMonthOverview);
+            _btnMonthOverview.BringToFront();
 
             // Invoice grouping choice (overrides each contract's stored BillingMode when generating):
             //   ticked  = one invoice per CSSI (service item)
@@ -975,7 +986,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "ISNULL(m.RebateQtyInPercent,0) AS RebatePct, ISNULL(m.InitialReading,0) AS InitReading, " +
                     "ISNULL(mt.IsFlatCharge,'N') AS IsFlatCharge, ISNULL(mt.IsRentalWaive,'N') AS IsRentalWaive, " +
                     "ISNULL(m.WaiveFirstNMonths,0) AS WaiveFirstNMonths, ISNULL(m.WaiveTargetAmount,0) AS WaiveTargetAmount, " +
-                    "ISNULL(m.WaivePartialPct,100) AS WaivePartialPct, ISNULL(m.WaiveScope,'BKCL') AS WaiveScope, " +
+                    "ISNULL(m.WaivePartialThreshold,0) AS WaivePartialThreshold, " +
+                    "ISNULL(m.WaivePartialAmount,0) AS WaivePartialAmount, ISNULL(m.WaiveScope,'BKCL') AS WaiveScope, " +
                     "m.RentalStartDate, ISNULL(m.RentalMonths,0) AS RentalMonths, ISNULL(m.RentalBasis,'A') AS RentalBasis, " +
                     "COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS EffExpiry, " +
                     "COALESCE(i.ServiceStartDate, c.ServiceStartDate) AS EffStart, " +
@@ -1087,7 +1099,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
                     g["WaiveFirstNMonths"] = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     g["WaiveTargetAmount"] = Dec(r["WaiveTargetAmount"]);
-                    g["WaivePartialPct"] = Dec(r["WaivePartialPct"]);
+                    g["WaivePartialThreshold"] = Dec(r["WaivePartialThreshold"]);
+                    g["WaivePartialAmount"] = Dec(r["WaivePartialAmount"]);
                     g["WaiveScope"] = S(r["WaiveScope"]);
                     // Expired = effective expiry BEFORE the billing month's 1st (still billable IN its
                     // final month — this only flags machines whose last billable month is already over).
@@ -1114,6 +1127,60 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             catch (Exception ex)
             {
                 XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Demo 28/07 #1b: per-day billing workload of the selected month. Counts every active,
+        // unexpired machine by its EFFECTIVE billing day (item override, else contract day) and
+        // how many already carry an invoice stamp for the period — "who is left to bill" at a glance.
+        private void BtnMonthOverview_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            try
+            {
+                int year = SelectedYear(), month = SelectedMonth();
+                string sql =
+                    "SELECT COALESCE(i.BillingDayOverride, c.BillingDay) AS EffDay, " +
+                    "COUNT(DISTINCT i.ItemKey) AS Machines, COUNT(DISTINCT inv.ItemKey) AS Invoiced " +
+                    "FROM dbo.zSCP2_Item i " +
+                    "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    "LEFT JOIN (SELECT DISTINCT m2.ItemKey FROM dbo.zSCP2_ItemMeter m2 " +
+                    "  JOIN dbo.zSCP2_MeterEntry me ON me.ItemMeterKey = m2.ItemMeterKey " +
+                    "  WHERE me.PeriodYear=" + year + " AND me.PeriodMonth=" + month +
+                    "    AND me.InvoicedDocKey IS NOT NULL) inv ON inv.ItemKey = i.ItemKey " +
+                    "WHERE i.Inactive='N' AND c.Inactive='N' " +
+                    "AND EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeter mm WHERE mm.ItemKey = i.ItemKey) " +
+                    "AND (COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) IS NULL " +
+                    "  OR COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) >= DATEFROMPARTS(" + year + "," + month + ",1)) " +
+                    "GROUP BY COALESCE(i.BillingDayOverride, c.BillingDay) " +
+                    "ORDER BY 1 OPTION (MAXDOP 1)";
+                DataTable dt = QueryWithTimeout(sql, 60);
+                string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + " " + year;
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.AppendLine("Billing overview  -  " + monthName);
+                sb.AppendLine("");
+                int totM = 0, totI = 0;
+                foreach (DataRow r in dt.Rows)
+                {
+                    string dayTxt = r["EffDay"] == DBNull.Value ? "(no day)" :
+                        ("Day " + Convert.ToInt32(r["EffDay"]).ToString().PadLeft(2));
+                    int mCnt = Convert.ToInt32(r["Machines"]);
+                    int iCnt = Convert.ToInt32(r["Invoiced"]);
+                    totM += mCnt; totI += iCnt;
+                    sb.AppendLine(dayTxt + "  :  " + mCnt.ToString().PadLeft(4) + " machine(s)   -   " +
+                                  iCnt + " invoiced, " + (mCnt - iCnt) + " to go");
+                }
+                if (dt.Rows.Count == 0) sb.AppendLine("No active machines found.");
+                sb.AppendLine("");
+                sb.AppendLine("TOTAL   :  " + totM + " machine(s)   -   " + totI + " invoiced, " +
+                              (totM - totI) + " to go");
+                XtraMessageBox.Show(sb.ToString(), "Month Overview  -  " + monthName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Overview failed:\r\n" + ex.Message, "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -1170,7 +1237,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("MachineMode", typeof(string));     // DEFINED online/offline ('' = use fetch status)
             dt.Columns.Add("WaiveFirstNMonths", typeof(int));
             dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
-            dt.Columns.Add("WaivePartialPct", typeof(decimal));
+            dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
+            dt.Columns.Add("WaivePartialAmount", typeof(decimal));
             dt.Columns.Add("WaiveScope", typeof(string));
             dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
             dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
@@ -1205,7 +1273,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialPct", "WaiveScope", "StrategyCode", "RentSep", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
             // Locked rows: the Current Reading cell refuses to open its editor (snapshot is frozen).
             GridViewMeter.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
@@ -2066,8 +2134,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 {
                     int wn = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     decimal wt = Dec(r["WaiveTargetAmount"]);
-                    decimal wp = Dec(r["WaivePartialPct"]);
-                    deal = ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form.Summary(wn, wt, wp);
+                    decimal wpt = Dec(r["WaivePartialThreshold"]);
+                    decimal wpa = Dec(r["WaivePartialAmount"]);
+                    deal = ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form.Summary(wn, wt, wpt, wpa);
                     string wsc = S(r["WaiveScope"]).Trim().ToUpperInvariant();
                     if (wt > 0m && (wsc == "BK" || wsc == "CL")) deal += " on " + (wsc == "BK" ? "Black" : "Colour");
                 }
@@ -2343,6 +2412,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             List<DataRow> visibleRows = new List<DataRow>();
             foreach (DataRow dr in _dtGrid.Rows) visibleRows.Add(dr);
 
+            // Demo 28/07 #3: "one invoice per customer" must be COMPLETE — if any of a ticked
+            // customer's machines would MISS the grouped invoice (not ticked, or a usage meter
+            // without a reading), abort with the exact list instead of quietly billing a partial
+            // customer invoice that needs a manual credit note later.
+            if (_chkPerCssi != null && _chkPerCssi.Checked)
+            {
+                HashSet<string> tickedDebtors = new HashSet<string>();
+                foreach (DataRow dr in visibleRows)
+                    if (dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"])
+                        && S(dr["InvoicedDocNo"]).Trim().Length == 0)
+                        tickedDebtors.Add(S(dr["DebtorCode"]));
+                List<string> problems = new List<string>();
+                foreach (DataRow dr in visibleRows)
+                {
+                    if (!tickedDebtors.Contains(S(dr["DebtorCode"]))) continue;
+                    if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
+                    bool gTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
+                    bool gExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
+                    if (!gTicked && gExpired) continue;   // an unticked EXPIRED machine is a choice, not a miss
+                    bool gFlat = dr["IsFlat"] != DBNull.Value && Convert.ToBoolean(dr["IsFlat"]);
+                    string why = null;
+                    if (!gTicked) why = "not ticked";
+                    else if (!gFlat && Dec(dr["CurrentReading"]) <= 0m) why = "no reading keyed";
+                    if (why == null) continue;
+                    if (problems.Count < 25)
+                        problems.Add(S(dr["DebtorCode"]) + "   " + S(dr["ServiceItemNo"]) + "   " +
+                                     S(dr["MeterType"]) + "   -   " + why);
+                    else { problems.Add("..."); break; }
+                }
+                if (problems.Count > 0)
+                {
+                    XtraMessageBox.Show(
+                        "Grouped invoicing is ON (one invoice per customer), but these meters of the " +
+                        "ticked customers would MISS the invoice:\r\n\r\n" +
+                        string.Join("\r\n", problems.ToArray()) + "\r\n\r\n" +
+                        "Key the readings / tick the machines first, or untick " +
+                        "\"Group same debtor into one invoice\" to bill per machine.\r\n" +
+                        "Nothing was generated.",
+                        "Incomplete customer group", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
             foreach (DataRow r in visibleRows)
             {
                 if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
@@ -2414,7 +2526,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 {
                     ln.WaiveFirstNMonths = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     ln.WaiveTargetAmount = Dec(r["WaiveTargetAmount"]);
-                    ln.WaivePartialPct = Dec(r["WaivePartialPct"]) > 0m ? Dec(r["WaivePartialPct"]) : 100m;
+                    ln.WaivePartialThreshold = Dec(r["WaivePartialThreshold"]);
+                    ln.WaivePartialAmount = Dec(r["WaivePartialAmount"]);
                 }
                 // Committed-minimum ("MIN ...") meter: bill the TOP-UP to the committed amount over the
                 // item's print charges (computed in ApplyCommittedMin), and always show it (transparency).
@@ -2758,7 +2871,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         else if (l.WaiveTargetAmount <= 0m)
                             fire = false;   // window over and no usage condition -> the waive retires
                     }
-                    decimal pct = 100m;
+                    decimal waiveAmt = amount;
                     if (fire && !inWindow && l.WaiveTargetAmount > 0m)
                     {
                         decimal total = 0m;
@@ -2773,18 +2886,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         }
                         if (total >= l.WaiveTargetAmount)
                             note += " - charges " + total.ToString("0.00") + " >= target " + l.WaiveTargetAmount.ToString("0.00");
-                        else if (l.WaivePartialPct > 0m && l.WaivePartialPct < 100m
-                                 && total >= l.WaiveTargetAmount * l.WaivePartialPct / 100m)
+                        // Partial band in RM (demo 28/07 #24): charges reach RM X -> waive RM Y
+                        // (was a % of the target — the customer agrees deals in RM, not %).
+                        else if (l.WaivePartialThreshold > 0m && l.WaivePartialAmount > 0m
+                                 && total >= l.WaivePartialThreshold)
                         {
-                            pct = l.WaivePartialPct;
-                            note += " - PARTIAL " + pct.ToString("0.##") + "%: charges " + total.ToString("0.00") +
-                                    " >= " + (l.WaiveTargetAmount * pct / 100m).ToString("0.00");
+                            waiveAmt = Math.Min(l.WaivePartialAmount, amount);
+                            note += " - PARTIAL: charges " + total.ToString("0.00") +
+                                    " >= " + l.WaivePartialThreshold.ToString("0.00") +
+                                    " -> waive " + waiveAmt.ToString("0.00");
                         }
                         else fire = false;
                     }
                     if (fire)
                     {
-                        l.Charge = -Math.Round(amount * pct / 100m, 2);   // the CONTRA line (negative)
+                        l.Charge = -Math.Round(waiveAmt, 2);   // the CONTRA line (negative)
                         l.UseMin = false;
                         l.AlwaysBill = true;                              // negative lines must print
                         l.StrategyNote = note;

@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.StockRequest.OperationForms
+﻿namespace ServiceContractPhotocopier.StockRequest.OperationForms
 {
     partial class StockRequestSettings_Form
     {
@@ -87,7 +87,7 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.LblFromLocation.Name = "LblFromLocation";
             this.LblFromLocation.Size = new System.Drawing.Size(135, 15);
             this.LblFromLocation.TabIndex = 1;
-            this.LblFromLocation.Text = "Default From Location:";
+            this.LblFromLocation.Text = "Default HQ Location:";
 
             // TxtFromLocation
             this.TxtFromLocation.Location = new System.Drawing.Point(155, 56);
@@ -112,9 +112,9 @@ namespace ServiceContractPhotocopier.StockRequest.OperationForms
             this.LblHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblHint.Location = new System.Drawing.Point(155, 86);
             this.LblHint.Name = "LblHint";
-            this.LblHint.Size = new System.Drawing.Size(265, 30);
+            this.LblHint.Size = new System.Drawing.Size(265, 45);
             this.LblHint.TabIndex = 3;
-            this.LblHint.Text = "Used as the From-Location on every Stock Transfer\r\ngenerated from a Stock Request Task.";
+            this.LblHint.Text = "The HQ side of every generated Stock Transfer:\r\nIN:   From = this location,  To = technician\r\nOUT: From = technician,  To = this location";
 
             // ChkFlagControl
             this.ChkFlagControl.Location = new System.Drawing.Point(14, 140);

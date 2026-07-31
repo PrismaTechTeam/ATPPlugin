@@ -191,7 +191,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // The billing engine decides at Generate.
             dt.Columns.Add("WaiveFirstNMonths", typeof(int));
             dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
-            dt.Columns.Add("WaivePartialPct", typeof(decimal));
+            dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
+            dt.Columns.Add("WaivePartialAmount", typeof(decimal));
             dt.Columns.Add("WaiveScope", typeof(string));
             return dt;
         }
@@ -557,15 +558,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 int wn0 = r.Table.Columns.Contains("WaiveFirstNMonths") && r["WaiveFirstNMonths"] != DBNull.Value ? Convert.ToInt32(r["WaiveFirstNMonths"]) : 0;
                 decimal wt0 = r.Table.Columns.Contains("WaiveTargetAmount") && r["WaiveTargetAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaiveTargetAmount"]) : 0m;
-                decimal wp0 = r.Table.Columns.Contains("WaivePartialPct") && r["WaivePartialPct"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialPct"]) : 100m;
+                decimal wpt0 = r.Table.Columns.Contains("WaivePartialThreshold") && r["WaivePartialThreshold"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialThreshold"]) : 0m;
+                decimal wpa0 = r.Table.Columns.Contains("WaivePartialAmount") && r["WaivePartialAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialAmount"]) : 0m;
                 string ws0 = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]) : "BKCL";
                 using (ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form wdlg =
-                    new ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form(mtType, wn0, wt0, wp0, ws0))
+                    new ServiceContractPhotocopier.Classes.CommonForms.WaiveConfig_Form(mtType, wn0, wt0, wpt0, wpa0, ws0))
                 {
                     if (wdlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
                     r["WaiveFirstNMonths"] = wdlg.FirstNMonths;
                     r["WaiveTargetAmount"] = wdlg.TargetAmount;
-                    r["WaivePartialPct"] = wdlg.PartialPct;
+                    r["WaivePartialThreshold"] = wdlg.PartialThreshold;
+                    r["WaivePartialAmount"] = wdlg.PartialAmount;
                     r["WaiveScope"] = wdlg.Scope;
                     GridViewMeters.RefreshData();
                 }
@@ -1007,7 +1010,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             r["FOCQty"] = 0m;
             r["InitialReading"] = 0m;
             r["CustomTiers"] = "";
-            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialPct"] = 100m; r["WaiveScope"] = "BKCL";
+            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m; r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
             _meters.Rows.Add(r);
         }
 
@@ -1488,7 +1491,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 _meters.Rows.Clear();
                 DataTable mt = _db.GetDataTable(
                     "SELECT ItemMeterKey, MeterTypeCode, MeterRole, [Description], MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                    "RebateQtyInPercent, FOCQty, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialPct, WaiveScope " +
+                    "RebateQtyInPercent, FOCQty, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope " +
                     "FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + key + " ORDER BY ItemMeterKey", false);
                 foreach (DataRow s in mt.Rows)
                 {
@@ -1505,7 +1508,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     nr["CustomTiers"] = LoadCustomTiersCsv(_db, Convert.ToInt64(s["ItemMeterKey"]));   // the deal's own ladder copies too
                     nr["WaiveFirstNMonths"] = s["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(s["WaiveFirstNMonths"]);
                     nr["WaiveTargetAmount"] = s["WaiveTargetAmount"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaiveTargetAmount"]);
-                    nr["WaivePartialPct"] = s["WaivePartialPct"] == DBNull.Value ? 100m : Convert.ToDecimal(s["WaivePartialPct"]);
+                    nr["WaivePartialThreshold"] = s["WaivePartialThreshold"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaivePartialThreshold"]);
+                    nr["WaivePartialAmount"] = s["WaivePartialAmount"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaivePartialAmount"]);
                     nr["WaiveScope"] = s["WaiveScope"] == DBNull.Value ? "BKCL" : Convert.ToString(s["WaiveScope"]);
                     _meters.Rows.Add(nr);
                 }
@@ -2321,7 +2325,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
                             "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, [Description]=@desc, MinimumCharges=@min, ChargesRate=@rate, " +
                             "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
-                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialPct=@wp, WaiveScope=@ws, " +
+                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialThreshold=@wpt, WaivePartialAmount=@wpa, WaiveScope=@ws, " +
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
                             up.Parameters.AddWithValue("@role", role);
@@ -2337,8 +2341,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
                             "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, " +
                             "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, " +
-                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialPct, WaiveScope, LastModified) " +
-                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wp,@ws,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, LastModified) " +
+                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
                         {
                             ins.Parameters.AddWithValue("@ik", itemKey);
                             ins.Parameters.AddWithValue("@type", type);
@@ -2462,7 +2466,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@init", r["InitialReading"] == DBNull.Value ? (object)0m : r["InitialReading"]);
             cmd.Parameters.AddWithValue("@wn", r.Table.Columns.Contains("WaiveFirstNMonths") && r["WaiveFirstNMonths"] != DBNull.Value ? Convert.ToInt32(r["WaiveFirstNMonths"]) : 0);
             cmd.Parameters.AddWithValue("@wt", r.Table.Columns.Contains("WaiveTargetAmount") && r["WaiveTargetAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaiveTargetAmount"]) : 0m);
-            cmd.Parameters.AddWithValue("@wp", r.Table.Columns.Contains("WaivePartialPct") && r["WaivePartialPct"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialPct"]) : 100m);
+            cmd.Parameters.AddWithValue("@wpt", r.Table.Columns.Contains("WaivePartialThreshold") && r["WaivePartialThreshold"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialThreshold"]) : 0m);
+            cmd.Parameters.AddWithValue("@wpa", r.Table.Columns.Contains("WaivePartialAmount") && r["WaivePartialAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialAmount"]) : 0m);
             string wsv = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]).Trim() : "";
             cmd.Parameters.AddWithValue("@ws", wsv.Length > 0 ? (object)wsv : (object)"BKCL");
         }

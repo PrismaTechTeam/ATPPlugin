@@ -841,6 +841,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v5_WaiveConfig.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterType_v3_DefaultRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />

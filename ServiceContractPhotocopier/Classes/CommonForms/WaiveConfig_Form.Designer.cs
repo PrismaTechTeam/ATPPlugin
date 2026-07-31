@@ -35,8 +35,10 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.ChkTarget = new DevExpress.XtraEditors.CheckEdit();
             this.LblTarget = new DevExpress.XtraEditors.LabelControl();
             this.SpnTarget = new DevExpress.XtraEditors.SpinEdit();
-            this.LblPartial = new DevExpress.XtraEditors.LabelControl();
-            this.SpnPartial = new DevExpress.XtraEditors.SpinEdit();
+            this.LblPartialTh = new DevExpress.XtraEditors.LabelControl();
+            this.SpnPartialTh = new DevExpress.XtraEditors.SpinEdit();
+            this.LblPartialAmt = new DevExpress.XtraEditors.LabelControl();
+            this.SpnPartialAmt = new DevExpress.XtraEditors.SpinEdit();
             this.LblScope = new DevExpress.XtraEditors.LabelControl();
             this.CmbScope = new DevExpress.XtraEditors.ComboBoxEdit();
             this.LblAlways = new DevExpress.XtraEditors.LabelControl();
@@ -46,7 +48,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             ((System.ComponentModel.ISupportInitialize)(this.SpnFirstN.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkTarget.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnTarget.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.SpnPartial.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnPartialTh.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnPartialAmt.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbScope.Properties)).BeginInit();
             this.SuspendLayout();
             //
@@ -106,32 +109,48 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.SpnTarget.Properties.MaxValue = new decimal(new int[] { 100000000, 0, 0, 0 });
             this.SpnTarget.Size = new System.Drawing.Size(100, 20);
             //
-            // LblPartial
+            // LblPartialTh
             //
-            this.LblPartial.Location = new System.Drawing.Point(32, 129);
-            this.LblPartial.Name = "LblPartial";
-            this.LblPartial.Size = new System.Drawing.Size(70, 13);
-            this.LblPartial.Text = "Partial waive %";
+            this.LblPartialTh.Location = new System.Drawing.Point(32, 129);
+            this.LblPartialTh.Name = "LblPartialTh";
+            this.LblPartialTh.Size = new System.Drawing.Size(90, 13);
+            this.LblPartialTh.Text = "Partial: hit (RM)";
             //
-            // SpnPartial
+            // SpnPartialTh
             //
-            this.SpnPartial.EditValue = new decimal(new int[] { 100, 0, 0, 0 });
-            this.SpnPartial.Location = new System.Drawing.Point(140, 126);
-            this.SpnPartial.Name = "SpnPartial";
-            this.SpnPartial.Properties.MaxValue = new decimal(new int[] { 100, 0, 0, 0 });
-            this.SpnPartial.Properties.MinValue = new decimal(new int[] { 1, 0, 0, 0 });
-            this.SpnPartial.Size = new System.Drawing.Size(100, 20);
+            this.SpnPartialTh.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
+            this.SpnPartialTh.Location = new System.Drawing.Point(140, 126);
+            this.SpnPartialTh.Name = "SpnPartialTh";
+            this.SpnPartialTh.Properties.DisplayFormat.FormatString = "n2";
+            this.SpnPartialTh.Properties.MaxValue = new decimal(new int[] { 100000000, 0, 0, 0 });
+            this.SpnPartialTh.Size = new System.Drawing.Size(100, 20);
+            //
+            // LblPartialAmt
+            //
+            this.LblPartialAmt.Location = new System.Drawing.Point(32, 157);
+            this.LblPartialAmt.Name = "LblPartialAmt";
+            this.LblPartialAmt.Size = new System.Drawing.Size(90, 13);
+            this.LblPartialAmt.Text = "-> waive (RM)";
+            //
+            // SpnPartialAmt
+            //
+            this.SpnPartialAmt.EditValue = new decimal(new int[] { 0, 0, 0, 0 });
+            this.SpnPartialAmt.Location = new System.Drawing.Point(140, 154);
+            this.SpnPartialAmt.Name = "SpnPartialAmt";
+            this.SpnPartialAmt.Properties.DisplayFormat.FormatString = "n2";
+            this.SpnPartialAmt.Properties.MaxValue = new decimal(new int[] { 100000000, 0, 0, 0 });
+            this.SpnPartialAmt.Size = new System.Drawing.Size(100, 20);
             //
             // LblScope
             //
-            this.LblScope.Location = new System.Drawing.Point(32, 157);
+            this.LblScope.Location = new System.Drawing.Point(32, 185);
             this.LblScope.Name = "LblScope";
             this.LblScope.Size = new System.Drawing.Size(85, 13);
             this.LblScope.Text = "Count usage from";
             //
             // CmbScope
             //
-            this.CmbScope.Location = new System.Drawing.Point(140, 154);
+            this.CmbScope.Location = new System.Drawing.Point(140, 182);
             this.CmbScope.Name = "CmbScope";
             this.CmbScope.Properties.Items.AddRange(new object[] { "BK + CL usage", "BK only", "CL only" });
             this.CmbScope.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
@@ -141,14 +160,14 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             //
             this.LblAlways.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(160)))), ((int)(((byte)(96)))), ((int)(((byte)(0)))));
             this.LblAlways.Appearance.Options.UseForeColor = true;
-            this.LblAlways.Location = new System.Drawing.Point(14, 186);
+            this.LblAlways.Location = new System.Drawing.Point(14, 214);
             this.LblAlways.Name = "LblAlways";
             this.LblAlways.Size = new System.Drawing.Size(380, 13);
             this.LblAlways.Text = "Nothing ticked = ALWAYS waive — the contra bills every month.";
             //
             // BtnOK
             //
-            this.BtnOK.Location = new System.Drawing.Point(200, 214);
+            this.BtnOK.Location = new System.Drawing.Point(200, 242);
             this.BtnOK.Name = "BtnOK";
             this.BtnOK.Size = new System.Drawing.Size(90, 28);
             this.BtnOK.Text = "OK";
@@ -156,7 +175,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             //
             // BtnCancel
             //
-            this.BtnCancel.Location = new System.Drawing.Point(298, 214);
+            this.BtnCancel.Location = new System.Drawing.Point(298, 242);
             this.BtnCancel.Name = "BtnCancel";
             this.BtnCancel.Size = new System.Drawing.Size(90, 28);
             this.BtnCancel.Text = "Cancel";
@@ -166,7 +185,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(404, 254);
+            this.ClientSize = new System.Drawing.Size(404, 282);
             this.Controls.Add(this.LblMeter);
             this.Controls.Add(this.ChkFirstN);
             this.Controls.Add(this.SpnFirstN);
@@ -174,8 +193,10 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.Controls.Add(this.ChkTarget);
             this.Controls.Add(this.LblTarget);
             this.Controls.Add(this.SpnTarget);
-            this.Controls.Add(this.LblPartial);
-            this.Controls.Add(this.SpnPartial);
+            this.Controls.Add(this.LblPartialTh);
+            this.Controls.Add(this.SpnPartialTh);
+            this.Controls.Add(this.LblPartialAmt);
+            this.Controls.Add(this.SpnPartialAmt);
             this.Controls.Add(this.LblScope);
             this.Controls.Add(this.CmbScope);
             this.Controls.Add(this.LblAlways);
@@ -191,7 +212,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             ((System.ComponentModel.ISupportInitialize)(this.SpnFirstN.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkTarget.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnTarget.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.SpnPartial.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnPartialTh.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SpnPartialAmt.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbScope.Properties)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -206,8 +228,10 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         private DevExpress.XtraEditors.CheckEdit ChkTarget;
         private DevExpress.XtraEditors.LabelControl LblTarget;
         private DevExpress.XtraEditors.SpinEdit SpnTarget;
-        private DevExpress.XtraEditors.LabelControl LblPartial;
-        private DevExpress.XtraEditors.SpinEdit SpnPartial;
+        private DevExpress.XtraEditors.LabelControl LblPartialTh;
+        private DevExpress.XtraEditors.SpinEdit SpnPartialTh;
+        private DevExpress.XtraEditors.LabelControl LblPartialAmt;
+        private DevExpress.XtraEditors.SpinEdit SpnPartialAmt;
         private DevExpress.XtraEditors.LabelControl LblScope;
         private DevExpress.XtraEditors.ComboBoxEdit CmbScope;
         private DevExpress.XtraEditors.LabelControl LblAlways;
