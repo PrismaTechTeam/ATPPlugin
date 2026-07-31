@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -30,6 +30,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DBSetting _dbSetting;
         private UserSession _userSession;
         private DataTable _dt;
+        private CheckEdit _chkUnsentOnly;     // #9b: "ready but not yet emailed" checklist filter
+        private SimpleButton _btnTemplate;    // #9a: saved subject/body template
+        private HashSet<InvoiceBatchMailEntity> _sentEntities;   // #9b: recipients Send actually dispatched
 
         // One email per customer: their invoice PDFs are the attachments. AccNo/CompanyName/DocNos
         // are reflected into the Batch Mail grid columns and usable as {tokens} in the message.
@@ -38,6 +41,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             public string AccNo { get; set; }
             public string CompanyName { get; set; }
             public string DocNos { get; set; }
+            // FIELDS (not properties) so BatchMail2's reflection never turns them into grid columns.
+            public List<long> DocKeyList = new List<long>();
+            public List<string> DocNoList = new List<string>();
         }
 
         public BulkEmailInvoice_Form()
@@ -51,6 +57,34 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbEmailSource.Properties.Items.Add("Statement Email (same as SOA Batch Mail)");
             this.CmbEmailSource.SelectedIndex = 0;
             ApplyFilterDefaults();
+
+            // Demo 28/07 #9a/#9b (created in code — the strict designer stays untouched):
+            // saved message template + the "which invoices are ready but not yet emailed" filter.
+            _btnTemplate = new SimpleButton();
+            _btnTemplate.Text = "Template…";
+            _btnTemplate.Location = new System.Drawing.Point(350, 87);
+            _btnTemplate.Size = new System.Drawing.Size(104, 28);
+            _btnTemplate.Click += new EventHandler(BtnTemplate_Click);
+            this.GrpFilter.Controls.Add(_btnTemplate);
+            _chkUnsentOnly = new CheckEdit();
+            _chkUnsentOnly.Properties.Caption = "Not yet emailed only";
+            _chkUnsentOnly.Location = new System.Drawing.Point(88, 118);
+            _chkUnsentOnly.Size = new System.Drawing.Size(240, 22);
+            _chkUnsentOnly.CheckedChanged += delegate { ApplyUnsentFilter(); };
+            this.GrpFilter.Controls.Add(_chkUnsentOnly);
+        }
+
+        private void ApplyUnsentFilter()
+        {
+            GridViewInv.ActiveFilterString =
+                _chkUnsentOnly != null && _chkUnsentOnly.Checked ? "[EmailedAt] Is Null" : "";
+        }
+
+        private void BtnTemplate_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            using (BulkEmailTemplate_Form dlg = new BulkEmailTemplate_Form(_dbSetting))
+                dlg.ShowDialog(this);
         }
 
         private void ApplyFilterDefaults()
@@ -165,8 +199,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             string sql =
                 "SELECT IV.DocKey, IV.DocNo, IV.DocDate, IV.DebtorCode, IV.DebtorName, IV.NetTotal, " +
                 "IV.[Description], ISNULL(D.EmailAddress,'') AS EmailAddress, " +
-                "ISNULL(D.StatementEmail,'') AS StatementEmail " +
+                "ISNULL(D.StatementEmail,'') AS StatementEmail, em.LastEmailAt " +
                 "FROM dbo.IV IV LEFT JOIN dbo.Debtor D ON D.AccNo = IV.DebtorCode " +
+                "LEFT JOIN (SELECT DocKey, MAX(SentAt) AS LastEmailAt FROM dbo.zSCP2_EmailLog GROUP BY DocKey) em " +
+                "  ON em.DocKey = IV.DocKey " +
                 "WHERE IV.Cancelled = 'F' AND IV.DocDate >= @from AND IV.DocDate <= @to " +
                 (debtor.Length > 0 ? "AND IV.DebtorCode = @debtor " : "") +
                 (ChkMeterOnly.Checked
@@ -204,6 +240,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _dt.Columns.Add("DocKey", typeof(long));
             _dt.Columns.Add("EmailAddress", typeof(string));
             _dt.Columns.Add("StatementEmail", typeof(string));
+            _dt.Columns.Add("EmailedAt", typeof(DateTime));   // #9b: last bulk-email send of this invoice
             foreach (DataRow r in raw.Rows)
             {
                 DataRow d = _dt.NewRow();
@@ -217,11 +254,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 d["DocKey"] = Convert.ToInt64(r["DocKey"]);
                 d["EmailAddress"] = Convert.ToString(r["EmailAddress"]).Trim();
                 d["StatementEmail"] = Convert.ToString(r["StatementEmail"]).Trim();
+                if (r["LastEmailAt"] != DBNull.Value) d["EmailedAt"] = Convert.ToDateTime(r["LastEmailAt"]);
                 _dt.Rows.Add(d);
             }
             FillEmailColumn();
             GridInv.DataSource = _dt;
             ConfigureColumns();
+            ApplyUnsentFilter();
             UpdateCount();
         }
 
@@ -245,6 +284,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (ct != null)
             { ct.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric; ct.DisplayFormat.FormatString = "n2"; }
             SetCol("Description", "Description", 260, false);
+            SetCol("EmailedAt", "Emailed", 120, false);
+            GridColumn ce = GridViewInv.Columns["EmailedAt"];
+            if (ce != null)
+            { ce.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime; ce.DisplayFormat.FormatString = "dd/MM/yyyy HH:mm"; }
         }
 
         private void SetCol(string field, string caption, int width, bool editable)
@@ -259,13 +302,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // and the Batch Mail dialog lets the user type one on the spot anyway.
         private void GridViewInv_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
-            if (e.Column == null || e.Column.FieldName != "Email") return;
-            object v = GridViewInv.GetRowCellValue(e.RowHandle, "Email");
-            string s = v == null || v == DBNull.Value ? "" : v.ToString().Trim();
-            if (s.Length == 0)
+            if (e.Column == null) return;
+            if (e.Column.FieldName == "Email")
             {
-                e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 236, 179);
-                e.Appearance.ForeColor = System.Drawing.Color.Black;
+                object v = GridViewInv.GetRowCellValue(e.RowHandle, "Email");
+                string s = v == null || v == DBNull.Value ? "" : v.ToString().Trim();
+                if (s.Length == 0)
+                {
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 236, 179);
+                    e.Appearance.ForeColor = System.Drawing.Color.Black;
+                }
+                return;
+            }
+            // #9b checklist: a green Emailed cell = this invoice already went out at least once.
+            if (e.Column.FieldName == "EmailedAt")
+            {
+                object v = GridViewInv.GetRowCellValue(e.RowHandle, "EmailedAt");
+                if (v != null && v != DBNull.Value)
+                {
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(212, 239, 212);
+                    e.Appearance.ForeColor = System.Drawing.Color.Black;
+                }
             }
         }
 
@@ -390,6 +447,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         entities.Add(ent);
                     }
                     ent.DocNos = ent.DocNos.Length == 0 ? docNo : ent.DocNos + ", " + docNo;
+                    ent.DocKeyList.Add(Convert.ToInt64(r["DocKey"]));
+                    ent.DocNoList.Add(docNo);
                     AttachmentData att = new AttachmentData();
                     att.FileName = "Invoice " + SafeFileName(docNo) + ".pdf";
                     att.Binary = pdf;
@@ -422,26 +481,74 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             catch { }
 
-            string subject = "Invoice {DocNos}";
-            string message = "Dear {CompanyName},\r\n\r\nPlease find attached your invoice(s): {DocNos}.\r\n\r\nThank you.";
+            // #9a: the saved template ("Template..." button) - set once, used every run.
+            string subject = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_BULKMAIL_SUBJECT,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_BULKMAIL_SUBJECT);
+            string message = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_BULKMAIL_BODY,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_BULKMAIL_BODY);
             ColumnNameCaption[] cols = new ColumnNameCaption[3];
             cols[0] = new ColumnNameCaption(); cols[0].ColumnName = "AccNo"; cols[0].Caption = "Customer"; cols[0].AllowEdit = false;
             cols[1] = new ColumnNameCaption(); cols[1].ColumnName = "CompanyName"; cols[1].Caption = "Company Name"; cols[1].AllowEdit = false;
             cols[2] = new ColumnNameCaption(); cols[2].ColumnName = "DocNos"; cols[2].Caption = "Invoices"; cols[2].AllowEdit = false;
 
+            // Send detection: dbo.Mail rows are only written by a background timer AFTER the SMTP
+            // send, so polling the table right after the dialog closes under-reports. The exact
+            // signal is FormBatchMail2 itself — clicking Send invokes our ConvertMessage handler
+            // once per recipient (Cancel never does), so those entities ARE the sent set.
+            _sentEntities = new HashSet<InvoiceBatchMailEntity>();
             using (FormBatchMail2 f = new FormBatchMail2(_userSession, subject, message, fromName, fromEmail,
                 new List<BatchMail2Entity>(entities.ToArray()), cols))
             {
                 f.SetConvertMessageHandler(new ConvertMessageEventHandler(ConvertBatchMessage));
                 f.ShowDialog(this);
             }
+            LogEmailed(_sentEntities);
+            _sentEntities = null;
+            LoadData();   // refresh the Emailed column / checklist
+        }
+
+        // #9b: write one zSCP2_EmailLog row per invoice of every recipient the user really sent to
+        // (FormBatchMail2 copies the grid's possibly-edited Email back onto the entity before it
+        // dispatches, so ent.Email is the final address).
+        private void LogEmailed(HashSet<InvoiceBatchMailEntity> sentEntities)
+        {
+            if (_dbSetting == null || sentEntities == null || sentEntities.Count == 0) return;
+            try
+            {
+                string by = _userSession != null ? Convert.ToString(_userSession.LoginUserID) : "";
+                using (SqlConnection conn = new SqlConnection(_dbSetting.ConnectionString))
+                {
+                    conn.Open();
+                    foreach (InvoiceBatchMailEntity ent in sentEntities)
+                    {
+                        string email = (ent.Email ?? "").Trim();
+                        for (int i = 0; i < ent.DocKeyList.Count; i++)
+                            using (SqlCommand cmd = new SqlCommand(
+                                "INSERT INTO dbo.zSCP2_EmailLog (DocKey, DocNo, DebtorCode, Email, SentAt, SentBy) " +
+                                "VALUES (@dk,@dn,@acc,@em,GETDATE(),@by)", conn))
+                            {
+                                cmd.Parameters.AddWithValue("@dk", ent.DocKeyList[i]);
+                                cmd.Parameters.AddWithValue("@dn", ent.DocNoList[i]);
+                                cmd.Parameters.AddWithValue("@acc", ent.AccNo ?? "");
+                                cmd.Parameters.AddWithValue("@em", email);
+                                cmd.Parameters.AddWithValue("@by", by);
+                                cmd.ExecuteNonQuery();
+                            }
+                    }
+                }
+            }
+            catch { /* the send already happened - history logging must never break it */ }
         }
 
         // {token} substitution per recipient — mirrors the Debtor Statement's Batch Mail behaviour.
+        // Also the SEND signal: FormBatchMail2 only calls this while dispatching (Send clicked).
         private void ConvertBatchMessage(BatchMail2Entity entity, ref string fromName, ref string subject, ref string message)
         {
             InvoiceBatchMailEntity ent = entity as InvoiceBatchMailEntity;
             if (ent == null) return;
+            if (_sentEntities != null) _sentEntities.Add(ent);
             fromName = ReplaceTokens(fromName, ent);
             subject = ReplaceTokens(subject, ent);
             message = ReplaceTokens(message, ent);
@@ -476,6 +583,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnReset_Click(object sender, EventArgs e)
         {
             ApplyFilterDefaults();
+            if (_chkUnsentOnly != null) _chkUnsentOnly.Checked = false;
             GridViewInv.ClearColumnsFilter();
             LoadData();
         }

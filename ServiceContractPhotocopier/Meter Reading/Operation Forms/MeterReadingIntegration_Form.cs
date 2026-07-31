@@ -969,6 +969,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "COALESCE(NULLIF(m.MachineSerialNo,''), i.SerialNumber) AS SerialNumber, " +
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                     "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
+                    "ISNULL(c.RentalBillingDay,0) AS RentalBillingDay, " +
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "ISNULL(i.IsGroupItem,'N') AS IsGroupItem, ISNULL(i.MachineMode,'') AS MachineMode, " +
@@ -1110,6 +1111,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     if (r["EffStart"] != DBNull.Value) g["EffStart"] = Convert.ToDateTime(r["EffStart"]);
                     g["StrategyCode"] = S(r["StrategyCode"]);
                     g["RentSep"] = S(r["RentSep"]) == "Y";
+                    g["RentalBillingDay"] = r["RentalBillingDay"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalBillingDay"]);
                     if (r["RentalStartDate"] != DBNull.Value) g["RentalStartDate"] = Convert.ToDateTime(r["RentalStartDate"]);
                     g["RentalMonths"] = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
                     g["RentalBasis"] = S(r["RentalBasis"]) == "P" ? "P" : "A";
@@ -1243,6 +1245,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("WaiveScope", typeof(string));
             dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
             dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
+            dt.Columns.Add("RentalBillingDay", typeof(int));   // rental-separate invoice's own day; 0 = follow meter date (hidden)
             dt.Columns.Add("RentalStartDate", typeof(DateTime)); // rental period anchor (hidden; n/N)
             dt.Columns.Add("RentalMonths", typeof(int));       // rental total periods N (hidden)
             dt.Columns.Add("RentalBasis", typeof(string));     // A accrual / P prepayment (hidden)
@@ -1274,7 +1277,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
             // Locked rows: the Current Reading cell refuses to open its editor (snapshot is frozen).
             GridViewMeter.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
@@ -2564,6 +2567,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     int effDay = r["BillingDay"] == DBNull.Value ? 28 : Convert.ToInt32(r["BillingDay"]);
                     int dim = DateTime.DaysInMonth(genYear, genMonth);
                     job.DocDate = new DateTime(genYear, genMonth, effDay > dim ? dim : (effDay < 1 ? 1 : effDay));
+                    // Demo 28/07 #18: the rental-separate job gets its OWN invoice day when the
+                    // contract sets one ("rental 是跟头标的,meter 是跟尾标的"): accrual rentals date
+                    // in the billing month, prepayment rentals in the NEXT month (June run -> July 1).
+                    if (rentalJob)
+                    {
+                        int rentDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
+                            ? Convert.ToInt32(r["RentalBillingDay"]) : 0;
+                        if (rentDay >= 1 && rentDay <= 28)
+                        {
+                            int ry = genYear, rm = genMonth;
+                            if (S(r["RentalBasis"]) == "P") { rm++; if (rm > 12) { rm = 1; ry++; } }
+                            int rdim = DateTime.DaysInMonth(ry, rm);
+                            job.DocDate = new DateTime(ry, rm, rentDay > rdim ? rdim : rentDay);
+                        }
+                    }
                     // Legacy header text (verified against the customer's V8 meter invoices);
                     // rental-only invoices get their own header so the two are distinguishable.
                     job.Description = (rentalJob ? "Rental- [" : "Billing- [") + refNo + "]";

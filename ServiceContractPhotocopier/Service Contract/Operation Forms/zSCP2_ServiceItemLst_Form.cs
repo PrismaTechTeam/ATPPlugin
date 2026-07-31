@@ -509,6 +509,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "ISNULL(COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')),'') AS DebtorCode, " +
                     "ISNULL(d.CompanyName,'') AS DebtorName, " +
                     "i.ItemCode, i.Description, i.GradeCode, i.ReferenceNo, " +
+                    // Demo 28/07 #11+14: EFFECTIVE branch (item's own, else the contract's) — where the machine sits.
+                    "COALESCE(NULLIF(i.DelBranchCode,''), c.DelBranchCode, '') AS BranchCode, " +
+                    "COALESCE(NULLIF(i.DelBranchName,''), c.DelBranchName, '') AS BranchName, " +
                     "COALESCE(NULLIF(i.ContractTypeCode,''), c.ContractTypeCode, '') AS ContractTypeCode, " +
                     "COALESCE(NULLIF(i.StaffCode,''), c.StaffCode, '') AS StaffCode, " +
                     "COALESCE(NULLIF(i.AreaCode,''), c.AreaCode, '') AS AreaCode, " +
@@ -552,6 +555,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 Cfg("BillingMode", "Billing Mode", 80, 12);
                 Cfg("BlackMeter", "Black Meter", 110, 13);
                 Cfg("ColourMeter", "Colour Meter", 110, 14);
+                Cfg("BranchCode", "Branch", 80, 5);        // VisibleIndex 5/6 inserts after Customer Name
+                Cfg("BranchName", "Branch Name", 140, 6);
                 GridColumn sd = GridView.Columns["ServiceStartDate"];
                 if (sd != null)
                 {

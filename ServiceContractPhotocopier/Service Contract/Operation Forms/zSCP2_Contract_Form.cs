@@ -111,6 +111,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LoadMoreHeader();
             BuildStrategyTab();
             BuildGroupTab();
+            BuildRentalDayControls();
             BuildBillingHistoryTab();
             BuildChangeHistoryTab();
             ApplyTemplateExtras();   // clone-at-open: spare parts / rules / More Header now have their tabs
@@ -427,6 +428,36 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.EditValueChanged += h;
             SluStrategy.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
+            if (_spnRentalDay != null) _spnRentalDay.EditValueChanged += h;
+        }
+
+        // Demo 28/07 #18: the rental-separate invoice's OWN billing day ("rental 是跟头标的").
+        // 0 = follow the meter invoice date; 1-28 = date the Rental- invoice on this day (accrual
+        // rentals in the billing month, prepayment rentals in the NEXT month). Created in code —
+        // the strict designer stays untouched.
+        private DevExpress.XtraEditors.LabelControl _lblRentalDay;
+        private DevExpress.XtraEditors.SpinEdit _spnRentalDay;
+        private int _loadedRentalDay;
+
+        private void BuildRentalDayControls()
+        {
+            _lblRentalDay = new DevExpress.XtraEditors.LabelControl();
+            _lblRentalDay.Text = "Rental inv. day";
+            _lblRentalDay.Location = new System.Drawing.Point(1050, 217);
+            PanelHeaderFields.Controls.Add(_lblRentalDay);
+            _spnRentalDay = new DevExpress.XtraEditors.SpinEdit();
+            _spnRentalDay.Location = new System.Drawing.Point(1130, 214);
+            _spnRentalDay.Size = new System.Drawing.Size(52, 20);
+            _spnRentalDay.Properties.IsFloatValue = false;
+            _spnRentalDay.Properties.MinValue = 0;
+            _spnRentalDay.Properties.MaxValue = 28;
+            _spnRentalDay.Value = _loadedRentalDay;
+            _spnRentalDay.ToolTip = "0 = rental rides the meter invoice date.\r\n" +
+                "1-28 = the separate Rental- invoice is dated on THIS day: accrual rentals in the " +
+                "billing month, prepayment rentals in the NEXT month (June run -> July 1 rental).";
+            PanelHeaderFields.Controls.Add(_spnRentalDay);
+            _spnRentalDay.Enabled = ChkRentalSeparate.Checked;
+            ChkRentalSeparate.CheckedChanged += delegate { _spnRentalDay.Enabled = ChkRentalSeparate.Checked; };
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
@@ -913,6 +944,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateInactiveInfoLabel();
             SluStrategy.EditValue = r.Table.Columns.Contains("StrategyCode") ? SetOrNull(AsStr(r["StrategyCode"])) : null;
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
+                ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
+            if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
             // called both here (post-save reload, controls exist) and at the end of BuildStrategyTab
@@ -4081,9 +4115,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -4099,7 +4133,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "ContractDate=@cdate, ServiceStartDate=@sdate, ServiceExpiryDate=@edate, ContractValue=@val, " +
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
-                "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, " +
+                "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
@@ -4140,6 +4174,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@note", (object)(TxtNote.Text ?? ""));
             cmd.Parameters.AddWithValue("@strategy", SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
+            cmd.Parameters.AddWithValue("@rentday", _spnRentalDay != null ? (object)(int)_spnRentalDay.Value : (object)_loadedRentalDay);
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -4467,7 +4502,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(SpnContractValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append('\t')
               .Append(Tsv(TxtRefNo.Text)).Append('\t').Append(Tsv(TxtRemark1.Text)).Append('\t')
               .Append(Tsv(TxtRemark2.Text)).Append('\t').Append(Tsv(TxtNote.Text)).Append('\t')
-              .Append(ChkRentalSeparate.Checked ? "Y" : "N").AppendLine();
+              .Append(ChkRentalSeparate.Checked ? "Y" : "N").Append('\t')
+              .Append(_spnRentalDay != null ? ((int)_spnRentalDay.Value).ToString() : "0").AppendLine();
             foreach (ItemEditData d in _items)
             {
                 sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
@@ -4608,6 +4644,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         TxtRefNo.Text = At(p, 16); TxtRemark1.Text = At(p, 17);
                         TxtRemark2.Text = At(p, 18); TxtNote.Text = At(p, 19);
                         ChkRentalSeparate.Checked = At(p, 20) == "Y";
+                        int rdClip;
+                        if (_spnRentalDay != null && int.TryParse(At(p, 21), out rdClip))
+                            _spnRentalDay.Value = Math.Max(0, Math.Min(28, rdClip));
                     }
                 }
                 else if (p[0] == "I") { last = ItemFromTsv(p, 1); _items.Add(last); }
@@ -4812,6 +4851,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SluProject.EditValue = r.Table.Columns.Contains("ProjNo") ? SetOrNull(AsStr(r["ProjNo"])) : null;
                 SluStrategy.EditValue = r.Table.Columns.Contains("StrategyCode") ? SetOrNull(AsStr(r["StrategyCode"])) : null;
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
+                ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
+            if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;
                 ApplyFocResetToUi();   // no-op before the strategy tab exists; re-applied by OnFormLoad

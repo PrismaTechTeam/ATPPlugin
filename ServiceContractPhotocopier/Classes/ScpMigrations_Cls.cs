@@ -163,6 +163,10 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v7_Inactive.sql", asm);
             // v8: month-end billing retired — legacy day-31/month-end rows become plain day 28.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v8_RetireMonthEnd.sql", asm);
+            // v9: rental-separate invoice's OWN billing day (0 = follow the meter invoice date).
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v9_RentalBillingDay.sql", asm);
+            // Bulk Email send history (Emailed column / not-yet-emailed checklist / contract reminder).
+            RunIfTableMissing(dbsetting, "zSCP2_EmailLog",              "02_CreateTable_zSCP2_EmailLog.sql", asm);
             // Rental Waive meter types ("(W)" family auto-tagged) + per-meter waive configuration.
             RunDDL(dbsetting, "02_Update_zSCP_MeterType_v2_RentalWaive.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v5_WaiveConfig.sql", asm);

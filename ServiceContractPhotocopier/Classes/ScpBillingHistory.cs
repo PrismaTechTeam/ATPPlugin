@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using AutoCount.Data;
 
@@ -23,11 +23,14 @@ namespace ServiceContractPhotocopier.Classes
                     "CASE WHEN ISNULL(iv.Cancelled,'F') = 'T' THEN 'YES' ELSE '' END AS [Cancelled], " +
                     "COUNT(DISTINCT me.ItemMeterKey) AS [Meters], " +
                     "MAX(ISNULL(me.StrategyCode, '')) AS [Strategy], " +
-                    "MAX(me.InvoicedAt) AS [Generated At] " +
+                    "MAX(me.InvoicedAt) AS [Generated At], " +
+                    "MAX(el.LastEmailAt) AS [Emailed] " +
                     "FROM dbo.zSCP2_MeterEntry me " +
                     "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = me.ItemMeterKey " +
                     "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                     "JOIN dbo.IV iv ON iv.DocKey = me.InvoicedDocKey " +
+                    "LEFT JOIN (SELECT DocKey, MAX(SentAt) AS LastEmailAt FROM dbo.zSCP2_EmailLog GROUP BY DocKey) el " +
+                    "  ON el.DocKey = iv.DocKey " +
                     "WHERE me.InvoicedDocKey IS NOT NULL AND " + filterCol + " = " + key + " " +
                     "GROUP BY iv.DocKey, iv.DocNo, iv.DocDate, iv.NetTotal, iv.Cancelled, me.PeriodYear, me.PeriodMonth " +
                     "ORDER BY me.PeriodYear DESC, me.PeriodMonth DESC, iv.DocNo DESC", false);
@@ -48,6 +51,7 @@ namespace ServiceContractPhotocopier.Classes
             dt.Columns.Add("Meters", typeof(int));
             dt.Columns.Add("Strategy", typeof(string));
             dt.Columns.Add("Generated At", typeof(DateTime));
+            dt.Columns.Add("Emailed", typeof(DateTime));
             return dt;
         }
 
@@ -68,6 +72,30 @@ namespace ServiceContractPhotocopier.Classes
 
             DataTable dt = key > 0 ? Load(db, filterCol, key) : Empty();
             grid.DataSource = dt;
+
+            // Demo 28/07 #9b: the contract module itself reminds when generated invoices are still
+            // waiting to be emailed (send them from Meter Reading > Bulk Email Invoice).
+            int notMailed = 0;
+            foreach (DataRow r0 in dt.Rows)
+                if (dt.Columns.Contains("Emailed") && Convert.ToString(r0["Cancelled"]).Length == 0
+                    && r0["Emailed"] == DBNull.Value) notMailed++;
+            if (notMailed > 0)
+            {
+                DevExpress.XtraEditors.LabelControl warn = new DevExpress.XtraEditors.LabelControl();
+                warn.Text = "   " + notMailed + " invoice(s) generated but NOT yet emailed  —  send them from " +
+                            "Meter Reading > Bulk Email Invoice.";
+                warn.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+                warn.Dock = System.Windows.Forms.DockStyle.Top;
+                warn.Height = 26;
+                warn.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 244, 202);
+                warn.Appearance.ForeColor = System.Drawing.Color.FromArgb(150, 90, 0);
+                warn.Appearance.Options.UseBackColor = true;
+                warn.Appearance.Options.UseForeColor = true;
+                warn.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+                warn.Appearance.Options.UseTextOptions = true;
+                page.Controls.Add(warn);
+                grid.BringToFront();   // Fill grid lays out under the Top banner
+            }
             view.PopulateColumns();
             if (view.Columns["DocKey"] != null) view.Columns["DocKey"].Visible = false;
             if (view.Columns["Amount"] != null)
@@ -79,6 +107,11 @@ namespace ServiceContractPhotocopier.Classes
             {
                 view.Columns["Invoice Date"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
                 view.Columns["Invoice Date"].DisplayFormat.FormatString = "dd/MM/yyyy";
+            }
+            if (view.Columns["Emailed"] != null)
+            {
+                view.Columns["Emailed"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                view.Columns["Emailed"].DisplayFormat.FormatString = "dd/MM/yyyy HH:mm";
             }
             view.BestFitColumns();
 

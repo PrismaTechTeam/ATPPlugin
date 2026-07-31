@@ -118,6 +118,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SearchLookUpEdit _lkCustomer;
         private DevExpress.XtraEditors.SearchLookUpEdit _lkContract;   // standalone: attach to an EXISTING contract
         private string _parentContractNo;                          // embedded add: shows contract read-only
+        private DevExpress.XtraEditors.SimpleButton _btnDelBranchSearch;   // demo 28/07 #11+14
+        private DevExpress.XtraEditors.SimpleButton _btnDelCopyContract;
 
         public zSCP2_Item_Form()
         {
@@ -2775,6 +2777,157 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ImhField(grp, "DelContactPerson", "Contact Person", 430, 161, 180);
             ImhField(grp, "DelCity", "City", 10, 150, 180);
             ImhField(grp, "DelPostalCode", "Postal Code", 10, 176, 180);
+
+            // Demo 28/07 #11+14: the machine's branch/location comes from the customer's REGISTERED
+            // branches (AutoCount A/R > Debtor > Branch) — the search lists only THIS debtor's
+            // branches, and picking one fills the whole block ("一选了它就把全部东西填进去").
+            // Everything stays editable afterwards. "From Contract" re-copies the contract default.
+            _btnDelBranchSearch = new DevExpress.XtraEditors.SimpleButton();
+            _btnDelBranchSearch.Text = "Search Branch";
+            _btnDelBranchSearch.Location = new System.Drawing.Point(620, 24);
+            _btnDelBranchSearch.Size = new System.Drawing.Size(94, 24);
+            _btnDelBranchSearch.Click += new EventHandler(BtnDelBranchSearch_Click);
+            grp.Controls.Add(_btnDelBranchSearch);
+            _btnDelCopyContract = new DevExpress.XtraEditors.SimpleButton();
+            _btnDelCopyContract.Text = "From Contract";
+            _btnDelCopyContract.Location = new System.Drawing.Point(718, 24);
+            _btnDelCopyContract.Size = new System.Drawing.Size(94, 24);
+            _btnDelCopyContract.Click += new EventHandler(BtnDelCopyContract_Click);
+            grp.Controls.Add(_btnDelCopyContract);
+        }
+
+        /// <summary>Effective debtor for the branch search: the standalone picker's customer, else
+        /// the saved item's contract debtor (or direct owner), else the embedded parent contract's.</summary>
+        private string ResolveDebtorForBranch()
+        {
+            string d = SelectedDebtorCode;
+            try
+            {
+                if (d.Length == 0 && _data != null && _data.ItemKey > 0)
+                {
+                    DataTable t = _db.GetDataTable(
+                        "SELECT ISNULL(COALESCE(NULLIF(c.DebtorCode,''), NULLIF(i.OwnerDebtorCode,'')),'') AS D " +
+                        "FROM [dbo].[zSCP2_Item] i LEFT JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                        "WHERE i.ItemKey=" + _data.ItemKey, false);
+                    if (t.Rows.Count > 0) d = Convert.ToString(t.Rows[0]["D"]).Trim();
+                }
+                if (d.Length == 0 && !string.IsNullOrEmpty(_parentContractNo))
+                {
+                    DataTable t2 = _db.GetDataTable(
+                        "SELECT ISNULL(DebtorCode,'') AS D FROM [dbo].[zSCP2_Contract] WHERE ContractNo=N'" +
+                        _parentContractNo.Replace("'", "''") + "'", false);
+                    if (t2.Rows.Count > 0) d = Convert.ToString(t2.Rows[0]["D"]).Trim();
+                }
+            }
+            catch { }
+            return d;
+        }
+
+        private void BtnDelBranchSearch_Click(object sender, EventArgs e)
+        {
+            string debtor = ResolveDebtorForBranch();
+            if (debtor.Length == 0)
+            {
+                XtraMessageBox.Show("No customer resolved yet — the branch list is per customer.\r\n" +
+                    "Pick / attach the customer first.", "Search Branch");
+                return;
+            }
+            DataTable br;
+            try
+            {
+                br = _db.GetDataTable(
+                    "SELECT BranchCode, ISNULL(BranchName,'') AS BranchName, ISNULL(Address1,'') AS Address1, " +
+                    "ISNULL(Address2,'') AS Address2, ISNULL(Address3,'') AS Address3, ISNULL(Address4,'') AS Address4, " +
+                    "ISNULL(PostCode,'') AS PostCode, ISNULL(Phone1,'') AS Phone1, ISNULL(Fax1,'') AS Fax1, " +
+                    "ISNULL(EmailAddress,'') AS EmailAddress, ISNULL(Contact,'') AS Contact " +
+                    "FROM [dbo].[Branch] WHERE AccNo=N'" + debtor.Replace("'", "''") + "' ORDER BY BranchCode", false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            if (br.Rows.Count == 0)
+            {
+                XtraMessageBox.Show("Customer '" + debtor + "' has no registered branches.\r\n\r\n" +
+                    "Register them in AutoCount: A/R > Debtor > (edit the debtor) > Branch tab.", "Search Branch");
+                return;
+            }
+            object sel = ServiceContractPhotocopier.Classes.CommonForms.AdvanceSearch_Form.Pick(
+                this, "Select Branch — " + debtor, br, "BranchCode",
+                new string[] { "BranchCode", "BranchName", "Address1", "PostCode", "Phone1" },
+                new string[] { "Branch Code", "Branch Name", "Address", "Post Code", "Phone" },
+                new int[] { 90, 200, 200, 80, 100 });
+            if (sel == null || sel == DBNull.Value) return;
+            DataRow[] f = br.Select("BranchCode='" + sel.ToString().Replace("'", "''") + "'");
+            if (f.Length == 0) return;
+            DataRow b = f[0];
+            ImhSet("DelBranchCode", AsS(b["BranchCode"]));
+            ImhSet("DelBranchName", AsS(b["BranchName"]));
+            if (_imhDelAddress != null)
+                _imhDelAddress.Text = string.Join("\r\n", new string[] { AsS(b["Address1"]), AsS(b["Address2"]), AsS(b["Address3"]), AsS(b["Address4"]) }).Trim('\r', '\n');
+            ImhSet("DelPostalCode", AsS(b["PostCode"]));
+            ImhSet("DelPhone", AsS(b["Phone1"]));
+            ImhSet("DelFax", AsS(b["Fax1"]));
+            ImhSet("DelEmail", AsS(b["EmailAddress"]));
+            ImhSet("DelContactPerson", AsS(b["Contact"]));
+            _dirty = true;
+        }
+
+        // "By default 跟 contract": copy the CONTRACT's delivery block onto the machine (falls back
+        // to the contract's main address when the contract has no delivery block of its own).
+        private void BtnDelCopyContract_Click(object sender, EventArgs e)
+        {
+            string where = "";
+            if (_data != null && _data.ItemKey > 0)
+                where = "ContractKey = (SELECT ContractKey FROM [dbo].[zSCP2_Item] WHERE ItemKey=" + _data.ItemKey + ")";
+            else if (SelectedContractKey > 0)
+                where = "ContractKey=" + SelectedContractKey;
+            else if (!string.IsNullOrEmpty(_parentContractNo))
+                where = "ContractNo=N'" + _parentContractNo.Replace("'", "''") + "'";
+            if (where.Length == 0) { XtraMessageBox.Show("No contract to copy from yet.", "From Contract"); return; }
+            DataTable t;
+            try
+            {
+                t = _db.GetDataTable(
+                    "SELECT ISNULL(DelBranchCode,'') AS DelBranchCode, ISNULL(DelBranchName,'') AS DelBranchName, " +
+                    "ISNULL(DelAddress,'') AS DelAddress, ISNULL(DelCity,'') AS DelCity, ISNULL(DelPostalCode,'') AS DelPostalCode, " +
+                    "ISNULL(DelState,'') AS DelState, ISNULL(DelCountry,'') AS DelCountry, ISNULL(DelPhone,'') AS DelPhone, " +
+                    "ISNULL(DelFax,'') AS DelFax, ISNULL(DelEmail,'') AS DelEmail, ISNULL(DelContactPerson,'') AS DelContactPerson, " +
+                    "ISNULL(Address1,'') AS Address1, ISNULL(City,'') AS City, ISNULL(PostalCode,'') AS PostalCode, " +
+                    "ISNULL(State,'') AS State, ISNULL(Country,'') AS Country, ISNULL(Phone,'') AS Phone, " +
+                    "ISNULL(Fax,'') AS Fax, ISNULL(Attention,'') AS Attention " +
+                    "FROM [dbo].[zSCP2_Contract] WHERE " + where, false);
+            }
+            catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); return; }
+            if (t.Rows.Count == 0) { XtraMessageBox.Show("Contract not found.", "From Contract"); return; }
+            DataRow c = t.Rows[0];
+            bool hasDel = AsS(c["DelBranchCode"]).Trim().Length > 0 || AsS(c["DelAddress"]).Trim().Length > 0
+                || AsS(c["DelCity"]).Trim().Length > 0 || AsS(c["DelPostalCode"]).Trim().Length > 0;
+            if (hasDel)
+            {
+                ImhSet("DelBranchCode", AsS(c["DelBranchCode"]));
+                ImhSet("DelBranchName", AsS(c["DelBranchName"]));
+                if (_imhDelAddress != null) _imhDelAddress.Text = AsS(c["DelAddress"]);
+                ImhSet("DelCity", AsS(c["DelCity"]));
+                ImhSet("DelPostalCode", AsS(c["DelPostalCode"]));
+                ImhSet("DelState", AsS(c["DelState"]));
+                ImhSet("DelCountry", AsS(c["DelCountry"]));
+                ImhSet("DelPhone", AsS(c["DelPhone"]));
+                ImhSet("DelFax", AsS(c["DelFax"]));
+                ImhSet("DelEmail", AsS(c["DelEmail"]));
+                ImhSet("DelContactPerson", AsS(c["DelContactPerson"]));
+            }
+            else
+            {
+                ImhSet("DelBranchCode", ""); ImhSet("DelBranchName", "");
+                if (_imhDelAddress != null) _imhDelAddress.Text = AsS(c["Address1"]);
+                ImhSet("DelCity", AsS(c["City"]));
+                ImhSet("DelPostalCode", AsS(c["PostalCode"]));
+                ImhSet("DelState", AsS(c["State"]));
+                ImhSet("DelCountry", AsS(c["Country"]));
+                ImhSet("DelPhone", AsS(c["Phone"]));
+                ImhSet("DelFax", AsS(c["Fax"]));
+                ImhSet("DelEmail", "");
+                ImhSet("DelContactPerson", AsS(c["Attention"]));
+            }
+            _dirty = true;
         }
 
         private void ImhField(System.Windows.Forms.Control parent, string col, string caption, int x, int y, int width)

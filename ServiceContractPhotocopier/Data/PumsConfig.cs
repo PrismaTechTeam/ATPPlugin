@@ -99,6 +99,12 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_INVOICE_DESC_FROM_ITEM = "INVOICE_DESC_FROM_ITEM";
         public const bool DEFAULT_INVOICE_DESC_FROM_ITEM = true;
 
+        // Bulk Email Invoice message template (demo 28/07 #9a) - set once, used on every run.
+        public const string KEY_BULKMAIL_SUBJECT = "BULKMAIL_SUBJECT";
+        public const string KEY_BULKMAIL_BODY = "BULKMAIL_BODY";
+        public const string DEFAULT_BULKMAIL_SUBJECT = "Invoice {DocNos}";
+        public const string DEFAULT_BULKMAIL_BODY = "Dear {CompanyName},\r\n\r\nPlease find attached your invoice(s): {DocNos}.\r\n\r\nThank you.";
+
         // ADVANCED invoice numbering (user request 2026-07-27): pick a DIFFERENT IV Document
         // Numbering Format depending on the billed machines' API status — ONLINE machines get one
         // format, OFFLINE another; rows with no API status fall back to the default format above.

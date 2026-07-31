@@ -170,6 +170,12 @@
     <Compile Include="Meter Reading\Operation Forms\BulkEmailInvoice_Form.Designer.cs">
       <DependentUpon>BulkEmailInvoice_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailTemplate_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailTemplate_Form.Designer.cs">
+      <DependentUpon>BulkEmailTemplate_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Classes\CommonForms\CopyMetersTo_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -842,6 +848,8 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterType_v3_DefaultRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />
@@ -930,6 +938,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Classes\CommonForms\CommitConfig_Form.resx">
       <DependentUpon>CommitConfig_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\BulkEmailTemplate_Form.resx">
+      <DependentUpon>BulkEmailTemplate_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\BulkEmailInvoice_Form.resx">
       <DependentUpon>BulkEmailInvoice_Form.cs</DependentUpon>

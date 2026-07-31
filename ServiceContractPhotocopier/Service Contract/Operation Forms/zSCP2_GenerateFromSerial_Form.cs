@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Windows.Forms;
@@ -29,6 +29,7 @@ namespace ServiceContractPhotocopier
 
         private readonly DBSetting _db;
         private DataTable _dt;
+        private DevExpress.XtraEditors.CheckEdit _chkShowTransferred;   // demo 28/07 #13
 
         public List<PickedSerial> Picked = new List<PickedSerial>();
 
@@ -45,10 +46,20 @@ namespace ServiceContractPhotocopier
 
         private void OnFormLoad(object sender, EventArgs e)
         {
+            // Demo 28/07 #13: transferred serials are HIDDEN by default ("只显示 available 的") —
+            // tick to review them; each shows WHICH saved service item is using it.
+            _chkShowTransferred = new DevExpress.XtraEditors.CheckEdit();
+            _chkShowTransferred.Properties.Caption = "Show transferred";
+            _chkShowTransferred.Location = new System.Drawing.Point(600, 10);
+            _chkShowTransferred.Size = new System.Drawing.Size(150, 22);
+            this.CmbDocType.Parent.Controls.Add(_chkShowTransferred);
+            _chkShowTransferred.BringToFront();
             this.CmbDocType.SelectedIndex = 0;
             LoadData();
             this.TxtSearch.EditValueChanged += new EventHandler(Filter_Changed);
             this.CmbDocType.SelectedIndexChanged += new EventHandler(Filter_Changed);
+            this._chkShowTransferred.CheckedChanged += new EventHandler(Filter_Changed);
+            Filter_Changed(this, EventArgs.Empty);   // apply the default available-only filter
             this.GridViewSerial.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewSerial_CellValueChanged);
             this.GridViewSerial.DoubleClick += new EventHandler(GridViewSerial_DoubleClick);
         }
@@ -60,7 +71,7 @@ namespace ServiceContractPhotocopier
             string sql =
                 "SELECT CAST(0 AS bit) AS Sel, st.DocType, h.DocNo, h.DocDate, h.DebtorCode, " +
                 "ISNULL(d.CompanyName,'') AS DebtorName, st.ItemCode, ISNULL(i.Description,'') AS ItemDesc, " +
-                "st.FromSerialNo AS SerialNo " +
+                "st.FromSerialNo AS SerialNo, ISNULL(zi.ServiceItemNo,'') AS TransferredTo " +
                 "FROM dbo.SerialNoTrans st " +
                 "JOIN (SELECT 'DO' AS DocType, DocKey, DocNo, DocDate, DebtorCode, Cancelled FROM dbo.DO " +
                 "      UNION ALL " +
@@ -68,13 +79,26 @@ namespace ServiceContractPhotocopier
                 "  ON h.DocType = st.DocType AND h.DocKey = st.DocKey " +
                 "LEFT JOIN dbo.Debtor d ON d.AccNo = h.DebtorCode " +
                 "LEFT JOIN dbo.Item i ON i.ItemCode = st.ItemCode " +
+                // Demo 28/07 #13: a serial already on a SAVED, ACTIVE service item is "transferred".
+                // Inactivating that CSSI (machine came back) frees the serial again automatically.
+                "OUTER APPLY (SELECT TOP 1 ServiceItemNo FROM dbo.zSCP2_Item z " +
+                "  WHERE z.SerialNumber = st.FromSerialNo AND ISNULL(z.Inactive,'N') = 'N' " +
+                "  ORDER BY z.ItemKey DESC) zi " +
                 "WHERE st.DocType IN ('DO','IV') " +
                 "AND ISNULL(st.Cancelled,'F') <> 'T' AND ISNULL(h.Cancelled,'F') <> 'T' " +
                 "AND ISNULL(st.FromSerialNo,'') <> '' AND ISNULL(st.ToSerialNo,'') = '' " +
+                // A machine credited BACK (CN with the serial, after this delivery) is no longer at
+                // the customer — its DO row leaves the pick list until it is delivered again.
+                "AND NOT EXISTS (SELECT 1 FROM dbo.SerialNoTrans cns " +
+                "  JOIN dbo.CN cnh ON cnh.DocKey = cns.DocKey AND cns.DocType = 'CN' " +
+                "  WHERE cns.FromSerialNo = st.FromSerialNo AND ISNULL(cns.Cancelled,'F') <> 'T' " +
+                "    AND ISNULL(cnh.Cancelled,'F') <> 'T' AND cnh.DocDate >= h.DocDate) " +
                 "ORDER BY h.DocDate DESC, h.DocNo, st.ItemCode";
             _dt = _db.GetDataTable(sql, false);
             _dt.Columns["Sel"].ReadOnly = false;
             this.GridSerial.DataSource = _dt;
+            DevExpress.XtraGrid.Columns.GridColumn ctr = this.GridViewSerial.Columns["TransferredTo"];
+            if (ctr != null) { ctr.Caption = "In Use By (CSSI)"; ctr.OptionsColumn.AllowEdit = false; }
         }
 
         private void Filter_Changed(object sender, EventArgs e)
@@ -83,6 +107,8 @@ namespace ServiceContractPhotocopier
             string docType = (this.CmbDocType.EditValue ?? "All").ToString();
             if (docType == "DO" || docType == "IV")
                 parts.Add("[DocType] = '" + docType + "'");
+            if (_chkShowTransferred == null || !_chkShowTransferred.Checked)
+                parts.Add("[TransferredTo] = ''");
             string s = (this.TxtSearch.EditValue ?? "").ToString().Trim().Replace("'", "''");
             if (s.Length > 0)
                 parts.Add("([DocNo] LIKE '%" + s + "%' OR [DebtorCode] LIKE '%" + s + "%' OR [DebtorName] LIKE '%" + s +
@@ -121,9 +147,17 @@ namespace ServiceContractPhotocopier
             this.GridViewSerial.PostEditor();
             this.GridViewSerial.UpdateCurrentRow();
             Picked.Clear();
+            List<string> inUse = new List<string>();
             foreach (DataRow r in _dt.Rows)
             {
                 if (r["Sel"] == DBNull.Value || !Convert.ToBoolean(r["Sel"])) continue;
+                // #13: a serial already on a saved active service item must not be transferred twice.
+                string usedBy = Convert.ToString(r["TransferredTo"]).Trim();
+                if (usedBy.Length > 0)
+                {
+                    inUse.Add(Convert.ToString(r["SerialNo"]) + "  (in use by " + usedBy + ")");
+                    continue;
+                }
                 PickedSerial p = new PickedSerial();
                 p.DocType = r["DocType"].ToString();
                 p.DocNo = r["DocNo"].ToString();
@@ -135,10 +169,15 @@ namespace ServiceContractPhotocopier
                 p.SerialNo = r["SerialNo"].ToString();
                 Picked.Add(p);
             }
+            if (inUse.Count > 0)
+                XtraMessageBox.Show("Skipped - already transferred to a saved service item:\r\n\r\n" +
+                    string.Join("\r\n", inUse.ToArray()) + "\r\n\r\n(Inactivate that service item first if the machine really came back.)",
+                    "Generate From Serial No", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             if (Picked.Count == 0)
             {
-                XtraMessageBox.Show("Tick at least one serial number to generate from.", "Generate From Serial No",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (inUse.Count == 0)
+                    XtraMessageBox.Show("Tick at least one serial number to generate from.", "Generate From Serial No",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             this.DialogResult = DialogResult.OK;
