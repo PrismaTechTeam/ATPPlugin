@@ -102,6 +102,7 @@
         private DevExpress.XtraTab.XtraTabPage PageItems;
         private DevExpress.XtraEditors.PanelControl PnlItemBar;
         private DevExpress.XtraEditors.SimpleButton BtnItemDelete;
+        private DevExpress.XtraEditors.SimpleButton BtnItemQuickAdd;
         private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
         private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
         private DevExpress.XtraEditors.LabelControl LblItemsHint;
@@ -228,6 +229,7 @@
             this.PageRemark = new DevExpress.XtraTab.XtraTabPage();
             this.PnlItemBar = new DevExpress.XtraEditors.PanelControl();
             this.BtnItemDelete = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemQuickAdd = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
             this.LblItemsHint = new DevExpress.XtraEditors.LabelControl();
@@ -1133,11 +1135,23 @@
             this.PnlItemBar.Controls.Add(this.BtnItemDelete);
             this.PnlItemBar.Controls.Add(this.BtnItemAttach);
             this.PnlItemBar.Controls.Add(this.BtnItemDetach);
+            this.PnlItemBar.Controls.Add(this.BtnItemQuickAdd);
             this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.PnlItemBar.Location = new System.Drawing.Point(0, 0);
             this.PnlItemBar.Name = "PnlItemBar";
             this.PnlItemBar.Size = new System.Drawing.Size(1174, 34);
             this.PnlItemBar.TabIndex = 0;
+            //
+            // BtnItemQuickAdd
+            //
+            this.BtnItemQuickAdd.ImageOptions.ImageUri.Uri = "Add;Size16x16";
+            this.BtnItemQuickAdd.Location = new System.Drawing.Point(6, 5);
+            this.BtnItemQuickAdd.Name = "BtnItemQuickAdd";
+            this.BtnItemQuickAdd.Size = new System.Drawing.Size(130, 24);
+            this.BtnItemQuickAdd.TabIndex = 1;
+            this.BtnItemQuickAdd.Text = "Quick Add Row";
+            this.BtnItemQuickAdd.ToolTip = "Add a blank service item (CSSI) and key it in directly in the grid. The number is drawn on Save.";
+            this.BtnItemQuickAdd.Click += new System.EventHandler(this.BtnItemQuickAdd_Click);
             //
             // BtnItemDelete
             //

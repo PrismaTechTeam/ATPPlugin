@@ -2227,7 +2227,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DataTable _inlineItemLookup;
         private DataTable _inlineGradeLookup;
         private DataTable _inlineSerialLookup;
-        private DevExpress.XtraEditors.SimpleButton _btnItemQuickAdd;
 
         private void EnableInlineItemEditing()
         {
@@ -2378,14 +2377,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colPM.ShowButtonMode = DevExpress.XtraGrid.Views.Base.ShowButtonModeEnum.ShowAlways;
             colPM.Width = 90;
 
-            _btnItemQuickAdd = new DevExpress.XtraEditors.SimpleButton();
-            _btnItemQuickAdd.Text = "Quick Add Row";
-            _btnItemQuickAdd.ImageOptions.ImageUri.Uri = "Add;Size16x16";
-            _btnItemQuickAdd.Location = new System.Drawing.Point(6, 5);
-            _btnItemQuickAdd.Size = new System.Drawing.Size(130, 24);
-            _btnItemQuickAdd.ToolTip = "Add a blank service item (CSSI) and key it in directly in the grid. The number is drawn on Save.";
-            _btnItemQuickAdd.Click += new EventHandler(BtnItemQuickAdd_Click);
-            PnlItemBar.Controls.Add(_btnItemQuickAdd);
         }
 
         // Cascade: when the Machine Serial cell opens, fill its dropdown with the serials registered
