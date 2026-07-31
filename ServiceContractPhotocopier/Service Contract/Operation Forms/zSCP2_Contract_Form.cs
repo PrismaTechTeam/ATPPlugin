@@ -564,35 +564,27 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void BuildBillingGroup()
         {
+            // Compact box in the header's EMPTY right area (below Department/Project/Reference No)
+            // instead of a full-width strip — the header keeps its height and Description stays put.
             _grpBilling = new DevExpress.XtraEditors.GroupControl();
             _grpBilling.Text = "Billing";
-            _grpBilling.Location = new System.Drawing.Point(8, 206);
-            _grpBilling.Size = new System.Drawing.Size(1644, 58);
+            _grpBilling.Location = new System.Drawing.Point(860, 96);
+            _grpBilling.Size = new System.Drawing.Size(600, 172);
             PanelHeaderFields.Controls.Add(_grpBilling);
 
             MoveIntoBillingGroup(LblBillDay, 12, 31);
-            MoveIntoBillingGroup(SpnBillingDay, 78, 28);
-            MoveIntoBillingGroup(LblBillMode, 152, 31);
-            MoveIntoBillingGroup(ChkBillGroup, 224, 27);
-            MoveIntoBillingGroup(ChkBillSeparate, 454, 27);
-            ChkRentalSeparate.Width = 158;
-            MoveIntoBillingGroup(ChkRentalSeparate, 684, 27);
-            if (_lblRentalDay != null) MoveIntoBillingGroup(_lblRentalDay, 850, 31);
-            if (_spnRentalDay != null) MoveIntoBillingGroup(_spnRentalDay, 938, 28);
-            if (_lblInvTpl != null) MoveIntoBillingGroup(_lblInvTpl, 1005, 31);
-            if (_sluInvTpl != null) { _sluInvTpl.Width = 200; MoveIntoBillingGroup(_sluInvTpl, 1098, 28); }
-            if (_chkGenSOA != null) MoveIntoBillingGroup(_chkGenSOA, 1310, 27);
-            if (_sluSOATpl != null) { _sluSOATpl.Width = 200; MoveIntoBillingGroup(_sluSOATpl, 1412, 28); }
-
-            // The Description/Inactive row moves below the group; the docked header panel grows so
-            // the tab control underneath just shifts down.
-            LblDesc.Location = new System.Drawing.Point(12, 273);
-            TxtDescription.Location = new System.Drawing.Point(100, 270);
-            ChkInactive.Location = new System.Drawing.Point(720, 270);
-            if (_lblInactiveInfo != null)
-                _lblInactiveInfo.Location = new System.Drawing.Point(
-                    ChkInactive.Location.X + ChkInactive.Width + 8, ChkInactive.Location.Y + 2);
-            PanelHeaderFields.Height = 300;
+            MoveIntoBillingGroup(SpnBillingDay, 110, 28);
+            MoveIntoBillingGroup(LblBillMode, 230, 31);
+            MoveIntoBillingGroup(ChkBillGroup, 310, 27);
+            MoveIntoBillingGroup(ChkBillSeparate, 310, 55);
+            ChkRentalSeparate.Width = 170;
+            MoveIntoBillingGroup(ChkRentalSeparate, 12, 83);
+            if (_lblRentalDay != null) MoveIntoBillingGroup(_lblRentalDay, 230, 87);
+            if (_spnRentalDay != null) MoveIntoBillingGroup(_spnRentalDay, 320, 84);
+            if (_lblInvTpl != null) MoveIntoBillingGroup(_lblInvTpl, 12, 115);
+            if (_sluInvTpl != null) { _sluInvTpl.Width = 260; MoveIntoBillingGroup(_sluInvTpl, 110, 112); }
+            if (_chkGenSOA != null) MoveIntoBillingGroup(_chkGenSOA, 12, 139);
+            if (_sluSOATpl != null) { _sluSOATpl.Width = 260; MoveIntoBillingGroup(_sluSOATpl, 110, 140); }
         }
 
         private void MoveIntoBillingGroup(System.Windows.Forms.Control c, int x, int y)
