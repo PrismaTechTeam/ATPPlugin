@@ -52,6 +52,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         };
         private SimpleButton _btnSetting;
         private SimpleButton _btnMonthOverview;
+        private bool _scopedGenerate;   // detail-dialog "Save & Generate": skip the #3 group guard
 
         public MeterReadingIntegration_Form()
         {
@@ -2267,7 +2268,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         r["Sel"] = true;
                 }
                 SyncSelCssi();
-                BtnGenerateInvoice_Click(this, EventArgs.Empty);
+                // Scoped one-contract run: the #3 completeness guard must not demand the debtor's
+                // OTHER machines here — the user explicitly asked to bill just this contract/machine.
+                _scopedGenerate = true;
+                try { BtnGenerateInvoice_Click(this, EventArgs.Empty); }
+                finally { _scopedGenerate = false; }
                 foreach (DataRow r in parked)
                     if (r.RowState != DataRowState.Detached) r["Sel"] = true;
                 SyncSelCssi();
@@ -2415,8 +2420,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Demo 28/07 #3: "one invoice per customer" must be COMPLETE — if any of a ticked
             // customer's machines would MISS the grouped invoice (not ticked, or a usage meter
             // without a reading), abort with the exact list instead of quietly billing a partial
-            // customer invoice that needs a manual credit note later.
-            if (_chkPerCssi != null && _chkPerCssi.Checked)
+            // customer invoice that needs a manual credit note later. A scoped run (detail dialog's
+            // "Save & Generate" for ONE contract) is exempt — that incompleteness is deliberate.
+            if (_chkPerCssi != null && _chkPerCssi.Checked && !_scopedGenerate)
             {
                 HashSet<string> tickedDebtors = new HashSet<string>();
                 foreach (DataRow dr in visibleRows)
