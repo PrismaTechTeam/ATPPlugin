@@ -129,4 +129,15 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- AutoCount loads its BUILT-IN report layouts from report.dat in the STARTUP directory
+       (PathHelper.GetStartupFile = AppDomain.BaseDirectory). ShadowMain's exe runs from bin\Debug,
+       so without these copies every report preview says "No report found". AutoCount.dll /
+       AutoCount.UI.dll are also copied because report SCRIPT compilation references them via the
+       same startup-path lookup. -->
+  <Target Name="CopyAutoCountReportData" AfterTargets="Build">
+    <Copy SourceFiles="C:\Program Files\AutoCount\Accounting 2.2\report.dat" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('C:\Program Files\AutoCount\Accounting 2.2\report.dat')" />
+    <Copy SourceFiles="C:\Program Files\AutoCount\Accounting 2.2\ms-MY\report.dat" DestinationFolder="$(OutputPath)ms-MY" SkipUnchangedFiles="true" Condition="Exists('C:\Program Files\AutoCount\Accounting 2.2\ms-MY\report.dat')" />
+    <Copy SourceFiles="C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('C:\Program Files\AutoCount\Accounting 2.2\AutoCount.dll')" />
+    <Copy SourceFiles="C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('C:\Program Files\AutoCount\Accounting 2.2\AutoCount.UI.dll')" />
+  </Target>
 </Project>
