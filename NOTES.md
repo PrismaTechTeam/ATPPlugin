@@ -1307,3 +1307,18 @@ negative line on the invoice) — but the ENGINE now decides each Generate wheth
   a "Send to customers" row in the staff table; sending-documents.md moved bulk invoice email from
   Coming Soon into "works today" with a 5-step walk of the new screen; introduction row updated.
   Docs build green.
+- 2026-07-28: Contract editor NON-MODAL (user request: use .Show not .ShowDialog). All 3 launch
+  sites converted: ContractLst OnNew/OnEdit (list refresh moved to FormClosed; editors auto-dispose
+  on close) and Copy-to-a-new inside the contract form. Added same-contract guard: the list keeps a
+  Dictionary<ContractKey, form> of open editors - double-opening the same contract ACTIVATES the
+  existing window instead of spawning a second editor whose save would silently overwrite the
+  first's. New contracts always open a fresh editor. Note: form sets DialogResult in OnFormClosing
+  which is a no-op for modeless forms (safe). Deployed + relaunched.
+- 2026-07-30: Deployed Fetch period guard (auto-Filter when combo != loaded period) + Group Deal
+  tab hidden (PageVisible=false, one-line un-hide). Demo Part 2 customer feedback transcribed and
+  itemized into Docs\demo-feedback-2026-07-30-PART2.md (29 points with timestamps: 13 TODO,
+  5 PENDING-align, 1 coming-soon=GroupDeal, rest clarified). Highlights: role filter in manual
+  key-in, group completeness guard, group setting moves to contract, CN reading-override flow
+  PENDING, rental separate invoice date PENDING, rebate % -> RM, branch/location per machine,
+  DO available-serial/outstanding control, email/SOA template code per contract, contract months
+  auto-expiry, lock tax period verify.

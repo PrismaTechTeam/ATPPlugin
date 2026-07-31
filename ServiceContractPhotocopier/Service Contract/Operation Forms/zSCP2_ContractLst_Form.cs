@@ -144,11 +144,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return rh < 0 ? null : GridView.GetDataRow(rh);
         }
 
+        // Contract editors open NON-MODAL (user request): the list, other contracts and the rest
+        // of AutoCount stay usable while a contract is being edited. The list refreshes whenever
+        // an editor closes; an already-open contract is ACTIVATED instead of opened twice (two
+        // editors on the same contract would silently overwrite each other's save).
+        private readonly System.Collections.Generic.Dictionary<long, zSCP2_Contract_Form> _openEditors =
+            new System.Collections.Generic.Dictionary<long, zSCP2_Contract_Form>();
+
         // Virtual so the "Maintain Service Item" alias can open the Service Item editor instead.
         protected virtual void OnNew(object sender, EventArgs e)
         {
-            using (zSCP2_Contract_Form f = new zSCP2_Contract_Form(_dbSetting))
-            { f.ShowDialog(this); LoadGrid(); }
+            zSCP2_Contract_Form f = new zSCP2_Contract_Form(_dbSetting);
+            f.FormClosed += delegate { LoadGrid(); };
+            f.Show(this);
         }
 
         // Virtual so the "Maintain Service Item" alias can open the Service Item editor instead of the
@@ -158,8 +166,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataRow row = GetSelectedRow();
             if (row == null) return;
             long key = Convert.ToInt64(row["ContractKey"]);
-            using (zSCP2_Contract_Form f = new zSCP2_Contract_Form(_dbSetting, key))
-            { f.ShowDialog(this); LoadGrid(); }
+            zSCP2_Contract_Form open;
+            if (_openEditors.TryGetValue(key, out open) && !open.IsDisposed)
+            {
+                if (open.WindowState == System.Windows.Forms.FormWindowState.Minimized)
+                    open.WindowState = System.Windows.Forms.FormWindowState.Normal;
+                open.Activate();
+                return;
+            }
+            zSCP2_Contract_Form f = new zSCP2_Contract_Form(_dbSetting, key);
+            _openEditors[key] = f;
+            f.FormClosed += delegate { _openEditors.Remove(key); LoadGrid(); };
+            f.Show(this);
         }
 
         // Virtual for the same reason: on the item list, Delete must remove only the selected ITEM,

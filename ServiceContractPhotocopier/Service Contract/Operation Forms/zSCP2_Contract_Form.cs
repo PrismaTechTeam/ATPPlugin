@@ -3036,6 +3036,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             _pgGroup = new DevExpress.XtraTab.XtraTabPage();
             _pgGroup.Text = "Group Deal";
+            // COMING SOON (user decision 2026-07-28): group/fleet-wide billing terms are not part
+            // of the current release — the docs present them as "coming soon", so the tab must not
+            // show either. Everything underneath stays wired; un-hide by removing this one line.
+            _pgGroup.PageVisible = false;
             _groupEmptySchema = zSCP2_Item_Form.CreateMetersTable();
 
             System.Windows.Forms.Panel bar = new System.Windows.Forms.Panel();
@@ -4411,8 +4415,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "contract, so those changes will NOT be included.\r\n\r\nContinue anyway?", "Copy to new",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
-            using (zSCP2_Contract_Form f = new zSCP2_Contract_Form(_db, _contractKey, true))
-            { f.ShowDialog(this); }
+            // Non-modal like the list's editors — the source contract stays usable alongside.
+            zSCP2_Contract_Form f = new zSCP2_Contract_Form(_db, _contractKey, true);
+            f.Show(this);
         }
 
         // Serialize the document to the clipboard (tagged text): H = header, I = one service item,

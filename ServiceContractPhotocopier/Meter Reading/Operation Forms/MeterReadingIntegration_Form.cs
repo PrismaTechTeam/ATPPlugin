@@ -1460,6 +1460,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             int year = SelectedYear();
             // Clamp the day to the month's length so day 31 behaves in 30-day months (B-6).
             int day = Math.Min(SelectedDay(), DateTime.DaysInMonth(year, month));
+
+            // GUARD (user-hit foot-gun): Fetch always follows the COMBO's period — if the grid is
+            // still showing a different loaded period (the user changed Month/Day but never pressed
+            // Filter), a fetch would paint period-B readings over the period-A view and stage them
+            // under B while the operator believes they are working A. Auto-Filter first so the
+            // loaded grid and the fetch period can never disagree.
+            if (!_periodCutoff.HasValue || _periodCutoff.Value.Year != year ||
+                _periodCutoff.Value.Month != month || _periodCutoff.Value.Day != day)
+            {
+                LoadData();
+                if (_dtGrid == null || _dtGrid.Rows.Count == 0)
+                { XtraMessageBox.Show("Nothing to fetch for the selected period — the list is empty.", "Fetch"); return; }
+            }
             System.Collections.Generic.List<StageRow> toStage = new System.Collections.Generic.List<StageRow>();
             this.BtnFetch.Enabled = false;
             ShowFetching(true);
