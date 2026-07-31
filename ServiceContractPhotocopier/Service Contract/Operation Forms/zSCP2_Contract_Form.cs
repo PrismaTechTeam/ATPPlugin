@@ -112,6 +112,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             BuildStrategyTab();
             BuildGroupTab();
             BuildRentalDayControls();
+            BuildReportTemplateControls();
             BuildBillingHistoryTab();
             BuildChangeHistoryTab();
             ApplyTemplateExtras();   // clone-at-open: spare parts / rules / More Header now have their tabs
@@ -429,6 +430,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SluStrategy.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
             if (_spnRentalDay != null) _spnRentalDay.EditValueChanged += h;
+            if (_sluInvTpl != null) _sluInvTpl.EditValueChanged += h;
+            if (_chkGenSOA != null) _chkGenSOA.EditValueChanged += h;
+            if (_sluSOATpl != null) _sluSOATpl.EditValueChanged += h;
         }
 
         // Demo 28/07 #18: the rental-separate invoice's OWN billing day ("rental 是跟头标的").
@@ -458,6 +462,96 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             PanelHeaderFields.Controls.Add(_spnRentalDay);
             _spnRentalDay.Enabled = ChkRentalSeparate.Checked;
             ChkRentalSeparate.CheckedChanged += delegate { _spnRentalDay.Enabled = ChkRentalSeparate.Checked; };
+        }
+
+        // Demo 28/07 #9c: per-contract report templates — a 60-month deal agrees its paperwork
+        // ONCE, so the contract remembers WHICH invoice layout (and optionally which SOA layout)
+        // this customer receives; Bulk Email Invoice then picks it automatically. AutoCount
+        // identifies report designs by NAME only (no separate code) — a renamed/deleted design is
+        // flagged "MISSING?" here and billing falls back to the default layout instead of failing.
+        private DevExpress.XtraEditors.LabelControl _lblInvTpl;
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluInvTpl;
+        private DevExpress.XtraGrid.Views.Grid.GridView _sluInvTplView;
+        private DevExpress.XtraEditors.CheckEdit _chkGenSOA;
+        private DevExpress.XtraEditors.SearchLookUpEdit _sluSOATpl;
+        private DevExpress.XtraGrid.Views.Grid.GridView _sluSOATplView;
+        private string _loadedInvRpt = "", _loadedSOARpt = "";
+        private bool _loadedGenSOA;
+
+        private static string TplVal(DevExpress.XtraEditors.SearchLookUpEdit ed, string fallback)
+        {
+            if (ed == null) return fallback ?? "";
+            return ed.EditValue == null || ed.EditValue == DBNull.Value ? "" : ed.EditValue.ToString().Trim();
+        }
+
+        private void BuildReportTemplateControls()
+        {
+            _lblInvTpl = new DevExpress.XtraEditors.LabelControl();
+            _lblInvTpl.Text = "Invoice Template";
+            _lblInvTpl.Location = new System.Drawing.Point(1200, 217);
+            PanelHeaderFields.Controls.Add(_lblInvTpl);
+            _sluInvTplView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            _sluInvTpl = new DevExpress.XtraEditors.SearchLookUpEdit();
+            ConfigureTplLookup(_sluInvTpl, _sluInvTplView, "Invoice Document", _loadedInvRpt);
+            _sluInvTpl.Location = new System.Drawing.Point(1295, 214);
+            _sluInvTpl.Size = new System.Drawing.Size(235, 20);
+            _sluInvTpl.ToolTip = "The AutoCount report design used for THIS contract's invoices " +
+                "(bulk email / preview). Empty = the book's default Invoice Document layout.";
+            PanelHeaderFields.Controls.Add(_sluInvTpl);
+
+            _chkGenSOA = new DevExpress.XtraEditors.CheckEdit();
+            _chkGenSOA.Properties.Caption = "Generate SOA";
+            _chkGenSOA.Location = new System.Drawing.Point(1196, 244);
+            _chkGenSOA.Size = new System.Drawing.Size(96, 20);
+            _chkGenSOA.Checked = _loadedGenSOA;
+            _chkGenSOA.ToolTip = "This customer receives a Statement of Account each cycle " +
+                "(sent via A/R > Debtor Statement > Batch Mail).";
+            PanelHeaderFields.Controls.Add(_chkGenSOA);
+            _sluSOATplView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            _sluSOATpl = new DevExpress.XtraEditors.SearchLookUpEdit();
+            ConfigureTplLookup(_sluSOATpl, _sluSOATplView, "Debtor Statement", _loadedSOARpt);
+            _sluSOATpl.Location = new System.Drawing.Point(1295, 246);
+            _sluSOATpl.Size = new System.Drawing.Size(235, 20);
+            _sluSOATpl.ToolTip = "The Debtor Statement report design for this customer's SOA. " +
+                "Empty = the default statement layout.";
+            PanelHeaderFields.Controls.Add(_sluSOATpl);
+            _sluSOATpl.Enabled = _chkGenSOA.Checked;
+            _chkGenSOA.CheckedChanged += delegate { _sluSOATpl.Enabled = _chkGenSOA.Checked; };
+        }
+
+        // Searchable popup listing every report DESIGN of the type (System + User rows straight
+        // from AutoCount's report registry). A saved name that no longer exists is kept visible as
+        // a "MISSING?" row instead of silently blanking out — renaming a design in the Report
+        // Designer must not silently detach 60-month contracts from their agreed layout.
+        private void ConfigureTplLookup(DevExpress.XtraEditors.SearchLookUpEdit ed,
+            DevExpress.XtraGrid.Views.Grid.GridView view, string reportType, string savedName)
+        {
+            DataTable dt = new DataTable();
+            dt.Columns.Add("ReportName", typeof(string));
+            dt.Columns.Add("Type", typeof(string));
+            try
+            {
+                DataTable src = AutoCount.Report.AutoCountReport.GetInstance().GetReportList(_db, reportType);
+                foreach (DataRow r in src.Rows)
+                    dt.Rows.Add(Convert.ToString(r["ReportName"]), Convert.ToString(r["Type"]));
+            }
+            catch { /* report registry unavailable — picker stays empty; the saved value still shows */ }
+            if (!string.IsNullOrEmpty(savedName) && dt.Select("ReportName='" + savedName.Replace("'", "''") + "'").Length == 0)
+                dt.Rows.Add(savedName, "MISSING? (renamed/deleted)");
+            ed.Properties.DataSource = dt;
+            ed.Properties.ValueMember = "ReportName";
+            ed.Properties.DisplayMember = "ReportName";
+            ed.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+            ed.Properties.NullText = "(default layout)";
+            ed.Properties.PopupView = view;
+            view.OptionsBehavior.AutoPopulateColumns = false;
+            view.OptionsView.ShowGroupPanel = false;
+            DevExpress.XtraGrid.Columns.GridColumn cn = view.Columns.AddVisible("ReportName");
+            cn.Caption = "Report Design"; cn.Width = 240;
+            DevExpress.XtraGrid.Columns.GridColumn ctp = view.Columns.AddVisible("Type");
+            ctp.Caption = "Type"; ctp.Width = 150;
+            view.OptionsView.ShowAutoFilterRow = true;
+            ed.EditValue = string.IsNullOrEmpty(savedName) ? null : (object)savedName;
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
@@ -947,6 +1041,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
+            _loadedInvRpt = r.Table.Columns.Contains("InvoiceReportName") ? AsStr(r["InvoiceReportName"]).Trim() : "";
+            _loadedGenSOA = r.Table.Columns.Contains("GenerateSOA") && AsStr(r["GenerateSOA"]) == "Y";
+            _loadedSOARpt = r.Table.Columns.Contains("SOAReportName") ? AsStr(r["SOAReportName"]).Trim() : "";
+            if (_sluInvTpl != null) _sluInvTpl.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
+            if (_chkGenSOA != null) _chkGenSOA.Checked = _loadedGenSOA;
+            if (_sluSOATpl != null) _sluSOATpl.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
             // called both here (post-save reload, controls exist) and at the end of BuildStrategyTab
@@ -4115,9 +4215,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -4134,6 +4234,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
+                "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
@@ -4175,6 +4276,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@strategy", SluStrategy.EditValue == null ? "" : SluStrategy.EditValue.ToString().Trim());
             cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
             cmd.Parameters.AddWithValue("@rentday", _spnRentalDay != null ? (object)(int)_spnRentalDay.Value : (object)_loadedRentalDay);
+            cmd.Parameters.AddWithValue("@invrpt", TplVal(_sluInvTpl, _loadedInvRpt));
+            cmd.Parameters.AddWithValue("@gensoa", _chkGenSOA != null ? (_chkGenSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
+            cmd.Parameters.AddWithValue("@soarpt", TplVal(_sluSOATpl, _loadedSOARpt));
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -4503,7 +4607,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(Tsv(TxtRefNo.Text)).Append('\t').Append(Tsv(TxtRemark1.Text)).Append('\t')
               .Append(Tsv(TxtRemark2.Text)).Append('\t').Append(Tsv(TxtNote.Text)).Append('\t')
               .Append(ChkRentalSeparate.Checked ? "Y" : "N").Append('\t')
-              .Append(_spnRentalDay != null ? ((int)_spnRentalDay.Value).ToString() : "0").AppendLine();
+              .Append(_spnRentalDay != null ? ((int)_spnRentalDay.Value).ToString() : "0").Append('\t')
+              .Append(Tsv(TplVal(_sluInvTpl, _loadedInvRpt))).Append('\t')
+              .Append(_chkGenSOA != null && _chkGenSOA.Checked ? "Y" : "N").Append('\t')
+              .Append(Tsv(TplVal(_sluSOATpl, _loadedSOARpt))).AppendLine();
             foreach (ItemEditData d in _items)
             {
                 sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
@@ -4647,6 +4754,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         int rdClip;
                         if (_spnRentalDay != null && int.TryParse(At(p, 21), out rdClip))
                             _spnRentalDay.Value = Math.Max(0, Math.Min(28, rdClip));
+                        if (_sluInvTpl != null && At(p, 22).Length > 0) _sluInvTpl.EditValue = At(p, 22);
+                        if (_chkGenSOA != null) _chkGenSOA.Checked = At(p, 23) == "Y";
+                        if (_sluSOATpl != null && At(p, 24).Length > 0) _sluSOATpl.EditValue = At(p, 24);
                     }
                 }
                 else if (p[0] == "I") { last = ItemFromTsv(p, 1); _items.Add(last); }
@@ -4854,6 +4964,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (_spnRentalDay != null) _spnRentalDay.Value = _loadedRentalDay;
+            _loadedInvRpt = r.Table.Columns.Contains("InvoiceReportName") ? AsStr(r["InvoiceReportName"]).Trim() : "";
+            _loadedGenSOA = r.Table.Columns.Contains("GenerateSOA") && AsStr(r["GenerateSOA"]) == "Y";
+            _loadedSOARpt = r.Table.Columns.Contains("SOAReportName") ? AsStr(r["SOAReportName"]).Trim() : "";
+            if (_sluInvTpl != null) _sluInvTpl.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
+            if (_chkGenSOA != null) _chkGenSOA.Checked = _loadedGenSOA;
+            if (_sluSOATpl != null) _sluSOATpl.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;
                 ApplyFocResetToUi();   // no-op before the strategy tab exists; re-applied by OnFormLoad

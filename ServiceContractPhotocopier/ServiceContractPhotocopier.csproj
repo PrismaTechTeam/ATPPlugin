@@ -849,6 +849,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v10_ReportTemplates.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />

@@ -395,9 +395,28 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
 
+            // Demo 28/07 #9c: per-contract invoice template — each invoice renders with the
+            // layout its CONTRACT names (resolved through the meter-billing stamps). '' or a
+            // renamed/deleted name falls back to the default layout.
+            Dictionary<long, string> tplByDoc = new Dictionary<long, string>();
+            try
+            {
+                DataTable tpl = _dbSetting.GetDataTable(
+                    "SELECT me.InvoicedDocKey AS DocKey, MAX(ISNULL(c.InvoiceReportName,'')) AS Tpl " +
+                    "FROM dbo.zSCP2_MeterEntry me " +
+                    "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = me.ItemMeterKey " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    "WHERE me.InvoicedDocKey IS NOT NULL AND ISNULL(c.InvoiceReportName,'') <> '' " +
+                    "GROUP BY me.InvoicedDocKey", false);
+                foreach (DataRow t in tpl.Rows)
+                    tplByDoc[Convert.ToInt64(t["DocKey"])] = Convert.ToString(t["Tpl"]).Trim();
+            }
+            catch { /* no templates resolvable -> everything uses the default layout */ }
+
             InvoiceListingReport rpt = InvoiceListingReport.Create(_userSession);
-            List<NameReportEntity> reports = null;
-            XtraReport xr = null;
+            Dictionary<string, XtraReport> tplCache = new Dictionary<string, XtraReport>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> tplMissing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             BtnEmail.Enabled = false;
             try
             {
@@ -409,19 +428,53 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     LblCount.Text = "Rendering " + n + " of " + ticked.Count + " — " + docNo + "…";
                     Application.DoEvents();
 
-                    object ds = rpt.GetReportDataSource(Convert.ToInt64(r["DocKey"]));
-                    if (reports == null)
+                    long docKey = Convert.ToInt64(r["DocKey"]);
+                    object ds = rpt.GetReportDataSource(docKey);
+                    // #9c: the contract's named layout wins; one XtraReport per layout, reused
+                    // across documents (DataSource swap — same pattern as before).
+                    string tplName;
+                    if (!tplByDoc.TryGetValue(docKey, out tplName) || tplName == null) tplName = "";
+                    XtraReport xr;
+                    if (!tplCache.TryGetValue(tplName, out xr))
                     {
-                        // Default "Invoice Document" layout, resolved once and reused per document
-                        // (same pattern as the Debtor Statement's Batch Mail).
-                        reports = ReportTool.SelectReport("Invoice Document", ds, _userSession, true, rpt.GetBasicReportOption());
-                        if (reports == null || reports.Count == 0)
+                        if (tplName.Length > 0)
                         {
-                            XtraMessageBox.Show("No default 'Invoice Document' report layout found — set a default report first.",
-                                "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            return;
+                            try
+                            {
+                                AutoCount.Report.ReportTemplate named =
+                                    AutoCount.Report.AutoCountReport.GetInstance().GetReport(tplName, ds, _userSession, true);
+                                xr = named != null ? named.Report as XtraReport : null;
+                            }
+                            catch { xr = null; }
+                            if (xr == null) tplMissing.Add(tplName);
+                            else
+                            {
+                                // The default path gets the book's report option (margins, Letter->A4
+                                // resize, custom paper name, print-in-black) applied inside
+                                // ReportTool.SelectReport — the named path must match, but
+                                // ApplyReportOption is private, so invoke it reflectively; a miss
+                                // just leaves the layout exactly as designed.
+                                try
+                                {
+                                    System.Reflection.MethodInfo aro = typeof(ReportTool).GetMethod("ApplyReportOption",
+                                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                                    if (aro != null) aro.Invoke(null, new object[] { xr, rpt.GetBasicReportOption() });
+                                }
+                                catch { }
+                            }
                         }
-                        xr = reports[0].Report;
+                        if (xr == null)
+                        {
+                            List<NameReportEntity> reports = ReportTool.SelectReport("Invoice Document", ds, _userSession, true, rpt.GetBasicReportOption());
+                            if (reports == null || reports.Count == 0)
+                            {
+                                XtraMessageBox.Show("No default 'Invoice Document' report layout found — set a default report first.",
+                                    "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                return;
+                            }
+                            xr = reports[0].Report;
+                        }
+                        tplCache[tplName] = xr;
                     }
                     xr.DataSource = ds;
                     xr.CreateDocument();
@@ -465,6 +518,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 BtnEmail.Enabled = true;
                 UpdateCount();
+            }
+
+            if (tplMissing.Count > 0)
+            {
+                string[] missArr = new string[tplMissing.Count];
+                tplMissing.CopyTo(missArr);
+                XtraMessageBox.Show("These contract invoice template(s) were NOT found (renamed or deleted in the " +
+                    "Report Designer?) \u2014 the DEFAULT layout was used for their invoices:\r\n\r\n" +
+                    string.Join("\r\n", missArr) +
+                    "\r\n\r\nFix the template name on the contract (Maintain Service Contract).",
+                    "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
             // Sender = the company profile; subject/message support {AccNo} {CompanyName} {DocNos}.
