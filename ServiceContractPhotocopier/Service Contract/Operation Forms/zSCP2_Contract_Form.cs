@@ -217,10 +217,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void InitContractTermControls()
         {
             cboNoOfMonth.Properties.Items.Clear();
-            cboNoOfMonth.Properties.Items.AddRange(new object[] { "1", "6", "12", "24", "36", "48", "60" });
+            cboNoOfMonth.Properties.Items.AddRange(new object[] {
+                "1 Month", "6 Months", "12 Months", "24 Months", "36 Months", "48 Months", "60 Months" });
             cboNoOfMonth.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
-            cboNoOfMonth.ToolTip = "Contract term. Plain number = months (any number, not only the list). " +
-                "Short terms without decimals: 2w = 2 weeks, 18d = 18 days. Expiry = start + term − 1 day.";
+            cboNoOfMonth.ToolTip = "Contract term. A plain number means months (any number, not only the " +
+                "list). Short terms are typed in FULL WORDS — no decimals: \"2 Weeks\", \"18 Days\". " +
+                "Expiry = start + term − 1 day.";
             DtExpiryDate.Properties.ReadOnly = true;
             DtExpiryDate.Properties.Appearance.BackColor = System.Drawing.Color.Gainsboro;
             DtExpiryDate.Properties.Appearance.ForeColor = System.Drawing.Color.DimGray;
@@ -230,21 +232,52 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SyncTermFromDates();   // an opened contract shows its term back-derived from the dates
 
             cboNoOfMonth.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
+            cboNoOfMonth.Leave += delegate { NormalizeTermText(); };   // "6" becomes "6 Months" on leave
             DtStartDate.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
         }
 
+        // Accepts a plain number (= months) or the term written out in words — "6 Months",
+        // "2 Weeks", "18 Days" (singular/plural, any case). No cryptic suffixes, no decimals.
         private static bool TryParseTerm(string text, out int n, out char unit)
         {
             n = 0; unit = 'm';
             text = (text ?? "").Trim().ToLowerInvariant();
             if (text.Length == 0) return false;
-            char last = text[text.Length - 1];
-            if (last == 'm' || last == 'w' || last == 'd')
-            {
-                unit = last;
-                text = text.Substring(0, text.Length - 1).Trim();
-            }
-            return int.TryParse(text, out n) && n >= 1 && n <= 1200;
+            int i = 0;
+            while (i < text.Length && char.IsDigit(text[i])) i++;
+            if (i == 0) return false;
+            string word = text.Substring(i).Trim();
+            if (word == "" || word == "month" || word == "months" || word == "mth" || word == "mths" || word == "m") unit = 'm';
+            else if (word == "week" || word == "weeks" || word == "wk" || word == "wks" || word == "w") unit = 'w';
+            else if (word == "day" || word == "days" || word == "d") unit = 'd';
+            else return false;
+            return int.TryParse(text.Substring(0, i), out n) && n >= 1 && n <= 1200;
+        }
+
+        private static string TermText(int n, char unit)
+        {
+            string word = unit == 'w' ? "Week" : (unit == 'd' ? "Day" : "Month");
+            return n + " " + word + (n == 1 ? "" : "s");
+        }
+
+        // After the user leaves the box, show the term in full words so it reads unambiguously.
+        private void NormalizeTermText()
+        {
+            int n; char unit;
+            if (!TryParseTerm(Convert.ToString(cboNoOfMonth.EditValue), out n, out unit)) return;
+            _termBusy = true;
+            try { cboNoOfMonth.EditValue = TermText(n, unit); }
+            finally { _termBusy = false; }
+        }
+
+        // Month-term expiry = start + N months − 1 day, BUT never on the 29th/30th/31st (user rule
+        // 01/08: "不能跳 31" — the whole system caps the billing rhythm at day 28, so an expiry
+        // past the 28th pulls back to the 28th). Week/day terms stay day-precise.
+        private static DateTime ExpiryForMonths(DateTime start, int months)
+        {
+            DateTime exp = start.AddMonths(months).AddDays(-1);
+            if (exp.Day > 28) exp = new DateTime(exp.Year, exp.Month, 28);
+            return exp;
         }
 
         private void RecalcExpiryFromTerm()
@@ -256,7 +289,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DateTime start = Convert.ToDateTime(DtStartDate.EditValue).Date;
             DateTime exp = unit == 'w' ? start.AddDays(7 * n - 1)
                          : unit == 'd' ? start.AddDays(n - 1)
-                         : start.AddMonths(n).AddDays(-1);
+                         : ExpiryForMonths(start, n);
             _termBusy = true;
             try { DtExpiryDate.EditValue = exp; }
             finally { _termBusy = false; }
@@ -278,11 +311,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 {
                     for (int m = 1; m <= 600; m++)
                     {
-                        if (start.AddMonths(m).AddDays(-1) == exp) { cboNoOfMonth.EditValue = m.ToString(); return; }
+                        if (ExpiryForMonths(start, m) == exp) { cboNoOfMonth.EditValue = TermText(m, 'm'); return; }
                         if (start.AddMonths(m) > exp.AddMonths(1)) break;
                     }
                     int days = (int)(exp - start).TotalDays + 1;
-                    cboNoOfMonth.EditValue = (days % 7 == 0) ? (days / 7) + "w" : days + "d";
+                    cboNoOfMonth.EditValue = (days % 7 == 0) ? TermText(days / 7, 'w') : TermText(days, 'd');
                 }
                 finally { _termBusy = false; }
             }
