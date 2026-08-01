@@ -554,7 +554,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ServiceContractPhotocopier.Classes.ScpEmailTemplates.LoadDefault(_dbSetting);
             string subject = tplDef.Subject;
             string message = tplDef.Body;
-            _mailStyled = tplDef.Styled;
+            _mailStyle = tplDef.Style;
             _mailSenderCompany = fromName;
             ColumnNameCaption[] cols = new ColumnNameCaption[3];
             cols[0] = new ColumnNameCaption(); cols[0].ColumnName = "AccNo"; cols[0].Caption = "Customer"; cols[0].AllowEdit = false;
@@ -610,7 +610,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             catch { /* the send already happened - history logging must never break it */ }
         }
 
-        private bool _mailStyled;              // template setting: wrap the body in the styled HTML frame
+        private string _mailStyle = "PLAIN";    // template style: PLAIN / STYLED (frame) / HTML (user-authored)
         private string _mailSenderCompany = ""; // header-bar company for the styled frame
 
         // {token} substitution per recipient — mirrors the Debtor Statement's Batch Mail behaviour.
@@ -623,8 +623,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             fromName = ReplaceTokens(fromName, ent);
             subject = ReplaceTokens(subject, ent);
             message = ReplaceTokens(message, ent);
-            if (_mailStyled)
+            if (_mailStyle == "STYLED")
                 message = ServiceContractPhotocopier.Classes.ScpMailHtml.BuildStyled(message, _mailSenderCompany);
+            else if (_mailStyle == "HTML")
+                message = ServiceContractPhotocopier.Classes.ScpMailHtml.EnsureHtml(message);
         }
 
         private static string ReplaceTokens(string text, InvoiceBatchMailEntity ent)

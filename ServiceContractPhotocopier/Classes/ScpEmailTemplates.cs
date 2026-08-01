@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Data.SqlClient;
 using AutoCount.Data;
@@ -17,7 +17,9 @@ namespace ServiceContractPhotocopier.Classes
             public string Name = "";
             public string Subject = "";
             public string Body = "";
-            public bool Styled;
+            public string Style = "PLAIN";   // PLAIN / STYLED / HTML
+            public bool Styled { get { return Style == "STYLED"; } }
+            public bool CustomHtml { get { return Style == "HTML"; } }
             public bool IsDefault;
         }
 
@@ -35,7 +37,8 @@ namespace ServiceContractPhotocopier.Classes
             t.Name = Convert.ToString(r["Name"]);
             t.Subject = Convert.ToString(r["Subject"]);
             t.Body = Convert.ToString(r["Body"]);
-            t.Styled = Convert.ToString(r["Style"]).Trim().ToUpperInvariant() == "STYLED";
+            t.Style = Convert.ToString(r["Style"]).Trim().ToUpperInvariant();
+            if (t.Style != "STYLED" && t.Style != "HTML") t.Style = "PLAIN";
             t.IsDefault = Convert.ToString(r["IsDefault"]).Trim() == "Y";
             return t;
         }
@@ -64,7 +67,7 @@ namespace ServiceContractPhotocopier.Classes
             return t;
         }
 
-        public static long Insert(DBSetting db, string name, string subject, string body, bool styled)
+        public static long Insert(DBSetting db, string name, string subject, string body, string style)
         {
             using (SqlConnection conn = new SqlConnection(db.ConnectionString))
             using (SqlCommand cmd = new SqlCommand(
@@ -74,13 +77,13 @@ namespace ServiceContractPhotocopier.Classes
                 cmd.Parameters.AddWithValue("@n", name);
                 cmd.Parameters.AddWithValue("@s", subject ?? "");
                 cmd.Parameters.AddWithValue("@b", body ?? "");
-                cmd.Parameters.AddWithValue("@st", styled ? "STYLED" : "PLAIN");
+                cmd.Parameters.AddWithValue("@st", style == "STYLED" || style == "HTML" ? style : "PLAIN");
                 conn.Open();
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
 
-        public static void Update(DBSetting db, long key, string subject, string body, bool styled)
+        public static void Update(DBSetting db, long key, string subject, string body, string style)
         {
             using (SqlConnection conn = new SqlConnection(db.ConnectionString))
             using (SqlCommand cmd = new SqlCommand(
@@ -89,7 +92,7 @@ namespace ServiceContractPhotocopier.Classes
             {
                 cmd.Parameters.AddWithValue("@s", subject ?? "");
                 cmd.Parameters.AddWithValue("@b", body ?? "");
-                cmd.Parameters.AddWithValue("@st", styled ? "STYLED" : "PLAIN");
+                cmd.Parameters.AddWithValue("@st", style == "STYLED" || style == "HTML" ? style : "PLAIN");
                 cmd.Parameters.AddWithValue("@k", key);
                 conn.Open();
                 cmd.ExecuteNonQuery();

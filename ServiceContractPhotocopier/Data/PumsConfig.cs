@@ -107,6 +107,8 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_BULKMAIL_STYLE = "BULKMAIL_STYLE";
         public const string BULKMAIL_STYLE_PLAIN = "PLAIN";
         public const string BULKMAIL_STYLE_STYLED = "STYLED";
+        /// <summary>The template BODY is user-authored HTML, sent as-is (tokens substituted).</summary>
+        public const string BULKMAIL_STYLE_HTML = "HTML";
         public const string DEFAULT_BULKMAIL_SUBJECT = "Invoice {DocNos}";
         public const string DEFAULT_BULKMAIL_BODY = "Dear {CompanyName},\r\n\r\nPlease find attached your invoice(s): {DocNos}.\r\n\r\nThank you.";
 

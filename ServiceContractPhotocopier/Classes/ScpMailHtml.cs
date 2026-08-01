@@ -47,5 +47,17 @@ namespace ServiceContractPhotocopier.Classes
         {
             return Wrap(EscapeText(plainBody), senderCompany);
         }
+
+        /// <summary>User-authored Custom HTML: AutoCount only treats a body as HTML when it has an
+        /// &lt;html&gt;…&lt;/html&gt; wrapper — add a minimal one if the user's snippet lacks it.</summary>
+        public static string EnsureHtml(string html)
+        {
+            html = html ?? "";
+            bool wrapped = System.Text.RegularExpressions.Regex.IsMatch(html, "<html[\\s>]",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                && System.Text.RegularExpressions.Regex.IsMatch(html, "</html>",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return wrapped ? html : "<html>\r\n<body>\r\n" + html + "\r\n</body>\r\n</html>";
+        }
     }
 }

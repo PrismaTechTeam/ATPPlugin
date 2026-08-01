@@ -35,14 +35,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ApplyButtonIcons();
             CmbStyle.SelectedIndex = 0;
             CmbStyle.ToolTip = "Plain text sends exactly what you type. Professional wraps your text " +
-                "in a styled layout (company header bar, clean typography, footer) — the customer " +
-                "sees a polished HTML email; you still just type plain text.";
+                "in a ready-made styled layout. Custom HTML gives you FULL control — the Message box " +
+                "is your own HTML (tokens still work); switching to it offers the Professional frame " +
+                "as an editable starting point.";
             _lastFocused = TxtBody;
             TxtSubject.Enter += delegate { _lastFocused = TxtSubject; };
             TxtBody.Enter += delegate { _lastFocused = TxtBody; };
             TxtSubject.EditValueChanged += delegate { UpdatePreview(); };
             TxtBody.EditValueChanged += delegate { UpdatePreview(); };
-            CmbStyle.SelectedIndexChanged += delegate { UpdatePreview(); };
+            CmbStyle.SelectedIndexChanged += new EventHandler(CmbStyle_SelectedIndexChanged);
             CmbTemplate.SelectedIndexChanged += new EventHandler(CmbTemplate_SelectedIndexChanged);
             this.FormClosing += new FormClosingEventHandler(OnClosingConfirm);
         }
@@ -94,12 +95,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             finally { _loadingTpl = false; }
         }
 
+        private static int StyleToIndex(string style)
+        {
+            return style == "STYLED" ? 1 : (style == "HTML" ? 2 : 0);
+        }
+
+        private string CurrentStyle()
+        {
+            return CmbStyle.SelectedIndex == 1 ? "STYLED" : (CmbStyle.SelectedIndex == 2 ? "HTML" : "PLAIN");
+        }
+
+        private bool _applyingTpl;
+
         private void ApplyTemplate(ScpEmailTemplates.Template t)
         {
-            _current = t;
-            TxtSubject.Text = t.Subject;
-            TxtBody.Text = t.Body;
-            CmbStyle.SelectedIndex = t.Styled ? 1 : 0;
+            _applyingTpl = true;
+            try
+            {
+                _current = t;
+                TxtSubject.Text = t.Subject;
+                TxtBody.Text = t.Body;
+                CmbStyle.SelectedIndex = StyleToIndex(t.Style);
+            }
+            finally { _applyingTpl = false; }
             UpdatePreview();
         }
 
@@ -108,7 +126,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (_current == null) return false;
             return (TxtSubject.Text ?? "") != _current.Subject
                 || (TxtBody.Text ?? "") != _current.Body
-                || (CmbStyle.SelectedIndex == 1) != _current.Styled;
+                || CurrentStyle() != _current.Style;
+        }
+
+        // Switching to Custom HTML with a plain-text body on screen: offer the Professional frame
+        // as an EDITABLE starting point — the user owns the HTML from there (nothing hardcoded).
+        private void CmbStyle_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (!_applyingTpl && CmbStyle.SelectedIndex == 2 && (TxtBody.Text ?? "").IndexOf('<') < 0
+                && (TxtBody.Text ?? "").Trim().Length > 0)
+            {
+                if (XtraMessageBox.Show(
+                        "Turn the current text into an editable HTML starting point (the Professional " +
+                        "layout, ready for you to customise)?\r\n\r\nNo = keep the box as-is and write " +
+                        "your own HTML from scratch.",
+                        "Custom HTML", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    TxtBody.Text = ScpMailHtml.BuildStyled(TxtBody.Text, _senderCompany);
+            }
+            TxtBody.Properties.Appearance.Font = CmbStyle.SelectedIndex == 2
+                ? new System.Drawing.Font("Consolas", 9F)
+                : new System.Drawing.Font("Tahoma", 8.25F);
+            UpdatePreview();
         }
 
         private void CmbTemplate_SelectedIndexChanged(object sender, EventArgs e)
@@ -138,7 +176,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 long key = ScpEmailTemplates.Insert(_dbSetting, name,
-                    TxtSubject.Text, TxtBody.Text, CmbStyle.SelectedIndex == 1);
+                    TxtSubject.Text, TxtBody.Text, CurrentStyle());
                 LoadTemplates(key);
             }
             catch (Exception ex)
@@ -220,18 +258,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void UpdatePreview()
         {
             LblPvSubject.Text = Fill(TxtSubject.Text);
-            bool styled = CmbStyle.SelectedIndex == 1;
-            TxtPreview.Visible = !styled;
-            WebPreview.Visible = styled;
-            if (styled)
-            {
-                try { WebPreview.DocumentText = ScpMailHtml.BuildStyled(Fill(TxtBody.Text), _senderCompany); }
-                catch { TxtPreview.Visible = true; WebPreview.Visible = false; TxtPreview.Text = Fill(TxtBody.Text); }
-            }
-            else
+            int mode = CmbStyle.SelectedIndex;   // 0 plain · 1 professional · 2 custom html
+            TxtPreview.Visible = mode == 0;
+            WebPreview.Visible = mode != 0;
+            if (mode == 0)
             {
                 TxtPreview.Text = Fill(TxtBody.Text);
+                return;
             }
+            try
+            {
+                WebPreview.DocumentText = mode == 1
+                    ? ScpMailHtml.BuildStyled(Fill(TxtBody.Text), _senderCompany)
+                    : ScpMailHtml.EnsureHtml(Fill(TxtBody.Text));
+            }
+            catch { TxtPreview.Visible = true; WebPreview.Visible = false; TxtPreview.Text = Fill(TxtBody.Text); }
         }
 
         // ── buttons ──
@@ -244,7 +285,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 ScpEmailTemplates.Update(_dbSetting, _current.Key, subject, TxtBody.Text ?? "",
-                    CmbStyle.SelectedIndex == 1);
+                    CurrentStyle());
                 LoadTemplates(_current.Key);   // refresh so HasUnsavedChanges is clean
             }
             catch (Exception ex) { XtraMessageBox.Show("Save failed:\r\n" + ex.Message, "Bulk Email Template"); }

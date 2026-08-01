@@ -159,7 +159,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbStyle.Properties.Items.AddRange(new object[] {
             "Plain text",
-            "Professional (styled)"});
+            "Professional (styled)",
+            "Custom HTML"});
             this.CmbStyle.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbStyle.Size = new System.Drawing.Size(200, 20);
             this.CmbStyle.TabIndex = 0;
