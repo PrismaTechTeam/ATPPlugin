@@ -29,6 +29,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void InitializeComponent()
         {
             this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
+            this.SplitMain = new DevExpress.XtraEditors.SplitContainerControl();
             this.GrpEdit = new DevExpress.XtraEditors.GroupControl();
             this.LblTpl = new DevExpress.XtraEditors.LabelControl();
             this.CmbTemplate = new DevExpress.XtraEditors.ComboBoxEdit();
@@ -37,7 +38,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnTplDefault = new DevExpress.XtraEditors.SimpleButton();
             this.LblStyle = new DevExpress.XtraEditors.LabelControl();
             this.CmbStyle = new DevExpress.XtraEditors.ComboBoxEdit();
-            this.WebPreview = new System.Windows.Forms.WebBrowser();
             this.LblSubject = new DevExpress.XtraEditors.LabelControl();
             this.TxtSubject = new DevExpress.XtraEditors.TextEdit();
             this.LblBody = new DevExpress.XtraEditors.LabelControl();
@@ -50,10 +50,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblPvSubjectCap = new DevExpress.XtraEditors.LabelControl();
             this.LblPvSubject = new DevExpress.XtraEditors.LabelControl();
             this.TxtPreview = new DevExpress.XtraEditors.MemoEdit();
+            this.WebPreview = new System.Windows.Forms.WebBrowser();
             this.LblPvSample = new DevExpress.XtraEditors.LabelControl();
+            this.PnlButtons = new System.Windows.Forms.Panel();
             this.BtnSave = new DevExpress.XtraEditors.SimpleButton();
             this.BtnDefault = new DevExpress.XtraEditors.SimpleButton();
             this.BtnCancel = new DevExpress.XtraEditors.SimpleButton();
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain.Panel1)).BeginInit();
+            this.SplitMain.Panel1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain.Panel2)).BeginInit();
+            this.SplitMain.Panel2.SuspendLayout();
+            this.SplitMain.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpEdit)).BeginInit();
             this.GrpEdit.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.CmbTemplate.Properties)).BeginInit();
@@ -63,6 +71,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GrpPreview)).BeginInit();
             this.GrpPreview.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.TxtPreview.Properties)).BeginInit();
+            this.PnlButtons.SuspendLayout();
             this.SuspendLayout();
             //
             // PanelHeaderTop
@@ -72,8 +81,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelHeaderTop.Hint = "";
             this.PanelHeaderTop.Location = new System.Drawing.Point(0, 0);
             this.PanelHeaderTop.Name = "PanelHeaderTop";
-            this.PanelHeaderTop.Size = new System.Drawing.Size(934, 34);
+            this.PanelHeaderTop.Size = new System.Drawing.Size(1264, 34);
             this.PanelHeaderTop.TabIndex = 0;
+            //
+            // SplitMain
+            //
+            this.SplitMain.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.SplitMain.Location = new System.Drawing.Point(0, 34);
+            this.SplitMain.Name = "SplitMain";
+            this.SplitMain.Panel1.Controls.Add(this.GrpEdit);
+            this.SplitMain.Panel1.Text = "Panel1";
+            this.SplitMain.Panel2.Controls.Add(this.GrpPreview);
+            this.SplitMain.Panel2.Text = "Panel2";
+            this.SplitMain.Size = new System.Drawing.Size(1264, 601);
+            this.SplitMain.SplitterPosition = 616;
+            this.SplitMain.TabIndex = 1;
             //
             // GrpEdit
             //
@@ -92,10 +114,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpEdit.Controls.Add(this.BtnTokAcc);
             this.GrpEdit.Controls.Add(this.BtnTokName);
             this.GrpEdit.Controls.Add(this.BtnTokDocs);
-            this.GrpEdit.Location = new System.Drawing.Point(10, 42);
+            this.GrpEdit.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.GrpEdit.Location = new System.Drawing.Point(0, 0);
             this.GrpEdit.Name = "GrpEdit";
-            this.GrpEdit.Size = new System.Drawing.Size(474, 408);
-            this.GrpEdit.TabIndex = 1;
+            this.GrpEdit.Size = new System.Drawing.Size(616, 601);
+            this.GrpEdit.TabIndex = 0;
             this.GrpEdit.Text = "Edit Template";
             //
             // LblTpl
@@ -112,14 +135,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbTemplate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbTemplate.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
-            this.CmbTemplate.Size = new System.Drawing.Size(168, 20);
+            this.CmbTemplate.Size = new System.Drawing.Size(190, 20);
             this.CmbTemplate.TabIndex = 0;
             //
             // BtnTplNew
             //
-            this.BtnTplNew.Location = new System.Drawing.Point(252, 29);
+            this.BtnTplNew.Location = new System.Drawing.Point(278, 29);
             this.BtnTplNew.Name = "BtnTplNew";
-            this.BtnTplNew.Size = new System.Drawing.Size(52, 24);
+            this.BtnTplNew.Size = new System.Drawing.Size(60, 24);
             this.BtnTplNew.TabIndex = 9;
             this.BtnTplNew.Text = "New";
             this.BtnTplNew.ToolTip = "Create a new template version (starts as a copy of what is on screen).";
@@ -127,18 +150,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnTplDelete
             //
-            this.BtnTplDelete.Location = new System.Drawing.Point(308, 29);
+            this.BtnTplDelete.Location = new System.Drawing.Point(342, 29);
             this.BtnTplDelete.Name = "BtnTplDelete";
-            this.BtnTplDelete.Size = new System.Drawing.Size(58, 24);
+            this.BtnTplDelete.Size = new System.Drawing.Size(66, 24);
             this.BtnTplDelete.TabIndex = 10;
             this.BtnTplDelete.Text = "Delete";
             this.BtnTplDelete.Click += new System.EventHandler(this.BtnTplDelete_Click);
             //
             // BtnTplDefault
             //
-            this.BtnTplDefault.Location = new System.Drawing.Point(370, 29);
+            this.BtnTplDefault.Location = new System.Drawing.Point(412, 29);
             this.BtnTplDefault.Name = "BtnTplDefault";
-            this.BtnTplDefault.Size = new System.Drawing.Size(90, 24);
+            this.BtnTplDefault.Size = new System.Drawing.Size(96, 24);
             this.BtnTplDefault.TabIndex = 11;
             this.BtnTplDefault.Text = "Set Default";
             this.BtnTplDefault.ToolTip = "Bulk Email Invoice always sends with the DEFAULT template.";
@@ -162,8 +185,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             "Professional (styled)",
             "Custom HTML"});
             this.CmbStyle.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
-            this.CmbStyle.Size = new System.Drawing.Size(200, 20);
-            this.CmbStyle.TabIndex = 0;
+            this.CmbStyle.Size = new System.Drawing.Size(190, 20);
+            this.CmbStyle.TabIndex = 12;
             //
             // LblSubject
             //
@@ -174,9 +197,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // TxtSubject
             //
+            this.TxtSubject.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.TxtSubject.Location = new System.Drawing.Point(80, 87);
             this.TxtSubject.Name = "TxtSubject";
-            this.TxtSubject.Size = new System.Drawing.Size(380, 20);
+            this.TxtSubject.Size = new System.Drawing.Size(516, 20);
             this.TxtSubject.TabIndex = 1;
             //
             // LblBody
@@ -188,23 +213,28 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // TxtBody
             //
+            this.TxtBody.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.TxtBody.Location = new System.Drawing.Point(80, 115);
             this.TxtBody.Name = "TxtBody";
-            this.TxtBody.Size = new System.Drawing.Size(380, 234);
+            this.TxtBody.Size = new System.Drawing.Size(516, 412);
             this.TxtBody.TabIndex = 2;
             //
             // LblInsert
             //
-            this.LblInsert.Location = new System.Drawing.Point(80, 361);
+            this.LblInsert.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.LblInsert.Location = new System.Drawing.Point(80, 539);
             this.LblInsert.Name = "LblInsert";
             this.LblInsert.Size = new System.Drawing.Size(60, 13);
             this.LblInsert.Text = "Insert token:";
             //
             // BtnTokAcc
             //
-            this.BtnTokAcc.Location = new System.Drawing.Point(80, 377);
+            this.BtnTokAcc.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.BtnTokAcc.Location = new System.Drawing.Point(80, 557);
             this.BtnTokAcc.Name = "BtnTokAcc";
-            this.BtnTokAcc.Size = new System.Drawing.Size(122, 25);
+            this.BtnTokAcc.Size = new System.Drawing.Size(140, 28);
             this.BtnTokAcc.TabIndex = 3;
             this.BtnTokAcc.Text = "Customer Code";
             this.BtnTokAcc.ToolTip = "Insert {AccNo} at the cursor — becomes each customer's account code when sending.";
@@ -212,9 +242,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnTokName
             //
-            this.BtnTokName.Location = new System.Drawing.Point(208, 377);
+            this.BtnTokName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.BtnTokName.Location = new System.Drawing.Point(226, 557);
             this.BtnTokName.Name = "BtnTokName";
-            this.BtnTokName.Size = new System.Drawing.Size(126, 25);
+            this.BtnTokName.Size = new System.Drawing.Size(146, 28);
             this.BtnTokName.TabIndex = 4;
             this.BtnTokName.Text = "Customer Name";
             this.BtnTokName.ToolTip = "Insert {CompanyName} at the cursor — becomes each customer's company name when sending.";
@@ -222,9 +253,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnTokDocs
             //
-            this.BtnTokDocs.Location = new System.Drawing.Point(340, 377);
+            this.BtnTokDocs.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.BtnTokDocs.Location = new System.Drawing.Point(378, 557);
             this.BtnTokDocs.Name = "BtnTokDocs";
-            this.BtnTokDocs.Size = new System.Drawing.Size(120, 25);
+            this.BtnTokDocs.Size = new System.Drawing.Size(130, 28);
             this.BtnTokDocs.TabIndex = 5;
             this.BtnTokDocs.Text = "Invoice Nos";
             this.BtnTokDocs.ToolTip = "Insert {DocNos} at the cursor — becomes that customer's invoice numbers when sending.";
@@ -237,10 +269,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpPreview.Controls.Add(this.TxtPreview);
             this.GrpPreview.Controls.Add(this.WebPreview);
             this.GrpPreview.Controls.Add(this.LblPvSample);
-            this.GrpPreview.Location = new System.Drawing.Point(492, 42);
+            this.GrpPreview.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.GrpPreview.Location = new System.Drawing.Point(0, 0);
             this.GrpPreview.Name = "GrpPreview";
-            this.GrpPreview.Size = new System.Drawing.Size(432, 408);
-            this.GrpPreview.TabIndex = 2;
+            this.GrpPreview.Size = new System.Drawing.Size(638, 601);
+            this.GrpPreview.TabIndex = 0;
             this.GrpPreview.Text = "Preview — what the customer receives";
             //
             // LblPvSubjectCap
@@ -252,6 +285,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // LblPvSubject
             //
+            this.LblPvSubject.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.LblPvSubject.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
             this.LblPvSubject.Appearance.Options.UseFont = true;
             this.LblPvSubject.Appearance.TextOptions.Trimming = DevExpress.Utils.Trimming.EllipsisCharacter;
@@ -259,15 +294,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblPvSubject.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblPvSubject.Location = new System.Drawing.Point(64, 34);
             this.LblPvSubject.Name = "LblPvSubject";
-            this.LblPvSubject.Size = new System.Drawing.Size(354, 13);
+            this.LblPvSubject.Size = new System.Drawing.Size(560, 13);
             this.LblPvSubject.Text = "";
             //
             // TxtPreview
             //
+            this.TxtPreview.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.TxtPreview.Location = new System.Drawing.Point(14, 55);
             this.TxtPreview.Name = "TxtPreview";
             this.TxtPreview.Properties.ReadOnly = true;
-            this.TxtPreview.Size = new System.Drawing.Size(404, 320);
+            this.TxtPreview.Size = new System.Drawing.Size(610, 512);
             this.TxtPreview.TabIndex = 0;
             this.TxtPreview.TabStop = false;
             //
@@ -275,29 +313,45 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             this.WebPreview.AllowNavigation = false;
             this.WebPreview.AllowWebBrowserDrop = false;
+            this.WebPreview.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.WebPreview.IsWebBrowserContextMenuEnabled = false;
             this.WebPreview.Location = new System.Drawing.Point(14, 55);
             this.WebPreview.Name = "WebPreview";
             this.WebPreview.ScriptErrorsSuppressed = true;
-            this.WebPreview.Size = new System.Drawing.Size(404, 320);
+            this.WebPreview.Size = new System.Drawing.Size(610, 512);
             this.WebPreview.TabStop = false;
             this.WebPreview.Visible = false;
             this.WebPreview.WebBrowserShortcutsEnabled = false;
             //
             // LblPvSample
             //
+            this.LblPvSample.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.LblPvSample.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(120)))), ((int)(((byte)(120)))), ((int)(((byte)(120)))));
             this.LblPvSample.Appearance.Options.UseForeColor = true;
-            this.LblPvSample.Location = new System.Drawing.Point(14, 383);
+            this.LblPvSample.Location = new System.Drawing.Point(14, 577);
             this.LblPvSample.Name = "LblPvSample";
-            this.LblPvSample.Size = new System.Drawing.Size(404, 13);
+            this.LblPvSample.Size = new System.Drawing.Size(500, 13);
             this.LblPvSample.Text = "Sample customer: 3000-A0011 · ATRIA ARCHITECT SDN BHD · MR2607.0001-0003";
+            //
+            // PnlButtons
+            //
+            this.PnlButtons.Controls.Add(this.BtnSave);
+            this.PnlButtons.Controls.Add(this.BtnDefault);
+            this.PnlButtons.Controls.Add(this.BtnCancel);
+            this.PnlButtons.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.PnlButtons.Location = new System.Drawing.Point(0, 635);
+            this.PnlButtons.Name = "PnlButtons";
+            this.PnlButtons.Size = new System.Drawing.Size(1264, 46);
+            this.PnlButtons.TabIndex = 2;
             //
             // BtnSave
             //
+            this.BtnSave.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.BtnSave.Appearance.Font = new System.Drawing.Font("Tahoma", 8.25F, System.Drawing.FontStyle.Bold);
             this.BtnSave.Appearance.Options.UseFont = true;
-            this.BtnSave.Location = new System.Drawing.Point(576, 460);
+            this.BtnSave.Location = new System.Drawing.Point(900, 7);
             this.BtnSave.Name = "BtnSave";
             this.BtnSave.Size = new System.Drawing.Size(120, 32);
             this.BtnSave.TabIndex = 6;
@@ -306,7 +360,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnDefault
             //
-            this.BtnDefault.Location = new System.Drawing.Point(702, 460);
+            this.BtnDefault.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.BtnDefault.Location = new System.Drawing.Point(1026, 7);
             this.BtnDefault.Name = "BtnDefault";
             this.BtnDefault.Size = new System.Drawing.Size(110, 32);
             this.BtnDefault.TabIndex = 7;
@@ -316,7 +371,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // BtnCancel
             //
-            this.BtnCancel.Location = new System.Drawing.Point(818, 460);
+            this.BtnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.BtnCancel.Location = new System.Drawing.Point(1142, 7);
             this.BtnCancel.Name = "BtnCancel";
             this.BtnCancel.Size = new System.Drawing.Size(106, 32);
             this.BtnCancel.TabIndex = 8;
@@ -327,16 +383,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(934, 502);
-            this.Controls.Add(this.GrpEdit);
-            this.Controls.Add(this.GrpPreview);
-            this.Controls.Add(this.BtnSave);
-            this.Controls.Add(this.BtnDefault);
-            this.Controls.Add(this.BtnCancel);
+            this.ClientSize = new System.Drawing.Size(1264, 681);
+            this.Controls.Add(this.SplitMain);
+            this.Controls.Add(this.PnlButtons);
             this.Controls.Add(this.PanelHeaderTop);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
+            this.MinimumSize = new System.Drawing.Size(1000, 600);
             this.Name = "BulkEmailTemplate_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Bulk Email Template";
@@ -351,12 +402,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpPreview.ResumeLayout(false);
             this.GrpPreview.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpPreview)).EndInit();
+            this.SplitMain.Panel1.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain.Panel1)).EndInit();
+            this.SplitMain.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain.Panel2)).EndInit();
+            this.SplitMain.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.SplitMain)).EndInit();
+            this.PnlButtons.ResumeLayout(false);
             this.ResumeLayout(false);
         }
 
         #endregion
 
         private AutoCount.Controls.PanelHeader PanelHeaderTop;
+        private DevExpress.XtraEditors.SplitContainerControl SplitMain;
         private DevExpress.XtraEditors.GroupControl GrpEdit;
         private DevExpress.XtraEditors.LabelControl LblTpl;
         private DevExpress.XtraEditors.ComboBoxEdit CmbTemplate;
@@ -365,7 +424,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnTplDefault;
         private DevExpress.XtraEditors.LabelControl LblStyle;
         private DevExpress.XtraEditors.ComboBoxEdit CmbStyle;
-        private System.Windows.Forms.WebBrowser WebPreview;
         private DevExpress.XtraEditors.LabelControl LblSubject;
         private DevExpress.XtraEditors.TextEdit TxtSubject;
         private DevExpress.XtraEditors.LabelControl LblBody;
@@ -378,7 +436,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.LabelControl LblPvSubjectCap;
         private DevExpress.XtraEditors.LabelControl LblPvSubject;
         private DevExpress.XtraEditors.MemoEdit TxtPreview;
+        private System.Windows.Forms.WebBrowser WebPreview;
         private DevExpress.XtraEditors.LabelControl LblPvSample;
+        private System.Windows.Forms.Panel PnlButtons;
         private DevExpress.XtraEditors.SimpleButton BtnSave;
         private DevExpress.XtraEditors.SimpleButton BtnDefault;
         private DevExpress.XtraEditors.SimpleButton BtnCancel;
