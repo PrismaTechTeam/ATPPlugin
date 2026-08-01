@@ -209,10 +209,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // ===================== Contract term — demo 28/07 #20 =====================
         // "start date + term = expiry": the NUMBER box lists 1/6/12/24/36/48/60 (any typed number
         // works) and the UNIT dropdown says Month / Week / Day out loud — no decimals, no cryptic
-        // suffixes (user decision 01/08; default unit = Month). Expiry = start + term − 1 day,
-        // recomputed whichever field is filled first; a MONTH-term expiry landing past the 28th
-        // pulls back to the 28th ("不能跳 31" — the system's day-28 billing rhythm). Contract
-        // Expiry itself is READ-ONLY (greyed): always derived, never hand-typed.
+        // suffixes (user decision 01/08; default unit = Month). Expiry = start + term − 1 day —
+        // 01/08/2026 + 12 Months = 31/07/2027, never spilling into the next day-1 — recomputed
+        // whichever field is filled first. Contract Expiry itself is READ-ONLY (greyed): always
+        // derived, never hand-typed.
         private bool _termBusy;
 
         private void InitContractTermControls()
@@ -243,13 +243,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return u == "week" ? 'w' : (u == "day" ? 'd' : 'm');
         }
 
-        // Month-term expiry = start + N months − 1 day, BUT never on the 29th/30th/31st (user rule
-        // 01/08: "不能跳 31"). Week/day terms stay day-precise.
+        // Month-term expiry = start + N months − 1 day, full stop: 01/08/2026 + 12 Months ends
+        // 31/07/2027 — the term must cover the WHOLE period and never spill into the next day-1.
+        // (An earlier "pull back to the 28th" reading of the user's rule was wrong and reverted.)
         private static DateTime ExpiryForMonths(DateTime start, int months)
         {
-            DateTime exp = start.AddMonths(months).AddDays(-1);
-            if (exp.Day > 28) exp = new DateTime(exp.Year, exp.Month, 28);
-            return exp;
+            return start.AddMonths(months).AddDays(-1);
         }
 
         private void RecalcExpiryFromTerm()
