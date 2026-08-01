@@ -112,6 +112,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             BuildStrategyTab();
             BuildGroupTab();
             InitBillingHeaderData();
+            InitContractTermControls();
             BuildBillingHistoryTab();
             BuildChangeHistoryTab();
             ApplyTemplateExtras();   // clone-at-open: spare parts / rules / More Header now have their tabs
@@ -203,6 +204,89 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DevExpress.XtraEditors.DateEdit changed = sender as DevExpress.XtraEditors.DateEdit;
             if (changed != null) changed.EditValue = null;
             else DtExpiryDate.EditValue = null;
+        }
+
+        // ===================== Contract term — demo 28/07 #20 =====================
+        // "start date + term = expiry" so nobody hand-computes (and mis-computes) 60-month
+        // expiries. No. Month offers 1/6/12/24/36/48/60 but accepts ANY typed number, and short
+        // terms WITHOUT decimals via a unit suffix: "2w" = 2 weeks, "18d" = 18 days ("6" = 6
+        // months). Expiry = start + term − 1 day, recomputed whichever side is filled first.
+        // Contract Expiry is READ-ONLY (greyed): always derived, never hand-typed.
+        private bool _termBusy;
+
+        private void InitContractTermControls()
+        {
+            cboNoOfMonth.Properties.Items.Clear();
+            cboNoOfMonth.Properties.Items.AddRange(new object[] { "1", "6", "12", "24", "36", "48", "60" });
+            cboNoOfMonth.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
+            cboNoOfMonth.ToolTip = "Contract term. Plain number = months (any number, not only the list). " +
+                "Short terms without decimals: 2w = 2 weeks, 18d = 18 days. Expiry = start + term − 1 day.";
+            DtExpiryDate.Properties.ReadOnly = true;
+            DtExpiryDate.Properties.Appearance.BackColor = System.Drawing.Color.Gainsboro;
+            DtExpiryDate.Properties.Appearance.ForeColor = System.Drawing.Color.DimGray;
+            DtExpiryDate.Properties.Appearance.Options.UseBackColor = true;
+            DtExpiryDate.Properties.Appearance.Options.UseForeColor = true;
+
+            SyncTermFromDates();   // an opened contract shows its term back-derived from the dates
+
+            cboNoOfMonth.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
+            DtStartDate.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
+        }
+
+        private static bool TryParseTerm(string text, out int n, out char unit)
+        {
+            n = 0; unit = 'm';
+            text = (text ?? "").Trim().ToLowerInvariant();
+            if (text.Length == 0) return false;
+            char last = text[text.Length - 1];
+            if (last == 'm' || last == 'w' || last == 'd')
+            {
+                unit = last;
+                text = text.Substring(0, text.Length - 1).Trim();
+            }
+            return int.TryParse(text, out n) && n >= 1 && n <= 1200;
+        }
+
+        private void RecalcExpiryFromTerm()
+        {
+            if (_loading || _termBusy) return;
+            if (DtStartDate.EditValue == null || DtStartDate.EditValue == DBNull.Value) return;
+            int n; char unit;
+            if (!TryParseTerm(Convert.ToString(cboNoOfMonth.EditValue), out n, out unit)) return;
+            DateTime start = Convert.ToDateTime(DtStartDate.EditValue).Date;
+            DateTime exp = unit == 'w' ? start.AddDays(7 * n - 1)
+                         : unit == 'd' ? start.AddDays(n - 1)
+                         : start.AddMonths(n).AddDays(-1);
+            _termBusy = true;
+            try { DtExpiryDate.EditValue = exp; }
+            finally { _termBusy = false; }
+        }
+
+        // Back-derive the term from stored dates (months first, then whole weeks, then days) so an
+        // existing contract opens with its term visible instead of an empty box.
+        private void SyncTermFromDates()
+        {
+            try
+            {
+                if (DtStartDate.EditValue == null || DtStartDate.EditValue == DBNull.Value) return;
+                if (DtExpiryDate.EditValue == null || DtExpiryDate.EditValue == DBNull.Value) return;
+                DateTime start = Convert.ToDateTime(DtStartDate.EditValue).Date;
+                DateTime exp = Convert.ToDateTime(DtExpiryDate.EditValue).Date;
+                if (exp < start) return;
+                _termBusy = true;
+                try
+                {
+                    for (int m = 1; m <= 600; m++)
+                    {
+                        if (start.AddMonths(m).AddDays(-1) == exp) { cboNoOfMonth.EditValue = m.ToString(); return; }
+                        if (start.AddMonths(m) > exp.AddMonths(1)) break;
+                    }
+                    int days = (int)(exp - start).TotalDays + 1;
+                    cboNoOfMonth.EditValue = (days % 7 == 0) ? (days / 7) + "w" : days + "d";
+                }
+                finally { _termBusy = false; }
+            }
+            catch { }
         }
 
         // The Expiry picker's calendar cannot go before the chosen Start (typed values are caught
@@ -413,6 +497,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
+            if (cboNoOfMonth != null) cboNoOfMonth.EditValueChanged += h;
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValueChanged += h;
             if (ChkGenerateSOA != null) ChkGenerateSOA.EditValueChanged += h;
             if (SluSOATemplate != null) SluSOATemplate.EditValueChanged += h;
@@ -938,6 +1023,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
             if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
             if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            SyncTermFromDates();
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
             // called both here (post-save reload, controls exist) and at the end of BuildStrategyTab
@@ -4732,6 +4818,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
             if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
             if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            SyncTermFromDates();
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;
                 ApplyFocResetToUi();   // no-op before the strategy tab exists; re-applied by OnFormLoad
