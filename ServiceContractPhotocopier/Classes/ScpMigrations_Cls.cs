@@ -169,6 +169,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v10_ReportTemplates.sql", asm);
             // Bulk Email send history (Emailed column / not-yet-emailed checklist / contract reminder).
             RunIfTableMissing(dbsetting, "zSCP2_EmailLog",              "02_CreateTable_zSCP2_EmailLog.sql", asm);
+            // Named bulk-email templates (user-maintained versions, one default; seeds "Standard").
+            RunIfTableMissing(dbsetting, "zSCP2_EmailTemplate",         "02_CreateTable_zSCP2_EmailTemplate.sql", asm);
             // Rental Waive meter types ("(W)" family auto-tagged) + per-meter waive configuration.
             RunDDL(dbsetting, "02_Update_zSCP_MeterType_v2_RentalWaive.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v5_WaiveConfig.sql", asm);

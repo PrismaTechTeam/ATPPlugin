@@ -545,13 +545,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             catch { }
 
-            // #9a: the saved template ("Template..." button) - set once, used every run.
-            string subject = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
-                ServiceContractPhotocopier.Data.PumsConfig.KEY_BULKMAIL_SUBJECT,
-                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_BULKMAIL_SUBJECT);
-            string message = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
-                ServiceContractPhotocopier.Data.PumsConfig.KEY_BULKMAIL_BODY,
-                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_BULKMAIL_BODY);
+            // #9a: send with the DEFAULT template from the user-maintained versions (Template…
+            // dialog). "Professional" style wraps the plain text into the styled HTML frame PER
+            // RECIPIENT (inside ConvertBatchMessage, after token substitution) — the Batch Mail
+            // dialog still shows clean editable text, and AutoCount's MailHelper auto-detects
+            // the HTML body.
+            ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template tplDef =
+                ServiceContractPhotocopier.Classes.ScpEmailTemplates.LoadDefault(_dbSetting);
+            string subject = tplDef.Subject;
+            string message = tplDef.Body;
+            _mailStyled = tplDef.Styled;
+            _mailSenderCompany = fromName;
             ColumnNameCaption[] cols = new ColumnNameCaption[3];
             cols[0] = new ColumnNameCaption(); cols[0].ColumnName = "AccNo"; cols[0].Caption = "Customer"; cols[0].AllowEdit = false;
             cols[1] = new ColumnNameCaption(); cols[1].ColumnName = "CompanyName"; cols[1].Caption = "Company Name"; cols[1].AllowEdit = false;
@@ -606,6 +610,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             catch { /* the send already happened - history logging must never break it */ }
         }
 
+        private bool _mailStyled;              // template setting: wrap the body in the styled HTML frame
+        private string _mailSenderCompany = ""; // header-bar company for the styled frame
+
         // {token} substitution per recipient — mirrors the Debtor Statement's Batch Mail behaviour.
         // Also the SEND signal: FormBatchMail2 only calls this while dispatching (Send clicked).
         private void ConvertBatchMessage(BatchMail2Entity entity, ref string fromName, ref string subject, ref string message)
@@ -616,6 +623,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             fromName = ReplaceTokens(fromName, ent);
             subject = ReplaceTokens(subject, ent);
             message = ReplaceTokens(message, ent);
+            if (_mailStyled)
+                message = ServiceContractPhotocopier.Classes.ScpMailHtml.BuildStyled(message, _mailSenderCompany);
         }
 
         private static string ReplaceTokens(string text, InvoiceBatchMailEntity ent)

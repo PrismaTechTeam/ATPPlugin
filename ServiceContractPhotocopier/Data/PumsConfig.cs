@@ -102,6 +102,11 @@ namespace ServiceContractPhotocopier.Data
         // Bulk Email Invoice message template (demo 28/07 #9a) - set once, used on every run.
         public const string KEY_BULKMAIL_SUBJECT = "BULKMAIL_SUBJECT";
         public const string KEY_BULKMAIL_BODY = "BULKMAIL_BODY";
+        /// <summary>"PLAIN" = send the text as typed; "STYLED" = wrap it in the professional HTML
+        /// frame (ScpMailHtml) at send time — AutoCount's mail pipeline auto-detects HTML bodies.</summary>
+        public const string KEY_BULKMAIL_STYLE = "BULKMAIL_STYLE";
+        public const string BULKMAIL_STYLE_PLAIN = "PLAIN";
+        public const string BULKMAIL_STYLE_STYLED = "STYLED";
         public const string DEFAULT_BULKMAIL_SUBJECT = "Invoice {DocNos}";
         public const string DEFAULT_BULKMAIL_BODY = "Dear {CompanyName},\r\n\r\nPlease find attached your invoice(s): {DocNos}.\r\n\r\nThank you.";
 
