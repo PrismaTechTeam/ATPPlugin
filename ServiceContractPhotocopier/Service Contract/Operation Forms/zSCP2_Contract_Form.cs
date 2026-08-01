@@ -2854,76 +2854,36 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             = new System.Collections.Generic.Dictionary<string, DevExpress.XtraEditors.TextEdit>();
         private DevExpress.XtraEditors.MemoEdit _mhDelAddress;
 
+        // More Header fields live in the DESIGNER now (user request 01/08): this only registers
+        // the designer editors into the _mh map (load/save read it) and wires dirty tracking.
         private void BuildMoreHeaderTab()
         {
-            // Top block: two columns of contact fields.
-            MhField("City", "City", 12, 14, 200);
-            MhField("PostalCode", "Postal Code", 430, 14, 200);
-            MhField("State", "State", 12, 40, 200);
-            MhField("Country", "Country", 430, 40, 200);
-            MhField("Fax", "Fax", 12, 66, 200);
-            MhField("Ref1", "Ref 1", 430, 66, 200);
-            MhField("Ref2", "Ref 2", 12, 92, 200);
-            MhField("Ref3", "Ref 3", 430, 92, 200);
-            MhField("Ref4", "Ref 4", 12, 118, 200);
-
-            // Delivery Address group.
-            DevExpress.XtraEditors.GroupControl grp = new DevExpress.XtraEditors.GroupControl();
-            grp.Text = "Delivery Address";
-            grp.Location = new System.Drawing.Point(12, 150);
-            grp.Size = new System.Drawing.Size(820, 210);
-            PageMoreHeader.Controls.Add(grp);
-
-            // Search = pick one of the customer's branches; Copy = copy the main contract address here.
-            DevExpress.XtraEditors.SimpleButton btnSearch = new DevExpress.XtraEditors.SimpleButton();
-            btnSearch.Text = "Search"; btnSearch.Location = new System.Drawing.Point(300, 27); btnSearch.Size = new System.Drawing.Size(60, 22);
-            btnSearch.Click += new EventHandler(DelSearch_Click);
-            grp.Controls.Add(btnSearch);
-            DevExpress.XtraEditors.SimpleButton btnCopy = new DevExpress.XtraEditors.SimpleButton();
-            btnCopy.Text = "Copy"; btnCopy.Location = new System.Drawing.Point(364, 27); btnCopy.Size = new System.Drawing.Size(55, 22);
-            btnCopy.Click += new EventHandler(DelCopy_Click);
-            grp.Controls.Add(btnCopy);
-
-            MhFieldIn(grp, "DelBranchCode", "Branch Code", 10, 28, 180);
-            MhFieldIn(grp, "DelState", "State", 430, 28, 180);
-            MhFieldIn(grp, "DelBranchName", "Branch Name", 10, 54, 180);
-            MhFieldIn(grp, "DelCountry", "Country", 430, 54, 180);
-
-            DevExpress.XtraEditors.LabelControl lblAddr = new DevExpress.XtraEditors.LabelControl();
-            lblAddr.Text = "Address"; lblAddr.Location = new System.Drawing.Point(10, 83);
-            grp.Controls.Add(lblAddr);
-            _mhDelAddress = new DevExpress.XtraEditors.MemoEdit();
-            _mhDelAddress.Location = new System.Drawing.Point(110, 80);
-            _mhDelAddress.Size = new System.Drawing.Size(200, 60);
+            RegMh("City", TxtMhCity);
+            RegMh("PostalCode", TxtMhPostalCode);
+            RegMh("State", TxtMhState);
+            RegMh("Country", TxtMhCountry);
+            RegMh("Fax", TxtMhFax);
+            RegMh("Ref1", TxtMhRef1);
+            RegMh("Ref2", TxtMhRef2);
+            RegMh("Ref3", TxtMhRef3);
+            RegMh("Ref4", TxtMhRef4);
+            RegMh("DelBranchCode", TxtMhDelBranchCode);
+            RegMh("DelState", TxtMhDelState);
+            RegMh("DelBranchName", TxtMhDelBranchName);
+            RegMh("DelCountry", TxtMhDelCountry);
+            RegMh("DelPhone", TxtMhDelPhone);
+            RegMh("DelFax", TxtMhDelFax);
+            RegMh("DelEmail", TxtMhDelEmail);
+            RegMh("DelContactPerson", TxtMhDelContactPerson);
+            RegMh("DelCity", TxtMhDelCity);
+            RegMh("DelPostalCode", TxtMhDelPostalCode);
+            _mhDelAddress = TxtMhDelAddress;
             _mhDelAddress.EditValueChanged += delegate { if (!_loading) _dirty = true; };
-            grp.Controls.Add(_mhDelAddress);
-
-            MhFieldIn(grp, "DelPhone", "Phone", 430, 83, 180);
-            MhFieldIn(grp, "DelFax", "Fax", 430, 109, 180);
-            MhFieldIn(grp, "DelEmail", "Email", 430, 135, 180);
-            MhFieldIn(grp, "DelContactPerson", "Contact Person", 430, 161, 180);
-            MhFieldIn(grp, "DelCity", "City", 10, 150, 180);
-            MhFieldIn(grp, "DelPostalCode", "Postal Code", 10, 176, 180);
         }
 
-        private void MhField(string col, string caption, int x, int y, int width)
+        private void RegMh(string col, DevExpress.XtraEditors.TextEdit ed)
         {
-            MhFieldOn(PageMoreHeader, col, caption, x, y, width);
-        }
-        private void MhFieldIn(DevExpress.XtraEditors.GroupControl grp, string col, string caption, int x, int y, int width)
-        {
-            MhFieldOn(grp, col, caption, x, y, width);
-        }
-        private void MhFieldOn(System.Windows.Forms.Control parent, string col, string caption, int x, int y, int width)
-        {
-            DevExpress.XtraEditors.LabelControl lbl = new DevExpress.XtraEditors.LabelControl();
-            lbl.Text = caption; lbl.Location = new System.Drawing.Point(x, y + 3);
-            parent.Controls.Add(lbl);
-            DevExpress.XtraEditors.TextEdit ed = new DevExpress.XtraEditors.TextEdit();
-            ed.Location = new System.Drawing.Point(x + 98, y);
-            ed.Size = new System.Drawing.Size(width, 20);
             ed.EditValueChanged += delegate { if (!_loading) _dirty = true; };
-            parent.Controls.Add(ed);
             _mh[col] = ed;
         }
 
@@ -3616,28 +3576,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // say in June" for reports.
 
         private DevExpress.XtraTab.XtraTabPage _pgChangeHist;
-        private DevExpress.XtraGrid.GridControl _gridChangeHist;
-        private DevExpress.XtraGrid.Views.Grid.GridView _viewChangeHist;
 
         private void BuildChangeHistoryTab()
         {
             _pgChangeHist = PageChangeHistory;   // designer page (user layout 01/08)
 
-            _gridChangeHist = new DevExpress.XtraGrid.GridControl();
-            _viewChangeHist = new DevExpress.XtraGrid.Views.Grid.GridView();
-            _gridChangeHist.MainView = _viewChangeHist;
-            _viewChangeHist.GridControl = _gridChangeHist;
-            _gridChangeHist.Dock = System.Windows.Forms.DockStyle.Fill;
-            _viewChangeHist.OptionsBehavior.Editable = false;
-            _viewChangeHist.OptionsView.ShowGroupPanel = false;
-            _viewChangeHist.OptionsView.ShowAutoFilterRow = true;
-            _pgChangeHist.Controls.Add(_gridChangeHist);
+            GridViewChangeHist.OptionsBehavior.Editable = false;
+            GridViewChangeHist.OptionsView.ShowGroupPanel = false;
+            GridViewChangeHist.OptionsView.ShowAutoFilterRow = true;
             RefreshChangeHistoryTab();
         }
 
         private void RefreshChangeHistoryTab()
         {
-            if (_gridChangeHist == null) return;
+            if (GridChangeHist == null) return;
             DataTable dt = null;
             if (_contractKey > 0)
             {
@@ -3665,15 +3617,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 dt.Columns.Add("New", typeof(string));
                 dt.Columns.Add("Item", typeof(string));
             }
-            _gridChangeHist.DataSource = dt;
-            _viewChangeHist.PopulateColumns();
-            if (_viewChangeHist.Columns["When"] != null)
+            GridChangeHist.DataSource = dt;
+            GridViewChangeHist.PopulateColumns();
+            if (GridViewChangeHist.Columns["When"] != null)
             {
-                _viewChangeHist.Columns["When"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
-                _viewChangeHist.Columns["When"].DisplayFormat.FormatString = "dd/MM/yyyy HH:mm:ss";
-                _viewChangeHist.Columns["When"].Width = 130;
+                GridViewChangeHist.Columns["When"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                GridViewChangeHist.Columns["When"].DisplayFormat.FormatString = "dd/MM/yyyy HH:mm:ss";
+                GridViewChangeHist.Columns["When"].Width = 130;
             }
-            _viewChangeHist.BestFitColumns();
+            GridViewChangeHist.BestFitColumns();
         }
 
         private void MhSet(string col, string val)

@@ -74,6 +74,51 @@
         private DevExpress.XtraTab.XtraTabPage PageItems;
         private DevExpress.XtraTab.XtraTabPage PageBillingHistory;
         private DevExpress.XtraTab.XtraTabPage PageChangeHistory;
+        private DevExpress.XtraEditors.LabelControl LblMhCity;
+        private DevExpress.XtraEditors.TextEdit TxtMhCity;
+        private DevExpress.XtraEditors.LabelControl LblMhPostalCode;
+        private DevExpress.XtraEditors.TextEdit TxtMhPostalCode;
+        private DevExpress.XtraEditors.LabelControl LblMhState;
+        private DevExpress.XtraEditors.TextEdit TxtMhState;
+        private DevExpress.XtraEditors.LabelControl LblMhCountry;
+        private DevExpress.XtraEditors.TextEdit TxtMhCountry;
+        private DevExpress.XtraEditors.LabelControl LblMhFax;
+        private DevExpress.XtraEditors.TextEdit TxtMhFax;
+        private DevExpress.XtraEditors.LabelControl LblMhRef1;
+        private DevExpress.XtraEditors.TextEdit TxtMhRef1;
+        private DevExpress.XtraEditors.LabelControl LblMhRef2;
+        private DevExpress.XtraEditors.TextEdit TxtMhRef2;
+        private DevExpress.XtraEditors.LabelControl LblMhRef3;
+        private DevExpress.XtraEditors.TextEdit TxtMhRef3;
+        private DevExpress.XtraEditors.LabelControl LblMhRef4;
+        private DevExpress.XtraEditors.TextEdit TxtMhRef4;
+        private DevExpress.XtraEditors.LabelControl LblMhDelBranchCode;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelBranchCode;
+        private DevExpress.XtraEditors.LabelControl LblMhDelState;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelState;
+        private DevExpress.XtraEditors.LabelControl LblMhDelBranchName;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelBranchName;
+        private DevExpress.XtraEditors.LabelControl LblMhDelCountry;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelCountry;
+        private DevExpress.XtraEditors.LabelControl LblMhDelPhone;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelPhone;
+        private DevExpress.XtraEditors.LabelControl LblMhDelFax;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelFax;
+        private DevExpress.XtraEditors.LabelControl LblMhDelEmail;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelEmail;
+        private DevExpress.XtraEditors.LabelControl LblMhDelContactPerson;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelContactPerson;
+        private DevExpress.XtraEditors.LabelControl LblMhDelCity;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelCity;
+        private DevExpress.XtraEditors.LabelControl LblMhDelPostalCode;
+        private DevExpress.XtraEditors.TextEdit TxtMhDelPostalCode;
+        private DevExpress.XtraEditors.GroupControl GrpDelivery;
+        private DevExpress.XtraEditors.LabelControl LblMhDelAddress;
+        private DevExpress.XtraEditors.MemoEdit TxtMhDelAddress;
+        private DevExpress.XtraEditors.SimpleButton BtnDelSearch;
+        private DevExpress.XtraEditors.SimpleButton BtnDelCopy;
+        private DevExpress.XtraGrid.GridControl GridChangeHist;
+        private DevExpress.XtraGrid.Views.Grid.GridView GridViewChangeHist;
         private DevExpress.XtraEditors.GroupControl GrpMeterCfg;
         private DevExpress.XtraGrid.GridControl GridMeterCfg;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewMeterCfg;
@@ -167,6 +212,51 @@
             this.ChkBillGroup = new DevExpress.XtraEditors.CheckEdit();
             this.ChkBillSeparate = new DevExpress.XtraEditors.CheckEdit();
             this.ChkRentalSeparate = new DevExpress.XtraEditors.CheckEdit();
+            this.LblMhCity = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhCity = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhPostalCode = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhPostalCode = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhState = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhState = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhCountry = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhCountry = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhFax = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhFax = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhRef1 = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhRef1 = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhRef2 = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhRef2 = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhRef3 = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhRef3 = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhRef4 = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhRef4 = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelBranchCode = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelBranchCode = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelState = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelState = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelBranchName = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelBranchName = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelCountry = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelCountry = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelPhone = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelPhone = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelFax = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelFax = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelEmail = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelEmail = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelContactPerson = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelContactPerson = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelCity = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelCity = new DevExpress.XtraEditors.TextEdit();
+            this.LblMhDelPostalCode = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelPostalCode = new DevExpress.XtraEditors.TextEdit();
+            this.GrpDelivery = new DevExpress.XtraEditors.GroupControl();
+            this.LblMhDelAddress = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMhDelAddress = new DevExpress.XtraEditors.MemoEdit();
+            this.BtnDelSearch = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnDelCopy = new DevExpress.XtraEditors.SimpleButton();
+            this.GridChangeHist = new DevExpress.XtraGrid.GridControl();
+            this.GridViewChangeHist = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.GrpMeterCfg = new DevExpress.XtraEditors.GroupControl();
             this.GridMeterCfg = new DevExpress.XtraGrid.GridControl();
             this.GridViewMeterCfg = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -313,6 +403,32 @@
             ((System.ComponentModel.ISupportInitialize)(this.TabMain)).BeginInit();
             this.TabMain.SuspendLayout();
             this.PageItems.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhCity.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhPostalCode.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhState.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhCountry.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhFax.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef1.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef2.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef3.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef4.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelBranchCode.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelState.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelBranchName.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelCountry.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelPhone.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelFax.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelEmail.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelContactPerson.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelCity.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelPostalCode.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelAddress.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpDelivery)).BeginInit();
+            this.GrpDelivery.SuspendLayout();
+            this.PageMoreHeader.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GridChangeHist)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewChangeHist)).BeginInit();
+            this.PageChangeHistory.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeterCfg)).BeginInit();
             this.GrpMeterCfg.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridMeterCfg)).BeginInit();
@@ -1053,6 +1169,332 @@
             this.LblMeterCfgHint.Size = new System.Drawing.Size(700, 13);
             this.LblMeterCfgHint.Text = "Meters of the selected service item. Pick a Meter Type — pricing fills from the type and can be overridden per machine. Saved together with the contract.";
             //
+            // LblMhCity
+            //
+            this.LblMhCity.Location = new System.Drawing.Point(12, 17);
+            this.LblMhCity.Name = "LblMhCity";
+            this.LblMhCity.Size = new System.Drawing.Size(30, 13);
+            this.LblMhCity.Text = "City";
+            //
+            // TxtMhCity
+            //
+            this.TxtMhCity.Location = new System.Drawing.Point(110, 14);
+            this.TxtMhCity.Name = "TxtMhCity";
+            this.TxtMhCity.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhPostalCode
+            //
+            this.LblMhPostalCode.Location = new System.Drawing.Point(430, 17);
+            this.LblMhPostalCode.Name = "LblMhPostalCode";
+            this.LblMhPostalCode.Size = new System.Drawing.Size(66, 13);
+            this.LblMhPostalCode.Text = "Postal Code";
+            //
+            // TxtMhPostalCode
+            //
+            this.TxtMhPostalCode.Location = new System.Drawing.Point(528, 14);
+            this.TxtMhPostalCode.Name = "TxtMhPostalCode";
+            this.TxtMhPostalCode.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhState
+            //
+            this.LblMhState.Location = new System.Drawing.Point(12, 43);
+            this.LblMhState.Name = "LblMhState";
+            this.LblMhState.Size = new System.Drawing.Size(30, 13);
+            this.LblMhState.Text = "State";
+            //
+            // TxtMhState
+            //
+            this.TxtMhState.Location = new System.Drawing.Point(110, 40);
+            this.TxtMhState.Name = "TxtMhState";
+            this.TxtMhState.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhCountry
+            //
+            this.LblMhCountry.Location = new System.Drawing.Point(430, 43);
+            this.LblMhCountry.Name = "LblMhCountry";
+            this.LblMhCountry.Size = new System.Drawing.Size(42, 13);
+            this.LblMhCountry.Text = "Country";
+            //
+            // TxtMhCountry
+            //
+            this.TxtMhCountry.Location = new System.Drawing.Point(528, 40);
+            this.TxtMhCountry.Name = "TxtMhCountry";
+            this.TxtMhCountry.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhFax
+            //
+            this.LblMhFax.Location = new System.Drawing.Point(12, 69);
+            this.LblMhFax.Name = "LblMhFax";
+            this.LblMhFax.Size = new System.Drawing.Size(30, 13);
+            this.LblMhFax.Text = "Fax";
+            //
+            // TxtMhFax
+            //
+            this.TxtMhFax.Location = new System.Drawing.Point(110, 66);
+            this.TxtMhFax.Name = "TxtMhFax";
+            this.TxtMhFax.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhRef1
+            //
+            this.LblMhRef1.Location = new System.Drawing.Point(430, 69);
+            this.LblMhRef1.Name = "LblMhRef1";
+            this.LblMhRef1.Size = new System.Drawing.Size(30, 13);
+            this.LblMhRef1.Text = "Ref 1";
+            //
+            // TxtMhRef1
+            //
+            this.TxtMhRef1.Location = new System.Drawing.Point(528, 66);
+            this.TxtMhRef1.Name = "TxtMhRef1";
+            this.TxtMhRef1.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhRef2
+            //
+            this.LblMhRef2.Location = new System.Drawing.Point(12, 95);
+            this.LblMhRef2.Name = "LblMhRef2";
+            this.LblMhRef2.Size = new System.Drawing.Size(30, 13);
+            this.LblMhRef2.Text = "Ref 2";
+            //
+            // TxtMhRef2
+            //
+            this.TxtMhRef2.Location = new System.Drawing.Point(110, 92);
+            this.TxtMhRef2.Name = "TxtMhRef2";
+            this.TxtMhRef2.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhRef3
+            //
+            this.LblMhRef3.Location = new System.Drawing.Point(430, 95);
+            this.LblMhRef3.Name = "LblMhRef3";
+            this.LblMhRef3.Size = new System.Drawing.Size(30, 13);
+            this.LblMhRef3.Text = "Ref 3";
+            //
+            // TxtMhRef3
+            //
+            this.TxtMhRef3.Location = new System.Drawing.Point(528, 92);
+            this.TxtMhRef3.Name = "TxtMhRef3";
+            this.TxtMhRef3.Size = new System.Drawing.Size(200, 20);
+            //
+            // LblMhRef4
+            //
+            this.LblMhRef4.Location = new System.Drawing.Point(12, 121);
+            this.LblMhRef4.Name = "LblMhRef4";
+            this.LblMhRef4.Size = new System.Drawing.Size(30, 13);
+            this.LblMhRef4.Text = "Ref 4";
+            //
+            // TxtMhRef4
+            //
+            this.TxtMhRef4.Location = new System.Drawing.Point(110, 118);
+            this.TxtMhRef4.Name = "TxtMhRef4";
+            this.TxtMhRef4.Size = new System.Drawing.Size(200, 20);
+            //
+            // GrpDelivery
+            //
+            this.GrpDelivery.Controls.Add(this.LblMhDelBranchCode);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelBranchCode);
+            this.GrpDelivery.Controls.Add(this.LblMhDelState);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelState);
+            this.GrpDelivery.Controls.Add(this.LblMhDelBranchName);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelBranchName);
+            this.GrpDelivery.Controls.Add(this.LblMhDelCountry);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelCountry);
+            this.GrpDelivery.Controls.Add(this.LblMhDelPhone);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelPhone);
+            this.GrpDelivery.Controls.Add(this.LblMhDelFax);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelFax);
+            this.GrpDelivery.Controls.Add(this.LblMhDelEmail);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelEmail);
+            this.GrpDelivery.Controls.Add(this.LblMhDelContactPerson);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelContactPerson);
+            this.GrpDelivery.Controls.Add(this.LblMhDelCity);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelCity);
+            this.GrpDelivery.Controls.Add(this.LblMhDelPostalCode);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelPostalCode);
+            this.GrpDelivery.Controls.Add(this.LblMhDelAddress);
+            this.GrpDelivery.Controls.Add(this.TxtMhDelAddress);
+            this.GrpDelivery.Controls.Add(this.BtnDelSearch);
+            this.GrpDelivery.Controls.Add(this.BtnDelCopy);
+            this.GrpDelivery.Location = new System.Drawing.Point(12, 150);
+            this.GrpDelivery.Name = "GrpDelivery";
+            this.GrpDelivery.Size = new System.Drawing.Size(820, 210);
+            this.GrpDelivery.TabIndex = 20;
+            this.GrpDelivery.Text = "Delivery Address";
+            //
+            // LblMhDelBranchCode
+            //
+            this.LblMhDelBranchCode.Location = new System.Drawing.Point(10, 31);
+            this.LblMhDelBranchCode.Name = "LblMhDelBranchCode";
+            this.LblMhDelBranchCode.Size = new System.Drawing.Size(66, 13);
+            this.LblMhDelBranchCode.Text = "Branch Code";
+            //
+            // TxtMhDelBranchCode
+            //
+            this.TxtMhDelBranchCode.Location = new System.Drawing.Point(108, 28);
+            this.TxtMhDelBranchCode.Name = "TxtMhDelBranchCode";
+            this.TxtMhDelBranchCode.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelState
+            //
+            this.LblMhDelState.Location = new System.Drawing.Point(430, 31);
+            this.LblMhDelState.Name = "LblMhDelState";
+            this.LblMhDelState.Size = new System.Drawing.Size(30, 13);
+            this.LblMhDelState.Text = "State";
+            //
+            // TxtMhDelState
+            //
+            this.TxtMhDelState.Location = new System.Drawing.Point(528, 28);
+            this.TxtMhDelState.Name = "TxtMhDelState";
+            this.TxtMhDelState.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelBranchName
+            //
+            this.LblMhDelBranchName.Location = new System.Drawing.Point(10, 57);
+            this.LblMhDelBranchName.Name = "LblMhDelBranchName";
+            this.LblMhDelBranchName.Size = new System.Drawing.Size(66, 13);
+            this.LblMhDelBranchName.Text = "Branch Name";
+            //
+            // TxtMhDelBranchName
+            //
+            this.TxtMhDelBranchName.Location = new System.Drawing.Point(108, 54);
+            this.TxtMhDelBranchName.Name = "TxtMhDelBranchName";
+            this.TxtMhDelBranchName.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelCountry
+            //
+            this.LblMhDelCountry.Location = new System.Drawing.Point(430, 57);
+            this.LblMhDelCountry.Name = "LblMhDelCountry";
+            this.LblMhDelCountry.Size = new System.Drawing.Size(42, 13);
+            this.LblMhDelCountry.Text = "Country";
+            //
+            // TxtMhDelCountry
+            //
+            this.TxtMhDelCountry.Location = new System.Drawing.Point(528, 54);
+            this.TxtMhDelCountry.Name = "TxtMhDelCountry";
+            this.TxtMhDelCountry.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelPhone
+            //
+            this.LblMhDelPhone.Location = new System.Drawing.Point(430, 86);
+            this.LblMhDelPhone.Name = "LblMhDelPhone";
+            this.LblMhDelPhone.Size = new System.Drawing.Size(30, 13);
+            this.LblMhDelPhone.Text = "Phone";
+            //
+            // TxtMhDelPhone
+            //
+            this.TxtMhDelPhone.Location = new System.Drawing.Point(528, 83);
+            this.TxtMhDelPhone.Name = "TxtMhDelPhone";
+            this.TxtMhDelPhone.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelFax
+            //
+            this.LblMhDelFax.Location = new System.Drawing.Point(430, 112);
+            this.LblMhDelFax.Name = "LblMhDelFax";
+            this.LblMhDelFax.Size = new System.Drawing.Size(30, 13);
+            this.LblMhDelFax.Text = "Fax";
+            //
+            // TxtMhDelFax
+            //
+            this.TxtMhDelFax.Location = new System.Drawing.Point(528, 109);
+            this.TxtMhDelFax.Name = "TxtMhDelFax";
+            this.TxtMhDelFax.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelEmail
+            //
+            this.LblMhDelEmail.Location = new System.Drawing.Point(430, 138);
+            this.LblMhDelEmail.Name = "LblMhDelEmail";
+            this.LblMhDelEmail.Size = new System.Drawing.Size(30, 13);
+            this.LblMhDelEmail.Text = "Email";
+            //
+            // TxtMhDelEmail
+            //
+            this.TxtMhDelEmail.Location = new System.Drawing.Point(528, 135);
+            this.TxtMhDelEmail.Name = "TxtMhDelEmail";
+            this.TxtMhDelEmail.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelContactPerson
+            //
+            this.LblMhDelContactPerson.Location = new System.Drawing.Point(430, 164);
+            this.LblMhDelContactPerson.Name = "LblMhDelContactPerson";
+            this.LblMhDelContactPerson.Size = new System.Drawing.Size(84, 13);
+            this.LblMhDelContactPerson.Text = "Contact Person";
+            //
+            // TxtMhDelContactPerson
+            //
+            this.TxtMhDelContactPerson.Location = new System.Drawing.Point(528, 161);
+            this.TxtMhDelContactPerson.Name = "TxtMhDelContactPerson";
+            this.TxtMhDelContactPerson.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelCity
+            //
+            this.LblMhDelCity.Location = new System.Drawing.Point(10, 153);
+            this.LblMhDelCity.Name = "LblMhDelCity";
+            this.LblMhDelCity.Size = new System.Drawing.Size(30, 13);
+            this.LblMhDelCity.Text = "City";
+            //
+            // TxtMhDelCity
+            //
+            this.TxtMhDelCity.Location = new System.Drawing.Point(108, 150);
+            this.TxtMhDelCity.Name = "TxtMhDelCity";
+            this.TxtMhDelCity.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelPostalCode
+            //
+            this.LblMhDelPostalCode.Location = new System.Drawing.Point(10, 179);
+            this.LblMhDelPostalCode.Name = "LblMhDelPostalCode";
+            this.LblMhDelPostalCode.Size = new System.Drawing.Size(66, 13);
+            this.LblMhDelPostalCode.Text = "Postal Code";
+            //
+            // TxtMhDelPostalCode
+            //
+            this.TxtMhDelPostalCode.Location = new System.Drawing.Point(108, 176);
+            this.TxtMhDelPostalCode.Name = "TxtMhDelPostalCode";
+            this.TxtMhDelPostalCode.Size = new System.Drawing.Size(180, 20);
+            //
+            // LblMhDelAddress
+            //
+            this.LblMhDelAddress.Location = new System.Drawing.Point(10, 83);
+            this.LblMhDelAddress.Name = "LblMhDelAddress";
+            this.LblMhDelAddress.Size = new System.Drawing.Size(40, 13);
+            this.LblMhDelAddress.Text = "Address";
+            //
+            // TxtMhDelAddress
+            //
+            this.TxtMhDelAddress.Location = new System.Drawing.Point(110, 80);
+            this.TxtMhDelAddress.Name = "TxtMhDelAddress";
+            this.TxtMhDelAddress.Size = new System.Drawing.Size(200, 60);
+            //
+            // BtnDelSearch
+            //
+            this.BtnDelSearch.Location = new System.Drawing.Point(300, 27);
+            this.BtnDelSearch.Name = "BtnDelSearch";
+            this.BtnDelSearch.Size = new System.Drawing.Size(60, 22);
+            this.BtnDelSearch.TabIndex = 21;
+            this.BtnDelSearch.Text = "Search";
+            this.BtnDelSearch.Click += new System.EventHandler(this.DelSearch_Click);
+            //
+            // BtnDelCopy
+            //
+            this.BtnDelCopy.Location = new System.Drawing.Point(364, 27);
+            this.BtnDelCopy.Name = "BtnDelCopy";
+            this.BtnDelCopy.Size = new System.Drawing.Size(55, 22);
+            this.BtnDelCopy.TabIndex = 22;
+            this.BtnDelCopy.Text = "Copy";
+            this.BtnDelCopy.Click += new System.EventHandler(this.DelCopy_Click);
+            //
+            // GridChangeHist
+            //
+            this.GridChangeHist.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.GridChangeHist.Location = new System.Drawing.Point(0, 0);
+            this.GridChangeHist.MainView = this.GridViewChangeHist;
+            this.GridChangeHist.Name = "GridChangeHist";
+            this.GridChangeHist.Size = new System.Drawing.Size(1658, 461);
+            this.GridChangeHist.TabIndex = 0;
+            this.GridChangeHist.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
+            this.GridViewChangeHist});
+            //
+            // GridViewChangeHist
+            //
+            this.GridViewChangeHist.GridControl = this.GridChangeHist;
+            this.GridViewChangeHist.Name = "GridViewChangeHist";
+            //
             // PageBillingHistory
             //
             this.PageBillingHistory.Name = "PageBillingHistory";
@@ -1061,6 +1503,7 @@
             //
             // PageChangeHistory
             //
+            this.PageChangeHistory.Controls.Add(this.GridChangeHist);
             this.PageChangeHistory.Name = "PageChangeHistory";
             this.PageChangeHistory.Size = new System.Drawing.Size(1658, 461);
             this.PageChangeHistory.Text = "Change History";
@@ -1365,6 +1808,25 @@
             // 
             // PageMoreHeader
             // 
+            this.PageMoreHeader.Controls.Add(this.LblMhCity);
+            this.PageMoreHeader.Controls.Add(this.TxtMhCity);
+            this.PageMoreHeader.Controls.Add(this.LblMhPostalCode);
+            this.PageMoreHeader.Controls.Add(this.TxtMhPostalCode);
+            this.PageMoreHeader.Controls.Add(this.LblMhState);
+            this.PageMoreHeader.Controls.Add(this.TxtMhState);
+            this.PageMoreHeader.Controls.Add(this.LblMhCountry);
+            this.PageMoreHeader.Controls.Add(this.TxtMhCountry);
+            this.PageMoreHeader.Controls.Add(this.LblMhFax);
+            this.PageMoreHeader.Controls.Add(this.TxtMhFax);
+            this.PageMoreHeader.Controls.Add(this.LblMhRef1);
+            this.PageMoreHeader.Controls.Add(this.TxtMhRef1);
+            this.PageMoreHeader.Controls.Add(this.LblMhRef2);
+            this.PageMoreHeader.Controls.Add(this.TxtMhRef2);
+            this.PageMoreHeader.Controls.Add(this.LblMhRef3);
+            this.PageMoreHeader.Controls.Add(this.TxtMhRef3);
+            this.PageMoreHeader.Controls.Add(this.LblMhRef4);
+            this.PageMoreHeader.Controls.Add(this.TxtMhRef4);
+            this.PageMoreHeader.Controls.Add(this.GrpDelivery);
             this.PageMoreHeader.Name = "PageMoreHeader";
             this.PageMoreHeader.Size = new System.Drawing.Size(1178, 392);
             this.PageMoreHeader.Text = "More Header";
@@ -1899,6 +2361,34 @@
             ((System.ComponentModel.ISupportInitialize)(this.GridMeterCfg)).EndInit();
             this.GrpMeterCfg.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeterCfg)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhCity.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhPostalCode.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhState.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhCountry.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhFax.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef1.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef2.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef3.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhRef4.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelBranchCode.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelState.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelBranchName.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelCountry.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelPhone.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelFax.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelEmail.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelContactPerson.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelCity.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelPostalCode.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMhDelAddress.Properties)).EndInit();
+            this.GrpDelivery.ResumeLayout(false);
+            this.GrpDelivery.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpDelivery)).EndInit();
+            this.PageMoreHeader.ResumeLayout(false);
+            this.PageMoreHeader.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewChangeHist)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridChangeHist)).EndInit();
+            this.PageChangeHistory.ResumeLayout(false);
             this.PageItems.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.GridItems)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewItems)).EndInit();
