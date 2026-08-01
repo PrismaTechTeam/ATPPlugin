@@ -19,6 +19,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
     {
         private readonly DBSetting _dbSetting;
         private DevExpress.XtraEditors.TextEdit _lastFocused;   // where a token button inserts (MemoEdit derives TextEdit)
+        private Timer _pvTimer;                                  // debounce: render 250ms after the last keystroke
         private readonly List<ScpEmailTemplates.Template> _templates = new List<ScpEmailTemplates.Template>();
         private ScpEmailTemplates.Template _current;
         private bool _loadingTpl;
@@ -41,8 +42,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _lastFocused = TxtBody;
             TxtSubject.Enter += delegate { _lastFocused = TxtSubject; };
             TxtBody.Enter += delegate { _lastFocused = TxtBody; };
-            TxtSubject.EditValueChanged += delegate { UpdatePreview(); };
-            TxtBody.EditValueChanged += delegate { UpdatePreview(); };
+            // LIVE preview while typing: MemoEdit only fires EditValueChanged on validation, so
+            // hook TextChanged too, debounced (typing bursts) — the tick renders once, 250ms after
+            // the last keystroke.
+            _pvTimer = new Timer();
+            _pvTimer.Interval = 250;
+            _pvTimer.Tick += delegate { _pvTimer.Stop(); UpdatePreview(); };
+            EventHandler kick = delegate { _pvTimer.Stop(); _pvTimer.Start(); };
+            TxtSubject.TextChanged += kick;
+            TxtBody.TextChanged += kick;
+            TxtSubject.EditValueChanged += kick;
+            TxtBody.EditValueChanged += kick;
             CmbStyle.SelectedIndexChanged += new EventHandler(CmbStyle_SelectedIndexChanged);
             CmbTemplate.SelectedIndexChanged += new EventHandler(CmbTemplate_SelectedIndexChanged);
             this.FormClosing += new FormClosingEventHandler(OnClosingConfirm);
@@ -268,11 +278,28 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             try
             {
-                WebPreview.DocumentText = mode == 1
+                SetWebHtml(mode == 1
                     ? ScpMailHtml.BuildStyled(Fill(TxtBody.Text), _senderCompany)
-                    : ScpMailHtml.EnsureHtml(Fill(TxtBody.Text));
+                    : ScpMailHtml.EnsureHtml(Fill(TxtBody.Text)));
             }
             catch { TxtPreview.Visible = true; WebPreview.Visible = false; TxtPreview.Text = Fill(TxtBody.Text); }
+        }
+
+        // Rapid DocumentText assignments get silently DROPPED while the WebBrowser is still loading
+        // the previous document — Document.OpenNew/Write replaces the content instantly instead.
+        private void SetWebHtml(string html)
+        {
+            try
+            {
+                if (WebPreview.Document != null)
+                {
+                    WebPreview.Document.OpenNew(true);
+                    WebPreview.Document.Write(html);
+                    return;
+                }
+            }
+            catch { }
+            WebPreview.DocumentText = html;
         }
 
         // ── buttons ──
