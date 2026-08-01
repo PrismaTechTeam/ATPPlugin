@@ -886,7 +886,6 @@
             0,
             0});
             this.SpnBillingDay.Location = new System.Drawing.Point(106, 12);
-            this.SpnBillingDay.MaximumSize = new System.Drawing.Size(46, 0);
             this.SpnBillingDay.Name = "SpnBillingDay";
             this.SpnBillingDay.Properties.IsFloatValue = false;
             this.SpnBillingDay.Properties.MaxValue = new decimal(new int[] {
@@ -899,7 +898,7 @@
             0,
             0,
             0});
-            this.SpnBillingDay.Size = new System.Drawing.Size(46, 20);
+            this.SpnBillingDay.Size = new System.Drawing.Size(50, 20);
             this.SpnBillingDay.StyleController = this.layoutControl2;
             this.SpnBillingDay.TabIndex = 28;
             // 
