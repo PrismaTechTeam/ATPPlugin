@@ -207,22 +207,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // ===================== Contract term — demo 28/07 #20 =====================
-        // "start date + term = expiry" so nobody hand-computes (and mis-computes) 60-month
-        // expiries. No. Month offers 1/6/12/24/36/48/60 but accepts ANY typed number, and short
-        // terms WITHOUT decimals via a unit suffix: "2w" = 2 weeks, "18d" = 18 days ("6" = 6
-        // months). Expiry = start + term − 1 day, recomputed whichever side is filled first.
-        // Contract Expiry is READ-ONLY (greyed): always derived, never hand-typed.
+        // "start date + term = expiry": the NUMBER box lists 1/6/12/24/36/48/60 (any typed number
+        // works) and the UNIT dropdown says Month / Week / Day out loud — no decimals, no cryptic
+        // suffixes (user decision 01/08; default unit = Month). Expiry = start + term − 1 day,
+        // recomputed whichever field is filled first; a MONTH-term expiry landing past the 28th
+        // pulls back to the 28th ("不能跳 31" — the system's day-28 billing rhythm). Contract
+        // Expiry itself is READ-ONLY (greyed): always derived, never hand-typed.
         private bool _termBusy;
 
         private void InitContractTermControls()
         {
             cboNoOfMonth.Properties.Items.Clear();
-            cboNoOfMonth.Properties.Items.AddRange(new object[] {
-                "1 Month", "6 Months", "12 Months", "24 Months", "36 Months", "48 Months", "60 Months" });
+            cboNoOfMonth.Properties.Items.AddRange(new object[] { "1", "6", "12", "24", "36", "48", "60" });
             cboNoOfMonth.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
-            cboNoOfMonth.ToolTip = "Contract term. A plain number means months (any number, not only the " +
-                "list). Short terms are typed in FULL WORDS — no decimals: \"2 Weeks\", \"18 Days\". " +
-                "Expiry = start + term − 1 day.";
+            cboNoOfMonth.ToolTip = "How long the contract runs — pick from the list or type any number. " +
+                "The unit beside it decides Month / Week / Day.";
+            if (cboTermUnit.SelectedIndex < 0) cboTermUnit.SelectedIndex = 0;   // default Month
+            cboTermUnit.ToolTip = "Unit for the contract term. Short rentals use Week or Day — no decimals.";
             DtExpiryDate.Properties.ReadOnly = true;
             DtExpiryDate.Properties.Appearance.BackColor = System.Drawing.Color.Gainsboro;
             DtExpiryDate.Properties.Appearance.ForeColor = System.Drawing.Color.DimGray;
@@ -232,47 +233,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SyncTermFromDates();   // an opened contract shows its term back-derived from the dates
 
             cboNoOfMonth.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
-            cboNoOfMonth.Leave += delegate { NormalizeTermText(); };   // "6" becomes "6 Months" on leave
+            cboTermUnit.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
             DtStartDate.EditValueChanged += delegate { RecalcExpiryFromTerm(); };
         }
 
-        // Accepts a plain number (= months) or the term written out in words — "6 Months",
-        // "2 Weeks", "18 Days" (singular/plural, any case). No cryptic suffixes, no decimals.
-        private static bool TryParseTerm(string text, out int n, out char unit)
+        private char CurrentTermUnit()
         {
-            n = 0; unit = 'm';
-            text = (text ?? "").Trim().ToLowerInvariant();
-            if (text.Length == 0) return false;
-            int i = 0;
-            while (i < text.Length && char.IsDigit(text[i])) i++;
-            if (i == 0) return false;
-            string word = text.Substring(i).Trim();
-            if (word == "" || word == "month" || word == "months" || word == "mth" || word == "mths" || word == "m") unit = 'm';
-            else if (word == "week" || word == "weeks" || word == "wk" || word == "wks" || word == "w") unit = 'w';
-            else if (word == "day" || word == "days" || word == "d") unit = 'd';
-            else return false;
-            return int.TryParse(text.Substring(0, i), out n) && n >= 1 && n <= 1200;
-        }
-
-        private static string TermText(int n, char unit)
-        {
-            string word = unit == 'w' ? "Week" : (unit == 'd' ? "Day" : "Month");
-            return n + " " + word + (n == 1 ? "" : "s");
-        }
-
-        // After the user leaves the box, show the term in full words so it reads unambiguously.
-        private void NormalizeTermText()
-        {
-            int n; char unit;
-            if (!TryParseTerm(Convert.ToString(cboNoOfMonth.EditValue), out n, out unit)) return;
-            _termBusy = true;
-            try { cboNoOfMonth.EditValue = TermText(n, unit); }
-            finally { _termBusy = false; }
+            string u = Convert.ToString(cboTermUnit.EditValue ?? "").Trim().ToLowerInvariant();
+            return u == "week" ? 'w' : (u == "day" ? 'd' : 'm');
         }
 
         // Month-term expiry = start + N months − 1 day, BUT never on the 29th/30th/31st (user rule
-        // 01/08: "不能跳 31" — the whole system caps the billing rhythm at day 28, so an expiry
-        // past the 28th pulls back to the 28th). Week/day terms stay day-precise.
+        // 01/08: "不能跳 31"). Week/day terms stay day-precise.
         private static DateTime ExpiryForMonths(DateTime start, int months)
         {
             DateTime exp = start.AddMonths(months).AddDays(-1);
@@ -284,8 +256,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             if (_loading || _termBusy) return;
             if (DtStartDate.EditValue == null || DtStartDate.EditValue == DBNull.Value) return;
-            int n; char unit;
-            if (!TryParseTerm(Convert.ToString(cboNoOfMonth.EditValue), out n, out unit)) return;
+            int n;
+            if (!int.TryParse(Convert.ToString(cboNoOfMonth.EditValue ?? "").Trim(), out n) || n < 1 || n > 1200) return;
+            char unit = CurrentTermUnit();
             DateTime start = Convert.ToDateTime(DtStartDate.EditValue).Date;
             DateTime exp = unit == 'w' ? start.AddDays(7 * n - 1)
                          : unit == 'd' ? start.AddDays(n - 1)
@@ -296,7 +269,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Back-derive the term from stored dates (months first, then whole weeks, then days) so an
-        // existing contract opens with its term visible instead of an empty box.
+        // existing contract opens with its term visible instead of empty boxes.
         private void SyncTermFromDates()
         {
             try
@@ -311,11 +284,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 {
                     for (int m = 1; m <= 600; m++)
                     {
-                        if (ExpiryForMonths(start, m) == exp) { cboNoOfMonth.EditValue = TermText(m, 'm'); return; }
+                        if (ExpiryForMonths(start, m) == exp)
+                        { cboNoOfMonth.EditValue = m.ToString(); cboTermUnit.SelectedIndex = 0; return; }
                         if (start.AddMonths(m) > exp.AddMonths(1)) break;
                     }
                     int days = (int)(exp - start).TotalDays + 1;
-                    cboNoOfMonth.EditValue = (days % 7 == 0) ? TermText(days / 7, 'w') : TermText(days, 'd');
+                    if (days % 7 == 0) { cboNoOfMonth.EditValue = (days / 7).ToString(); cboTermUnit.SelectedIndex = 1; }
+                    else { cboNoOfMonth.EditValue = days.ToString(); cboTermUnit.SelectedIndex = 2; }
                 }
                 finally { _termBusy = false; }
             }
@@ -531,6 +506,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkRentalSeparate.EditValueChanged += h;
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
             if (cboNoOfMonth != null) cboNoOfMonth.EditValueChanged += h;
+            if (cboTermUnit != null) cboTermUnit.EditValueChanged += h;
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValueChanged += h;
             if (ChkGenerateSOA != null) ChkGenerateSOA.EditValueChanged += h;
             if (SluSOATemplate != null) SluSOATemplate.EditValueChanged += h;

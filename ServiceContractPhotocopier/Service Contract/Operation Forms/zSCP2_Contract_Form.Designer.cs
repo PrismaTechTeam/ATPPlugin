@@ -343,6 +343,8 @@
             this.layoutControlItem19 = new DevExpress.XtraLayout.LayoutControlItem();
             this.cboNoOfMonth = new DevExpress.XtraEditors.ComboBoxEdit();
             this.layoutControlItem20 = new DevExpress.XtraLayout.LayoutControlItem();
+            this.cboTermUnit = new DevExpress.XtraEditors.ComboBoxEdit();
+            this.TermUnitItem = new DevExpress.XtraLayout.LayoutControlItem();
             this.TxtDescription = new DevExpress.XtraEditors.MemoEdit();
             this.emptySpaceItem1 = new DevExpress.XtraLayout.EmptySpaceItem();
             this.layoutControl2 = new DevExpress.XtraLayout.LayoutControl();
@@ -472,6 +474,8 @@
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem19)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.cboNoOfMonth.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem20)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.cboTermUnit.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TermUnitItem)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.emptySpaceItem1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControl2)).BeginInit();
@@ -1896,6 +1900,7 @@
             // layoutControl1
             // 
             this.layoutControl1.Controls.Add(this.cboNoOfMonth);
+            this.layoutControl1.Controls.Add(this.cboTermUnit);
             this.layoutControl1.Controls.Add(this.GrpBilling);
             this.layoutControl1.Controls.Add(this.ChkInactive);
             this.layoutControl1.Controls.Add(this.LkDebtorCode);
@@ -1942,6 +1947,7 @@
             this.emptySpaceItem1,
             this.layoutControlItem19,
             this.layoutControlItem20,
+            this.TermUnitItem,
             this.layoutControlItem18,
             this.Department,
             this.layoutControlItem11,
@@ -2142,9 +2148,34 @@
             this.layoutControlItem20.Control = this.cboNoOfMonth;
             this.layoutControlItem20.Location = new System.Drawing.Point(363, 120);
             this.layoutControlItem20.Name = "layoutControlItem20";
-            this.layoutControlItem20.Size = new System.Drawing.Size(262, 24);
+            this.layoutControlItem20.Size = new System.Drawing.Size(170, 24);
             this.layoutControlItem20.Text = "No. Month";
             this.layoutControlItem20.TextSize = new System.Drawing.Size(101, 13);
+            //
+            // cboTermUnit
+            //
+            this.cboTermUnit.Location = new System.Drawing.Point(545, 132);
+            this.cboTermUnit.MenuManager = this.RibbonCtl;
+            this.cboTermUnit.Name = "cboTermUnit";
+            this.cboTermUnit.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.cboTermUnit.Properties.Items.AddRange(new object[] {
+            "Month",
+            "Week",
+            "Day"});
+            this.cboTermUnit.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.cboTermUnit.Size = new System.Drawing.Size(88, 20);
+            this.cboTermUnit.StyleController = this.layoutControl1;
+            this.cboTermUnit.TabIndex = 47;
+            //
+            // TermUnitItem
+            //
+            this.TermUnitItem.Control = this.cboTermUnit;
+            this.TermUnitItem.Location = new System.Drawing.Point(533, 120);
+            this.TermUnitItem.Name = "TermUnitItem";
+            this.TermUnitItem.Size = new System.Drawing.Size(92, 24);
+            this.TermUnitItem.TextSize = new System.Drawing.Size(0, 0);
+            this.TermUnitItem.TextVisible = false;
             // 
             // TxtDescription
             // 
@@ -2430,6 +2461,8 @@
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem19)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.cboNoOfMonth.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem20)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.cboTermUnit.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TermUnitItem)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtDescription.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.emptySpaceItem1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControl2)).EndInit();
@@ -2475,6 +2508,8 @@
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem19;
         private DevExpress.XtraEditors.ComboBoxEdit cboNoOfMonth;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem20;
+        private DevExpress.XtraEditors.ComboBoxEdit cboTermUnit;
+        private DevExpress.XtraLayout.LayoutControlItem TermUnitItem;
         private DevExpress.XtraEditors.MemoEdit TxtDescription;
         private DevExpress.XtraLayout.EmptySpaceItem emptySpaceItem1;
         private DevExpress.XtraLayout.LayoutControl layoutControl2;
