@@ -1145,6 +1145,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "COALESCE(NULLIF(m.MachineSerialNo,''), i.SerialNumber) AS SerialNumber, " +
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                     "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
+                    "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
                     "ISNULL(c.RentalBillingDay,0) AS RentalBillingDay, " +
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
@@ -1287,8 +1288,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["IsExpired"] = r["EffExpiry"] != DBNull.Value &&
                         Convert.ToDateTime(r["EffExpiry"]).Date < new DateTime(year, month, 1);
                     if (r["EffStart"] != DBNull.Value) g["EffStart"] = Convert.ToDateTime(r["EffStart"]);
+                    if (r["ContractStart"] != DBNull.Value) g["ContractStart"] = Convert.ToDateTime(r["ContractStart"]);
                     g["StrategyCode"] = S(r["StrategyCode"]);
                     g["RentSep"] = S(r["RentSep"]) == "Y";
+                    g["PeriodByContract"] = S(r["PeriodByContract"]) == "Y";
                     g["RentalBillingDay"] = r["RentalBillingDay"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalBillingDay"]);
                     if (r["RentalStartDate"] != DBNull.Value) g["RentalStartDate"] = Convert.ToDateTime(r["RentalStartDate"]);
                     g["RentalMonths"] = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
@@ -1424,6 +1427,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("WaiveScope", typeof(string));
             dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
             dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
+            dt.Columns.Add("PeriodByContract", typeof(bool));  // #16: invoice display dates follow the contract cycle (hidden)
             dt.Columns.Add("RentalBillingDay", typeof(int));   // rental-separate invoice's own day; 0 = follow meter date (hidden)
             dt.Columns.Add("RentalStartDate", typeof(DateTime)); // rental period anchor (hidden; n/N)
             dt.Columns.Add("RentalMonths", typeof(int));       // rental total periods N (hidden)
@@ -1434,6 +1438,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("HasConflict", typeof(bool));       // saved-manual value differs from a fresh API value (hidden)
             dt.Columns.Add("IsExpired", typeof(bool));         // effective expiry BEFORE the billing month (row tinted; Generate warns)
             dt.Columns.Add("EffStart", typeof(DateTime));      // effective service start (RENTAL-FREE-N month anchor; hidden)
+            dt.Columns.Add("ContractStart", typeof(DateTime)); // CONTRACT service start (#16 period anchor - one period per invoice; hidden)
             dt.Columns.Add("InvoicedDocNo", typeof(string));   // non-empty = this meter+period is already invoiced (hidden)
             return dt;
         }
@@ -1456,7 +1461,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
+            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
                 if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
             // Locked rows: the Current Reading cell refuses to open its editor (snapshot is frozen).
             GridViewMeter.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
@@ -2910,6 +2915,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (S(r["EntrySource"]) == "RENTAL FREE") { ln.StrategyNote = "RENTAL FREE - FOC month"; ln.AlwaysBill = true; }
                 if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
                 if (r["LastAuditDate"] != DBNull.Value) ln.AuditDate = Convert.ToDateTime(r["LastAuditDate"]);
+                // #16: contract-cycle billing period for the invoice DISPLAY (flag on the contract).
+                // Anchor day = the CONTRACT's service start day (contract-level on purpose: one
+                // invoice shows ONE period even when items carry their own start-date overrides);
+                // fallback billing day, then 1. Period = anchor day of the billed month .. +1 month
+                // -1 day (e.g. day 1 July -> 01/07-31/07; day 23 -> 23/07-22/08).
+                if (r["PeriodByContract"] != DBNull.Value && Convert.ToBoolean(r["PeriodByContract"]))
+                {
+                    int anchorDay = r["ContractStart"] != DBNull.Value ? Convert.ToDateTime(r["ContractStart"]).Day
+                        : (r["BillingDay"] != DBNull.Value && Convert.ToInt32(r["BillingDay"]) >= 1 ? Convert.ToInt32(r["BillingDay"]) : 1);
+                    int dim16 = DateTime.DaysInMonth(genYear, genMonth);
+                    DateTime ps = new DateTime(genYear, genMonth, anchorDay > dim16 ? dim16 : anchorDay);
+                    ln.PeriodStart = ps;
+                    ln.PeriodEnd = ps.AddMonths(1).AddDays(-1);
+                }
 
                 MeterInvoiceGenerator.InvoiceJob job;
                 if (!jobs.TryGetValue(groupKey, out job))
@@ -3319,7 +3338,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 header[ck] = "Contract " + S(r["ContractNo"]) + "  |  Customer " + S(r["DebtorCode"]) +
                     "  |  Strategy '" + S(r["StrategyCode"]) + "'  |  FOC Reset " + S(r["FOCResetUnit"]) +
                     (S(r["FOCResetUnit"]) == "D" ? "/" + S(r["FOCResetN"]) : "") +
-                    "  |  RentalSeparate " + (r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]) ? "Y" : "N");
+                    "  |  RentalSeparate " + (r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]) ? "Y" : "N") +
+                    "  |  PeriodFollowContract " + (r["PeriodByContract"] != DBNull.Value && Convert.ToBoolean(r["PeriodByContract"]) ? "Y" : "N");
             }
             foreach (long ck in cks)
             {

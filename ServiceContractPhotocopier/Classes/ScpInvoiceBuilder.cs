@@ -70,6 +70,11 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>API LastAuditDate of the CURRENT reading — used as the MeterTrans date so the
         /// next period's "Last Read Date" is the real meter-read date (falls back to now if absent).</summary>
         public DateTime? AuditDate;
+        // #16 "billing period follows contract date": when set, the invoice DISPLAYS these contract-
+        // cycle dates instead of LastDate/AuditDate (Previous = PeriodStart, Current = PeriodEnd).
+        // DISPLAY ONLY — stamps, staging and the reading log always keep the real audit dates.
+        public DateTime? PeriodStart;
+        public DateTime? PeriodEnd;
     }
 
     /// <summary>
@@ -316,9 +321,12 @@ namespace ServiceContractPhotocopier.Classes
                 // breakdown is already on the charge row's description).
                 if (!ln.IsCommittedMin)
                 {
-                DateTime curDate = ln.AuditDate ?? readingDate;
+                // #16: contract-period mode swaps the DISPLAYED dates (Previous = period start,
+                // Current = period end); readings themselves are always the real meter values.
+                DateTime curDate = ln.PeriodEnd ?? (ln.AuditDate ?? readingDate);
                 string curDateStr = curDate.ToString("dd/MM/yyyy");
-                string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "";
+                DateTime? lastDate = ln.PeriodStart ?? ln.LastDate;
+                string lastDateStr = lastDate.HasValue ? lastDate.Value.ToString("dd/MM/yyyy") : "";
 
                 // Text rows carry NO account (master: acccode empty on description-only rows) — AddDetail
                 // pre-fills the default sales account, so it is explicitly cleared here.
@@ -399,15 +407,20 @@ namespace ServiceContractPhotocopier.Classes
         // customer's V8 meter invoices.
         private static string ComposeBreakdown(MeterBillLine ln, DateTime readingDate)
         {
-            DateTime cur = ln.AuditDate ?? readingDate;
+            // #16: contract-period mode swaps the DISPLAYED dates in fields 7/13/14/15; the ACTUAL
+            // audit dates are always appended as fields 16/17 so report designs can print either.
+            DateTime actualCur = ln.AuditDate ?? readingDate;
+            DateTime cur = ln.PeriodEnd ?? actualCur;
             System.Globalization.CultureInfo en = new System.Globalization.CultureInfo("en-US");
-            string lastLong = ln.LastDate.HasValue ? LongDate(ln.LastDate.Value, en) : "";
-            string lastShort = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("yyyyMMdd") : "";
+            DateTime? lastDate = ln.PeriodStart ?? ln.LastDate;
+            string lastLong = lastDate.HasValue ? LongDate(lastDate.Value, en) : "";
+            string lastShort = lastDate.HasValue ? lastDate.Value.ToString("yyyyMMdd") : "";
 
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.AppendLine("1. Mt Type; 2. Mt Name; 3. Min Chrg; 4. Chrg Rate; 5. FOC Qty; 6. Rebate %; " +
                           "7. Last Reading Date; 8. Last Reading Mt; 9. Mt Usage; 10. Total Chrg; 11. Multi Price; " +
-                          "12. Rebate Qty; 13. Current Reading Date; 14. Last Reading Short Date; 15. Current Reading Short Date");
+                          "12. Rebate Qty; 13. Current Reading Date; 14. Last Reading Short Date; 15. Current Reading Short Date; " +
+                          "16. Actual Last Audit; 17. Actual Current Audit");
             // FOC as APPLIED (ladder free band / reset-scaled column), consistent with the FOC text row.
             decimal focShown = ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies);
             if (focShown < 0m) focShown = 0m;
@@ -429,7 +442,10 @@ namespace ServiceContractPhotocopier.Classes
             sb.AppendLine("0");                      // rebate qty
             sb.AppendLine(LongDate(cur, en));
             sb.AppendLine(lastShort);
-            sb.Append(cur.ToString("yyyyMMdd"));
+            sb.AppendLine(cur.ToString("yyyyMMdd"));
+            // 16/17: the ACTUAL audit dates (same as 14/15 unless contract-period mode swapped them).
+            sb.AppendLine(ln.LastDate.HasValue ? ln.LastDate.Value.ToString("yyyyMMdd") : "");
+            sb.Append(actualCur.ToString("yyyyMMdd"));
             return sb.ToString();
         }
 

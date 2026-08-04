@@ -352,7 +352,8 @@
             this.layoutControl2 = new DevExpress.XtraLayout.LayoutControl();
             this.layoutControlGroup1 = new DevExpress.XtraLayout.LayoutControlGroup();
             this.layoutControlItem21 = new DevExpress.XtraLayout.LayoutControlItem();
-            this.emptySpaceItem2 = new DevExpress.XtraLayout.EmptySpaceItem();
+            this.ChkPeriodByContract = new DevExpress.XtraEditors.CheckEdit();
+            this.layoutControlItem29 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem22 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem23 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem24 = new DevExpress.XtraLayout.LayoutControlItem();
@@ -484,7 +485,8 @@
             this.layoutControl2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlGroup1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem21)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.emptySpaceItem2)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkPeriodByContract.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem29)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem22)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem23)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem24)).BeginInit();
@@ -981,6 +983,15 @@
             this.ChkGenerateSOA.Size = new System.Drawing.Size(524, 20);
             this.ChkGenerateSOA.StyleController = this.layoutControl2;
             this.ChkGenerateSOA.TabIndex = 48;
+            //
+            // ChkPeriodByContract
+            //
+            this.ChkPeriodByContract.Location = new System.Drawing.Point(346, 60);
+            this.ChkPeriodByContract.Name = "ChkPeriodByContract";
+            this.ChkPeriodByContract.Properties.Caption = "Billing period follows contract date";
+            this.ChkPeriodByContract.Size = new System.Drawing.Size(338, 20);
+            this.ChkPeriodByContract.StyleController = this.layoutControl2;
+            this.ChkPeriodByContract.TabIndex = 50;
             // 
             // SluSOATemplate
             // 
@@ -2218,6 +2229,7 @@
             this.layoutControl2.Controls.Add(this.SluInvoiceTemplate);
             this.layoutControl2.Controls.Add(this.ChkGenerateSOA);
             this.layoutControl2.Controls.Add(this.SluSOATemplate);
+            this.layoutControl2.Controls.Add(this.ChkPeriodByContract);
             this.layoutControl2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
             this.layoutControl2.Name = "layoutControl2";
@@ -2232,7 +2244,7 @@
             this.layoutControlGroup1.GroupBordersVisible = false;
             this.layoutControlGroup1.Items.AddRange(new DevExpress.XtraLayout.BaseLayoutItem[] {
             this.layoutControlItem21,
-            this.emptySpaceItem2,
+            this.layoutControlItem29,
             this.layoutControlItem22,
             this.layoutControlItem25,
             this.layoutControlItem23,
@@ -2252,14 +2264,15 @@
             this.layoutControlItem21.Size = new System.Drawing.Size(148, 24);
             this.layoutControlItem21.Text = "Billing Due Day";
             this.layoutControlItem21.TextSize = new System.Drawing.Size(82, 13);
-            // 
-            // emptySpaceItem2
-            // 
-            this.emptySpaceItem2.AllowHotTrack = false;
-            this.emptySpaceItem2.Location = new System.Drawing.Point(334, 48);
-            this.emptySpaceItem2.Name = "emptySpaceItem2";
-            this.emptySpaceItem2.Size = new System.Drawing.Size(342, 24);
-            this.emptySpaceItem2.TextSize = new System.Drawing.Size(0, 0);
+            //
+            // layoutControlItem29
+            //
+            this.layoutControlItem29.Control = this.ChkPeriodByContract;
+            this.layoutControlItem29.Location = new System.Drawing.Point(334, 48);
+            this.layoutControlItem29.Name = "layoutControlItem29";
+            this.layoutControlItem29.Size = new System.Drawing.Size(342, 24);
+            this.layoutControlItem29.TextSize = new System.Drawing.Size(0, 0);
+            this.layoutControlItem29.TextVisible = false;
             // 
             // layoutControlItem22
             // 
@@ -2484,7 +2497,8 @@
             this.layoutControl2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlGroup1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem21)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.emptySpaceItem2)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem29)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkPeriodByContract.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem22)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem23)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem24)).EndInit();
@@ -2530,7 +2544,8 @@
         private DevExpress.XtraLayout.LayoutControl layoutControl2;
         private DevExpress.XtraLayout.LayoutControlGroup layoutControlGroup1;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem21;
-        private DevExpress.XtraLayout.EmptySpaceItem emptySpaceItem2;
+        private DevExpress.XtraEditors.CheckEdit ChkPeriodByContract;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem29;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem22;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem23;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem24;

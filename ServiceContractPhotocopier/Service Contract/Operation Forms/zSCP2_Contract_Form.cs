@@ -503,6 +503,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             TxtNote.EditValueChanged += h;
             ChkInactive.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
+            ChkPeriodByContract.EditValueChanged += h;
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
             if (cboNoOfMonth != null) cboNoOfMonth.EditValueChanged += h;
             if (cboTermUnit != null) cboTermUnit.EditValueChanged += h;
@@ -574,6 +575,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SpnRentalDay.Value = _loadedRentalDay;
             SpnRentalDay.Enabled = ChkRentalSeparate.Checked;
             ChkRentalSeparate.CheckedChanged += delegate { SpnRentalDay.Enabled = ChkRentalSeparate.Checked; };
+            // #16: invoice DISPLAY dates follow the contract cycle instead of the actual reading dates.
+            ChkPeriodByContract.ToolTip =
+                "Ticked: the invoice shows the CONTRACT cycle as the billing period (start day .. start day + 1 month - 1 day),\r\n" +
+                "e.g. a day-1 contract billed for July shows 01/07 - 31/07 no matter when the meter was read.\r\n" +
+                "Unticked: the invoice shows the actual reading dates (previous audit - current audit) as before.\r\n" +
+                "Display only - meter stamps and reading history always keep the real audit dates.";
             SpnRentalDay.ToolTip = "0 = rental rides the meter invoice date.\r\n" +
                 "1-28 = the separate Rental- invoice is dated on THIS day: accrual rentals in the " +
                 "billing month, prepayment rentals in the NEXT month (June run -> July 1 rental).";
@@ -1022,6 +1029,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateInactiveInfoLabel();
             _loadedStrategyCode = r.Table.Columns.Contains("StrategyCode") ? AsStr(r["StrategyCode"]).Trim() : "";
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;
@@ -4144,9 +4152,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -4163,7 +4171,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
-                "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
+                "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, PeriodFollowContract=@pmode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
@@ -4208,6 +4216,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@invrpt", TplVal(SluInvoiceTemplate, _loadedInvRpt));
             cmd.Parameters.AddWithValue("@gensoa", ChkGenerateSOA != null ? (ChkGenerateSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
             cmd.Parameters.AddWithValue("@soarpt", TplVal(SluSOATemplate, _loadedSOARpt));
+            cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -4540,7 +4549,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(SpnRentalDay != null ? ((int)SpnRentalDay.Value).ToString() : "0").Append('\t')
               .Append(Tsv(TplVal(SluInvoiceTemplate, _loadedInvRpt))).Append('\t')
               .Append(ChkGenerateSOA != null && ChkGenerateSOA.Checked ? "Y" : "N").Append('\t')
-              .Append(Tsv(TplVal(SluSOATemplate, _loadedSOARpt))).AppendLine();
+              .Append(Tsv(TplVal(SluSOATemplate, _loadedSOARpt))).Append('\t')
+              .Append(ChkPeriodByContract.Checked ? "Y" : "N").AppendLine();
             foreach (ItemEditData d in _items)
             {
                 sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
@@ -4687,6 +4697,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         if (SluInvoiceTemplate != null && At(p, 22).Length > 0) SluInvoiceTemplate.EditValue = At(p, 22);
                         if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = At(p, 23) == "Y";
                         if (SluSOATemplate != null && At(p, 24).Length > 0) SluSOATemplate.EditValue = At(p, 24);
+                        if (p.Length > 25) ChkPeriodByContract.Checked = At(p, 25) == "Y";
                     }
                 }
                 else if (p[0] == "I") { last = ItemFromTsv(p, 1); _items.Add(last); }
@@ -4891,6 +4902,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SluProject.EditValue = r.Table.Columns.Contains("ProjNo") ? SetOrNull(AsStr(r["ProjNo"])) : null;
                 _loadedStrategyCode = r.Table.Columns.Contains("StrategyCode") ? AsStr(r["StrategyCode"]).Trim() : "";
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;

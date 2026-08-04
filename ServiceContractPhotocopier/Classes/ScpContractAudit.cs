@@ -30,7 +30,7 @@ namespace ServiceContractPhotocopier.Classes
             "City","PostalCode","State","Country","Fax","Ref1","Ref2","Ref3","Ref4",
             "DelBranchCode","DelBranchName","DelAddress","DelCity","DelPostalCode","DelState","DelCountry",
             "DelPhone","DelFax","DelEmail","DelContactPerson",
-            "StrategyCode","RentalSeparateInvoice","FOCResetUnit","FOCResetN"
+            "StrategyCode","RentalSeparateInvoice","PeriodFollowContract","FOCResetUnit","FOCResetN"
         };
 
         /// <summary>Reads the audited columns of one contract as normalised strings (dates yyyy-MM-dd,
@@ -38,23 +38,29 @@ namespace ServiceContractPhotocopier.Classes
         public static Dictionary<string, string> Snapshot(SqlConnection cn, SqlTransaction tx, long contractKey)
         {
             Dictionary<string, string> snap = new Dictionary<string, string>();
-            System.Text.StringBuilder sb = new System.Text.StringBuilder("SELECT ");
-            for (int i = 0; i < Cols.Length; i++)
+            // Audit must never block the save: on an older schema (a Cols entry whose migration has
+            // not run yet) the explicit SELECT throws — swallow and return the empty snapshot.
+            try
             {
-                if (i > 0) sb.Append(", ");
-                sb.Append("[").Append(Cols[i]).Append("]");
-            }
-            sb.Append(" FROM dbo.zSCP2_Contract WHERE ContractKey=@ck");
-            using (SqlCommand cmd = new SqlCommand(sb.ToString(), cn, tx))
-            {
-                cmd.Parameters.AddWithValue("@ck", contractKey);
-                using (SqlDataReader r = cmd.ExecuteReader())
+                System.Text.StringBuilder sb = new System.Text.StringBuilder("SELECT ");
+                for (int i = 0; i < Cols.Length; i++)
                 {
-                    if (r.Read())
-                        for (int i = 0; i < Cols.Length; i++)
-                            snap[Cols[i]] = Normalise(r.IsDBNull(i) ? null : r.GetValue(i));
+                    if (i > 0) sb.Append(", ");
+                    sb.Append("[").Append(Cols[i]).Append("]");
+                }
+                sb.Append(" FROM dbo.zSCP2_Contract WHERE ContractKey=@ck");
+                using (SqlCommand cmd = new SqlCommand(sb.ToString(), cn, tx))
+                {
+                    cmd.Parameters.AddWithValue("@ck", contractKey);
+                    using (SqlDataReader r = cmd.ExecuteReader())
+                    {
+                        if (r.Read())
+                            for (int i = 0; i < Cols.Length; i++)
+                                snap[Cols[i]] = Normalise(r.IsDBNull(i) ? null : r.GetValue(i));
+                    }
                 }
             }
+            catch { }
             return snap;
         }
 
