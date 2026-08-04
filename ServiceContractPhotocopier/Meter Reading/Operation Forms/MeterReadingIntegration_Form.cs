@@ -53,6 +53,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private SimpleButton _btnSetting;
         private SimpleButton _btnMonthOverview;
         private bool _scopedGenerate;   // detail-dialog "Save & Generate": skip the #3 group guard
+        // TEST-ONLY mock fetch (Ctrl+Shift+T reveals the button): a pasted JSON impersonates the
+        // meter API so the REAL fetch pipeline can be exercised without the live endpoints.
+        private SimpleButton _btnMockFetch;
+        private ServiceContractPhotocopier.MeterReading.Services.IMeterReadingApiClient _testJsonClient;
+        private static string _lastTestJson;   // remembered across form opens (session-wide)
 
         public MeterReadingIntegration_Form()
         {
@@ -74,6 +79,176 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 e.Handled = true;
                 DevWipeGeneratedInvoices();
             }
+            else if (e.Control && e.Shift && e.KeyCode == Keys.T)
+            {
+                e.Handled = true;
+                ToggleMockFetchButton();
+            }
+        }
+
+        // ── TEST Fetch (JSON): hidden button + paste dialog ──────────────────────────────────────
+
+        private void ToggleMockFetchButton()
+        {
+            if (_btnMockFetch == null)
+            {
+                _btnMockFetch = new SimpleButton();
+                _btnMockFetch.Size = new Size(150, this.BtnFetch.Height);
+                _btnMockFetch.Appearance.BackColor = Color.FromArgb(255, 236, 179);   // amber = TEST
+                _btnMockFetch.Appearance.Options.UseBackColor = true;
+                _btnMockFetch.Parent = this.BtnFetch.Parent;
+                _btnMockFetch.Location = new Point(this.BtnFetch.Right + 8, this.BtnFetch.Top);
+                _btnMockFetch.Click += new EventHandler(BtnMockFetch_Click);
+                UpdateMockFetchButtonText();
+            }
+            _btnMockFetch.Visible = !_btnMockFetch.Visible;
+            if (_btnMockFetch.Visible) _btnMockFetch.BringToFront();
+        }
+
+        private void UpdateMockFetchButtonText()
+        {
+            if (_btnMockFetch == null) return;
+            _btnMockFetch.Text = _testJsonClient != null ? "TEST JSON ACTIVE ✓" : "TEST Fetch (JSON)";
+        }
+
+        private void BtnMockFetch_Click(object sender, EventArgs e)
+        {
+            using (DevExpress.XtraEditors.XtraForm dlg = new DevExpress.XtraEditors.XtraForm())
+            {
+                dlg.Text = "TEST Fetch — paste the fake API JSON";
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.ClientSize = new Size(760, 520);
+                dlg.MinimizeBox = false;
+
+                LabelControl hint = new LabelControl();
+                hint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+                hint.Appearance.Options.UseTextOptions = true;
+                hint.AutoSizeMode = LabelAutoSizeMode.None;
+                hint.Location = new Point(10, 8);
+                hint.Size = new Size(740, 44);
+                hint.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                hint.Text = "Machines are matched by SerialNumber (fallback: Code = Service Item No). TotalBK / TotalCL " +
+                    "are CUMULATIVE lifetime counters. Flat array = all ONLINE; use {\"Online\":[...],\"Offline\":[...]} " +
+                    "to test offline + TrackingId. Missing LastAuditDate auto-fills day 1 of the selected period. " +
+                    "The override stays active for every Fetch until you clear it.";
+                dlg.Controls.Add(hint);
+
+                MemoEdit memo = new MemoEdit();
+                memo.Location = new Point(10, 56);
+                memo.Size = new Size(740, 410);
+                memo.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                memo.Properties.Appearance.Font = new Font("Consolas", 9F);
+                memo.Properties.WordWrap = false;
+                memo.Properties.ScrollBars = ScrollBars.Both;
+                memo.Text = string.IsNullOrEmpty(_lastTestJson) ? BuildSampleTestJson() : _lastTestJson;
+                dlg.Controls.Add(memo);
+
+                SimpleButton bUse = new SimpleButton();
+                bUse.Text = "Use JSON + Fetch";
+                bUse.Size = new Size(130, 26);
+                bUse.Location = new Point(10, 478);
+                bUse.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+                dlg.Controls.Add(bUse);
+
+                SimpleButton bClear = new SimpleButton();
+                bClear.Text = "Clear override";
+                bClear.Size = new Size(110, 26);
+                bClear.Location = new Point(148, 478);
+                bClear.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+                bClear.Enabled = _testJsonClient != null;
+                dlg.Controls.Add(bClear);
+
+                SimpleButton bCancel = new SimpleButton();
+                bCancel.Text = "Cancel";
+                bCancel.Size = new Size(90, 26);
+                bCancel.Location = new Point(660, 478);
+                bCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                bCancel.DialogResult = DialogResult.Cancel;
+                dlg.Controls.Add(bCancel);
+                dlg.CancelButton = bCancel;
+
+                bool doFetch = false;
+                bUse.Click += new EventHandler(delegate
+                {
+                    string json = memo.Text.Trim();
+                    if (json.Length == 0)
+                    {
+                        XtraMessageBox.Show("Paste a JSON first.", "TEST Fetch", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    // Validate NOW so a typo fails here, not mid-fetch.
+                    try
+                    {
+                        ServiceContractPhotocopier.MeterReading.Services.JsonPasteMeterReadingApiClient probe =
+                            new ServiceContractPhotocopier.MeterReading.Services.JsonPasteMeterReadingApiClient(json);
+                        int n = probe.GetReadings(ServiceContractPhotocopier.MeterReading.Services.MachineStatus.Online, SelectedYear(), SelectedMonth()).Count
+                              + probe.GetReadings(ServiceContractPhotocopier.MeterReading.Services.MachineStatus.Offline, SelectedYear(), SelectedMonth()).Count;
+                        if (n == 0)
+                        {
+                            XtraMessageBox.Show("The JSON parsed but contains 0 readings.", "TEST Fetch",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        _testJsonClient = probe;
+                        _lastTestJson = json;
+                    }
+                    catch (Exception ex)
+                    {
+                        XtraMessageBox.Show("JSON not valid:\r\n" + ex.Message, "TEST Fetch",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                    doFetch = true;
+                    dlg.DialogResult = DialogResult.OK;
+                    dlg.Close();
+                });
+                bClear.Click += new EventHandler(delegate
+                {
+                    _testJsonClient = null;
+                    UpdateMockFetchButtonText();
+                    dlg.DialogResult = DialogResult.Cancel;
+                    dlg.Close();
+                });
+
+                dlg.ShowDialog(this);
+                UpdateMockFetchButtonText();
+                if (doFetch) BtnFetch_Click(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>Template JSON generated from the CURRENT grid: one entry per machine serial,
+        /// TotalBK/TotalCL prefilled with last reading + 100 so charges appear immediately.</summary>
+        private string BuildSampleTestJson()
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("[\r\n");
+            bool first = true;
+            System.Collections.Generic.Dictionary<string, decimal[]> bySerial =
+                new System.Collections.Generic.Dictionary<string, decimal[]>(StringComparer.OrdinalIgnoreCase);
+            System.Collections.Generic.List<string> order = new System.Collections.Generic.List<string>();
+            if (_dtGrid != null)
+                foreach (DataRow r in _dtGrid.Rows)
+                {
+                    string sn = S(r["SerialNo"]).Trim();
+                    string role = S(r["Role"]).Trim().ToUpperInvariant();
+                    if (sn.Length == 0 || (role != "BK" && role != "CL")) continue;
+                    decimal[] v;
+                    if (!bySerial.TryGetValue(sn, out v)) { v = new decimal[2]; bySerial[sn] = v; order.Add(sn); }
+                    v[role == "BK" ? 0 : 1] = Dec(r["LastReading"]) + 100m;
+                }
+            string audit = new DateTime(SelectedYear(), SelectedMonth(), 1).ToString("yyyy-MM-dd");
+            foreach (string sn in order)
+            {
+                if (!first) sb.Append(",\r\n");
+                first = false;
+                decimal[] v = bySerial[sn];
+                sb.Append("  { \"SerialNumber\": \"").Append(sn.Replace("\"", "\\\""))
+                  .Append("\", \"TotalBK\": ").Append(v[0].ToString("0"))
+                  .Append(", \"TotalCL\": ").Append(v[1].ToString("0"))
+                  .Append(", \"LastAuditDate\": \"").Append(audit).Append("\" }");
+            }
+            sb.Append("\r\n]");
+            return sb.ToString();
         }
 
         // TESTING ONLY: deletes ALL invoices this module generated (proper AutoCount delete, so GL /
@@ -1571,7 +1746,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // catch each endpoint independently so a dead online endpoint still lets offline load.
                 await System.Threading.Tasks.Task.Run(() =>
                 {
-                    IMeterReadingApiClient client = MeterReadingApiClientFactory.Create(_dbSetting);
+                    // TEST override (Ctrl+Shift+T button): a pasted JSON impersonates the API so the
+                    // whole real pipeline below runs on fake data. Null = normal factory client.
+                    IMeterReadingApiClient client = _testJsonClient != null
+                        ? _testJsonClient : MeterReadingApiClientFactory.Create(_dbSetting);
                     // Fetch both endpoints CONCURRENTLY so the total wait is max(online, offline), not
                     // their sum — each can take ~15s server-side. GetReadings is stateless (a fresh
                     // HttpClient per call), so sharing one client across the two tasks is safe.
