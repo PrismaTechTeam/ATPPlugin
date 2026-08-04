@@ -41,6 +41,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 TimeSpan t;
                 if (!TimeSpan.TryParse(cutTime, out t)) t = new TimeSpan(23, 59, 0);
                 this.TimeCutoff.EditValue = new DateTime(2000, 1, 1).Add(t);
+                string grouping = PumsConfig.Get(_dbSetting, PumsConfig.KEY_METER_GROUPING, PumsConfig.DEFAULT_METER_GROUPING).Trim().ToUpperInvariant();
+                this.CmbGrouping.SelectedIndex = grouping == PumsConfig.METER_GROUPING_DEBTOR ? 1
+                    : grouping == PumsConfig.METER_GROUPING_MACHINE ? 2 : 0;
+                this.ChkGroupGuard.Checked =
+                    PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_METER_GROUP_GUARD, PumsConfig.DEFAULT_METER_GROUP_GUARD);
             }
         }
 
@@ -142,6 +147,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     this.CmbCutoffDay.SelectedIndex == 1 ? "ON" : "BEFORE");
                 DateTime tv = this.TimeCutoff.EditValue is DateTime ? (DateTime)this.TimeCutoff.EditValue : new DateTime(2000, 1, 1, 23, 59, 0);
                 PumsConfig.Set(_dbSetting, PumsConfig.KEY_AUTO_FETCH_CUTOFF, tv.ToString("HH:mm"));
+                PumsConfig.Set(_dbSetting, PumsConfig.KEY_METER_GROUPING,
+                    this.CmbGrouping.SelectedIndex == 1 ? PumsConfig.METER_GROUPING_DEBTOR
+                    : this.CmbGrouping.SelectedIndex == 2 ? PumsConfig.METER_GROUPING_MACHINE
+                    : PumsConfig.METER_GROUPING_FOLLOW);
+                PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_METER_GROUP_GUARD, this.ChkGroupGuard.Checked);
             }
             this.DialogResult = DialogResult.OK;
             this.Close();

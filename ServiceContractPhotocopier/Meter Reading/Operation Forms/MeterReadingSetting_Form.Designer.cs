@@ -32,9 +32,14 @@
             this.CmbCutoffDay = new DevExpress.XtraEditors.ComboBoxEdit();
             this.LblCutoffTime = new DevExpress.XtraEditors.LabelControl();
             this.TimeCutoff = new DevExpress.XtraEditors.TimeEdit();
+            this.LblGrouping = new DevExpress.XtraEditors.LabelControl();
+            this.CmbGrouping = new DevExpress.XtraEditors.ComboBoxEdit();
+            this.ChkGroupGuard = new DevExpress.XtraEditors.CheckEdit();
             this.BtnClearStaging = new DevExpress.XtraEditors.SimpleButton();
             this.BtnOk = new DevExpress.XtraEditors.SimpleButton();
             this.BtnCancel = new DevExpress.XtraEditors.SimpleButton();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbGrouping.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGroupGuard.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeLate.Properties)).BeginInit();
@@ -125,11 +130,39 @@
             this.TimeCutoff.Size = new System.Drawing.Size(80, 20);
             this.TimeCutoff.TabIndex = 7;
             //
+            // LblGrouping
+            //
+            this.LblGrouping.Location = new System.Drawing.Point(20, 191);
+            this.LblGrouping.Name = "LblGrouping";
+            this.LblGrouping.Size = new System.Drawing.Size(95, 14);
+            this.LblGrouping.TabIndex = 13;
+            this.LblGrouping.Text = "Invoice grouping:";
+            //
+            // CmbGrouping
+            //
+            this.CmbGrouping.Location = new System.Drawing.Point(140, 188);
+            this.CmbGrouping.Name = "CmbGrouping";
+            this.CmbGrouping.Properties.Items.AddRange(new object[] {
+            "Follow each contract\'s Billing Mode",
+            "Always group same debtor into one invoice",
+            "Always one invoice per machine"});
+            this.CmbGrouping.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.CmbGrouping.Size = new System.Drawing.Size(300, 20);
+            this.CmbGrouping.TabIndex = 14;
+            //
+            // ChkGroupGuard
+            //
+            this.ChkGroupGuard.Location = new System.Drawing.Point(20, 217);
+            this.ChkGroupGuard.Name = "ChkGroupGuard";
+            this.ChkGroupGuard.Properties.Caption = "Block Generate when a group is incomplete (machines not all ticked / keyed)";
+            this.ChkGroupGuard.Size = new System.Drawing.Size(440, 20);
+            this.ChkGroupGuard.TabIndex = 15;
+            //
             // BtnClearStaging
             //
             this.BtnClearStaging.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnClearStaging.Appearance.Options.UseForeColor = true;
-            this.BtnClearStaging.Location = new System.Drawing.Point(20, 191);
+            this.BtnClearStaging.Location = new System.Drawing.Point(20, 251);
             this.BtnClearStaging.Name = "BtnClearStaging";
             this.BtnClearStaging.Size = new System.Drawing.Size(150, 28);
             this.BtnClearStaging.TabIndex = 8;
@@ -138,7 +171,7 @@
             //
             // BtnOk
             //
-            this.BtnOk.Location = new System.Drawing.Point(180, 191);
+            this.BtnOk.Location = new System.Drawing.Point(180, 251);
             this.BtnOk.Name = "BtnOk";
             this.BtnOk.Size = new System.Drawing.Size(80, 28);
             this.BtnOk.TabIndex = 2;
@@ -148,7 +181,7 @@
             // BtnCancel
             //
             this.BtnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.BtnCancel.Location = new System.Drawing.Point(268, 191);
+            this.BtnCancel.Location = new System.Drawing.Point(268, 251);
             this.BtnCancel.Name = "BtnCancel";
             this.BtnCancel.Size = new System.Drawing.Size(80, 28);
             this.BtnCancel.TabIndex = 3;
@@ -159,7 +192,10 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 14F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.BtnCancel;
-            this.ClientSize = new System.Drawing.Size(480, 236);
+            this.ClientSize = new System.Drawing.Size(480, 296);
+            this.Controls.Add(this.ChkGroupGuard);
+            this.Controls.Add(this.CmbGrouping);
+            this.Controls.Add(this.LblGrouping);
             this.Controls.Add(this.BtnClearStaging);
             this.Controls.Add(this.BtnCancel);
             this.Controls.Add(this.BtnOk);
@@ -178,6 +214,8 @@
             this.Name = "MeterReadingSetting_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Meter Reading Settings";
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGroupGuard.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbGrouping.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeInactive.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeLate.Properties)).EndInit();
@@ -199,6 +237,9 @@
         private DevExpress.XtraEditors.ComboBoxEdit CmbCutoffDay;
         private DevExpress.XtraEditors.LabelControl LblCutoffTime;
         private DevExpress.XtraEditors.TimeEdit TimeCutoff;
+        private DevExpress.XtraEditors.LabelControl LblGrouping;
+        private DevExpress.XtraEditors.ComboBoxEdit CmbGrouping;
+        private DevExpress.XtraEditors.CheckEdit ChkGroupGuard;
         private DevExpress.XtraEditors.SimpleButton BtnClearStaging;
         private DevExpress.XtraEditors.SimpleButton BtnOk;
         private DevExpress.XtraEditors.SimpleButton BtnCancel;

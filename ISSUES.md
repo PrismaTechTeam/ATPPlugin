@@ -54,10 +54,13 @@
 ### 🟡 D-1 "Include expired Service Item" 默认值
 目前默认 = **显示**过期机器(账单行为不变)。你说过「过期不显示不错」→ 要不要改成**默认隐藏**?(会让 ~1,199 台已过期的默认从列表消失)
 
-### 🟡 D-2 开票方式有两处设置,互相冲突
-- 合约编辑器有 **BillingMode G/S**;但 Generate 的 "**Separate invoice per CSSI**" 勾选框会**完全无视**合约设定(勾=全部 S,不勾=全部 G)。
-- 新的多机合约设了 G/S 等于没用。
-- 建议:默认**跟合约 BillingMode 走**,勾选框只作为一次性 override(或干脆三选:Follow contract / Force per CSSI / Force per contract)。
+### ✅ D-2 开票方式有两处设置,互相冲突 —— 已解决 (2026-08-04)
+- ~~合约编辑器有 **BillingMode G/S**;但 Generate 的勾选框会**完全无视**合约设定~~
+- 用户拍板:run-level 勾选框**移除**,改为 **Setting > Invoice grouping** 三选:
+  **Follow each contract's Billing Mode(默认,G = 一合约一张、S = 一机一张)/ Always group same debtor / Always one invoice per machine**。
+  主画面显示当前模式的绿色标签。保护机制(incomplete customer / contract / bill group 三个 guard)
+  也进了 Setting("Block Generate when a group is incomplete",默认开)。FOLLOW 模式下新增
+  **Incomplete contract group** guard:G 合约的机器没勾齐/没读数就 Generate 会被挡下。
 
 ### 🟡 D-3 8 张「平票」合约的结账日规则
 合约的 BillingDay 取 item override 众数;8 张平票(如 7、30 各一台)我取了**较大日**,未经确认。名单可随时列出。

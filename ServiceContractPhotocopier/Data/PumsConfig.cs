@@ -60,6 +60,18 @@ namespace ServiceContractPhotocopier.Data
         /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
         public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
+        /// <summary>How Generate groups meter lines into invoices. FOLLOW (default) = each contract's
+        /// own Billing Mode (G = one invoice per contract, S = one per machine); DEBTOR = legacy
+        /// "group same debtor into one invoice"; MACHINE = force one invoice per machine.</summary>
+        public const string KEY_METER_GROUPING = "METER_INVOICE_GROUPING";
+        public const string METER_GROUPING_FOLLOW = "FOLLOW";
+        public const string METER_GROUPING_DEBTOR = "DEBTOR";
+        public const string METER_GROUPING_MACHINE = "MACHINE";
+        public const string DEFAULT_METER_GROUPING = METER_GROUPING_FOLLOW;
+        /// <summary>Block Generate when a group (customer / contract / Bill Group) is only partially
+        /// ticked or keyed — the incomplete-group protection prompts. Default ON.</summary>
+        public const string KEY_METER_GROUP_GUARD = "METER_GROUP_GUARD";
+        public const bool DEFAULT_METER_GROUP_GUARD = true;
         // Show meters of INACTIVE contracts/items on the Meter Reading list (off by default) — used
         // to review, and if needed bill, the leftover un-invoiced readings of a stopped contract.
         public const string KEY_INCLUDE_INACTIVE = "INCLUDE_INACTIVE";

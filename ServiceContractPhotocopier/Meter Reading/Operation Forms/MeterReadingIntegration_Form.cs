@@ -41,7 +41,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private int _fetchMsgIdx;
         private bool _suppressFilterEvent;   // guards programmatic Day/ShowAll changes from auto-reloading
         private DevExpress.XtraEditors.CheckEdit _chkInclude0Usage;
-        private DevExpress.XtraEditors.CheckEdit _chkPerCssi;
+        private LabelControl _lblGroupingInfo;   // shows the Invoice grouping SETTING (no run-level toggle)
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _selCssiEditor;
         private static readonly string[] FETCH_MSGS = new string[] {
             "Contacting the meter API...",
@@ -494,17 +494,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //   unticked= one invoice per whole contract
             // Grouping choice: CHECKED (default) = one invoice per debtor/contract; unchecked = one
             // invoice per CSSI. Sits left-aligned under the action buttons.
-            _chkPerCssi = new DevExpress.XtraEditors.CheckEdit();
-            _chkPerCssi.Properties.Caption = "Group same debtor into one invoice";
-            _chkPerCssi.Properties.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            _chkPerCssi.Properties.Appearance.Options.UseFont = true;
-            _chkPerCssi.Properties.Appearance.ForeColor = Color.FromArgb(27, 94, 32);
-            _chkPerCssi.Properties.Appearance.Options.UseForeColor = true;
-            _chkPerCssi.Location = new Point(510, 64);
-            _chkPerCssi.Size = new Size(300, 22);
-            _chkPerCssi.Checked = true;
-            this.PanelFilter.Controls.Add(_chkPerCssi);
-            _chkPerCssi.BringToFront();
+            // Invoice grouping is a SETTING now (user decision 2026-08-04): Generate follows each
+            // contract's own Billing Mode by default; the old "group same debtor" toggle lives in
+            // Setting as an override. This label just shows the active mode.
+            _lblGroupingInfo = new LabelControl();
+            _lblGroupingInfo.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            _lblGroupingInfo.Appearance.Options.UseFont = true;
+            _lblGroupingInfo.Appearance.ForeColor = Color.FromArgb(27, 94, 32);
+            _lblGroupingInfo.Appearance.Options.UseForeColor = true;
+            _lblGroupingInfo.Location = new Point(510, 68);
+            this.PanelFilter.Controls.Add(_lblGroupingInfo);
+            _lblGroupingInfo.BringToFront();
+            RefreshGroupingInfo();
             BuildDayButtonStrip();
 
             // (The Contracts/Meters statistics block was removed on request — the tab captions and
@@ -2164,8 +2165,47 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             using (MeterReadingSetting_Form dlg = new MeterReadingSetting_Form(_dbSetting, SelectedYear(), SelectedMonth()))
             {
                 if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    RefreshGroupingInfo();
                     LoadData();
+                }
             }
+        }
+
+        /// <summary>The Invoice grouping SETTING: FOLLOW (contract Billing Mode) / DEBTOR / MACHINE.</summary>
+        private string GroupingMode()
+        {
+            try
+            {
+                string m = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_GROUPING,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_GROUPING).Trim().ToUpperInvariant();
+                if (m == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR ||
+                    m == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_MACHINE) return m;
+            }
+            catch { }
+            return ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_FOLLOW;
+        }
+
+        private bool GroupGuardOn()
+        {
+            try
+            {
+                return ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_GROUP_GUARD,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_GROUP_GUARD);
+            }
+            catch { return true; }
+        }
+
+        private void RefreshGroupingInfo()
+        {
+            if (_lblGroupingInfo == null) return;
+            string m = GroupingMode();
+            _lblGroupingInfo.Text =
+                m == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR ? "Grouping: one invoice per customer  (Setting)" :
+                m == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_MACHINE ? "Grouping: one invoice per machine  (Setting)" :
+                "Grouping: follow contract Billing Mode  (Setting)";
         }
 
         // Insert-or-update one staged reading (unique per ItemMeterKey + period).
@@ -2610,12 +2650,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             List<DataRow> visibleRows = new List<DataRow>();
             foreach (DataRow dr in _dtGrid.Rows) visibleRows.Add(dr);
 
+            // Invoice grouping SETTING (2026-08-04): FOLLOW = each contract's own Billing Mode
+            // (G = one invoice per contract, S = per machine); DEBTOR = legacy one-per-customer;
+            // MACHINE = force per machine. The incomplete-group protections below are gated by the
+            // "Block Generate when a group is incomplete" setting (default ON).
+            string grpMode = GroupingMode();
+            bool guardOn = GroupGuardOn();
+
             // Demo 28/07 #3: "one invoice per customer" must be COMPLETE — if any of a ticked
             // customer's machines would MISS the grouped invoice (not ticked, or a usage meter
             // without a reading), abort with the exact list instead of quietly billing a partial
             // customer invoice that needs a manual credit note later. A scoped run (detail dialog's
             // "Save & Generate" for ONE contract) is exempt — that incompleteness is deliberate.
-            if (_chkPerCssi != null && _chkPerCssi.Checked && !_scopedGenerate)
+            if (guardOn && grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR && !_scopedGenerate)
             {
                 HashSet<string> tickedDebtors = new HashSet<string>();
                 foreach (DataRow dr in visibleRows)
@@ -2646,18 +2693,66 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         "Grouped invoicing is ON (one invoice per customer), but these meters of the " +
                         "ticked customers would MISS the invoice:\r\n\r\n" +
                         string.Join("\r\n", problems.ToArray()) + "\r\n\r\n" +
-                        "Key the readings / tick the machines first, or untick " +
-                        "\"Group same debtor into one invoice\" to bill per machine.\r\n" +
+                        "Key the readings / tick the machines first, or change Invoice grouping " +
+                        "in Setting to bill per machine.\r\n" +
                         "Nothing was generated.",
                         "Incomplete customer group", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
             }
 
+            // Same protection at CONTRACT level (user request 2026-08-04): a contract set to
+            // "Group Services into One Invoice" (Billing Mode G) bills as ONE invoice per contract —
+            // if some of its machines are ticked but others would MISS that invoice, abort with the
+            // list. Only in FOLLOW mode (DEBTOR mode has the stronger customer-level guard above).
+            if (guardOn && grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_FOLLOW && !_scopedGenerate)
+            {
+                HashSet<long> tickedContracts = new HashSet<long>();
+                foreach (DataRow dr in visibleRows)
+                    if (dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"])
+                        && S(dr["InvoicedDocNo"]).Trim().Length == 0
+                        && S(dr["BillingMode"]).Trim().ToUpperInvariant() != "S")
+                        tickedContracts.Add(D64(dr["ContractKey"]));
+                if (tickedContracts.Count > 0)
+                {
+                    List<string> problems = new List<string>();
+                    foreach (DataRow dr in visibleRows)
+                    {
+                        if (S(dr["BillingMode"]).Trim().ToUpperInvariant() == "S") continue;
+                        if (!tickedContracts.Contains(D64(dr["ContractKey"]))) continue;
+                        if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
+                        bool cTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
+                        bool cExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
+                        if (!cTicked && cExpired) continue;   // an unticked EXPIRED machine is a choice, not a miss
+                        bool cFlat = dr["IsFlat"] != DBNull.Value && Convert.ToBoolean(dr["IsFlat"]);
+                        string why = null;
+                        if (!cTicked) why = "not ticked";
+                        else if (!cFlat && Dec(dr["CurrentReading"]) <= 0m) why = "no reading keyed";
+                        if (why == null) continue;
+                        if (problems.Count < 25)
+                            problems.Add(S(dr["ContractNo"]) + "   " + S(dr["ServiceItemNo"]) + "   " +
+                                         S(dr["MeterType"]) + "   -   " + why);
+                        else { problems.Add("..."); break; }
+                    }
+                    if (problems.Count > 0)
+                    {
+                        XtraMessageBox.Show(
+                            "These contracts are set to \"Group Services into One Invoice\", but some of " +
+                            "their meters would MISS the contract's invoice:\r\n\r\n" +
+                            string.Join("\r\n", problems.ToArray()) + "\r\n\r\n" +
+                            "Key the readings / tick the machines first, or set the contract's Billing Mode " +
+                            "to \"Separate invoice per service item\".\r\n" +
+                            "Nothing was generated.",
+                            "Incomplete contract group", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+            }
+
             // Demo 28/07 #6: bill-group completeness — a Bill Group is billed as ONE invoice, so a
             // partially ticked / partially keyed group must not slip out as a partial invoice. Runs
-            // regardless of the debtor-grouping toggle (the group setting overrides that toggle).
-            if (!_scopedGenerate)
+            // regardless of the grouping setting (the Bill Group overrides it).
+            if (guardOn && !_scopedGenerate)
             {
                 HashSet<string> tickedGroups = new HashSet<string>();
                 foreach (DataRow dr in visibleRows)
@@ -2715,14 +2810,23 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // even with reading 0 (that is the whole point — no meter to read).
                 bool rowFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
                 if (!rowFlat && Dec(r["CurrentReading"]) <= 0m) continue;
-                // Invoice grouping: the checkbox overrides each contract's stored BillingMode for this run.
-                // CHECKED = "Group same debtor into one invoice" — literally: ONE invoice per CUSTOMER,
-                // across all their contracts. Unchecked = one invoice per CSSI.
-                string mode = (_chkPerCssi != null && _chkPerCssi.Checked) ? "G" : "S";
+                // Invoice grouping (SETTING, 2026-08-04 — closes ISSUES.md D-2):
+                //   FOLLOW  = the contract's own Billing Mode decides: G -> ONE invoice per CONTRACT
+                //             ("Group Services into One Invoice"), S -> one per machine.
+                //   DEBTOR  = legacy override: ONE invoice per CUSTOMER across all their contracts.
+                //   MACHINE = force one invoice per machine.
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
-                string groupKey = mode == "S" ? ("C" + contractKey + "_I" + itemKey) : ("D" + S(r["DebtorCode"]));
-                // Demo 28/07 #6: an explicit Bill Group on the machine OVERRIDES the run-level toggle
+                string mode;
+                if (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR) mode = "G";
+                else if (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_MACHINE) mode = "S";
+                else mode = S(r["BillingMode"]).Trim().ToUpperInvariant() == "S" ? "S" : "G";
+                string groupKey = mode == "S"
+                    ? ("C" + contractKey + "_I" + itemKey)
+                    : (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR
+                        ? ("D" + S(r["DebtorCode"]))
+                        : ("C" + contractKey));
+                // Demo 28/07 #6: an explicit Bill Group on the machine OVERRIDES the grouping setting
                 // (same philosophy as the per-contract template #9c): same contract + same code = ONE
                 // invoice. Bill Group splits INVOICES only — never the deal scope (strategy passes stay
                 // contract-wide). Fleet group machines (IsGroupItem) never carry a code -> legacy key,
