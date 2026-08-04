@@ -577,8 +577,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkRentalSeparate.CheckedChanged += delegate { SpnRentalDay.Enabled = ChkRentalSeparate.Checked; };
             // #16: invoice DISPLAY dates follow the contract cycle instead of the actual reading dates.
             ChkPeriodByContract.ToolTip =
-                "Ticked: the invoice shows the CONTRACT cycle as the billing period (start day .. start day + 1 month - 1 day),\r\n" +
-                "e.g. a day-1 contract billed for July shows 01/07 - 31/07 no matter when the meter was read.\r\n" +
+                "Ticked: the invoice shows the CONTRACT cycle ending in the billed month as the billing period,\r\n" +
+                "no matter when the meter was read - a day-1 contract billed for July shows 01/07 - 31/07;\r\n" +
+                "a day-25 contract billed for August shows 25/07 - 24/08.\r\n" +
                 "Unticked: the invoice shows the actual reading dates (previous audit - current audit) as before.\r\n" +
                 "Display only - meter stamps and reading history always keep the real audit dates.";
             SpnRentalDay.ToolTip = "0 = rental rides the meter invoice date.\r\n" +

@@ -2918,16 +2918,28 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // #16: contract-cycle billing period for the invoice DISPLAY (flag on the contract).
                 // Anchor day = the CONTRACT's service start day (contract-level on purpose: one
                 // invoice shows ONE period even when items carry their own start-date overrides);
-                // fallback billing day, then 1. Period = anchor day of the billed month .. +1 month
-                // -1 day (e.g. day 1 July -> 01/07-31/07; day 23 -> 23/07-22/08).
+                // fallback billing day, then 1. The period is the cycle window that ENDS in the
+                // billed month — the one this month's reading actually measured (user-verified):
+                //   day-1 contract, July run  -> 01/07 - 31/07 (the billed month itself)
+                //   day-25 contract, Aug run  -> 25/07 - 24/08
                 if (r["PeriodByContract"] != DBNull.Value && Convert.ToBoolean(r["PeriodByContract"]))
                 {
                     int anchorDay = r["ContractStart"] != DBNull.Value ? Convert.ToDateTime(r["ContractStart"]).Day
                         : (r["BillingDay"] != DBNull.Value && Convert.ToInt32(r["BillingDay"]) >= 1 ? Convert.ToInt32(r["BillingDay"]) : 1);
-                    int dim16 = DateTime.DaysInMonth(genYear, genMonth);
-                    DateTime ps = new DateTime(genYear, genMonth, anchorDay > dim16 ? dim16 : anchorDay);
-                    ln.PeriodStart = ps;
-                    ln.PeriodEnd = ps.AddMonths(1).AddDays(-1);
+                    if (anchorDay <= 1)
+                    {
+                        ln.PeriodStart = new DateTime(genYear, genMonth, 1);
+                        ln.PeriodEnd = new DateTime(genYear, genMonth, DateTime.DaysInMonth(genYear, genMonth));
+                    }
+                    else
+                    {
+                        int dimB = DateTime.DaysInMonth(genYear, genMonth);
+                        ln.PeriodEnd = new DateTime(genYear, genMonth, (anchorDay - 1) > dimB ? dimB : (anchorDay - 1));
+                        int py = genYear, pm = genMonth - 1;
+                        if (pm < 1) { pm = 12; py--; }
+                        int dimP = DateTime.DaysInMonth(py, pm);
+                        ln.PeriodStart = new DateTime(py, pm, anchorDay > dimP ? dimP : anchorDay);
+                    }
                 }
 
                 MeterInvoiceGenerator.InvoiceJob job;
