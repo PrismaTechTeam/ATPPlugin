@@ -190,6 +190,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v10_BillGroup.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
+            // v3: Demo 28/07 #10 - CN reading-correction linkage (CNDocKey/CNDocNo + filtered index).
+            RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v3_CNCorrection.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent
             // (guarded by sys.indexes) — first install creates them; existing books get any missing.
             RunDDL(dbsetting, "02_CreateIndex_zSCP2_Performance.sql", asm);

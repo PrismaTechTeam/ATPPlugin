@@ -294,6 +294,33 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
             }
 
+            // #10: correction CNs are wiped too — otherwise live CNs point at deleted invoices and
+            // their override rows keep winning the baseline, corrupting the next test run.
+            try
+            {
+                DataTable cnKeys = _dbSetting.GetDataTable(
+                    "SELECT DISTINCT CNDocKey, ISNULL(CNDocNo,'') AS CNDocNo FROM dbo.zSCP_MeterTrans WHERE CNDocKey IS NOT NULL", false);
+                if (cnKeys.Rows.Count > 0)
+                {
+                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
+                        AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
+                            AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
+                    foreach (DataRow r in cnKeys.Rows)
+                    {
+                        try { cnCmd.Delete(Convert.ToInt64(r["CNDocKey"])); deleted++; }
+                        catch (Exception ex)
+                        {
+                            failed++;
+                            if (errs.Length < 600) errs.AppendLine(r["CNDocNo"] + ": " + ex.Message);
+                        }
+                    }
+                }
+                // Belt-and-braces: any override row that survived (CN delete failed) is removed so
+                // the wiped book's baselines are clean for the next run.
+                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP_MeterTrans WHERE CNDocKey IS NOT NULL");
+            }
+            catch { }
+
             ReconcileDeletedInvoices();   // clears stamps + billed readings of the now-deleted docs
             LoadData();
             XtraMessageBox.Show(
@@ -1077,6 +1104,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "FROM dbo.zSCP2_MeterEntry me " +
                     "WHERE me.InvoicedDocKey IS NOT NULL " +
                     "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = me.InvoicedDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
+                // #10: reading overrides whose CN was deleted/cancelled roll back the same way.
+                ServiceContractPhotocopier.Classes.ScpCreditNoteBuilder.ReconcileDeletedCreditNotes(_dbSetting);
             }
             catch { }   // reconciliation is best-effort; the load itself must never be blocked
         }

@@ -206,6 +206,7 @@
     <Compile Include="Meter Reading\Services\LiveMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\MockMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\JsonPasteMeterReadingApiClient.cs" />
+    <Compile Include="Classes\ScpCreditNoteBuilder.cs" />
     <Compile Include="Meter Reading\Services\MeterReadingApiClientFactory.cs" />
     <Compile Include="Service Contract\Operation Forms\zSCP2_ServiceItemLst_Form.cs">
       <SubType>Form</SubType>
@@ -257,6 +258,12 @@
     </Compile>
     <Compile Include="Service Contract\Operation Forms\BillGroupAssign_Form.Designer.cs">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterCN_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterCN_Form.Designer.cs">
+      <DependentUpon>MeterCN_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="General Setup\Master Forms\AppointmentPriorityLst_Form.cs">
@@ -860,6 +867,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v10_ReportTemplates.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v11_PeriodMode.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v3_CNCorrection.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailTemplate.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
@@ -1065,6 +1073,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\BillGroupAssign_Form.resx">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterCN_Form.resx">
+      <DependentUpon>MeterCN_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_ChangeOwnership_Form.resx">
       <DependentUpon>zSCP2_ChangeOwnership_Form.cs</DependentUpon>

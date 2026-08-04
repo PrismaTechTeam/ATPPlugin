@@ -13,6 +13,8 @@ namespace ServiceContractPhotocopier.Classes
         public const string SOURCE_INVOICE = "INVOICE";
         public const string SOURCE_INVOICE_DELETED = "INVOICE-DELETED";
         public const string SOURCE_CLEARED = "CLEARED";
+        public const string SOURCE_CN = "CN";                  // #10 correction issued (usage/charge negative)
+        public const string SOURCE_CN_DELETED = "CN-DELETED";  // #10 correction rolled back (CN deleted/cancelled)
 
         public static void Append(SqlConnection conn, SqlTransaction tx, long itemMeterKey,
             int periodYear, int periodMonth, decimal reading, DateTime? readingDate, string source, string docNo)

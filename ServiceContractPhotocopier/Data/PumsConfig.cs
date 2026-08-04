@@ -104,6 +104,10 @@ namespace ServiceContractPhotocopier.Data
         /// format doesn't exist in dbo.DocNoFormat.</summary>
         public const string KEY_METER_INVOICE_DOCNO_FORMAT = "METER_INVOICE_DOCNO_FORMAT";
         public const string DEFAULT_METER_INVOICE_DOCNO_FORMAT = "MR FORMAT";
+        /// <summary>DocNo format (DocType 'CN') for meter-correction credit notes (#10).
+        /// Empty (default) = the book's default CN numbering.</summary>
+        public const string KEY_METER_CN_DOCNO_FORMAT = "METER_CN_DOCNO_FORMAT";
+        public const string DEFAULT_METER_CN_DOCNO_FORMAT = "";
 
         // Invoice line description source (user decision 2026-07-27): DEFAULT = the AutoCount stock
         // item's description (matches the customer's master invoices, e.g. "BK COPY + PRINT A4&A3");

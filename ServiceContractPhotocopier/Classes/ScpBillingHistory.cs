@@ -16,11 +16,17 @@ namespace ServiceContractPhotocopier.Classes
         {
             try
             {
+                // #10: overrides whose CN was deleted/cancelled in AutoCount roll back before display.
+                ScpCreditNoteBuilder.ReconcileDeletedCreditNotes(db);
                 return db.GetDataTable(
                     "SELECT iv.DocKey, iv.DocNo AS [Invoice No], iv.DocDate AS [Invoice Date], " +
                     "RIGHT('0' + CAST(me.PeriodMonth AS VARCHAR(2)), 2) + '/' + CAST(me.PeriodYear AS VARCHAR(4)) AS [Period], " +
                     "ISNULL(iv.NetTotal, 0) AS [Amount], " +
                     "CASE WHEN ISNULL(iv.Cancelled,'F') = 'T' THEN 'YES' ELSE '' END AS [Cancelled], " +
+                    // #10: live CNs correcting this invoice (matched by OurInvoiceNo), comma-joined.
+                    "ISNULL(STUFF((SELECT ', ' + c.DocNo FROM dbo.CN c " +
+                    "  WHERE c.OurInvoiceNo = iv.DocNo AND ISNULL(c.Cancelled,'F') <> 'T' " +
+                    "  ORDER BY c.DocDate, c.DocNo FOR XML PATH('')), 1, 2, ''), '') AS [CN], " +
                     "COUNT(DISTINCT me.ItemMeterKey) AS [Meters], " +
                     "MAX(ISNULL(me.StrategyCode, '')) AS [Strategy], " +
                     "MAX(me.InvoicedAt) AS [Generated At], " +
@@ -48,6 +54,7 @@ namespace ServiceContractPhotocopier.Classes
             dt.Columns.Add("Period", typeof(string));
             dt.Columns.Add("Amount", typeof(decimal));
             dt.Columns.Add("Cancelled", typeof(string));
+            dt.Columns.Add("CN", typeof(string));
             dt.Columns.Add("Meters", typeof(int));
             dt.Columns.Add("Strategy", typeof(string));
             dt.Columns.Add("Generated At", typeof(DateTime));
@@ -94,8 +101,53 @@ namespace ServiceContractPhotocopier.Classes
                 warn.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
                 warn.Appearance.Options.UseTextOptions = true;
                 page.Controls.Add(warn);
-                grid.BringToFront();   // Fill grid lays out under the Top banner
             }
+
+            // #10: "Correct with CN..." — corrects the focused invoice's readings with a REAL Sales
+            // Credit Note (MeterCN_Form); the corrected reading overrides the machine's last reading.
+            DevExpress.XtraEditors.PanelControl bar = new DevExpress.XtraEditors.PanelControl();
+            bar.Dock = System.Windows.Forms.DockStyle.Top;
+            bar.Height = 34;
+            DevExpress.XtraEditors.SimpleButton btnCN = new DevExpress.XtraEditors.SimpleButton();
+            btnCN.Text = "Correct with CN...";
+            btnCN.Location = new System.Drawing.Point(6, 5);
+            btnCN.Size = new System.Drawing.Size(130, 24);
+            btnCN.ToolTip = "Wrong reading billed and the invoice already sent? Key the CORRECT reading — a real " +
+                "Sales Credit Note is created and future billing starts from the corrected reading.";
+            bar.Controls.Add(btnCN);
+            page.Controls.Add(bar);
+            grid.BringToFront();   // Fill grid lays out under ALL the Top controls
+
+            btnCN.Click += delegate
+            {
+                try
+                {
+                    int rh = view.FocusedRowHandle;
+                    if (rh < 0) { DevExpress.XtraEditors.XtraMessageBox.Show("Select an invoice row first.", "Correct with CN"); return; }
+                    DataRow row = view.GetDataRow(rh);
+                    if (row == null || row["DocKey"] == DBNull.Value) return;
+                    if (Convert.ToString(row["Cancelled"]) == "YES")
+                    {
+                        DevExpress.XtraEditors.XtraMessageBox.Show("This invoice is cancelled - nothing to correct.", "Correct with CN");
+                        return;
+                    }
+                    long docKey = Convert.ToInt64(row["DocKey"]);
+                    string docNo = Convert.ToString(row["Invoice No"]);
+                    using (MeterCN_Form f = new MeterCN_Form(db, docKey, docNo))
+                    {
+                        if (f.ShowDialog(page.FindForm()) == System.Windows.Forms.DialogResult.OK)
+                            // Rebuild AFTER this click handler unwinds — BuildTab clears the very
+                            // controls whose event we are currently executing.
+                            page.BeginInvoke(new System.Windows.Forms.MethodInvoker(delegate
+                            { BuildTab(page, db, filterCol, key); }));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DevExpress.XtraEditors.XtraMessageBox.Show("Correct with CN failed:\r\n" + ex.Message, "Error");
+                }
+            };
+
             view.PopulateColumns();
             if (view.Columns["DocKey"] != null) view.Columns["DocKey"].Visible = false;
             if (view.Columns["Amount"] != null)
