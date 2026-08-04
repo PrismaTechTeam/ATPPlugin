@@ -132,6 +132,7 @@
         private DevExpress.XtraEditors.SimpleButton BtnItemDelete;
         private DevExpress.XtraEditors.SimpleButton BtnItemQuickAdd;
         private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
+        private DevExpress.XtraEditors.SimpleButton BtnItemBillGroup;
         private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
         private DevExpress.XtraEditors.LabelControl LblItemsHint;
         private DevExpress.XtraTab.XtraTabPage PageSpareParts;
@@ -301,6 +302,7 @@
             this.LblItemsHint = new DevExpress.XtraEditors.LabelControl();
             this.BtnItemDelete = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemBillGroup = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemQuickAdd = new DevExpress.XtraEditors.SimpleButton();
             this.PageSpareParts = new DevExpress.XtraTab.XtraTabPage();
@@ -1674,6 +1676,7 @@
             this.PnlItemBar.Controls.Add(this.BtnItemDelete);
             this.PnlItemBar.Controls.Add(this.BtnItemAttach);
             this.PnlItemBar.Controls.Add(this.BtnItemDetach);
+            this.PnlItemBar.Controls.Add(this.BtnItemBillGroup);
             this.PnlItemBar.Controls.Add(this.BtnItemQuickAdd);
             this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.PnlItemBar.Location = new System.Drawing.Point(0, 0);
@@ -1711,7 +1714,7 @@
             this.BtnItemAttach.Click += new System.EventHandler(this.BtnItemAttach_Click);
             // 
             // BtnItemDetach
-            // 
+            //
             this.BtnItemDetach.ImageOptions.ImageUri.Uri = "Remove;Size16x16";
             this.BtnItemDetach.Location = new System.Drawing.Point(504, 5);
             this.BtnItemDetach.Name = "BtnItemDetach";
@@ -1719,6 +1722,18 @@
             this.BtnItemDetach.TabIndex = 4;
             this.BtnItemDetach.Text = "Detach from Contract";
             this.BtnItemDetach.Click += new System.EventHandler(this.BtnItemDetach_Click);
+            //
+            // BtnItemBillGroup
+            //
+            this.BtnItemBillGroup.ImageOptions.ImageUri.Uri = "BOInvoice;Size16x16";
+            this.BtnItemBillGroup.Location = new System.Drawing.Point(690, 5);
+            this.BtnItemBillGroup.Name = "BtnItemBillGroup";
+            this.BtnItemBillGroup.Size = new System.Drawing.Size(120, 24);
+            this.BtnItemBillGroup.TabIndex = 6;
+            this.BtnItemBillGroup.Text = "Bill Group...";
+            this.BtnItemBillGroup.ToolTip = "Split this contract into multiple invoices: tick machines and give them a group n" +
+    "ame - each group is billed as ONE invoice at Generate.";
+            this.BtnItemBillGroup.Click += new System.EventHandler(this.BtnItemBillGroup_Click);
             // 
             // BtnItemQuickAdd
             // 

@@ -1208,6 +1208,27 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // "-" Remove selected service item from the contract (detach — the item survives as
         // contract-less; existing items get ContractKey=NULL on save, new ones are just dropped).
         // Detach: the item leaves THIS contract but survives contract-less (meters + history intact).
+        // #6: friendly bulk assign — tick machines, give them a group name, one invoice per group.
+        private void BtnItemBillGroup_Click(object sender, EventArgs e)
+        {
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            bool any = false;
+            foreach (ItemEditData d in _items) if (!d.IsGroupItem) { any = true; break; }
+            if (!any)
+            {
+                XtraMessageBox.Show("Add machines to the contract first (Quick Add Row / Attach).",
+                    "Bill Group", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (BillGroupAssign_Form f = new BillGroupAssign_Form(_items))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+            }
+            RebuildItemsView();
+            if (!_loading) _dirty = true;
+        }
+
         private void BtnItemDetach_Click(object sender, EventArgs e)
         {
             int rh = GridViewItems.FocusedRowHandle;
@@ -2326,6 +2347,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colBillGrp.Width = 80;
             colBillGrp.OptionsColumn.AllowEdit = true;
             colBillGrp.ColumnEdit = _inlineBillGroupRepo;
+            colBillGrp.ToolTip = "Machines with the same group name are billed together as ONE invoice at Generate. " +
+                "Empty = normal billing. Use the \"Bill Group...\" button above for bulk assign.";
 
             SetItemColEditable("ItemCode", null);          // editor supplied at edit time (lookup)
             // Machine Serial: bind the designer column DIRECTLY (a hidden duplicate FieldName once
