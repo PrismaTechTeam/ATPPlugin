@@ -321,22 +321,35 @@ namespace ServiceContractPhotocopier.Classes
                 // breakdown is already on the charge row's description).
                 if (!ln.IsCommittedMin)
                 {
-                // #16: contract-period mode swaps the DISPLAYED dates (Previous = period start,
-                // Current = period end); readings themselves are always the real meter values.
-                DateTime curDate = ln.PeriodEnd ?? (ln.AuditDate ?? readingDate);
+                // #16: contract-period mode prints the period as ONE range line — user-specified
+                // format "(start - end)" — and the reading rows drop their dates (the customer must
+                // never see cross-month reading dates). Normal mode is unchanged.
+                bool periodMode = ln.PeriodStart.HasValue && ln.PeriodEnd.HasValue;
+                if (periodMode)
+                {
+                    AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dPer = doc.AddDetail();
+                    dPer.Description = "Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
+                                       " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")";
+                    dPer.FurtherDescription = block;
+                    dPer.AccNo = null;
+                }
+                DateTime curDate = ln.AuditDate ?? readingDate;
                 string curDateStr = curDate.ToString("dd/MM/yyyy");
-                DateTime? lastDate = ln.PeriodStart ?? ln.LastDate;
-                string lastDateStr = lastDate.HasValue ? lastDate.Value.ToString("dd/MM/yyyy") : "";
+                string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "";
 
                 // Text rows carry NO account (master: acccode empty on description-only rows) — AddDetail
                 // pre-fills the default sales account, so it is explicitly cleared here.
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dCur = doc.AddDetail();
-                dCur.Description = "Current Meter Reading (" + curDateStr + ") : " + Num(ln.Current);
+                dCur.Description = periodMode
+                    ? "Current Meter Reading : " + Num(ln.Current)
+                    : "Current Meter Reading (" + curDateStr + ") : " + Num(ln.Current);
                 dCur.FurtherDescription = block;
                 dCur.AccNo = null;
 
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dPrev = doc.AddDetail();
-                dPrev.Description = "Previous Meter Reading (" + lastDateStr + ") : " + Num(ln.Last);
+                dPrev.Description = periodMode
+                    ? "Previous Meter Reading : " + Num(ln.Last)
+                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(ln.Last);
                 dPrev.FurtherDescription = block;
                 dPrev.AccNo = null;
 
