@@ -67,8 +67,8 @@ namespace ServiceContractPhotocopier
             this.LblHint.Size = new System.Drawing.Size(740, 30);
             this.LblHint.TabIndex = 0;
             this.LblHint.Text = "Machines with the SAME group name are billed together on ONE invoice at Generate;" +
-    " each group gets its own invoice. Machines with no group bill the normal way. Tick machines, type" +
-    " a group name, press Assign.";
+    " machines with no group bill the normal way. Tick machines, type a group name, press Assign -" +
+    " then OK, and SAVE the contract to keep the grouping.";
             //
             // GridMachines
             //

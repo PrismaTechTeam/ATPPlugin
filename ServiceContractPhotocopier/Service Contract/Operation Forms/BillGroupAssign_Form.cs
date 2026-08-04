@@ -16,6 +16,7 @@ namespace ServiceContractPhotocopier
     {
         private readonly List<ItemEditData> _items;
         private DataTable _dt;
+        private bool _changed;   // Assign/Clear happened — guard against closing without OK
 
         public BillGroupAssign_Form()
         {
@@ -53,8 +54,39 @@ namespace ServiceContractPhotocopier
             }
             this.GridMachines.DataSource = _dt;
             this.GridViewMachines.DoubleClick += new EventHandler(GridViewMachines_DoubleClick);
+            this.FormClosing += new FormClosingEventHandler(OnFormClosingGuard);
             RefreshGroupCombo();
             RefreshSummary();
+        }
+
+        // Assign changes only the list INSIDE this dialog; OK applies them to the contract. A user
+        // who presses Assign and then closes the window would silently lose the grouping — catch it.
+        private void OnFormClosingGuard(object sender, FormClosingEventArgs e)
+        {
+            if (this.DialogResult == DialogResult.OK || !_changed) return;
+            DialogResult r = XtraMessageBox.Show(
+                "You assigned groups but did not press OK.\r\n\r\n" +
+                "Apply the Bill Group changes to the contract?\r\n" +
+                "(Remember to SAVE the contract afterwards.)",
+                "Bill Group", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (r == DialogResult.Cancel) { e.Cancel = true; return; }
+            if (r == DialogResult.Yes)
+            {
+                ApplyToItems();
+                this.DialogResult = DialogResult.OK;
+            }
+        }
+
+        /// <summary>Writes the dialog's grouping back into the contract editor's item list.</summary>
+        private void ApplyToItems()
+        {
+            this.GridViewMachines.PostEditor();
+            foreach (DataRow r in _dt.Rows)
+            {
+                int idx = Convert.ToInt32(r["Idx"]);
+                if (idx >= 0 && idx < _items.Count)
+                    _items[idx].BillGroupCode = Convert.ToString(r["BillGroup"]).Trim();
+            }
         }
 
         private void RefreshGroupCombo()
@@ -144,6 +176,7 @@ namespace ServiceContractPhotocopier
                 return;
             }
             foreach (DataRow r in rows) { r["BillGroup"] = code; r["Sel"] = false; }
+            _changed = true;
             this.CmbGroup.Text = "";
             RefreshGroupCombo();
             RefreshSummary();
@@ -159,19 +192,27 @@ namespace ServiceContractPhotocopier
                 return;
             }
             foreach (DataRow r in rows) { r["BillGroup"] = ""; r["Sel"] = false; }
+            _changed = true;
             RefreshGroupCombo();
             RefreshSummary();
         }
 
         private void BtnOK_Click(object sender, EventArgs e)
         {
-            this.GridViewMachines.PostEditor();
-            foreach (DataRow r in _dt.Rows)
+            // The other half of the trap: ticked machines + a typed group name, but Assign was never
+            // pressed. OK almost certainly means "assign them" — do it rather than silently ignore.
+            string pending = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(this.CmbGroup.Text);
+            if (pending.Length > 0)
             {
-                int idx = Convert.ToInt32(r["Idx"]);
-                if (idx >= 0 && idx < _items.Count)
-                    _items[idx].BillGroupCode = Convert.ToString(r["BillGroup"]).Trim();
+                List<DataRow> rows = TickedRows();
+                if (rows.Count > 0)
+                {
+                    foreach (DataRow r in rows) { r["BillGroup"] = pending; r["Sel"] = false; }
+                    _changed = true;
+                    RefreshSummary();
+                }
             }
+            ApplyToItems();
             this.DialogResult = DialogResult.OK;
             this.Close();
         }
