@@ -63,17 +63,30 @@ namespace ServiceContractPhotocopier
             this.GridViewSerial.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewSerial_CellValueChanged);
             this.GridViewSerial.DoubleClick += new EventHandler(GridViewSerial_DoubleClick);
             this.GridViewSerial.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewSerial_RowStyle);
+            this.GridViewSerial.ShowingEditor += new System.ComponentModel.CancelEventHandler(GridViewSerial_ShowingEditor);
+        }
+
+        private bool IsTransferredRow(int rowHandle)
+        {
+            if (rowHandle < 0) return false;
+            string usedBy = Convert.ToString(this.GridViewSerial.GetRowCellValue(rowHandle, "TransferredTo"));
+            return usedBy != null && usedBy.Trim().Length > 0;
         }
 
         private void GridViewSerial_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
-            if (e.RowHandle < 0) return;
-            string usedBy = Convert.ToString(this.GridViewSerial.GetRowCellValue(e.RowHandle, "TransferredTo"));
-            if (usedBy != null && usedBy.Trim().Length > 0)
+            if (IsTransferredRow(e.RowHandle))
             {
                 e.Appearance.BackColor = System.Drawing.Color.LightYellow;
                 e.Appearance.ForeColor = System.Drawing.Color.FromArgb(90, 80, 0);
             }
+        }
+
+        // #13: a transferred serial cannot be ticked at all — the checkbox editor never opens.
+        private void GridViewSerial_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (this.GridViewSerial.FocusedColumn == null || this.GridViewSerial.FocusedColumn.FieldName != "Sel") return;
+            if (IsTransferredRow(this.GridViewSerial.FocusedRowHandle)) e.Cancel = true;
         }
 
         private void LoadData()
@@ -111,10 +124,6 @@ namespace ServiceContractPhotocopier
             _dt = _db.GetDataTable(sql, false);
             _dt.Columns["Sel"].ReadOnly = false;
             this.GridSerial.DataSource = _dt;
-            DevExpress.XtraGrid.Columns.GridColumn ctr = this.GridViewSerial.Columns["TransferredTo"];
-            if (ctr != null) { ctr.Caption = "In Use By (CSSI)"; ctr.OptionsColumn.AllowEdit = false; }
-            DevExpress.XtraGrid.Columns.GridColumn ctc = this.GridViewSerial.Columns["TransferredContract"];
-            if (ctc != null) { ctc.Caption = "In Use By (Contract)"; ctc.OptionsColumn.AllowEdit = false; }
         }
 
         private void Filter_Changed(object sender, EventArgs e)
@@ -141,6 +150,16 @@ namespace ServiceContractPhotocopier
         {
             int rh = this.GridViewSerial.FocusedRowHandle;
             if (rh < 0) return;
+            if (IsTransferredRow(rh))
+            {
+                string cssi = Convert.ToString(this.GridViewSerial.GetRowCellValue(rh, "TransferredTo")).Trim();
+                string cn = Convert.ToString(this.GridViewSerial.GetRowCellValue(rh, "TransferredContract")).Trim();
+                XtraMessageBox.Show("This serial is already transferred to " +
+                    (cn.Length > 0 ? cn + " / " : "") + cssi +
+                    ".\r\nInactivate that service item first if the machine really came back.",
+                    "Generate From Serial No", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             bool cur = false;
             object v = this.GridViewSerial.GetRowCellValue(rh, "Sel");
             if (v != null && v != DBNull.Value) cur = Convert.ToBoolean(v);

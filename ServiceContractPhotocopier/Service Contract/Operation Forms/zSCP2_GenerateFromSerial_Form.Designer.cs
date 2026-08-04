@@ -44,6 +44,8 @@ namespace ServiceContractPhotocopier
             this.ColItemCode = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColItemDesc = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColSerialNo = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColTransferredContract = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColTransferredTo = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoSel = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             this.PanelBottom = new DevExpress.XtraEditors.PanelControl();
             this.LblCount = new DevExpress.XtraEditors.LabelControl();
@@ -133,7 +135,9 @@ namespace ServiceContractPhotocopier
             this.ColDebtorName,
             this.ColItemCode,
             this.ColItemDesc,
-            this.ColSerialNo});
+            this.ColSerialNo,
+            this.ColTransferredContract,
+            this.ColTransferredTo});
             this.GridViewSerial.GridControl = this.GridSerial;
             this.GridViewSerial.Name = "GridViewSerial";
             this.GridViewSerial.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
@@ -235,6 +239,26 @@ namespace ServiceContractPhotocopier
             this.ColSerialNo.VisibleIndex = 8;
             this.ColSerialNo.Width = 120;
             //
+            // ColTransferredContract
+            //
+            this.ColTransferredContract.Caption = "In Use By (Contract)";
+            this.ColTransferredContract.FieldName = "TransferredContract";
+            this.ColTransferredContract.Name = "ColTransferredContract";
+            this.ColTransferredContract.OptionsColumn.AllowEdit = false;
+            this.ColTransferredContract.Visible = true;
+            this.ColTransferredContract.VisibleIndex = 9;
+            this.ColTransferredContract.Width = 120;
+            //
+            // ColTransferredTo
+            //
+            this.ColTransferredTo.Caption = "In Use By (CSSI)";
+            this.ColTransferredTo.FieldName = "TransferredTo";
+            this.ColTransferredTo.Name = "ColTransferredTo";
+            this.ColTransferredTo.OptionsColumn.AllowEdit = false;
+            this.ColTransferredTo.Visible = true;
+            this.ColTransferredTo.VisibleIndex = 10;
+            this.ColTransferredTo.Width = 120;
+            //
             // RepoSel
             //
             this.RepoSel.AutoHeight = false;
@@ -323,6 +347,8 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraGrid.Columns.GridColumn ColItemCode;
         private DevExpress.XtraGrid.Columns.GridColumn ColItemDesc;
         private DevExpress.XtraGrid.Columns.GridColumn ColSerialNo;
+        private DevExpress.XtraGrid.Columns.GridColumn ColTransferredContract;
+        private DevExpress.XtraGrid.Columns.GridColumn ColTransferredTo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit RepoSel;
         private DevExpress.XtraEditors.PanelControl PanelBottom;
         private DevExpress.XtraEditors.LabelControl LblCount;
