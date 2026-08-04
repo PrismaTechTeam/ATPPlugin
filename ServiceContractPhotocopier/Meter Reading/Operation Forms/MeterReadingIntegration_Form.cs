@@ -973,6 +973,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "ISNULL(i.IsGroupItem,'N') AS IsGroupItem, ISNULL(i.MachineMode,'') AS MachineMode, " +
+                    "ISNULL(i.BillGroupCode,'') AS BillGroupCode, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
                     // goes on the charge row); ACItemCode is an explicit override when set.
@@ -1098,6 +1099,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["IsWaive"] = S(r["IsRentalWaive"]) == "Y";
                     g["IsGroupItem"] = S(r["IsGroupItem"]) == "Y";
                     g["MachineMode"] = S(r["MachineMode"]);
+                    g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
                     g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
                     g["WaiveFirstNMonths"] = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     g["WaiveTargetAmount"] = Dec(r["WaiveTargetAmount"]);
@@ -1238,6 +1240,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("IsWaive", typeof(bool));           // Rental-Waive contra meter (engine decides firing)
             dt.Columns.Add("IsGroupItem", typeof(bool));       // the contract's GROUP machine (fleet-total deals)
             dt.Columns.Add("MachineMode", typeof(string));     // DEFINED online/offline ('' = use fetch status)
+            dt.Columns.Add("BillGroupCode", typeof(string));   // #6 bill-group split ('' = none)
             dt.Columns.Add("WaiveFirstNMonths", typeof(int));
             dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
             dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
@@ -1292,12 +1295,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // the column chooser (right-click the header -> Column Chooser).
             // MachineStatus is VISIBLE now (green=ONLINE / orange=OFFLINE cell tint) — it replaced the
             // old Online/Offline tabs.
-            foreach (string h in new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict" })
+            foreach (string h in new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode" })
             {
                 GridColumn hc = GridViewMeter.Columns[h];
                 if (hc == null) continue;
                 hc.Visible = false;
                 hc.OptionsColumn.ShowInCustomizationForm = true;
+            }
+            GridColumn cBillGrp = GridViewMeter.Columns["BillGroupCode"];
+            if (cBillGrp != null)
+            {
+                cBillGrp.Caption = "Bill Group"; cBillGrp.Width = 70;
+                // Display-only here: the code is maintained on the CONTRACT (item grid); an edit in
+                // this grid would regroup one run without persisting — silently reverting next load.
+                cBillGrp.OptionsColumn.AllowEdit = false;
+                cBillGrp.OptionsColumn.ReadOnly = true;
             }
 
             SetCol("SelCssi", "Select", 55, true);
@@ -2464,6 +2476,58 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
             }
 
+            // Demo 28/07 #6: bill-group completeness — a Bill Group is billed as ONE invoice, so a
+            // partially ticked / partially keyed group must not slip out as a partial invoice. Runs
+            // regardless of the debtor-grouping toggle (the group setting overrides that toggle).
+            if (!_scopedGenerate)
+            {
+                HashSet<string> tickedGroups = new HashSet<string>();
+                foreach (DataRow dr in visibleRows)
+                {
+                    if (dr["Sel"] == DBNull.Value || !Convert.ToBoolean(dr["Sel"])) continue;
+                    if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;
+                    string bg = S(dr["BillGroupCode"]).Trim();
+                    if (bg.Length == 0) continue;
+                    if (dr["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(dr["IsGroupItem"])) continue;
+                    tickedGroups.Add(D64(dr["ContractKey"]) + "_" + bg);
+                }
+                if (tickedGroups.Count > 0)
+                {
+                    List<string> problems = new List<string>();
+                    foreach (DataRow dr in visibleRows)
+                    {
+                        string bg = S(dr["BillGroupCode"]).Trim();
+                        if (bg.Length == 0) continue;
+                        if (dr["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(dr["IsGroupItem"])) continue;
+                        if (!tickedGroups.Contains(D64(dr["ContractKey"]) + "_" + bg)) continue;
+                        if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
+                        bool gTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
+                        bool gExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
+                        if (!gTicked && gExpired) continue;   // an unticked EXPIRED machine is a choice, not a miss
+                        bool gFlat = dr["IsFlat"] != DBNull.Value && Convert.ToBoolean(dr["IsFlat"]);
+                        string why = null;
+                        if (!gTicked) why = "not ticked";
+                        else if (!gFlat && Dec(dr["CurrentReading"]) <= 0m) why = "no reading keyed";
+                        if (why == null) continue;
+                        if (problems.Count < 25)
+                            problems.Add(S(dr["DebtorCode"]) + "   " + S(dr["ServiceItemNo"]) + "   [" + bg + "]   " +
+                                         S(dr["MeterType"]) + "   -   " + why);
+                        else { problems.Add("..."); break; }
+                    }
+                    if (problems.Count > 0)
+                    {
+                        XtraMessageBox.Show(
+                            "Bill Group invoicing: these meters belong to a ticked machine's Bill Group " +
+                            "but would MISS the group's invoice:\r\n\r\n" +
+                            string.Join("\r\n", problems.ToArray()) + "\r\n\r\n" +
+                            "Key the readings / tick the machines first — a Bill Group is billed as ONE invoice.\r\n" +
+                            "Nothing was generated.",
+                            "Incomplete bill group", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+            }
+
             foreach (DataRow r in visibleRows)
             {
                 if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
@@ -2480,14 +2544,23 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 long contractKey = D64(r["ContractKey"]);
                 long itemKey = D64(r["ItemKey"]);
                 string groupKey = mode == "S" ? ("C" + contractKey + "_I" + itemKey) : ("D" + S(r["DebtorCode"]));
+                // Demo 28/07 #6: an explicit Bill Group on the machine OVERRIDES the run-level toggle
+                // (same philosophy as the per-contract template #9c): same contract + same code = ONE
+                // invoice. Bill Group splits INVOICES only — never the deal scope (strategy passes stay
+                // contract-wide). Fleet group machines (IsGroupItem) never carry a code -> legacy key,
+                // so their fleet-total MIN/WAIVE lines stay on the invoice that has the prints.
+                string billGroup = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
+                bool rowIsGroupItem = r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"]);
+                if (rowIsGroupItem) billGroup = "";
                 // Contract flag "Rental separate invoice": flat (rental/min) lines split into their own
                 // job — one extra invoice per group ("Rental- [ref]") instead of riding the meter invoice.
                 bool rentSep = r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]);
                 // Only actual RENTAL meters split onto the rental-separate invoice — a committed-minimum
                 // ("MIN ...") meter is a print charge and must stay on the meter invoice with BK/CL.
                 bool rentalJob = rowFlat && rentSep && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));
-                if (rentalJob) groupKey += "_R";
                 string refNo = mode == "S" ? S(r["ServiceItemNo"]) : S(r["ContractNo"]);
+                if (billGroup.Length > 0) { groupKey = "C" + contractKey + "_G" + billGroup; refNo = S(r["ContractNo"]); }
+                if (rentalJob) groupKey += "_R";   // rental suffix composes: 2 groups x rentSep = 4 jobs
 
                 MeterBillLine ln = new MeterBillLine();
                 ln.ItemKey = itemKey;
@@ -2584,8 +2657,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     }
                     // Legacy header text (verified against the customer's V8 meter invoices);
                     // rental-only invoices get their own header so the two are distinguishable.
-                    job.Description = (rentalJob ? "Rental- [" : "Billing- [") + refNo + "]";
-                    job.Label = refNo + (rentalJob ? " (rental)" : "");
+                    job.Description = (rentalJob ? "Rental- [" : "Billing- [") + refNo
+                        + (billGroup.Length > 0 ? " / " + billGroup : "") + "]";
+                    job.Label = refNo + (billGroup.Length > 0 ? " / " + billGroup : "") + (rentalJob ? " (rental)" : "");
                     job.Lines = new List<MeterBillLine>();
                     jobs[groupKey] = job;
                 }
@@ -3035,13 +3109,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // COMMIT-MIN RULES act LIVE too (no meter push): for every covered item WITHOUT a MIN
                 // meter, a top-up line is synthesized when its scoped print charges fall short.
                 if (strats == null || strats.Count == 0) return;
+                // ONE top-up per item per RUN (not per job): with rental-separate ("_R") or Bill Group
+                // splits an item's lines can span jobs — the old per-job dedup synthesized a SECOND
+                // full-amount top-up on the rental-only job (printed=0 there). The top-up prints once,
+                // on the job carrying the item's usage charges, and counts printed across ALL jobs.
+                Dictionary<long, MeterInvoiceGenerator.InvoiceJob> hostByItem =
+                    new Dictionary<long, MeterInvoiceGenerator.InvoiceJob>();
+                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
+                    foreach (MeterBillLine l in jb.Lines)
+                        if (l.ItemKey > 0 && !l.IsFlat && !hostByItem.ContainsKey(l.ItemKey))
+                            hostByItem[l.ItemKey] = jb;
+                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
+                    foreach (MeterBillLine l in jb.Lines)
+                        if (l.ItemKey > 0 && !hostByItem.ContainsKey(l.ItemKey))
+                            hostByItem[l.ItemKey] = jb;   // flat-only item: any job carrying it
+                HashSet<long> doneItems = new HashSet<long>();
                 foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
                 {
                     List<MeterBillLine> extra = new List<MeterBillLine>();
-                    HashSet<long> doneItems = new HashSet<long>();
                     foreach (MeterBillLine l in jb.Lines)
                     {
-                        if (l.ItemKey <= 0 || l.ContractKey <= 0 || !doneItems.Add(l.ItemKey)) continue;
+                        if (l.ItemKey <= 0 || l.ContractKey <= 0) continue;
+                        if (hostByItem[l.ItemKey] != jb) continue;   // synthesize only on the host job
+                        if (!doneItems.Add(l.ItemKey)) continue;
                         if (minMeterItems.Contains(l.ItemKey)) continue;   // MIN meter already rules this item
                         StrategyDef sd;
                         if (!strats.TryGetValue(l.ContractKey, out sd)) continue;
@@ -3049,16 +3139,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         {
                             if (rule.CommitAmount <= 0m) continue;
                             if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(l.ItemKey)) continue;
-                            // Scoped print charges of THIS item (BK / CL / both per the rule).
-                            decimal printed = 0m;
-                            foreach (MeterBillLine u in jb.Lines)
-                            {
-                                if (u.ItemKey != l.ItemKey || u.IsFlat) continue;
-                                if (u.ColorLabel != "Black" && u.ColorLabel != "Colour") continue;
-                                if (rule.Scope == "BK" && u.ColorLabel != "Black") continue;
-                                if (rule.Scope == "CL" && u.ColorLabel != "Colour") continue;
-                                printed += u.Charge;
-                            }
+                            // Scoped print charges of THIS item across ALL jobs (run-wide buckets built
+                            // above — identical filter to the old inner loop, but complete after splits).
+                            decimal pBk, pCl;
+                            printBkByItem.TryGetValue(l.ItemKey, out pBk);
+                            printClByItem.TryGetValue(l.ItemKey, out pCl);
+                            decimal printed = rule.Scope == "BK" ? pBk : (rule.Scope == "CL" ? pCl : pBk + pCl);
                             decimal topUp = rule.CommitAmount - printed;
                             if (topUp < 0m) topUp = 0m;
                             MeterBillLine minLn = new MeterBillLine();

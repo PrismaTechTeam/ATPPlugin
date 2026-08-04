@@ -29,6 +29,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public bool IsGroupItem;          // the contract's invisible GROUP "machine" (fleet-total deals)
         public string MachineMode = "";   // DEFINED ONLINE/OFFLINE ('' = undefined) — drives the
                                           // advanced invoice number format (fetch status = fallback)
+        public string BillGroupCode = ""; // #6 Bill Group split billing ('' = not grouped)
 
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";

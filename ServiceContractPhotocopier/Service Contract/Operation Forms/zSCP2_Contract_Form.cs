@@ -1079,6 +1079,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? (DateTime?)null : Convert.ToDateTime(r["ServiceExpiryDate"]);
             d.IsGroupItem = r.Table.Columns.Contains("IsGroupItem") && AsStr(r["IsGroupItem"]) == "Y";
             d.MachineMode = r.Table.Columns.Contains("MachineMode") ? AsStr(r["MachineMode"]).Trim().ToUpperInvariant() : "";
+            d.BillGroupCode = r.Table.Columns.Contains("BillGroupCode")
+                ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(AsStr(r["BillGroupCode"])) : "";
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
@@ -1245,6 +1247,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("Description", typeof(string));
             _dtItemsView.Columns.Add("Inactive", typeof(string));
             _dtItemsView.Columns.Add("MachineMode", typeof(string));
+            _dtItemsView.Columns.Add("BillGroupCode", typeof(string));
             _dtItemsView.Columns.Add("Expiry", typeof(DateTime));
 
             int n = 0;
@@ -1271,6 +1274,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["Description"] = d.Description ?? "";
                 r["Inactive"] = d.Inactive ? "Y" : "N";
                 r["MachineMode"] = d.MachineMode ?? "";
+                r["BillGroupCode"] = d.BillGroupCode ?? "";
                 r["Expiry"] = (object)d.ServiceExpiryDate ?? DBNull.Value;
                 _dtItemsView.Rows.Add(r);
             }
@@ -2192,6 +2196,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineItemCodeRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineGradeRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineSerialRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineBillGroupRepo;
         private DataTable _inlineItemLookup;
         private DataTable _inlineGradeLookup;
         private DataTable _inlineSerialLookup;
@@ -2309,6 +2314,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colMode.OptionsColumn.AllowEdit = true;
             colMode.ColumnEdit = repoMode;
 
+            // #6 Bill Group split billing: machines sharing a code get ONE invoice at generate
+            // ('' = not grouped, legacy path). Typeable combo; dropdown filled at edit time with
+            // the codes already used in THIS contract (GridViewItems_ShownEditorBillGroup).
+            _inlineBillGroupRepo = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            _inlineBillGroupRepo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
+            GridItems.RepositoryItems.Add(_inlineBillGroupRepo);
+            GridViewItems.ShownEditor += new EventHandler(GridViewItems_ShownEditorBillGroup);
+            DevExpress.XtraGrid.Columns.GridColumn colBillGrp = GridViewItems.Columns.AddVisible("BillGroupCode");
+            colBillGrp.Caption = "Bill Group";
+            colBillGrp.Width = 80;
+            colBillGrp.OptionsColumn.AllowEdit = true;
+            colBillGrp.ColumnEdit = _inlineBillGroupRepo;
+
             SetItemColEditable("ItemCode", null);          // editor supplied at edit time (lookup)
             // Machine Serial: bind the designer column DIRECTLY (a hidden duplicate FieldName once
             // made ColumnByFieldName pick the wrong column and the visible cell stayed locked).
@@ -2359,6 +2377,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (_inlineSerialLookup == null || code.Length == 0) return;
             foreach (DataRow r in _inlineSerialLookup.Select("ItemCode='" + code.Replace("'", "''") + "'"))
                 ed.Properties.Items.Add(r["SerialNumber"].ToString());
+        }
+
+        // #6: when the Bill Group cell opens, list the codes already used in THIS contract so the
+        // user can pick an existing group or type a new one.
+        private void GridViewItems_ShownEditorBillGroup(object sender, EventArgs e)
+        {
+            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "BillGroupCode") return;
+            DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;
+            if (ed == null) return;
+            ed.Properties.Items.Clear();
+            SortedSet<string> codes = new SortedSet<string>();
+            foreach (ItemEditData d in _items)
+                if (!d.IsGroupItem && !string.IsNullOrEmpty(d.BillGroupCode)) codes.Add(d.BillGroupCode);
+            foreach (string c in codes) ed.Properties.Items.Add(c);
         }
 
         private void SetItemColEditable(string field, DevExpress.XtraEditors.Repository.RepositoryItem edit)
@@ -2443,6 +2475,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 {
                     string mm = s.Trim().ToUpperInvariant();
                     d.MachineMode = mm == "ONLINE" || mm == "OFFLINE" ? mm : "";
+                    break;
+                }
+                case "BillGroupCode":
+                {
+                    // #6: normalized (uppercase, A-Z/0-9/dash, 20 cap) so 'a ' and 'A' are one group
+                    // and the code can never forge the job-key separator ('_').
+                    string bg = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(s);
+                    d.BillGroupCode = bg;
+                    if (bg != s)
+                    {
+                        // Echo the normalized value into the cell in place — a full RebuildItemsView
+                        // would reset the focused row mid-typing. Re-entrant CellValueChanged then
+                        // sees bg == s and stops.
+                        int rh = e.RowHandle;
+                        BeginInvoke(new MethodInvoker(delegate
+                        { GridViewItems.SetRowCellValue(rh, "BillGroupCode", bg); }));
+                    }
                     break;
                 }
                 case "BillingDay":
@@ -4150,8 +4199,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "INSERT INTO [dbo].[zSCP2_Item] " +
                 "(ContractKey, ServiceItemNo, SerialNumber, Description, BillingDayOverride, " +
-                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, LastModified) " +
-                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,GETDATE()); " +
+                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LastModified) " +
+                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -4167,6 +4216,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@inact", d.Inactive ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@isgrp", d.IsGroupItem ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
+                cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -4180,7 +4230,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // stale direct-owner would mis-resolve the COALESCE if the contract's debtor were blank.
                 "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', ServiceItemNo=@no, SerialNumber=@serial, " +
                 "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
-                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, LastModified=GETDATE() WHERE ItemKey=@ik";
+                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 cmd.Parameters.AddWithValue("@ck", _contractKey);
@@ -4195,6 +4245,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@inact", d.Inactive ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@isgrp", d.IsGroupItem ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
+                cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@ik", d.ItemKey);
                 cmd.ExecuteNonQuery();
             }

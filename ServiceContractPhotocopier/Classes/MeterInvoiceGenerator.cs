@@ -164,6 +164,10 @@ namespace ServiceContractPhotocopier.Classes
                     {
                         foreach (MeterBillLine ln in lines)
                         {
+                            // Synthesized lines (COMMIT-MIN rule top-up) have no physical meter — no
+                            // ItemMeterKey to stamp; inserting key 0 would violate the FK and roll the
+                            // whole invoice back. The charge is on the invoice; nothing to roll forward.
+                            if (ln.ItemMeterKey <= 0) continue;
                             SqlCommand cmd = new SqlCommand(
                                 "INSERT INTO [dbo].[zSCP_MeterTrans] (ServiceItemMeterTypeKey, ServiceItemKey, MeterTypeCode, " +
                                 "MeterTransDate, MeterTransReading, SalesInvoiceDocKey, Remark) " +
@@ -261,6 +265,8 @@ namespace ServiceContractPhotocopier.Classes
                     {
                         foreach (MeterBillLine ln in lines)
                         {
+                            // Synthesized lines (COMMIT-MIN rule top-up) have no physical meter to stamp.
+                            if (ln.ItemMeterKey <= 0) continue;
                             // A flat/rental meter with FOC months remaining is FREE this period (RM0) —
                             // the free-months counter is decremented so rent resumes when it hits 0.
                             bool freeRental = ln.IsFlat && ln.Foc > 0m;

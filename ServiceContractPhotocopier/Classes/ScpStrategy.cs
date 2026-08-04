@@ -215,6 +215,21 @@ namespace ServiceContractPhotocopier.Classes
             return c.StartsWith("RA") || c.Contains(".RA") || c.Contains("-RA") || c.Contains(" RA") || c.Contains("RENTAL");
         }
 
+        /// <summary>Normalizes a Bill Group code (#6 split billing): trim, uppercase, A-Z/0-9/dash
+        /// only, max 20 chars. The charset matters — the code is embedded in the invoice job key
+        /// ("C{ck}_G{code}[_R]") where underscore is the separator, so a code like "1_R" must never
+        /// be able to forge the rental-separate suffix.</summary>
+        public static string SanitizeBillGroup(string raw)
+        {
+            if (raw == null) return "";
+            string s = raw.Trim().ToUpperInvariant();
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+                if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') sb.Append(c);
+            string r = sb.ToString();
+            return r.Length > 20 ? r.Substring(0, 20) : r;
+        }
+
         /// <summary>True if a (flat) meter type code is a COMMITTED-MINIMUM meter — the master convention
         /// puts the minimum committed print charge on its own meter, e.g. "MIN 1764-12MTH" (rate 0, minimum
         /// = the committed amount). Such a meter tops the item's print charges up to the committed minimum,

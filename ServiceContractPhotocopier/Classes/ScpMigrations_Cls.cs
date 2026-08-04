@@ -184,6 +184,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_GroupItem.sql", asm);
             // Per-machine ONLINE/OFFLINE definition -> advanced invoice number format.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v9_MachineMode.sql", asm);
+            // Demo 28/07 #6: Bill Group split billing (same contract + same code = one invoice).
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v10_BillGroup.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // Performance indexes for the contract/service-item lists + meter load. Idempotent
