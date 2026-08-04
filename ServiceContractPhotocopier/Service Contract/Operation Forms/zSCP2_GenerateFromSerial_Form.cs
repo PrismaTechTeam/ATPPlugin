@@ -62,6 +62,18 @@ namespace ServiceContractPhotocopier
             Filter_Changed(this, EventArgs.Empty);   // apply the default available-only filter
             this.GridViewSerial.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewSerial_CellValueChanged);
             this.GridViewSerial.DoubleClick += new EventHandler(GridViewSerial_DoubleClick);
+            this.GridViewSerial.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewSerial_RowStyle);
+        }
+
+        private void GridViewSerial_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
+        {
+            if (e.RowHandle < 0) return;
+            string usedBy = Convert.ToString(this.GridViewSerial.GetRowCellValue(e.RowHandle, "TransferredTo"));
+            if (usedBy != null && usedBy.Trim().Length > 0)
+            {
+                e.Appearance.BackColor = System.Drawing.Color.LightYellow;
+                e.Appearance.ForeColor = System.Drawing.Color.FromArgb(90, 80, 0);
+            }
         }
 
         private void LoadData()
@@ -71,7 +83,8 @@ namespace ServiceContractPhotocopier
             string sql =
                 "SELECT CAST(0 AS bit) AS Sel, st.DocType, h.DocNo, h.DocDate, h.DebtorCode, " +
                 "ISNULL(d.CompanyName,'') AS DebtorName, st.ItemCode, ISNULL(i.Description,'') AS ItemDesc, " +
-                "st.FromSerialNo AS SerialNo, ISNULL(zi.ServiceItemNo,'') AS TransferredTo " +
+                "st.FromSerialNo AS SerialNo, ISNULL(zi.ServiceItemNo,'') AS TransferredTo, " +
+                "ISNULL(zi.ContractNo,'') AS TransferredContract " +
                 "FROM dbo.SerialNoTrans st " +
                 "JOIN (SELECT 'DO' AS DocType, DocKey, DocNo, DocDate, DebtorCode, Cancelled FROM dbo.DO " +
                 "      UNION ALL " +
@@ -81,7 +94,8 @@ namespace ServiceContractPhotocopier
                 "LEFT JOIN dbo.Item i ON i.ItemCode = st.ItemCode " +
                 // Demo 28/07 #13: a serial already on a SAVED, ACTIVE service item is "transferred".
                 // Inactivating that CSSI (machine came back) frees the serial again automatically.
-                "OUTER APPLY (SELECT TOP 1 ServiceItemNo FROM dbo.zSCP2_Item z " +
+                "OUTER APPLY (SELECT TOP 1 z.ServiceItemNo, c.ContractNo FROM dbo.zSCP2_Item z " +
+                "  LEFT JOIN dbo.zSCP2_Contract c ON c.ContractKey = z.ContractKey " +
                 "  WHERE z.SerialNumber = st.FromSerialNo AND ISNULL(z.Inactive,'N') = 'N' " +
                 "  ORDER BY z.ItemKey DESC) zi " +
                 "WHERE st.DocType IN ('DO','IV') " +
@@ -99,6 +113,8 @@ namespace ServiceContractPhotocopier
             this.GridSerial.DataSource = _dt;
             DevExpress.XtraGrid.Columns.GridColumn ctr = this.GridViewSerial.Columns["TransferredTo"];
             if (ctr != null) { ctr.Caption = "In Use By (CSSI)"; ctr.OptionsColumn.AllowEdit = false; }
+            DevExpress.XtraGrid.Columns.GridColumn ctc = this.GridViewSerial.Columns["TransferredContract"];
+            if (ctc != null) { ctc.Caption = "In Use By (Contract)"; ctc.OptionsColumn.AllowEdit = false; }
         }
 
         private void Filter_Changed(object sender, EventArgs e)
