@@ -110,7 +110,11 @@ namespace ServiceContractPhotocopier.Classes
                 totalCredit += l.CreditAmount;
             }
 
-            doc.Save();
+            // Our own save must not trip the real-time CN watcher (it would see a correction CN
+            // whose log rows are not written yet and cry mismatch).
+            ScpCnWatcher.Suppress = true;
+            try { doc.Save(); }
+            finally { ScpCnWatcher.Suppress = false; }
             string cnDocNo = doc.DocNo;
             cnDocKey = Convert.ToInt64(doc.DocKey);
 
@@ -166,6 +170,7 @@ namespace ServiceContractPhotocopier.Classes
                 // stamp failure (the operator must always learn whether the CN still exists).
                 bool rolledBack = false;
                 Exception delEx = null;
+                ScpCnWatcher.Suppress = true;
                 try
                 {
                     AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
@@ -173,6 +178,7 @@ namespace ServiceContractPhotocopier.Classes
                     rolledBack = true;
                 }
                 catch (Exception ex2) { delEx = ex2; }
+                finally { ScpCnWatcher.Suppress = false; }
                 throw new InvalidOperationException(rolledBack
                     ? "Reading override failed - the credit note was rolled back. " + stampEx.Message
                     : "Reading override failed AND the credit note " + cnDocNo +

@@ -306,15 +306,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
                         AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
                             AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
-                    foreach (DataRow r in cnKeys.Rows)
+                    ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = true;   // wipe = ours, no per-CN alerts
+                    try
                     {
-                        try { cnCmd.Delete(Convert.ToInt64(r["CNDocKey"])); deleted++; }
-                        catch (Exception ex)
+                        foreach (DataRow r in cnKeys.Rows)
                         {
-                            failed++;
-                            if (errs.Length < 600) errs.AppendLine(r["CNDocNo"] + ": " + ex.Message);
+                            try { cnCmd.Delete(Convert.ToInt64(r["CNDocKey"])); deleted++; }
+                            catch (Exception ex)
+                            {
+                                failed++;
+                                if (errs.Length < 600) errs.AppendLine(r["CNDocNo"] + ": " + ex.Message);
+                            }
                         }
                     }
+                    finally { ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = false; }
                 }
                 // Belt-and-braces: any override row that survived (CN delete failed) is removed so
                 // the wiped book's baselines are clean for the next run.

@@ -48,12 +48,17 @@ namespace ServiceContractPhotocopier.Classes
             // no-ops unless enabled in Meter Reading > Setting).
             try { ScpAutoFetchService.Start(e.DBSetting); } catch { }
 
+            // #10: real-time watch on Sales CN saves/deletes — a correction CN edited/deleted
+            // anywhere in AutoCount alerts (and rolls back) IMMEDIATELY, not on next screen load.
+            try { ScpCnWatcher.Start(e.DBSetting); } catch { }
+
             return true;
         }
 
         public override void AfterUnload(BaseArgs e)
         {
             // AccessRightMap entries are process-wide; nothing to undo here.
+            try { ScpCnWatcher.Stop(); } catch { }
         }
 
         private static void RegisterAccessRights()

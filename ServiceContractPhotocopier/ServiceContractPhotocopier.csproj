@@ -207,6 +207,7 @@
     <Compile Include="Meter Reading\Services\MockMeterReadingApiClient.cs" />
     <Compile Include="Meter Reading\Services\JsonPasteMeterReadingApiClient.cs" />
     <Compile Include="Classes\ScpCreditNoteBuilder.cs" />
+    <Compile Include="Classes\ScpCnWatcher.cs" />
     <Compile Include="Meter Reading\Services\MeterReadingApiClientFactory.cs" />
     <Compile Include="Service Contract\Operation Forms\zSCP2_ServiceItemLst_Form.cs">
       <SubType>Form</SubType>
