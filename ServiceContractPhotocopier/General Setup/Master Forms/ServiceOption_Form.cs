@@ -71,6 +71,22 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_DESC_FROM_ITEM);
 
+                // #10: numbering format for meter-correction CREDIT NOTES (DocType 'CN');
+                // empty = the book's default CN numbering.
+                try
+                {
+                    CmbCnFormat.Properties.Items.Clear();
+                    CmbCnFormat.Properties.Items.Add("");
+                    System.Data.DataTable cnf = _dbSetting.GetDataTable(
+                        "SELECT Name FROM dbo.DocNoFormat WHERE DocType='CN' ORDER BY Name", false);
+                    foreach (System.Data.DataRow r in cnf.Rows)
+                        CmbCnFormat.Properties.Items.Add(r["Name"] as string ?? "");
+                }
+                catch { }
+                CmbCnFormat.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_CN_DOCNO_FORMAT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_CN_DOCNO_FORMAT);
+
                 // Advanced No. Format by machine status: same IV format list as the default combo.
                 try
                 {
@@ -309,6 +325,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_INVOICE_DOCNO_FORMAT,
                     (CmbMeterInvFormat.Text ?? "").Trim());
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_CN_DOCNO_FORMAT,
+                    (CmbCnFormat.Text ?? "").Trim());
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
                     ChkInvDescFromItem.Checked);

@@ -17,7 +17,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private GroupControl GrpGeneral, GrpDefaults, GrpApi;
         private CheckEdit ChkShowStockPicture, ChkUseAlternativeItem, ChkNegativeStockChecking;
         private CheckEdit ChkAutoGenSalesInvoice, ChkAutoCloseNote, ChkAllowEditClosed;
-        private LabelControl LblDefaultStatus, LblDefaultPriority, LblMeterInvFormat;
+        private LabelControl LblDefaultStatus, LblDefaultPriority, LblMeterInvFormat, LblCnFormat;
+        private ComboBoxEdit CmbCnFormat;
         private TextEdit TxtDefaultServiceStatus, TxtDefaultAppointmentPriority;
         private ComboBoxEdit CmbMeterInvFormat;
         private CheckEdit ChkInvDescFromItem;
@@ -60,6 +61,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblDefaultStatus = new LabelControl(); this.TxtDefaultServiceStatus = new TextEdit();
             this.LblDefaultPriority = new LabelControl(); this.TxtDefaultAppointmentPriority = new TextEdit();
             this.LblMeterInvFormat = new LabelControl(); this.CmbMeterInvFormat = new ComboBoxEdit();
+            this.LblCnFormat = new LabelControl(); this.CmbCnFormat = new ComboBoxEdit();
             this.ChkInvDescFromItem = new CheckEdit();
             this.ChkInvFmtAdvanced = new CheckEdit();
             this.LblInvFmtOnline = new LabelControl(); this.CmbInvFmtOnline = new ComboBoxEdit();
@@ -118,7 +120,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.GrpDefaults.Text = "Defaults";
             this.GrpDefaults.Location = new Point(14, 154);
-            this.GrpDefaults.Size = new Size(660, 190);
+            this.GrpDefaults.Size = new Size(660, 220);
             Lbl(this.LblDefaultStatus, "Default Service Status", 16, 32);
             this.TxtDefaultServiceStatus.Location = new Point(190, 30); this.TxtDefaultServiceStatus.Width = 220;
             Lbl(this.LblDefaultPriority, "Default Appt. Priority", 16, 62);
@@ -133,6 +135,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.CmbInvFmtOnline.Location = new Point(292, 151); this.CmbInvFmtOnline.Width = 150;
             Lbl(this.LblInvFmtOffline, "Offline", 452, 154);
             this.CmbInvFmtOffline.Location = new Point(492, 151); this.CmbInvFmtOffline.Width = 150;
+            Lbl(this.LblCnFormat, "Meter CN No. Format", 16, 182);
+            this.CmbCnFormat.Location = new Point(190, 180); this.CmbCnFormat.Width = 220;
             this.GrpDefaults.Controls.Add(this.LblDefaultStatus); this.GrpDefaults.Controls.Add(this.TxtDefaultServiceStatus);
             this.GrpDefaults.Controls.Add(this.LblDefaultPriority); this.GrpDefaults.Controls.Add(this.TxtDefaultAppointmentPriority);
             this.GrpDefaults.Controls.Add(this.LblMeterInvFormat); this.GrpDefaults.Controls.Add(this.CmbMeterInvFormat);
@@ -140,6 +144,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GrpDefaults.Controls.Add(this.ChkInvFmtAdvanced);
             this.GrpDefaults.Controls.Add(this.LblInvFmtOnline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOnline);
             this.GrpDefaults.Controls.Add(this.LblInvFmtOffline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOffline);
+            this.GrpDefaults.Controls.Add(this.LblCnFormat); this.GrpDefaults.Controls.Add(this.CmbCnFormat);
 
             this.PageServiceOption.Controls.Add(this.GrpGeneral);
             this.PageServiceOption.Controls.Add(this.GrpDefaults);
