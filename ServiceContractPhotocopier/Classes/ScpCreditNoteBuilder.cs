@@ -77,10 +77,10 @@ namespace ServiceContractPhotocopier.Classes
 
             doc.DebtorCode = debtorCode;
             doc.DocDate = cnDate;
-            doc.Description = "Meter correction - Invoice " + invoiceDocNo;
+            doc.Description = Trunc("Meter correction - Invoice " + invoiceDocNo, 80);   // CN.Description nvarchar(80)
             doc.RefDocNo = invoiceDocNo;
-            doc.OurInvoiceNo = invoiceDocNo;
-            doc.Reason = reason ?? "";
+            doc.OurInvoiceNo = Trunc(invoiceDocNo, 100);
+            doc.Reason = Trunc(reason ?? "", 80);                                        // CN.Reason nvarchar(80)
             if (doc.DetailCount > 0) doc.ClearDetails();
 
             decimal totalCredit = 0m;
@@ -88,9 +88,12 @@ namespace ServiceContractPhotocopier.Classes
             {
                 AutoCount.Invoicing.Sales.CreditNote.CreditNoteDetail dtl = doc.AddDetail();
                 if (!string.IsNullOrEmpty(l.ACItemCode)) dtl.ItemCode = l.ACItemCode;
-                dtl.Description = (string.IsNullOrEmpty(l.MeterTypeName) ? l.MeterTypeCode : l.MeterTypeName) +
-                    " - CORRECTION reading " + Num(l.BilledReading) + " -> " + Num(l.CorrectReading) +
-                    " (Invoice " + invoiceDocNo + ")";
+                // CNDTL.Description is nvarchar(100): compact wording, meter name truncated to fit;
+                // the invoice no lives on the header (RefDocNo/OurInvoiceNo) and the full arithmetic
+                // in FurtherDescription, so nothing is lost.
+                string corrSuffix = " - CORRECTION " + Num(l.BilledReading) + " -> " + Num(l.CorrectReading);
+                string meterName = string.IsNullOrEmpty(l.MeterTypeName) ? l.MeterTypeCode : l.MeterTypeName;
+                dtl.Description = Trunc(meterName, 100 - corrSuffix.Length) + corrSuffix;
                 dtl.Qty = l.CreditCopies;
                 dtl.UnitPrice = l.AmountOverridden && l.CreditCopies != 0m
                     ? Math.Round(l.CreditAmount / l.CreditCopies, 6) : l.Rate;
@@ -263,5 +266,12 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         private static string Num(decimal v) { return v.ToString("0.######"); }
+
+        private static string Trunc(string s, int max)
+        {
+            if (s == null) return "";
+            if (max < 0) max = 0;
+            return s.Length <= max ? s : s.Substring(0, max);
+        }
     }
 }
