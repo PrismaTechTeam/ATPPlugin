@@ -71,6 +71,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // so billing runs can be repeated. No button on purpose — key combo only.
             this.KeyPreview = true;
             this.KeyDown += new KeyEventHandler(DevShortcut_KeyDown);
+            // #1a: the user's grid layout (sorting/filter/columns) survives closing the module —
+            // silently saved into AutoCount's native dbo.Layout as this user's assigned layout.
+            this.FormClosed += delegate { SaveGridLayoutForCurrentUser(); };
         }
 
         private void DevShortcut_KeyDown(object sender, KeyEventArgs e)
@@ -1373,6 +1376,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
                 GridMeter.DataSource = _dtGrid;
                 ConfigureGrid();
+                WireNativeGridLayout();   // #1a: AutoCount-native layout restore + header menu
                 UpdateTabCounts();
                 ApplyTabFilter();
             }
@@ -1380,6 +1384,67 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        // ── #1a: grid layout persistence via AutoCount's NATIVE CustomizeGridLayout ──
+        // Layouts live in dbo.Layout / dbo.LayoutUsers exactly like AutoCount's own screens:
+        // right-click a column header -> Save Layout / Load Layout / Reset Layout / Layout Manager
+        // (named templates, set-as-default, assign to users). The ctor auto-restores the user's
+        // assigned layout (else the all-user default). On close we ALSO silently save a per-user
+        // layout ("SCP Meter - <user>") and assign it, so the clerk never has to re-set anything.
+
+        private const string GRID_LAYOUT_KEY = "SCP_METER_READING";   // dbo.Layout.FormName
+        private AutoCount.XtraUtils.CustomizeGridLayout _gridLayout;
+
+        private void WireNativeGridLayout()
+        {
+            if (_gridLayout != null) return;
+            try
+            {
+                AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
+                if (us == null) return;
+                // Ctor restores the layout from dbo.Layout (per-user assignment wins over default)
+                // and injects the layout menu into the column-header right-click popup.
+                _gridLayout = new AutoCount.XtraUtils.CustomizeGridLayout(us, GRID_LAYOUT_KEY, GridViewMeter);
+                // Our grid, our rules: every user gets the layout/column/export menu here (the
+                // native SYS_BHV_* rights default to admin-ish groups only).
+                _gridLayout.GetAccessRightSetting +=
+                    new AutoCount.XtraUtils.GetCustomizeGridLayoutAccessRightSettingEventHandler(delegate
+                    {
+                        AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting s =
+                            new AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting();
+                        s.AllowCustomizeGridLayout = true;
+                        s.AllowColumnChooser = true;
+                        s.AllowColumnCaption = true;
+                        s.AllowExportGridContent = true;
+                        s.AllowPrintGridContent = true;
+                        return s;
+                    });
+                ApplyTabColumnLayout();   // per-tab hidden columns win over the restored snapshot
+            }
+            catch { }   // layout plumbing must never break the screen
+        }
+
+        // Silent per-user auto-save on close (#1a "no re-setting"): saved as a NAMED layout owned
+        // by this user and assigned via dbo.LayoutUsers, so the ctor restores it next open. The
+        // native Save Layout / templates / defaults keep working on top.
+        private void SaveGridLayoutForCurrentUser()
+        {
+            try
+            {
+                if (_gridLayout == null || _dbSetting == null) return;
+                string user = "";
+                try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
+                if (user.Length == 0) return;
+                string title = "SCP Meter - " + user;
+                if (title.Length > 60) title = title.Substring(0, 60);
+                if (!_gridLayout.SaveLayout(title, false)) return;   // title owned by another grid — skip
+                string tEsc = title.Replace("'", "''"), uEsc = user.Replace("'", "''");
+                _dbSetting.ExecuteNonQuery(
+                    "IF NOT EXISTS (SELECT 1 FROM dbo.LayoutUsers WHERE Title = N'" + tEsc + "' AND UserID = N'" + uEsc + "') " +
+                    "INSERT INTO dbo.LayoutUsers (Title, UserID) VALUES (N'" + tEsc + "', N'" + uEsc + "')");
+            }
+            catch { }
         }
 
         // Demo 28/07 #1b: per-day billing workload of the selected month. Counts every active,
@@ -1806,6 +1871,24 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void BtnReset_Click(object sender, EventArgs e)
         {
+            // #1a escape hatch: Ctrl+Reset deletes THIS user's auto-saved layout from dbo.Layout —
+            // factory column layout on next open. (Named templates/defaults are managed in the
+            // native Layout Manager: right-click a column header.)
+            if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
+            {
+                try
+                {
+                    string u = (AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? "").Replace("'", "''");
+                    string t = ("SCP Meter - " + u);
+                    if (t.Length > 60) t = t.Substring(0, 60);
+                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.LayoutUsers WHERE Title = N'" + t + "'");
+                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.Layout WHERE Title = N'" + t + "'");
+                    _gridLayout = null;   // stop the FormClosed auto-save from resurrecting it this session
+                    XtraMessageBox.Show("Your saved grid layout was cleared — reopen the module for the factory layout.",
+                        "Reset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+            }
             this.TxtSearch.EditValue = null;
             _suppressFilterEvent = true;
             this.ChkShowAll.Checked = false;   // default: filter by the selected billing Day (not show all)
