@@ -62,6 +62,45 @@ namespace ServiceContractPhotocopier.Classes
             return dt;
         }
 
+        // #10: opens the LATEST correction CN of a comma-joined list in AutoCount's own Credit Note
+        // entry (amend/delete there), then rebuilds the tab so the reconcile + banners reflect it.
+        private static void OpenCorrectionCn(System.Windows.Forms.Control page, DBSetting db,
+            string filterCol, long key, string cnList)
+        {
+            try
+            {
+                string[] parts = cnList.Split(',');
+                string cnNo = parts[parts.Length - 1].Trim();
+                DataTable k = db.GetDataTable(
+                    "SELECT TOP 1 DocKey FROM dbo.CN WHERE DocNo = '" + cnNo.Replace("'", "''") + "' ORDER BY DocKey DESC", false);
+                if (k.Rows.Count == 0)
+                {
+                    DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " not found — it may have been deleted.", "Open CN");
+                    return;
+                }
+                AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
+                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
+                        AutoCount.Authentication.UserSession.CurrentUserSession, db);
+                AutoCount.Invoicing.Sales.CreditNote.CreditNote cnDoc = cnCmd.Edit(Convert.ToInt64(k.Rows[0]["DocKey"]));
+                if (cnDoc == null)
+                {
+                    DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " could not be opened.", "Open CN");
+                    return;
+                }
+                using (AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry f =
+                    new AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry(cnDoc))
+                {
+                    f.ShowDialog(page.FindForm());
+                }
+                page.BeginInvoke(new System.Windows.Forms.MethodInvoker(delegate
+                { BuildTab(page, db, filterCol, key); }));
+            }
+            catch (Exception ex)
+            {
+                DevExpress.XtraEditors.XtraMessageBox.Show("Open CN failed:\r\n" + ex.Message, "Error");
+            }
+        }
+
         /// <summary>Builds the read-only Billing History grid into a tab page (BuildDebtorHistoryTab
         /// pattern). Double-clicking a row opens the invoice in AutoCount's own editor.</summary>
         public static void BuildTab(System.Windows.Forms.Control page, DBSetting db, string filterCol, long key)
@@ -194,51 +233,17 @@ namespace ServiceContractPhotocopier.Classes
 
             btnOpenCN.Click += delegate
             {
-                try
+                int rh = view.FocusedRowHandle;
+                if (rh < 0) return;
+                DataRow row = view.GetDataRow(rh);
+                if (row == null) return;
+                string cnList = row.Table.Columns.Contains("CN") ? Convert.ToString(row["CN"]).Trim() : "";
+                if (cnList.Length == 0)
                 {
-                    int rh = view.FocusedRowHandle;
-                    if (rh < 0) return;
-                    DataRow row = view.GetDataRow(rh);
-                    if (row == null) return;
-                    string cnList = view.Columns["CN"] != null ? Convert.ToString(row["CN"]).Trim() : "";
-                    if (cnList.Length == 0)
-                    {
-                        DevExpress.XtraEditors.XtraMessageBox.Show("This invoice has no correction CN.", "Open CN");
-                        return;
-                    }
-                    // Comma-joined, ordered oldest -> latest; open the LATEST (the one that rules).
-                    string[] parts = cnList.Split(',');
-                    string cnNo = parts[parts.Length - 1].Trim();
-                    DataTable k = db.GetDataTable(
-                        "SELECT TOP 1 DocKey FROM dbo.CN WHERE DocNo = '" + cnNo.Replace("'", "''") + "' ORDER BY DocKey DESC", false);
-                    if (k.Rows.Count == 0)
-                    {
-                        DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " not found — it may have been deleted.", "Open CN");
-                        return;
-                    }
-                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
-                        AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
-                            AutoCount.Authentication.UserSession.CurrentUserSession, db);
-                    AutoCount.Invoicing.Sales.CreditNote.CreditNote cnDoc = cnCmd.Edit(Convert.ToInt64(k.Rows[0]["DocKey"]));
-                    if (cnDoc == null)
-                    {
-                        DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " could not be opened.", "Open CN");
-                        return;
-                    }
-                    using (AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry f =
-                        new AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry(cnDoc))
-                    {
-                        f.ShowDialog(page.FindForm());
-                    }
-                    // Whatever happened in there (amend / delete / cancel) — rebuild so the reconcile
-                    // and the CN/drift banners reflect it.
-                    page.BeginInvoke(new System.Windows.Forms.MethodInvoker(delegate
-                    { BuildTab(page, db, filterCol, key); }));
+                    DevExpress.XtraEditors.XtraMessageBox.Show("This invoice has no correction CN.", "Open CN");
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    DevExpress.XtraEditors.XtraMessageBox.Show("Open CN failed:\r\n" + ex.Message, "Error");
-                }
+                OpenCorrectionCn(page, db, filterCol, key, cnList);
             };
 
             view.PopulateColumns();
@@ -267,7 +272,21 @@ namespace ServiceContractPhotocopier.Classes
                     int rh = view.FocusedRowHandle;
                     if (rh < 0) return;
                     DataRow row = view.GetDataRow(rh);
-                    if (row == null || row["DocKey"] == DBNull.Value) return;
+                    if (row == null) return;
+                    // #10: double-click ON the CN column (and the row has one) opens the correction
+                    // CN; anywhere else on the row opens the invoice as before.
+                    System.Drawing.Point pt = grid.PointToClient(System.Windows.Forms.Control.MousePosition);
+                    DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit = view.CalcHitInfo(pt);
+                    if (hit != null && hit.InRowCell && hit.Column != null && hit.Column.FieldName == "CN")
+                    {
+                        string cnList = row.Table.Columns.Contains("CN") ? Convert.ToString(row["CN"]).Trim() : "";
+                        if (cnList.Length > 0)
+                        {
+                            OpenCorrectionCn(page, db, filterCol, key, cnList);
+                            return;
+                        }
+                    }
+                    if (row["DocKey"] == DBNull.Value) return;
                     long docKey = Convert.ToInt64(row["DocKey"]);
                     AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
                         AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
