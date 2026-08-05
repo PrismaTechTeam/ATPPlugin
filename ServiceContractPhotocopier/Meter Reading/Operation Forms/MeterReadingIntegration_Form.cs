@@ -514,10 +514,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // Demo 28/07 #1b: "Month Overview" — how many machines bill on each day of the
             // selected month and how many are already invoiced (created in code, strict designer).
+            // #1b Month Overview as a HOVER icon (the old wide button broke the filter layout):
+            // hovering shows the per-day machine counts as a tooltip; clicking still opens the
+            // message box for a copyable view.
             _btnMonthOverview = new SimpleButton();
-            _btnMonthOverview.Text = "Month Overview";
-            _btnMonthOverview.Location = new Point(350, 119);
-            _btnMonthOverview.Size = new Size(138, 28);
+            _btnMonthOverview.Text = "";
+            _btnMonthOverview.Location = new Point(242, 88);
+            _btnMonthOverview.Size = new Size(26, 26);
+            _btnMonthOverview.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
+            SetBtnSvgIcon(_btnMonthOverview, "svgimages/xaf/action_aboutinfo.svg");
+            _btnMonthOverview.ImageOptions.ImageToTextIndent = 0;
+            _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
+            _btnMonthOverview.ToolTipTitle = "Month Overview";
+            _btnMonthOverview.ToolTip = "hover to load...";
+            _btnMonthOverview.MouseEnter += new EventHandler(BtnMonthOverview_MouseEnter);
             _btnMonthOverview.Click += new EventHandler(BtnMonthOverview_Click);
             this.GrpFilter.Controls.Add(_btnMonthOverview);
             _btnMonthOverview.BringToFront();
@@ -1375,12 +1385,50 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Demo 28/07 #1b: per-day billing workload of the selected month. Counts every active,
         // unexpired machine by its EFFECTIVE billing day (item override, else contract day) and
         // how many already carry an invoice stamp for the period — "who is left to bill" at a glance.
+        // Hover: compute the overview (cached per billing period for 30s) and hand it to the
+        // button's tooltip — MouseEnter fires before the tooltip's show delay, so it is in time.
+        private string _ovCacheKey;
+        private DateTime _ovCacheAt;
+        private string _ovCacheText = "";
+
+        private void BtnMonthOverview_MouseEnter(object sender, EventArgs e)
+        {
+            if (_dbSetting == null || _btnMonthOverview == null) return;
+            try
+            {
+                string key = SelectedYear() + "-" + SelectedMonth();
+                if (key != _ovCacheKey || (DateTime.Now - _ovCacheAt).TotalSeconds > 30)
+                {
+                    string monthName;
+                    _ovCacheText = BuildMonthOverviewText(out monthName);
+                    _btnMonthOverview.ToolTipTitle = "Month Overview  -  " + monthName;
+                    _ovCacheKey = key;
+                    _ovCacheAt = DateTime.Now;
+                }
+                _btnMonthOverview.ToolTip = _ovCacheText;
+            }
+            catch { }
+        }
+
         private void BtnMonthOverview_Click(object sender, EventArgs e)
         {
             if (_dbSetting == null) return;
             try
             {
-                int year = SelectedYear(), month = SelectedMonth();
+                string monthName;
+                string text = BuildMonthOverviewText(out monthName);
+                XtraMessageBox.Show(text, "Month Overview  -  " + monthName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception exOv)
+            { XtraMessageBox.Show("Overview failed:\r\n" + exOv.Message, "Month Overview"); }
+        }
+
+        private string BuildMonthOverviewText(out string monthName)
+        {
+            int year = SelectedYear(), month = SelectedMonth();
+            monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + " " + year;
+            {
                 string sql =
                     "SELECT COALESCE(i.BillingDayOverride, c.BillingDay) AS EffDay, " +
                     "COUNT(DISTINCT i.ItemKey) AS Machines, COUNT(DISTINCT inv.ItemKey) AS Invoiced " +
@@ -1397,7 +1445,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "GROUP BY COALESCE(i.BillingDayOverride, c.BillingDay) " +
                     "ORDER BY 1 OPTION (MAXDOP 1)";
                 DataTable dt = QueryWithTimeout(sql, 60);
-                string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(month) + " " + year;
                 System.Text.StringBuilder sb = new System.Text.StringBuilder();
                 sb.AppendLine("Billing overview  -  " + monthName);
                 sb.AppendLine("");
@@ -1416,13 +1463,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 sb.AppendLine("");
                 sb.AppendLine("TOTAL   :  " + totM + " machine(s)   -   " + totI + " invoiced, " +
                               (totM - totI) + " to go");
-                XtraMessageBox.Show(sb.ToString(), "Month Overview  -  " + monthName,
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                XtraMessageBox.Show("Overview failed:\r\n" + ex.Message, "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return sb.ToString();
             }
         }
 
