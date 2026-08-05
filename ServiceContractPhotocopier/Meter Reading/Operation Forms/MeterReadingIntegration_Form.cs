@@ -517,21 +517,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpFilter.Controls.Add(_btnMonthOverview);
             _btnMonthOverview.BringToFront();
 
-            // Billing YEAR made explicit (user hit this testing September in August: a month later
-            // than today auto-resolves to LAST year — correct for real arrears billing, invisible
-            // when testing). Defaults to the auto-resolved year and re-defaults on month change;
-            // pick another year manually to test future/other periods.
+            // Billing YEAR made explicit and WYSIWYG: defaults to the current year and NEVER changes
+            // itself (no auto "future month = last year" magic, no reset on month change — the user
+            // rightly hated both). Cross-year runs (January billing December) = pick last year once.
             _cmbYear = new ComboBoxEdit();
             int yNow = DateTime.Today.Year;
             _cmbYear.Properties.Items.AddRange(new object[] { yNow - 2, yNow - 1, yNow, yNow + 1 });
             _cmbYear.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             _cmbYear.Location = new Point(172, 90);
             _cmbYear.Size = new Size(64, 22);
-            _cmbYear.SelectedItem = AutoYearFor(SelectedMonth());
+            _cmbYear.SelectedItem = yNow;
             this.GrpFilter.Controls.Add(_cmbYear);
             _cmbYear.BringToFront();
-            this.CmbMonth.SelectedIndexChanged += delegate
-            { if (_cmbYear != null) _cmbYear.SelectedItem = AutoYearFor(SelectedMonth()); };
 
             // Invoice grouping choice (overrides each contract's stored BillingMode when generating):
             //   ticked  = one invoice per CSSI (service item)
