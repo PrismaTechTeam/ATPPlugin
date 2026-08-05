@@ -115,7 +115,51 @@ namespace ServiceContractPhotocopier.Classes
             btnCN.ToolTip = "Wrong reading billed and the invoice already sent? Key the CORRECT reading — a real " +
                 "Sales Credit Note is created and future billing starts from the corrected reading.";
             bar.Controls.Add(btnCN);
+            DevExpress.XtraEditors.SimpleButton btnOpenCN = new DevExpress.XtraEditors.SimpleButton();
+            btnOpenCN.Text = "Open CN...";
+            btnOpenCN.Location = new System.Drawing.Point(142, 5);
+            btnOpenCN.Size = new System.Drawing.Size(100, 24);
+            btnOpenCN.ToolTip = "Opens the focused invoice's (latest) correction CN in AutoCount's Credit Note " +
+                "module — amend or delete it there; deleting/cancelling rolls the reading override back automatically.";
+            bar.Controls.Add(btnOpenCN);
             page.Controls.Add(bar);
+
+            // #10: drift watch — a CN whose quantities were changed DIRECTLY in AutoCount no longer
+            // matches the reading correction it was issued for. Detected by comparing the CN's
+            // detail qty sum against the correction log; surfaced, never auto-rolled-back.
+            try
+            {
+                DataTable drift = db.GetDataTable(
+                    "SELECT DISTINCT t.CNDocNo FROM dbo.zSCP_MeterTrans t " +
+                    "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = t.ServiceItemMeterTypeKey " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "JOIN (SELECT DocKey, SUM(ISNULL(Qty,0)) AS CnQty FROM dbo.CNDTL GROUP BY DocKey) d " +
+                    "  ON d.DocKey = t.CNDocKey " +
+                    "JOIN (SELECT DocNo, SUM(ISNULL(-[Usage],0)) AS OurQty FROM dbo.zSCP2_MeterReadingLog " +
+                    "  WHERE Source='CN' GROUP BY DocNo) lg ON lg.DocNo = t.CNDocNo " +
+                    "WHERE t.CNDocKey IS NOT NULL AND " + filterCol + " = " + key + " " +
+                    "AND ABS(ISNULL(d.CnQty,0) - ISNULL(lg.OurQty,0)) > 0.01", false);
+                if (drift.Rows.Count > 0)
+                {
+                    System.Collections.Generic.List<string> nos = new System.Collections.Generic.List<string>();
+                    foreach (DataRow r0 in drift.Rows) nos.Add(Convert.ToString(r0["CNDocNo"]));
+                    DevExpress.XtraEditors.LabelControl driftWarn = new DevExpress.XtraEditors.LabelControl();
+                    driftWarn.Text = "   ⚠ CN modified directly in AutoCount: " + string.Join(", ", nos.ToArray()) +
+                                     "  —  its quantity no longer matches the reading correction. Open the CN to review.";
+                    driftWarn.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+                    driftWarn.Dock = System.Windows.Forms.DockStyle.Top;
+                    driftWarn.Height = 26;
+                    driftWarn.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 214, 210);
+                    driftWarn.Appearance.ForeColor = System.Drawing.Color.FromArgb(160, 30, 30);
+                    driftWarn.Appearance.Options.UseBackColor = true;
+                    driftWarn.Appearance.Options.UseForeColor = true;
+                    driftWarn.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+                    driftWarn.Appearance.Options.UseTextOptions = true;
+                    page.Controls.Add(driftWarn);
+                }
+            }
+            catch { }
+
             grid.BringToFront();   // Fill grid lays out under ALL the Top controls
 
             btnCN.Click += delegate
@@ -145,6 +189,55 @@ namespace ServiceContractPhotocopier.Classes
                 catch (Exception ex)
                 {
                     DevExpress.XtraEditors.XtraMessageBox.Show("Correct with CN failed:\r\n" + ex.Message, "Error");
+                }
+            };
+
+            btnOpenCN.Click += delegate
+            {
+                try
+                {
+                    int rh = view.FocusedRowHandle;
+                    if (rh < 0) return;
+                    DataRow row = view.GetDataRow(rh);
+                    if (row == null) return;
+                    string cnList = view.Columns["CN"] != null ? Convert.ToString(row["CN"]).Trim() : "";
+                    if (cnList.Length == 0)
+                    {
+                        DevExpress.XtraEditors.XtraMessageBox.Show("This invoice has no correction CN.", "Open CN");
+                        return;
+                    }
+                    // Comma-joined, ordered oldest -> latest; open the LATEST (the one that rules).
+                    string[] parts = cnList.Split(',');
+                    string cnNo = parts[parts.Length - 1].Trim();
+                    DataTable k = db.GetDataTable(
+                        "SELECT TOP 1 DocKey FROM dbo.CN WHERE DocNo = '" + cnNo.Replace("'", "''") + "' ORDER BY DocKey DESC", false);
+                    if (k.Rows.Count == 0)
+                    {
+                        DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " not found — it may have been deleted.", "Open CN");
+                        return;
+                    }
+                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
+                        AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
+                            AutoCount.Authentication.UserSession.CurrentUserSession, db);
+                    AutoCount.Invoicing.Sales.CreditNote.CreditNote cnDoc = cnCmd.Edit(Convert.ToInt64(k.Rows[0]["DocKey"]));
+                    if (cnDoc == null)
+                    {
+                        DevExpress.XtraEditors.XtraMessageBox.Show("CN " + cnNo + " could not be opened.", "Open CN");
+                        return;
+                    }
+                    using (AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry f =
+                        new AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry(cnDoc))
+                    {
+                        f.ShowDialog(page.FindForm());
+                    }
+                    // Whatever happened in there (amend / delete / cancel) — rebuild so the reconcile
+                    // and the CN/drift banners reflect it.
+                    page.BeginInvoke(new System.Windows.Forms.MethodInvoker(delegate
+                    { BuildTab(page, db, filterCol, key); }));
+                }
+                catch (Exception ex)
+                {
+                    DevExpress.XtraEditors.XtraMessageBox.Show("Open CN failed:\r\n" + ex.Message, "Error");
                 }
             };
 

@@ -288,16 +288,46 @@ namespace ServiceContractPhotocopier
                 string cnNo = ScpCreditNoteBuilder.CreateCorrectionCN(_db, _debtorCode, _invoiceDocKey,
                     _invoiceDocNo, cnDate, this.TxtReason.Text.Trim(), this.ChkKnockOff.Checked,
                     lines, out cnDocKey, out koWarn);
-                XtraMessageBox.Show("Credit Note " + cnNo + " created." +
-                    (koWarn.Length > 0 ? "\r\n\r\n⚠ " + koWarn : ""),
-                    "Correct with CN", MessageBoxButtons.OK,
+                DialogResult open = XtraMessageBox.Show("Credit Note " + cnNo + " created." +
+                    (koWarn.Length > 0 ? "\r\n\r\n⚠ " + koWarn : "") +
+                    "\r\n\r\nOpen it in the Credit Note module now?",
+                    "Correct with CN", MessageBoxButtons.YesNo,
                     koWarn.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                if (open == DialogResult.Yes) OpenCreditNote(cnDocKey);
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }
             catch (Exception ex)
             {
                 XtraMessageBox.Show("Credit note failed:\r\n" + ex.Message, "Correct with CN",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Opens the created CN in AutoCount's own Credit Note entry form (amend/delete there —
+        // the reconcile picks up whatever the user does to it).
+        private void OpenCreditNote(long cnDocKey)
+        {
+            try
+            {
+                AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cmd =
+                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
+                        AutoCount.Authentication.UserSession.CurrentUserSession, _db);
+                AutoCount.Invoicing.Sales.CreditNote.CreditNote doc = cmd.Edit(cnDocKey);
+                if (doc == null)
+                {
+                    XtraMessageBox.Show("Credit note not found.", "Correct with CN");
+                    return;
+                }
+                using (AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry f =
+                    new AutoCount.Invoicing.Sales.CreditNote.FormCreditNoteEntry(doc))
+                {
+                    f.ShowDialog(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Open credit note failed:\r\n" + ex.Message, "Correct with CN",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
