@@ -52,6 +52,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         };
         private SimpleButton _btnSetting;
         private SimpleButton _btnMonthOverview;
+        private ComboBoxEdit _cmbYear;   // explicit billing YEAR (defaults to the auto-resolved one)
         private bool _scopedGenerate;   // detail-dialog "Save & Generate": skip the #3 group guard
         // TEST-ONLY mock fetch (Ctrl+Shift+T reveals the button): a pasted JSON impersonates the
         // meter API so the REAL fetch pipeline can be exercised without the live endpoints.
@@ -516,6 +517,22 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpFilter.Controls.Add(_btnMonthOverview);
             _btnMonthOverview.BringToFront();
 
+            // Billing YEAR made explicit (user hit this testing September in August: a month later
+            // than today auto-resolves to LAST year — correct for real arrears billing, invisible
+            // when testing). Defaults to the auto-resolved year and re-defaults on month change;
+            // pick another year manually to test future/other periods.
+            _cmbYear = new ComboBoxEdit();
+            int yNow = DateTime.Today.Year;
+            _cmbYear.Properties.Items.AddRange(new object[] { yNow - 2, yNow - 1, yNow, yNow + 1 });
+            _cmbYear.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            _cmbYear.Location = new Point(172, 90);
+            _cmbYear.Size = new Size(64, 22);
+            _cmbYear.SelectedItem = AutoYearFor(SelectedMonth());
+            this.GrpFilter.Controls.Add(_cmbYear);
+            _cmbYear.BringToFront();
+            this.CmbMonth.SelectedIndexChanged += delegate
+            { if (_cmbYear != null) _cmbYear.SelectedItem = AutoYearFor(SelectedMonth()); };
+
             // Invoice grouping choice (overrides each contract's stored BillingMode when generating):
             //   ticked  = one invoice per CSSI (service item)
             //   unticked= one invoice per whole contract
@@ -938,9 +955,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Billing YEAR for the selected month: a month LATER than the current one means the previous
         // year (e.g. running December's billing in January 2027 -> 2026-12). Billing never targets a
         // future period, so "December selected in July" is last December, not next.
+        private static int AutoYearFor(int month)
+        {
+            return month > DateTime.Today.Month ? DateTime.Today.Year - 1 : DateTime.Today.Year;
+        }
         private int SelectedYear()
         {
-            return SelectedMonth() > DateTime.Today.Month ? DateTime.Today.Year - 1 : DateTime.Today.Year;
+            // Explicit Year combo wins; the auto rule (future month = last year) is only the default.
+            if (_cmbYear != null && _cmbYear.SelectedItem != null)
+            {
+                int y;
+                if (int.TryParse(_cmbYear.SelectedItem.ToString(), out y) && y > 2000) return y;
+            }
+            return AutoYearFor(SelectedMonth());
         }
 
         // Fill the Day combo with only the billing days actually in use (distinct effective billing
