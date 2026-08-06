@@ -51,6 +51,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             "Almost there - finishing up..."
         };
         private SimpleButton _btnSetting;
+        private SimpleButton _btnViewSetting;    // #2(b): pick which columns the grid shows
+        private ComboBoxEdit _cmbMeterFilter;    // #2(d): All / BK only / CL only / BK + CL
+        private LabelControl _lblLegendMust;     // #2(c): colour legend
+        private LabelControl _lblLegendNo;
         private SimpleButton _btnMonthOverview;
         private ComboBoxEdit _cmbYear;   // explicit billing YEAR (defaults to the auto-resolved one)
         private bool _scopedGenerate;   // detail-dialog "Save & Generate": skip the #3 group guard
@@ -71,6 +75,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // so billing runs can be repeated. No button on purpose — key combo only.
             this.KeyPreview = true;
             this.KeyDown += new KeyEventHandler(DevShortcut_KeyDown);
+            // #2(a): a reading typed and left un-posted must save before the form dies (FormClosing
+            // runs BEFORE the FormClosed layout auto-save below).
+            this.FormClosing += delegate { try { GridViewMeter.CloseEditor(); GridViewMeter.UpdateCurrentRow(); } catch { } };
             // #1a: the user's grid layout (sorting/filter/columns) survives closing the module —
             // silently saved into AutoCount's native dbo.Layout as this user's assigned layout.
             this.FormClosed += delegate { SaveGridLayoutForCurrentUser(); };
@@ -564,6 +571,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _lblGroupingInfo.Location = new Point(510, 68);
             this.PanelFilter.Controls.Add(_lblGroupingInfo);
             _lblGroupingInfo.BringToFront();
+
+            // ── Demo 28/07 #2: working-comfort row under the action buttons ──────────────
+            // Meters filter (d) + Current Reading colour legend (c) + View Setting (b).
+            LabelControl lblMeters = new LabelControl();
+            lblMeters.Text = "Meters:";
+            lblMeters.Appearance.ForeColor = Color.FromArgb(80, 80, 80);
+            lblMeters.Appearance.Options.UseForeColor = true;
+            lblMeters.Location = new Point(510, 100);
+            this.PanelFilter.Controls.Add(lblMeters);
+            lblMeters.BringToFront();
+
+            _cmbMeterFilter = new ComboBoxEdit();
+            _cmbMeterFilter.Properties.Items.AddRange(new object[] { "All", "BK only", "CL only", "BK + CL" });
+            _cmbMeterFilter.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            _cmbMeterFilter.SelectedIndex = 0;
+            _cmbMeterFilter.Location = new Point(562, 96);
+            _cmbMeterFilter.Size = new Size(110, 22);
+            _cmbMeterFilter.ToolTip = "Show only black-and-white (BK) or colour (CL) meter rows.";
+            _cmbMeterFilter.SelectedIndexChanged += new EventHandler(CmbMeterFilter_SelectedIndexChanged);
+            this.PanelFilter.Controls.Add(_cmbMeterFilter);
+            _cmbMeterFilter.BringToFront();
+
+            _lblLegendMust = MakeLegend("  MUST key in  ", Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
+                "Current Reading cells in this colour still need a reading before you can invoice.");
+            _lblLegendMust.Location = new Point(690, 97);
+            this.PanelFilter.Controls.Add(_lblLegendMust);
+            _lblLegendMust.BringToFront();
+
+            _lblLegendNo = MakeLegend("  no key-in needed  ", Color.FromArgb(235, 235, 235), Color.DimGray, false,
+                "Rental / waive / commitment rows, frozen snapshots and already-invoiced rows — nothing to key in.");
+            _lblLegendNo.Location = new Point(800, 97);
+            this.PanelFilter.Controls.Add(_lblLegendNo);
+            _lblLegendNo.BringToFront();
+
+            _btnViewSetting = new SimpleButton();
+            _btnViewSetting.Text = "View Setting";
+            _btnViewSetting.Location = new Point(958, 94);
+            _btnViewSetting.Size = new Size(120, 28);
+            _btnViewSetting.ToolTip = "Choose which columns this grid shows.";
+            _btnViewSetting.Click += new EventHandler(BtnViewSetting_Click);
+            this.PanelFilter.Controls.Add(_btnViewSetting);
+            _btnViewSetting.BringToFront();
+
             RefreshGroupingInfo();
             BuildDayButtonStrip();
 
@@ -736,6 +786,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void ApplyTabFilter()
         {
             if (_tabView == null) return;
+            // Demo #2(a): post any half-typed Current Reading BEFORE the DataView swap below —
+            // posting fires CellValueChanged → Recalc + SaveInlineReading while the row is still
+            // bound. Covers tab switches, the 0-usage toggle and the meter filter in one spot.
+            try { GridViewMeter.CloseEditor(); GridViewMeter.UpdateCurrentRow(); } catch { }
             string f = "";
             // "Need Manual Key-In" membership is a SNAPSHOT (NeedManual flag, recomputed only at
             // load/fetch): keying a reading keeps the row on this tab so the operator can review what
@@ -758,6 +812,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0 OR [InvoicedDocNo] <> '' OR [IsFlat] = True)";
                 f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
             }
+            // Demo #2(d): "Meters" filter — the operator working a BK-only (or CL-only) run does not
+            // want the other meter's rows in the way. Rental/waive/commit rows are NOT meters, so any
+            // non-"All" choice drops them too.
+            string role = MeterRoleFilter();
+            if (role.Length > 0) f = string.IsNullOrEmpty(f) ? role : "(" + f + ") AND " + role;
             // Each tab is its OWN datasource (DataView.RowFilter over the master table) — NOT the
             // grid's removable filter panel. The user can no longer X the system filter away and end
             // up selecting/generating from the wrong row set; the grid filter row stays purely theirs.
@@ -794,6 +853,59 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
+
+        // A colour swatch label for the Current Reading legend — same colours the cell style paints.
+        private LabelControl MakeLegend(string text, Color back, Color fore, bool bold, string tip)
+        {
+            LabelControl l = new LabelControl();
+            l.Text = text;
+            l.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            l.Size = new Size(text.Length * 7, 20);
+            l.Appearance.Font = new Font("Segoe UI", 8F, bold ? FontStyle.Bold : FontStyle.Regular);
+            l.Appearance.Options.UseFont = true;
+            l.Appearance.BackColor = back;
+            l.Appearance.Options.UseBackColor = true;
+            l.Appearance.ForeColor = fore;
+            l.Appearance.Options.UseForeColor = true;
+            l.Appearance.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Center;
+            l.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            l.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.Simple;
+            l.ToolTip = tip;
+            return l;
+        }
+
+        // RowFilter clause for the Meters combo (empty = All meters, no clause).
+        private string MeterRoleFilter()
+        {
+            if (_cmbMeterFilter == null) return "";
+            int i = _cmbMeterFilter.SelectedIndex;
+            if (i == 1) return "[Role] = 'BK'";
+            if (i == 2) return "[Role] = 'CL'";
+            if (i == 3) return "([Role] = 'BK' OR [Role] = 'CL')";
+            return "";
+        }
+
+        private void CmbMeterFilter_SelectedIndexChanged(object sender, EventArgs e) { ApplyTabFilter(); }
+
+        // #2(b): let the user choose which columns the grid shows. The column chooser can do this
+        // too, but only if you know to right-click the header — this is the discoverable door, and
+        // it only lists the columns that are actually the user's to decide (the tab-owned key-in
+        // columns and the system drivers stay out of reach).
+        private void BtnViewSetting_Click(object sender, EventArgs e)
+        {
+            System.Collections.Generic.List<GridColumn> cols = new System.Collections.Generic.List<GridColumn>();
+            foreach (string fn in _viewSettingCols)
+            {
+                GridColumn c = GridViewMeter.Columns[fn];
+                if (c != null) cols.Add(c);
+            }
+            if (cols.Count == 0) return;
+            using (MeterViewSetting_Form f = new MeterViewSetting_Form(cols))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                f.ApplySelection();
+            }
+        }
 
         // Snapshot the "Need Manual Key-In" membership per MACHINE: a machine needs key-in when NONE
         // of its meters has a reading from anywhere (no key-in, no API value). Called only at load
@@ -1607,8 +1719,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             return dt;
         }
 
+        // Columns the user may never see (data drivers / plumbing) — never offered in View Setting.
+        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" };
+
+        // Hidden by DEFAULT but user-selectable (column chooser / View Setting).
+        private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role" };
+
+        // Everything View Setting lets the user toggle. Excludes the columns ApplyTabColumnLayout
+        // owns (it re-forces their Visible on every tab switch, so a user choice there would not
+        // stick), the Customer group column and the system drivers above.
+        private static readonly string[] _viewSettingCols = new string[] { "ContractNo", "ServiceItemNo", "SerialNo", "Mode", "BillingDay", "MeterType", "MeterTypeName", "LastReadDate", "LastFetchDate", "LastReading", "LastInvNo", "LastInvDate", "UseMin", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Role" };
+
+        // ConfigureGrid is pure column/view SHAPING (captions, widths, default visibility, appearance,
+        // summaries) — the DataTable schema is identical on every load, so re-running it only undoes
+        // the user's own layout: it would wipe the restored native layout and any View Setting choice
+        // on every Refresh/Fetch. Shape once, then leave the grid alone.
+        private bool _gridShaped;
+
         private void ConfigureGrid()
         {
+            if (_gridShaped) return;
+            _gridShaped = true;
             GridViewMeter.OptionsBehavior.Editable = true;
             // Open the in-place editor on MOUSE DOWN: without this, the first click on a (merged)
             // Select cell only focuses it and the checkbox never toggles on a single click.
@@ -1625,8 +1756,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
-            foreach (string h in new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Role", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" })
-                if (GridViewMeter.Columns[h] != null) GridViewMeter.Columns[h].Visible = false;
+            foreach (string h in _systemHiddenCols)
+                if (GridViewMeter.Columns[h] != null)
+                {
+                    GridViewMeter.Columns[h].Visible = false;
+                    GridViewMeter.Columns[h].OptionsColumn.ShowInCustomizationForm = false;
+                }
             // Locked rows: the Current Reading cell refuses to open its editor (snapshot is frozen).
             GridViewMeter.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
             GridViewMeter.ShowingEditor += new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
@@ -1640,7 +1775,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // the column chooser (right-click the header -> Column Chooser).
             // MachineStatus is VISIBLE now (green=ONLINE / orange=OFFLINE cell tint) — it replaced the
             // old Online/Offline tabs.
-            foreach (string h in new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode" })
+            foreach (string h in _optionalCols)
             {
                 GridColumn hc = GridViewMeter.Columns[h];
                 if (hc == null) continue;
@@ -1678,6 +1813,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("SerialNo", "Serial", 110, false);
             SetCol("MachineStatus", "Machine Status", 95, false);
             SetCol("Customer", "Customer", 220, false);
+            SetCol("Role", "Role", 55, false);          // BK / CL / RENTAL / WAIVE / COMMIT / NA
             SetCol("Mode", "Mode", 70, false);
             SetCol("BillingDay", "Billing Day", 80, false);
             SetCol("MeterType", "Meter Type", 130, false);
@@ -1798,6 +1934,31 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void GridViewMeter_LastInvCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
             if (e.Column == null) return;
+            // Current Reading traffic light (#2c): the operator must be able to tell "I have to key
+            // this in" from "this row is not mine to fill" at a glance.
+            //   GREY  = no key-in needed (rental / waive / commit / NA row, locked snapshot, or the
+            //           period is already invoiced) — the editor also refuses to open (IsInlineEditable)
+            //   AMBER bold = MUST key in, still empty
+            //   pale amber (column default) = keyed in already
+            if (e.Column.FieldName == "CurrentReading")
+            {
+                DataRow rc = GridViewMeter.GetDataRow(e.RowHandle);
+                if (rc == null) return;
+                if (!IsInlineEditable(rc))
+                {
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(235, 235, 235);
+                    e.Appearance.ForeColor = System.Drawing.Color.DimGray;
+                    return;
+                }
+                decimal curv = rc["CurrentReading"] == DBNull.Value ? 0m : Convert.ToDecimal(rc["CurrentReading"]);
+                if (curv <= 0m)
+                {
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 213, 79);
+                    e.Appearance.ForeColor = System.Drawing.Color.FromArgb(102, 60, 0);
+                    e.Appearance.FontStyleDelta = System.Drawing.FontStyle.Bold;
+                }
+                return;   // filled-in rows keep the column's own pale amber
+            }
             if (e.Column.FieldName == "LastAuditDate")
             {
                 object av = GridViewMeter.GetRowCellValue(e.RowHandle, "LastAuditDate");
@@ -2443,14 +2604,82 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ServiceContractPhotocopier.Classes.ScpMeterReadingLog.SOURCE_CLEARED, "");
         }
 
-        // Block editing the Current Reading unless manual mode is on (and never on an API-sourced row —
-        // those are changed only through the contract detail / override form).
+        // ONE rule for "this Current Reading cell is the operator's to fill" (demo #2):
+        // a usage meter (BK/CL), not flat/rental, not a locked auto-fetch snapshot, not invoiced
+        // this period. Drives the inline editor gate AND the must-fill/not-fill cell colours.
+        private bool IsInlineEditable(DataRow r)
+        {
+            if (r == null) return false;
+            if (r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"])) return false;
+            if (r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"])) return false;
+            if (S(r["InvoicedDocNo"]).Trim().Length > 0) return false;
+            string role = S(r["Role"]).Trim().ToUpperInvariant();
+            return role == "BK" || role == "CL";
+        }
+
+        // Demo #2(a): Current Reading edits INLINE on any tab — allowed only where the cell is the
+        // operator's to fill. Flat/rental, locked-snapshot and invoiced rows keep refusing the
+        // editor (the Invoiced tab only shows invoiced rows, so it is read-only for free).
         private void GridViewMeter_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (GridViewMeter.FocusedColumn != null && GridViewMeter.FocusedColumn.FieldName == "CurrentReading")
+            if (GridViewMeter.FocusedColumn == null ||
+                GridViewMeter.FocusedColumn.FieldName != "CurrentReading") return;
+            DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+            if (r == null || !IsInlineEditable(r)) e.Cancel = true;
+        }
+
+        // Demo #2(a): the grid twin of the detail dialog's save (manual / cleared-to-0 branches).
+        // One short transaction per committed cell. Deliberately does NOT touch NeedManual — tab
+        // membership stays a snapshot until the next Refresh/Fetch, same as the dialog.
+        private void SaveInlineReading(DataRow r)
+        {
+            if (_dbSetting == null || r == null) return;
+            long imk = D64(r["ItemMeterKey"]);
+            if (imk <= 0) return;
+            int year = SelectedYear(), month = SelectedMonth();
+            decimal cv = Dec(r["CurrentReading"]);
+            try
             {
-                e.Cancel = true;   // Current Reading is read-only (manual key-in removed)
+                using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
+                {
+                    cn.Open();
+                    using (SqlTransaction tx = cn.BeginTransaction("InlineKeyIn"))
+                    {
+                        try
+                        {
+                            if (cv > 0m)
+                                UpsertStaging(cn, tx, imk, year, month, cv, DateTime.Now, "MANUAL", S(r["TrackingId"]));
+                            else
+                                DeleteStaging(cn, tx, imk, year, month);
+                            tx.Commit();
+                        }
+                        catch { tx.Rollback(); throw; }
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                // NEVER lose the typed value silently: keep it in the grid, flag it, and say so.
+                r["Status"] = "⚠ NOT SAVED — key in again";
+                XtraMessageBox.Show("The reading was typed but NOT saved to the database:\r\n" + ex.Message +
+                    "\r\n\r\nThe value stays in the grid for now but will be LOST on Refresh — " +
+                    "key it in again once the connection is back.",
+                    "Meter Reading", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (cv > 0m)
+            {
+                r["EntrySource"] = "MANUAL";
+                r["HasConflict"] = false;
+                r["Sel"] = true;
+                r["Status"] = "Manual (saved)  " + DateTime.Now.ToString("dd/MM/yyyy");
+            }
+            else
+            {   // cleared to 0 → same full reset as the detail dialog's cleared branch
+                r["EntrySource"] = ""; r["TrackingId"] = ""; r["HasConflict"] = false;
+                r["FetchedReading"] = 0m; r["MachineStatus"] = ""; r["Sel"] = false; r["Status"] = "";
+            }
+            SyncSelCssi();   // Sel changed programmatically — keep the merged checkbox truthful
         }
 
         // Open the per-contract detail / override dialog. The dialog shows every meter of the contract
@@ -2730,7 +2959,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
             {
                 DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
-                if (r != null) Recalc(r);
+                if (r != null)
+                {
+                    Recalc(r);
+                    // Demo #2(a): persist inline key-ins immediately — the old grid path recalculated
+                    // but never saved, so a Refresh silently lost the typed reading. UseMin stays
+                    // grid-only. (Programmatic DataRow writes — dialog/fetch — don't raise this event.)
+                    if (e.Column.FieldName == "CurrentReading" && IsInlineEditable(r))
+                        SaveInlineReading(r);
+                }
             }
             if (e.Column.FieldName == "SelCssi")
             {

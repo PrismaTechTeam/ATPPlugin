@@ -741,6 +741,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.Designer.cs">
       <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterViewSetting_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterViewSetting_Form.Designer.cs">
+      <DependentUpon>MeterViewSetting_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="About\FormAbout.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1185,6 +1191,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingIntegration_Form.resx">
       <DependentUpon>MeterReadingIntegration_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterViewSetting_Form.resx">
+      <DependentUpon>MeterViewSetting_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.resx">
       <DependentUpon>MeterReadingHistory_Form.cs</DependentUpon>
