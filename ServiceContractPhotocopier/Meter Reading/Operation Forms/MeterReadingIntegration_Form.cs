@@ -292,21 +292,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             int deleted = 0, failed = 0;
             System.Text.StringBuilder errs = new System.Text.StringBuilder();
-            AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
-                AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
-                    AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
-            foreach (DataRow r in keys.Rows)
-            {
-                try { cmd.Delete(Convert.ToInt64(r["DocKey"])); deleted++; }
-                catch (Exception ex)
-                {
-                    failed++;
-                    if (errs.Length < 600) errs.AppendLine(r["DocNo"] + ": " + ex.Message);
-                }
-            }
 
-            // #10: correction CNs are wiped too — otherwise live CNs point at deleted invoices and
-            // their override rows keep winning the baseline, corrupting the next test run.
+            // #10: correction CNs are wiped FIRST — before the invoices they correct. A CN created
+            // with "knock off against the invoice" puts an AR knock-off on that invoice, and
+            // AutoCount refuses to delete an invoice that carries one ("Can't delete A/R invoice
+            // that has payment"). Deleting the CN releases the knock-off. Order also matters for
+            // correctness: live CNs must never point at a deleted invoice, and their override rows
+            // would keep winning the baseline and corrupt the next test run.
             try
             {
                 DataTable cnKeys = _dbSetting.GetDataTable(
@@ -336,6 +328,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP_MeterTrans WHERE CNDocKey IS NOT NULL");
             }
             catch { }
+
+            AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
+                AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
+                    AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
+            foreach (DataRow r in keys.Rows)
+            {
+                try { cmd.Delete(Convert.ToInt64(r["DocKey"])); deleted++; }
+                catch (Exception ex)
+                {
+                    failed++;
+                    if (errs.Length < 600) errs.AppendLine(r["DocNo"] + ": " + ex.Message);
+                }
+            }
 
             ReconcileDeletedInvoices();   // clears stamps + billed readings of the now-deleted docs
             LoadData();
