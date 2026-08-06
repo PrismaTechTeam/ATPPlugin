@@ -284,7 +284,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
             if (XtraMessageBox.Show(
-                    "TESTING SHORTCUT\r\n\r\nDelete ALL " + keys.Rows.Count + " meter-generated invoice(s) from AutoCount?\r\n" +
+                    "TESTING SHORTCUT\r\n\r\nDelete ALL " + keys.Rows.Count + " meter-generated invoice(s) from AutoCount?\r\n\r\n" +
+                    "FORCE: any credit note, payment or refund knocked off against them is DELETED FIRST " +
+                    "(AutoCount refuses to delete an invoice that carries one). A payment that also pays " +
+                    "OTHER invoices is deleted whole — this is a test-data reset, not an accounting correction.\r\n\r\n" +
                     "Meter stamps are released so billing can be repeated. This cannot be undone.",
                     "Dev Wipe — Generated Invoices", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes)
@@ -329,6 +332,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             catch { }
 
+            // FORCE: clear every AR document knocked off against these invoices (payment, manual CN,
+            // refund). AutoCount counts a knock-off as payment and blocks the delete otherwise.
+            int blockers = ClearBlockingArDocuments(keys, errs);
+
             AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
                 AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
                     AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
@@ -345,9 +352,99 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ReconcileDeletedInvoices();   // clears stamps + billed readings of the now-deleted docs
             LoadData();
             XtraMessageBox.Show(
-                "Deleted " + deleted + " invoice(s)." + (failed > 0 ? "\r\nFailed: " + failed + "\r\n" + errs : "") +
+                "Deleted " + deleted + " invoice(s)." +
+                (blockers > 0 ? "\r\nCleared " + blockers + " blocking payment/CN/refund first." : "") +
+                (failed > 0 ? "\r\nFailed: " + failed + "\r\n" + errs : "") +
                 "\r\nMeter stamps released — you can generate again.",
                 "Dev Wipe", MessageBoxButtons.OK, failed > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// Dev Wipe force-clear: delete every AR document knocked off against the given sales
+        /// invoices. AutoCount treats ANY knock-off (customer payment, credit note, refund) as
+        /// payment on the invoice and refuses InvoiceCommand.Delete while one exists — which is how
+        /// a wipe ends up reporting "Can't delete A/R invoice that has payment". This is a
+        /// test-data reset, so the whole blocking document goes, even if it also settles other
+        /// invoices. Returns how many blockers were removed; failures are appended to errs.
+        /// </summary>
+        private int ClearBlockingArDocuments(DataTable ivKeys, System.Text.StringBuilder errs)
+        {
+            if (_dbSetting == null || ivKeys == null || ivKeys.Rows.Count == 0) return 0;
+            System.Text.StringBuilder ids = new System.Text.StringBuilder();
+            foreach (DataRow r in ivKeys.Rows)
+            {
+                if (ids.Length > 0) ids.Append(",");
+                ids.Append(Convert.ToInt64(r["DocKey"]));
+            }
+            // dbo.IV and dbo.ARInvoice are separate keyspaces — the AR side points back with
+            // SourceType='IV' + SourceKey = the sales invoice DocKey.
+            string arInv = "SELECT DocKey FROM dbo.ARInvoice WHERE SourceType='IV' AND SourceKey IN (" + ids + ")";
+            DataTable blockers;
+            try
+            {
+                blockers = _dbSetting.GetDataTable(
+                    "SELECT DISTINCT 'CN' AS Kind, k.DocKey FROM dbo.ARCNKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
+                    "UNION ALL SELECT DISTINCT 'PAYMENT', k.DocKey FROM dbo.ARPaymentKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
+                    "UNION ALL SELECT DISTINCT 'REFUND', k.DocKey FROM dbo.ARRefundKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
+                    "UNION ALL SELECT DISTINCT 'CONTRA', k.DocKey FROM dbo.ARContraKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ")", false);
+            }
+            catch (Exception ex)
+            {
+                if (errs.Length < 600) errs.AppendLine("Blocker lookup failed: " + ex.Message);
+                return 0;
+            }
+            if (blockers.Rows.Count == 0) return 0;
+
+            AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
+            string userId = us.LoginUserID;
+            int cleared = 0;
+            ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = true;   // wipe = ours, no per-CN alerts
+            try
+            {
+                foreach (DataRow b in blockers.Rows)
+                {
+                    string kind = S(b["Kind"]);
+                    long key = Convert.ToInt64(b["DocKey"]);
+                    try
+                    {
+                        if (kind == "CN")
+                        {
+                            // An AR CN raised from the Invoicing module must die through the sales
+                            // side (SourceType='CN' -> SourceKey = dbo.CN.DocKey); a pure AR CN
+                            // through the AR side.
+                            DataTable src = _dbSetting.GetDataTable(
+                                "SELECT ISNULL(SourceType,'') AS SourceType, ISNULL(SourceKey,0) AS SourceKey " +
+                                "FROM dbo.ARCN WHERE DocKey=" + key, false);
+                            long salesKey = 0;
+                            if (src.Rows.Count > 0 && S(src.Rows[0]["SourceType"]).Trim().ToUpperInvariant() == "CN")
+                                salesKey = Convert.ToInt64(src.Rows[0]["SourceKey"]);
+                            if (salesKey > 0)
+                                AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(us, _dbSetting).Delete(salesKey);
+                            else
+                                AutoCount.ARAP.ARCN.ARCNDataAccess.Create(us, _dbSetting).DeleteARCN(key, userId);
+                        }
+                        else if (kind == "PAYMENT")
+                            AutoCount.ARAP.ARPayment.ARPaymentDataAccess.Create(us, _dbSetting).DeleteARPayment(key, userId);
+                        else if (kind == "REFUND")
+                            AutoCount.ARAP.ARRefund.ARRefundDataAccess.Create(us, _dbSetting).DeleteARRefund(key, userId);
+                        else
+                        {
+                            // AR Contra has no public delete API in AutoCount.Accounting — say so
+                            // instead of failing the invoice delete with a mystery message.
+                            if (errs.Length < 600)
+                                errs.AppendLine("AR Contra (DocKey " + key + ") blocks the invoice — delete it in AutoCount first.");
+                            continue;
+                        }
+                        cleared++;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (errs.Length < 600) errs.AppendLine(kind + " " + key + ": " + ex.Message);
+                    }
+                }
+            }
+            finally { ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = false; }
+            return cleared;
         }
 
         // Native AutoCount toolbar icons — the SAME family and size the "Maintain Service Contract"
