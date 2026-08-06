@@ -81,9 +81,10 @@ namespace ServiceContractPhotocopier
             this.LblHint.Name = "LblHint";
             this.LblHint.Size = new System.Drawing.Size(956, 30);
             this.LblHint.TabIndex = 0;
-            this.LblHint.Text = "Key the CORRECT reading per meter. Credit Copies = Billed - Correct; a REAL Sales" +
-    " Credit Note is created and the corrected reading becomes this machine\'s Last Re" +
-    "ading for future billing (the latest CN always wins).";
+            this.LblHint.Text = "Key the CORRECT reading per meter. Credit Copies = Last Reading - Correct; a REAL " +
+    "Sales Credit Note is created and the corrected reading becomes this machine\'s La" +
+    "st Reading for future billing (the latest CN always wins, whichever invoice it co" +
+    "rrects).";
             //
             // PanelHeader
             //
@@ -243,10 +244,13 @@ namespace ServiceContractPhotocopier
             //
             // ColBilledReading
             //
-            this.ColBilledReading.Caption = "Billed Reading";
+            this.ColBilledReading.Caption = "Last Reading";
             this.ColBilledReading.DisplayFormat.FormatString = "n0";
             this.ColBilledReading.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            this.ColBilledReading.FieldName = "BilledReading";
+            // BaseReading, not the raw billed figure: once an earlier CN has moved this machine's
+            // reading, the credit is measured from where the meter STANDS NOW - which is what the
+            // agreed scenario's "Last Reading" column means.
+            this.ColBilledReading.FieldName = "BaseReading";
             this.ColBilledReading.Name = "ColBilledReading";
             this.ColBilledReading.OptionsColumn.AllowEdit = false;
             this.ColBilledReading.Visible = true;

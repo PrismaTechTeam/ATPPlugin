@@ -105,10 +105,14 @@ namespace ServiceContractPhotocopier
                 "  FROM dbo.zSCP2_MeterReadingLog l " +
                 "  WHERE l.ItemMeterKey = t.ServiceItemMeterTypeKey AND l.Source='INVOICE' " +
                 "    AND l.DocNo='" + _invoiceDocNo.Replace("'", "''") + "' ORDER BY l.LogKey DESC) lg " +
-                // A LATER CN's base = the previous CN's corrected reading, never the raw billed value
-                // - otherwise a second CN would re-credit copies the first CN already credited.
+                // A LATER CN's base = the machine's CURRENT corrected reading (the newest correction
+                // on ANY invoice of this meter), never the raw billed value - otherwise a second CN
+                // would re-credit copies an earlier CN already credited. Not scoped to this invoice:
+                // the agreed scenario corrects a LATER invoice first and then an EARLIER one, and
+                // that second CN must start from where the first one left the meter, not from the
+                // older invoice's own billed figure.
                 "OUTER APPLY (SELECT TOP 1 p.MeterTransReading AS PrevCorrectReading FROM dbo.zSCP_MeterTrans p " +
-                "  WHERE p.CNDocKey IS NOT NULL AND p.CorrectedInvoiceDocKey = t.SalesInvoiceDocKey " +
+                "  WHERE p.CNDocKey IS NOT NULL " +
                 "    AND p.ServiceItemMeterTypeKey = t.ServiceItemMeterTypeKey ORDER BY p.MeterTransKey DESC) pc " +
                 "WHERE t.SalesInvoiceDocKey = " + _invoiceDocKey + " AND t.CNDocKey IS NULL " +
                 "AND ISNULL(mt.IsFlatCharge,'N') = 'N' " +

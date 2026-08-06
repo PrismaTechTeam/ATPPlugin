@@ -131,6 +131,22 @@ namespace ServiceContractPhotocopier.Classes
                         {
                             foreach (CnCorrectionLine l in billable)
                             {
+                                // The override must date NO EARLIER than the meter's newest reading,
+                                // or "the latest CN always wins" silently stops being true: correcting
+                                // an OLD invoice after a newer one has already been billed/corrected
+                                // would file the new value behind the newer date and the baseline
+                                // (MeterTransDate DESC, MeterTransKey DESC) would keep the old answer.
+                                // Capped at the meter's own newest reading date, so the row can never
+                                // jump into a month the meter has no readings in; the billed month is
+                                // still unaffected because SalesInvoiceDocKey stays NULL there.
+                                SqlCommand mx = new SqlCommand(
+                                    "SELECT MAX(MeterTransDate) FROM dbo.zSCP_MeterTrans WHERE ServiceItemMeterTypeKey=@imk", cn, tx);
+                                mx.Parameters.AddWithValue("@imk", l.ItemMeterKey);
+                                object mxv = mx.ExecuteScalar();
+                                DateTime transDate = l.BilledTransDate;
+                                if (mxv != null && mxv != DBNull.Value && Convert.ToDateTime(mxv) > transDate)
+                                    transDate = Convert.ToDateTime(mxv);
+
                                 SqlCommand ins = new SqlCommand(
                                     "INSERT INTO dbo.zSCP_MeterTrans (ServiceItemMeterTypeKey, ServiceItemKey, MeterTypeCode, " +
                                     "MeterTransDate, MeterTransReading, SalesInvoiceDocKey, CNDocKey, CNDocNo, CorrectedInvoiceDocKey, Remark) " +
@@ -138,12 +154,11 @@ namespace ServiceContractPhotocopier.Classes
                                 ins.Parameters.AddWithValue("@imk", l.ItemMeterKey);
                                 ins.Parameters.AddWithValue("@ik", l.ItemKey);
                                 ins.Parameters.AddWithValue("@code", l.MeterTypeCode ?? "");
-                                // SAME date as the billed row: the billed month keeps showing invoiced
-                                // (NULL SalesInvoiceDocKey excludes this row there), and the NEXT month's
-                                // baseline resolves the tie by MeterTransKey DESC = insert order — which
-                                // is also how multiple CNs pick "the latest CN wins". A +1s offset would
-                                // break on a billed row stamped 23:59:59 of the month's last day.
-                                ins.Parameters.AddWithValue("@dt", l.BilledTransDate);
+                                // Never the billed row's date + 1s: a billed row stamped 23:59:59 on the
+                                // month's last day would roll into the next month. Same date (or the
+                                // meter's newest date) + MeterTransKey DESC = insert order is what makes
+                                // multiple CNs resolve as "the latest CN wins".
+                                ins.Parameters.AddWithValue("@dt", transDate);
                                 ins.Parameters.AddWithValue("@rd", l.CorrectReading);
                                 ins.Parameters.AddWithValue("@cnk", cnDocKey);
                                 ins.Parameters.AddWithValue("@cnno", cnDocNo ?? "");
