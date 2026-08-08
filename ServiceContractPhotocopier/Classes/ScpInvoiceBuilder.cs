@@ -92,6 +92,70 @@ namespace ServiceContractPhotocopier.Classes
         ///   charge floored at MinCharges (committed minimum still bills when FOC covers all usage)
         /// Flat/rental meters bill qty 1 x rate (FOC Qty = free-rental months -> RM0 this period).
         /// Pass the pre-loaded multi-price ladders (null = flat rate only).</summary>
+        /// <summary>
+        /// Feedback #6 "Group Rental with same unit price and QTY": collapse a job's RENTAL lines so
+        /// there is one invoice row PER METER TYPE carrying the number of units, instead of one row
+        /// per machine. Their own invoice reads
+        /// <c>RA-32 UNIT ... MEDIUM HEAVY DUTY "55 cpm"   32 UNIT   908.20   29,062.40</c>.
+        ///
+        /// <paramref name="groupQty"/> maps each surviving "leader" line to its unit count;
+        /// <paramref name="folded"/> lists the lines whose unit was counted there and which must not
+        /// print a row of their own.
+        ///
+        /// Only merges what is genuinely identical: same meter type, same per-unit charge, same
+        /// department/project, and no per-machine story to tell. Anything carrying a strategy note
+        /// (a waived or committed-minimum rental explains ITSELF on the line) stays separate —
+        /// merging those would throw the explanation away.
+        /// </summary>
+        private static void GroupRentalLines(DBSetting db,
+            System.Collections.Generic.List<MeterBillLine> lines,
+            out System.Collections.Generic.Dictionary<MeterBillLine, decimal> groupQty,
+            out System.Collections.Generic.List<MeterBillLine> folded)
+        {
+            groupQty = new System.Collections.Generic.Dictionary<MeterBillLine, decimal>();
+            folded = new System.Collections.Generic.List<MeterBillLine>();
+            if (lines == null || lines.Count < 2) return;
+            bool on = true;
+            try
+            {
+                on = ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_GROUP_RENTAL_BY_METER,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_GROUP_RENTAL_BY_METER);
+            }
+            catch { }
+            if (!on) return;
+
+            System.Collections.Generic.Dictionary<string, MeterBillLine> leaderByKey =
+                new System.Collections.Generic.Dictionary<string, MeterBillLine>(StringComparer.OrdinalIgnoreCase);
+            foreach (MeterBillLine ln in lines)
+            {
+                if (!IsGroupableRental(ln)) continue;
+                // Same meter type AND same per-unit money — a different rate is a different line, or
+                // Qty x UnitPrice would stop equalling what the machines actually cost.
+                string key = (ln.MeterTypeCode ?? "") + "|" + (ln.ACItemCode ?? "") + "|" +
+                             ln.Charge.ToString("0.####") + "|" + ln.ContractKey;
+                MeterBillLine leader;
+                if (leaderByKey.TryGetValue(key, out leader))
+                {
+                    groupQty[leader] = groupQty[leader] + 1m;
+                    folded.Add(ln);
+                }
+                else
+                {
+                    leaderByKey[key] = ln;
+                    groupQty[ln] = 1m;
+                }
+            }
+        }
+
+        /// <summary>A rental line that may be merged with identical ones. Committed-minimum top-ups
+        /// and rentals whose strategy wrote a per-machine note keep their own row.</summary>
+        private static bool IsGroupableRental(MeterBillLine ln)
+        {
+            return ln != null && ln.IsFlat && ln.IsRental && !ln.IsCommittedMin
+                   && string.IsNullOrEmpty(ln.StrategyNote) && ln.Charge > 0m;
+        }
+
         public static void ComputeCharge(MeterBillLine ln,
             System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<decimal[]>> ladders)
         {
@@ -246,8 +310,18 @@ namespace ServiceContractPhotocopier.Classes
                 }
             }
 
+            // Feedback #6 "Group Rental": one line PER METER TYPE, not per machine. A customer with
+            // 32 identical units wants "RA-32 UNIT ... 32 UNIT x 908.20 = 29,062.40", not 32 rows of
+            // qty 1. Merging happens on the INVOICE only — the meter stamps stay per machine, so the
+            // listing, the reading history and any later CN are unaffected.
+            System.Collections.Generic.Dictionary<MeterBillLine, decimal> rentalGroupQty;
+            System.Collections.Generic.List<MeterBillLine> rentalFolded;
+            GroupRentalLines(db, lines, out rentalGroupQty, out rentalFolded);
+
             foreach (MeterBillLine ln in lines)
             {
+                if (rentalFolded.Contains(ln)) continue;   // its unit is counted on the group's line
+
                 string lineDept = "", lineProj = "";
                 string[] dp;
                 if (ln.ContractKey > 0 && contractDeptProj.TryGetValue(ln.ContractKey, out dp))
@@ -281,7 +355,13 @@ namespace ServiceContractPhotocopier.Classes
                     ? itemMasterDesc                    // master convention: the stock item's description
                     : ComposeLineDescription(ln);       // fallback / option OFF: meter type name
                 if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
-                { dtl.Qty = 1m; dtl.UnitPrice = ln.Charge; }
+                {
+                    // Grouped rental: Qty = how many machines share this meter type, UnitPrice stays
+                    // the PER-UNIT rental, so the line reads "32 UNIT x 908.20" and totals correctly.
+                    decimal groupQty;
+                    dtl.Qty = rentalGroupQty.TryGetValue(ln, out groupQty) && groupQty > 1m ? groupQty : 1m;
+                    dtl.UnitPrice = ln.Charge;
+                }
                 else
                 {
                     dtl.Qty = ln.BillCopies;

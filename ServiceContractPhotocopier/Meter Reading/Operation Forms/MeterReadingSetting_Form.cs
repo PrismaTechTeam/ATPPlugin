@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 using AutoCount.Data;
 using DevExpress.XtraEditors;
@@ -46,6 +46,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     : grouping == PumsConfig.METER_GROUPING_MACHINE ? 2 : 0;
                 this.ChkGroupGuard.Checked =
                     PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_METER_GROUP_GUARD, PumsConfig.DEFAULT_METER_GROUP_GUARD);
+                this.ChkGroupRental.Checked =
+                    PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_GROUP_RENTAL_BY_METER, PumsConfig.DEFAULT_GROUP_RENTAL_BY_METER);
             }
         }
 
@@ -152,6 +154,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     : this.CmbGrouping.SelectedIndex == 2 ? PumsConfig.METER_GROUPING_MACHINE
                     : PumsConfig.METER_GROUPING_FOLLOW);
                 PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_METER_GROUP_GUARD, this.ChkGroupGuard.Checked);
+                PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_GROUP_RENTAL_BY_METER, this.ChkGroupRental.Checked);
             }
             this.DialogResult = DialogResult.OK;
             this.Close();

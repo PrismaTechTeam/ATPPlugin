@@ -56,6 +56,13 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
         public const string DEFAULT_BILLING_MODE_VALUE = "G";
 
+        /// <summary>Feedback #6 "Group Rental": one invoice line per RENTAL METER TYPE carrying the
+        /// number of units ("RA-32 UNIT ... 32 UNIT x 908.20"), instead of one line per machine.
+        /// ON by default — it is what the customer's own invoice looks like. Merging is display-only:
+        /// meter stamps, reading history and the Appendix A listing stay per machine.</summary>
+        public const string KEY_GROUP_RENTAL_BY_METER = "GROUP_RENTAL_BY_METER";
+        public const bool DEFAULT_GROUP_RENTAL_BY_METER = true;
+
         /// <summary>Customer feedback 07/08 "A": a service item created under a contract carries the
         /// CONTRACT's Reference No. On by default - it is what they asked for; untick to key each
         /// item's reference by hand. A reference typed on the item is never overwritten.</summary>

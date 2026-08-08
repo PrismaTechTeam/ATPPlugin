@@ -35,11 +35,13 @@
             this.LblGrouping = new DevExpress.XtraEditors.LabelControl();
             this.CmbGrouping = new DevExpress.XtraEditors.ComboBoxEdit();
             this.ChkGroupGuard = new DevExpress.XtraEditors.CheckEdit();
+            this.ChkGroupRental = new DevExpress.XtraEditors.CheckEdit();
             this.BtnClearStaging = new DevExpress.XtraEditors.SimpleButton();
             this.BtnOk = new DevExpress.XtraEditors.SimpleButton();
             this.BtnCancel = new DevExpress.XtraEditors.SimpleButton();
             ((System.ComponentModel.ISupportInitialize)(this.CmbGrouping.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkGroupGuard.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGroupRental.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeLate.Properties)).BeginInit();
@@ -158,11 +160,19 @@
             this.ChkGroupGuard.Size = new System.Drawing.Size(440, 20);
             this.ChkGroupGuard.TabIndex = 15;
             //
+            // ChkGroupRental
+            //
+            this.ChkGroupRental.Location = new System.Drawing.Point(20, 243);
+            this.ChkGroupRental.Name = "ChkGroupRental";
+            this.ChkGroupRental.Properties.Caption = "Group rental on the invoice by meter type (32 units = ONE line x 32, not 32 lines)";
+            this.ChkGroupRental.Size = new System.Drawing.Size(440, 20);
+            this.ChkGroupRental.TabIndex = 16;
+            //
             // BtnClearStaging
             //
             this.BtnClearStaging.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnClearStaging.Appearance.Options.UseForeColor = true;
-            this.BtnClearStaging.Location = new System.Drawing.Point(20, 251);
+            this.BtnClearStaging.Location = new System.Drawing.Point(20, 277);
             this.BtnClearStaging.Name = "BtnClearStaging";
             this.BtnClearStaging.Size = new System.Drawing.Size(150, 28);
             this.BtnClearStaging.TabIndex = 8;
@@ -192,8 +202,9 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 14F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.BtnCancel;
-            this.ClientSize = new System.Drawing.Size(480, 296);
+            this.ClientSize = new System.Drawing.Size(480, 322);
             this.Controls.Add(this.ChkGroupGuard);
+            this.Controls.Add(this.ChkGroupRental);
             this.Controls.Add(this.CmbGrouping);
             this.Controls.Add(this.LblGrouping);
             this.Controls.Add(this.BtnClearStaging);
@@ -214,6 +225,7 @@
             this.Name = "MeterReadingSetting_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Meter Reading Settings";
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGroupRental.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkGroupGuard.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbGrouping.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).EndInit();
@@ -240,6 +252,7 @@
         private DevExpress.XtraEditors.LabelControl LblGrouping;
         private DevExpress.XtraEditors.ComboBoxEdit CmbGrouping;
         private DevExpress.XtraEditors.CheckEdit ChkGroupGuard;
+        private DevExpress.XtraEditors.CheckEdit ChkGroupRental;
         private DevExpress.XtraEditors.SimpleButton BtnClearStaging;
         private DevExpress.XtraEditors.SimpleButton BtnOk;
         private DevExpress.XtraEditors.SimpleButton BtnCancel;
