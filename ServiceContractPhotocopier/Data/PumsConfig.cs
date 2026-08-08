@@ -56,6 +56,25 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
         public const string DEFAULT_BILLING_MODE_VALUE = "G";
 
+        /// <summary>Customer feedback 07/08 "A": a service item created under a contract carries the
+        /// CONTRACT's Reference No. On by default - it is what they asked for; untick to key each
+        /// item's reference by hand. A reference typed on the item is never overwritten.</summary>
+        public const string KEY_ITEM_REF_FROM_CONTRACT = "ITEM_REF_FROM_CONTRACT";
+        public const bool DEFAULT_ITEM_REF_FROM_CONTRACT = true;
+
+        /// <summary>Customer feedback 07/08 "B": Service Item No. is derived from the Contract No.
+        /// with a running suffix (contract ABC -> ABC.1, ABC.2, ...) instead of its own DocNo format.
+        /// OFF by default - switching it on changes how every new item is numbered, so the book's
+        /// owner opts in.</summary>
+        public const string KEY_ITEM_NO_FROM_CONTRACT = "ITEM_NO_FROM_CONTRACT";
+        public const bool DEFAULT_ITEM_NO_FROM_CONTRACT = false;
+
+        /// <summary>Companion to <see cref="KEY_ITEM_NO_FROM_CONTRACT"/>: when the Contract No. is
+        /// edited, renumber the contract's service items to follow it. OFF by default - renaming
+        /// items that already appear on invoices and meter history is not something to do silently.</summary>
+        public const string KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME = "ITEM_NO_FOLLOW_CONTRACT_RENAME";
+        public const bool DEFAULT_ITEM_NO_FOLLOW_CONTRACT_RENAME = false;
+
         /// <summary>Whether the Meter Reading list includes expired service items. Default true = show
         /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";

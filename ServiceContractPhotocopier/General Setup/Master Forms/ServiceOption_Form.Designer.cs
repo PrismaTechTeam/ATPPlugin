@@ -13,8 +13,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private AutoCount.Controls.PanelHeader PanelHeaderTop;
         private PanelControl PanelToolbar;
         private XtraTabControl TabMain;
-        private XtraTabPage PageServiceOption, PageNoteControl, PageApi;
-        private GroupControl GrpGeneral, GrpDefaults, GrpApi;
+        private XtraTabPage PageServiceOption, PageNoteControl, PageApi, PageNumbering;
+        private GroupControl GrpGeneral, GrpDefaults, GrpApi, GrpItemNo;
+        private CheckEdit ChkItemRefFromContract, ChkItemNoFromContract, ChkItemNoRenumber;
+        private LabelControl LblItemNoHint, LblRenumberWarn;
         private CheckEdit ChkShowStockPicture, ChkUseAlternativeItem, ChkNegativeStockChecking;
         private CheckEdit ChkAutoGenSalesInvoice, ChkAutoCloseNote, ChkAllowEditClosed;
         private LabelControl LblDefaultStatus, LblDefaultPriority, LblMeterInvFormat, LblCnFormat;
@@ -40,9 +42,16 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.PageServiceOption = new XtraTabPage();
             this.PageNoteControl = new XtraTabPage();
             this.PageApi = new XtraTabPage();
+            this.PageNumbering = new XtraTabPage();
             this.GrpGeneral = new GroupControl();
             this.GrpDefaults = new GroupControl();
             this.GrpApi = new GroupControl();
+            this.GrpItemNo = new GroupControl();
+            this.ChkItemRefFromContract = new CheckEdit();
+            this.ChkItemNoFromContract = new CheckEdit();
+            this.ChkItemNoRenumber = new CheckEdit();
+            this.LblItemNoHint = new LabelControl();
+            this.LblRenumberWarn = new LabelControl();
             this.LblApiProfile = new LabelControl(); this.CmbApiProfile = new ComboBoxEdit();
             this.LblApiUrl = new LabelControl(); this.TxtApiBaseUrl = new TextEdit();
             this.LblApiToken = new LabelControl(); this.TxtApiToken = new TextEdit();
@@ -102,7 +111,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.PageServiceOption.Text = "1. Service Option";
             this.PageNoteControl.Text = "2. Service Note Control";
             this.PageApi.Text = "3. API";
-            this.TabMain.TabPages.AddRange(new XtraTabPage[] { this.PageServiceOption, this.PageNoteControl, this.PageApi });
+            this.PageNumbering.Text = "4. Contract & Item No.";
+            this.TabMain.TabPages.AddRange(new XtraTabPage[] { this.PageServiceOption, this.PageNoteControl, this.PageApi, this.PageNumbering });
 
             // Service Option tab — General checkboxes + Defaults (incl. Meter Invoice No. Format).
             this.GrpGeneral.Text = "General";
@@ -148,6 +158,54 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.PageServiceOption.Controls.Add(this.GrpGeneral);
             this.PageServiceOption.Controls.Add(this.GrpDefaults);
+
+            // Contract & Item No. tab — how a service item takes its number and reference from the
+            // contract it sits under (customer feedback 07/08, items "A" and "B").
+            this.GrpItemNo.Text = "Service Item No. && Reference No.";
+            this.GrpItemNo.Location = new Point(14, 12);
+            this.GrpItemNo.Size = new Size(660, 300);
+            this.ChkItemRefFromContract.Properties.Caption =
+                "A new service item takes the contract's Reference No.";
+            this.ChkItemRefFromContract.Location = new Point(16, 32); this.ChkItemRefFromContract.Width = 620;
+            Lbl(this.LblItemNoHint,
+                "A reference already typed on the item is never overwritten. Changing the contract's " +
+                "Reference No. updates the items still carrying the old one.", 36, 56);
+            this.LblItemNoHint.Width = 600;
+            this.LblItemNoHint.AutoSizeMode = LabelAutoSizeMode.None;
+            this.LblItemNoHint.Height = 32;
+            this.LblItemNoHint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            this.LblItemNoHint.Appearance.Options.UseTextOptions = true;
+            this.LblItemNoHint.Appearance.ForeColor = Color.FromArgb(110, 110, 110);
+            this.LblItemNoHint.Appearance.Options.UseForeColor = true;
+
+            this.ChkItemNoFromContract.Properties.Caption =
+                "Service Item No. follows the Contract No.   (contract ABC  ->  ABC.1, ABC.2, ABC.3 ...)";
+            this.ChkItemNoFromContract.Location = new Point(16, 106); this.ChkItemNoFromContract.Width = 620;
+            this.ChkItemNoFromContract.CheckedChanged += new System.EventHandler(this.OnItemNoFromContractChanged);
+
+            this.ChkItemNoRenumber.Properties.Caption =
+                "Renumber the service items when the Contract No. changes";
+            this.ChkItemNoRenumber.Location = new Point(36, 136); this.ChkItemNoRenumber.Width = 600;
+
+            Lbl(this.LblRenumberWarn,
+                "Numbers are assigned when the contract is saved and are checked for clashes first - " +
+                "an item number already used anywhere in the book is never reissued. Renumbering " +
+                "rewrites numbers that may already appear on issued invoices and meter history, so " +
+                "leave it off unless the contract is still new.", 36, 166);
+            this.LblRenumberWarn.Width = 600;
+            this.LblRenumberWarn.AutoSizeMode = LabelAutoSizeMode.None;
+            this.LblRenumberWarn.Height = 64;
+            this.LblRenumberWarn.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            this.LblRenumberWarn.Appearance.Options.UseTextOptions = true;
+            this.LblRenumberWarn.Appearance.ForeColor = Color.FromArgb(110, 110, 110);
+            this.LblRenumberWarn.Appearance.Options.UseForeColor = true;
+
+            this.GrpItemNo.Controls.Add(this.ChkItemRefFromContract);
+            this.GrpItemNo.Controls.Add(this.LblItemNoHint);
+            this.GrpItemNo.Controls.Add(this.ChkItemNoFromContract);
+            this.GrpItemNo.Controls.Add(this.ChkItemNoRenumber);
+            this.GrpItemNo.Controls.Add(this.LblRenumberWarn);
+            this.PageNumbering.Controls.Add(this.GrpItemNo);
 
             // API tab — Meter API connection profiles (maintained in dbo.zSCP2_ApiProfile).
             this.GrpApi.Text = "Meter Reading API";

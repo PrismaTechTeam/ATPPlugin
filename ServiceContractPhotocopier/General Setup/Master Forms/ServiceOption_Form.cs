@@ -87,6 +87,18 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_METER_CN_DOCNO_FORMAT,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_METER_CN_DOCNO_FORMAT);
 
+                // Contract & Item No. tab (customer feedback 07/08 "A" and "B").
+                ChkItemRefFromContract.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_REF_FROM_CONTRACT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_REF_FROM_CONTRACT);
+                ChkItemNoFromContract.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FROM_CONTRACT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FROM_CONTRACT);
+                ChkItemNoRenumber.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FOLLOW_CONTRACT_RENAME);
+                OnItemNoFromContractChanged(null, EventArgs.Empty);
+
                 // Advanced No. Format by machine status: same IV format list as the default combo.
                 try
                 {
@@ -309,6 +321,13 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             catch (Exception ex) { throw new Exception("SetConfig failed for " + key + ": " + ex.Message); }
         }
 
+        // Renumber-on-rename only means anything while the numbers follow the contract at all.
+        private void OnItemNoFromContractChanged(object sender, EventArgs e)
+        {
+            ChkItemNoRenumber.Enabled = ChkItemNoFromContract.Checked;
+            if (!ChkItemNoFromContract.Checked) ChkItemNoRenumber.Checked = false;
+        }
+
         private void OnSave(object sender, EventArgs e)
         {
             try
@@ -340,6 +359,15 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_OFFLINE,
                     (CmbInvFmtOffline.Text ?? "").Trim());
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_REF_FROM_CONTRACT,
+                    ChkItemRefFromContract.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FROM_CONTRACT,
+                    ChkItemNoFromContract.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME,
+                    ChkItemNoFromContract.Checked && ChkItemNoRenumber.Checked);
 
                 // API tab: upsert the selected profile and make it the active connection.
                 SaveApiTab();

@@ -137,6 +137,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateFormModeTitle();
             // Typing a custom Contract No must update the "— NEW (xxx)" caption live, not only at save.
             TxtContractNo.EditValueChanged += delegate { UpdateFormModeTitle(); };
+            // Feedback 07/08 "A"/"B": the header's Reference No. and Contract No. carry down to the
+            // service items. Snapshot on ENTER and compare on VALIDATED — that gives the exact
+            // before/after pair without threading an old value through every load path.
+            TxtRefNo.Enter += delegate { _prevRefNo = TxtRefNo.Text.Trim(); };
+            TxtRefNo.Validated += new EventHandler(OnContractRefNoValidated);
+            TxtContractNo.Enter += delegate { _prevContractNo = TxtContractNo.Text.Trim(); };
+            TxtContractNo.Validated += new EventHandler(OnContractNoValidated);
             // Multi-row selection so "Copy Selected Details" can actually copy more than the focused
             // row (Ctrl / Shift + click the row indicator; plain cell clicks still edit inline).
             GridViewItems.OptionsSelection.MultiSelect = true;
@@ -328,6 +335,154 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 d.ServiceStartDate = Convert.ToDateTime(DtStartDate.EditValue).Date;
             if (!d.ServiceExpiryDate.HasValue && DtExpiryDate.EditValue != null && DtExpiryDate.EditValue != DBNull.Value)
                 d.ServiceExpiryDate = Convert.ToDateTime(DtExpiryDate.EditValue).Date;
+            // Customer feedback 07/08 "A": a service item created under this contract carries the
+            // CONTRACT's Reference No. Only fills a BLANK reference - what the user typed on the item
+            // is theirs.
+            if (ItemRefFollowsContract() && string.IsNullOrWhiteSpace(d.ReferenceNo))
+                d.ReferenceNo = TxtRefNo.Text.Trim();
+        }
+
+        // ── Feedback 07/08 "A"/"B": contract-driven Reference No. and Service Item No. ─────────────
+
+        private bool ItemRefFollowsContract()
+        {
+            try
+            {
+                return ServiceContractPhotocopier.Data.PumsConfig.GetBool(_db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_REF_FROM_CONTRACT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_REF_FROM_CONTRACT);
+            }
+            catch { return ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_REF_FROM_CONTRACT; }
+        }
+
+        private bool ItemNoFollowsContract()
+        {
+            try
+            {
+                return ServiceContractPhotocopier.Data.PumsConfig.GetBool(_db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FROM_CONTRACT,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FROM_CONTRACT);
+            }
+            catch { return false; }
+        }
+
+        private bool ItemNoRenumbersOnRename()
+        {
+            try
+            {
+                return ServiceContractPhotocopier.Data.PumsConfig.GetBool(_db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FOLLOW_CONTRACT_RENAME);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>True when this exact Service Item No. is already taken - by another item in this
+        /// contract's own list, or by any item already in the book. <paramref name="skip"/> is the
+        /// item being numbered (so it never clashes with itself).</summary>
+        private bool ServiceItemNoTaken(string no, ItemEditData skip)
+        {
+            if (string.IsNullOrWhiteSpace(no)) return false;
+            foreach (ItemEditData x in _items)
+            {
+                if (ReferenceEquals(x, skip)) continue;
+                if (string.Equals((x.ServiceItemNo ?? "").Trim(), no, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            try
+            {
+                DataTable t = _db.GetDataTable(
+                    "SELECT TOP 1 ItemKey FROM [dbo].[zSCP2_Item] WHERE ServiceItemNo = '" +
+                    no.Replace("'", "''") + "'" +
+                    (skip != null && skip.ItemKey > 0 ? " AND ItemKey <> " + skip.ItemKey : ""), false);
+                return t.Rows.Count > 0;
+            }
+            catch { return false; }   // a lookup failure must not block the save; the DB index is the backstop
+        }
+
+        /// <summary>Next free "&lt;ContractNo&gt;.&lt;n&gt;" for this contract, skipping any suffix already
+        /// in use here or anywhere in the book. Returns "" when there is no contract number yet.</summary>
+        private string NextContractItemNo(ItemEditData forItem)
+        {
+            string baseNo = TxtContractNo.Text.Trim();
+            if (baseNo.Length == 0) return "";
+            for (int n = 1; n <= 9999; n++)
+            {
+                string cand = baseNo + "." + n;
+                if (!ServiceItemNoTaken(cand, forItem)) return cand;
+            }
+            return "";
+        }
+
+        private string _prevRefNo = "";
+        private string _prevContractNo = "";
+
+        // "A": the contract's Reference No. changed — carry it to the items that were still showing
+        // the OLD one. An item whose reference was typed by hand keeps it.
+        private void OnContractRefNoValidated(object sender, EventArgs e)
+        {
+            string now = TxtRefNo.Text.Trim();
+            string was = _prevRefNo;
+            _prevRefNo = now;
+            if (string.Equals(now, was, StringComparison.Ordinal)) return;
+            if (!ItemRefFollowsContract() || _items.Count == 0) return;
+
+            int touched = 0;
+            foreach (ItemEditData d in _items)
+            {
+                string cur = (d.ReferenceNo ?? "").Trim();
+                if (cur.Length != 0 && !string.Equals(cur, was, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(cur, now, StringComparison.Ordinal)) continue;
+                d.ReferenceNo = now;
+                touched++;
+            }
+            if (touched > 0) { _dirty = true; RebuildItemsView(); }
+        }
+
+        // "B": the Contract No. changed — renumber the items that followed it. This rewrites numbers
+        // that may already be printed on invoices and carried in meter history, so it always asks,
+        // and it only runs when BOTH options are on.
+        private void OnContractNoValidated(object sender, EventArgs e)
+        {
+            string now = TxtContractNo.Text.Trim();
+            string was = _prevContractNo;
+            _prevContractNo = now;
+            if (string.Equals(now, was, StringComparison.Ordinal)) return;
+            if (!ItemNoFollowsContract() || !ItemNoRenumbersOnRename()) return;
+            if (now.Length == 0 || was.Length == 0 || _items.Count == 0) return;
+
+            string oldPrefix = was + ".";
+            List<ItemEditData> following = new List<ItemEditData>();
+            foreach (ItemEditData d in _items)
+                if ((d.ServiceItemNo ?? "").Trim().StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                    following.Add(d);
+            if (following.Count == 0) return;
+
+            if (XtraMessageBox.Show(
+                    "The Contract No. changed from " + was + " to " + now + ".\r\n\r\n" +
+                    "Renumber " + following.Count + " service item(s) to follow it?\r\n" +
+                    "Numbers already used elsewhere are skipped.\r\n\r\n" +
+                    "These numbers may already appear on issued invoices and in meter reading history.",
+                    "Service Item No.", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+
+            int done = 0;
+            foreach (ItemEditData d in following)
+            {
+                // Keep the item's own suffix when that slot is free under the new number, so
+                // ABC.3 becomes XYZ.3 rather than being shuffled into a different position.
+                string suffix = (d.ServiceItemNo ?? "").Trim().Substring(oldPrefix.Length);
+                string cand = now + "." + suffix;
+                if (suffix.Length == 0 || ServiceItemNoTaken(cand, d)) cand = NextContractItemNo(d);
+                if (cand.Length == 0) continue;
+                d.ServiceItemNo = cand;
+                done++;
+            }
+            if (done > 0) { _dirty = true; RebuildItemsView(); }
+            if (done < following.Count)
+                XtraMessageBox.Show((following.Count - done) + " item(s) kept their number — " +
+                    "no free number was available under " + now + ".",
+                    "Service Item No.", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         // "Generate From Serial No" — pick DO/IV lines that carry machine serials; auto-fill the
@@ -452,8 +607,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     d.Meters = zSCP2_Item_Form.CreateMetersTable();
                     d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
                     ApplyContractDateDefaults(d);   // Service Start / Expiry follow the contract dates
-                    d.ServiceItemNo = fmtSI == null ? "" :
-                        ServiceContractPhotocopier.Classes.ScpDocNo.Format(fmtSI, nextSI + autosAhead + added);
+                    // Preview only — the real number is drawn at save. Under the "follow the contract
+                    // number" option the preview must show ABC.n too, or the operator sees one
+                    // numbering scheme on screen and a different one after saving.
+                    string previewNo = "";
+                    if (ItemNoFollowsContract())
+                    {
+                        _items.Add(d);                       // let NextContractItemNo see the earlier previews
+                        previewNo = NextContractItemNo(d);
+                        _items.Remove(d);
+                    }
+                    if (previewNo.Length == 0 && fmtSI != null)
+                        previewNo = ServiceContractPhotocopier.Classes.ScpDocNo.Format(fmtSI, nextSI + autosAhead + added);
+                    d.ServiceItemNo = previewNo;
                     d.ServiceItemNoIsAuto = true;    // real number reserved by ScpDocNo.Next() at save time
                     d.ItemCode = p.ItemCode;
                     d.SerialNumber = p.SerialNo;
@@ -3978,12 +4144,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             // Embedded items showing an auto-preview number: reserve a real one each at save. The
             // blank-number check is a safety net — NO item may ever be inserted without a number.
+            // Feedback 07/08 "B": when the option is on the number is derived from the CONTRACT No.
+            // (ABC -> ABC.1, ABC.2, ...) instead of the Service Item DocNo format. NextContractItemNo
+            // skips any suffix already used here or anywhere in the book, so a number is never
+            // reissued; if it cannot produce one (no contract number, or 9999 exhausted) the normal
+            // DocNo format still runs — an item must never be inserted without a number.
+            bool byContract = ItemNoFollowsContract();
             foreach (ItemEditData d in _items)
             {
                 if (d.ServiceItemNoIsAuto || string.IsNullOrWhiteSpace(d.ServiceItemNo))
                 {
-                    d.ServiceItemNo = ServiceContractPhotocopier.Classes.ScpDocNo.Next(
-                        _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
+                    string byCon = byContract ? NextContractItemNo(d) : "";
+                    d.ServiceItemNo = byCon.Length > 0 ? byCon
+                        : ServiceContractPhotocopier.Classes.ScpDocNo.Next(
+                            _db, ServiceContractPhotocopier.Classes.ScpDocNo.DOCTYPE_SERVICE_ITEM);
                     d.ServiceItemNoIsAuto = false;
                 }
             }
