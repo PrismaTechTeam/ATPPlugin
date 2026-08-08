@@ -42,6 +42,12 @@ namespace ServiceContractPhotocopier.Classes
                 return false;
             }
 
+            // AutoCount User Defined Fields the plugin depends on. Separate from the SQL migrations
+            // because a UDF must be registered through AutoCount's SDK (metadata + ALTER in one
+            // transaction) or its screens and report designer will not see it. Idempotent and never
+            // fatal — a missing UDF costs a feature, not the module.
+            try { ScpUdf_Cls.EnsureUdfs(e.DBSetting); } catch { }
+
             RegisterAccessRights();
 
             // Billing-day auto-fetch snapshot service (background while AutoCount is open; it

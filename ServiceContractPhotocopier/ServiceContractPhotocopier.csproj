@@ -143,6 +143,7 @@
     </Compile>
     <Compile Include="Classes\PluginMain.cs" />
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
+    <Compile Include="Classes\ScpUdf_Cls.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
