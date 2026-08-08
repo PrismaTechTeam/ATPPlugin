@@ -110,6 +110,14 @@
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraLayout.v22.2.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="DevExpress.XtraPrinting.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraPrinting.v22.2.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DevExpress.XtraReports.v22.2.Extensions, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraReports.v22.2.Extensions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="DevExpress.XtraReports.v22.2, Version=22.2.7.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a, processorArchitecture=MSIL">
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\DevExpress.XtraReports.v22.2.dll</HintPath>
       <Private>False</Private>
@@ -144,6 +152,7 @@
     <Compile Include="Classes\PluginMain.cs" />
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
     <Compile Include="Classes\ScpUdf_Cls.cs" />
+    <Compile Include="Classes\ScpMeterListing.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
@@ -748,6 +757,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterViewSetting_Form.Designer.cs">
       <DependentUpon>MeterViewSetting_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterListingInquiry_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterListingInquiry_Form.Designer.cs">
+      <DependentUpon>MeterListingInquiry_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="About\FormAbout.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1197,6 +1212,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterViewSetting_Form.resx">
       <DependentUpon>MeterViewSetting_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterListingInquiry_Form.resx">
+      <DependentUpon>MeterListingInquiry_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.resx">
       <DependentUpon>MeterReadingHistory_Form.cs</DependentUpon>

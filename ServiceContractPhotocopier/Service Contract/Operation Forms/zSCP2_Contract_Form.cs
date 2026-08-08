@@ -769,7 +769,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Customer feedback 07/08: the month-end bulk email must also carry the "Summary sales
             // invoice meter listing" (Appendix A) — one row per CSSI with the readings, FOC, rates
             // and charges behind that month's invoice. Same shape as the SOA pair above.
-            ConfigureTplLookup(SluMeterListingTemplate, SluMeterListingTemplateView, "Invoice Document", _loadedListingRpt);
+            // The listing has its OWN report type — the designs come from the Summary Sales Invoice
+            // Meter Listing module's Report Design button, not from the Invoice Document family.
+            ConfigureTplLookup(SluMeterListingTemplate, SluMeterListingTemplateView,
+                ServiceContractPhotocopier.Classes.ScpMeterListing.REPORT_TYPE, _loadedListingRpt);
             ChkGenerateMeterListing.Checked = _loadedGenListing;
             ChkGenerateMeterListing.ToolTip =
                 "This customer receives the Summary sales invoice meter listing (Appendix A) each " +
