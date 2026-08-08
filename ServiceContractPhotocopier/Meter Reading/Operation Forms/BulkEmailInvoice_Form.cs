@@ -555,6 +555,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             string subject = tplDef.Subject;
             string message = tplDef.Body;
             _mailStyle = tplDef.Style;
+            // A customer whose contract names its own template gets THAT wording instead (another
+            // language, extra instructions). Applied per recipient in ConvertBatchMessage, so one
+            // batch can still carry several templates - no need to send in separate runs.
+            LoadPerDebtorTemplates();
+            _tplDefaultSubject = subject;
+            _tplDefaultBody = message;
+            _tplDefaultStyle = tplDef.Style;
             _mailSenderCompany = fromName;
             ColumnNameCaption[] cols = new ColumnNameCaption[3];
             cols[0] = new ColumnNameCaption(); cols[0].ColumnName = "AccNo"; cols[0].Caption = "Customer"; cols[0].AllowEdit = false;
@@ -610,6 +617,35 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             catch { /* the send already happened - history logging must never break it */ }
         }
 
+        // Per-customer email wording (contract.EmailTemplateKey -> template), plus the batch default
+        // we handed to the dialog so ConvertBatchMessage can tell "untouched" from "operator typed".
+        private System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template> _perDebtorTpl;
+        private string _tplDefaultSubject = "";
+        private string _tplDefaultBody = "";
+        private string _tplDefaultStyle = "PLAIN";
+
+        /// <summary>Debtor -> the template their contract asks for. Debtors with no contract-level
+        /// choice are simply absent, and fall through to the default.</summary>
+        private void LoadPerDebtorTemplates()
+        {
+            _perDebtorTpl = new System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template>();
+            try
+            {
+                System.Data.DataTable dt = _dbSetting.GetDataTable(
+                    "SELECT DISTINCT c.DebtorCode, t.TemplateKey, t.Name, t.Subject, t.Body, t.Style " +
+                    "FROM dbo.zSCP2_Contract c " +
+                    "JOIN dbo.zSCP2_EmailTemplate t ON t.TemplateKey = c.EmailTemplateKey " +
+                    "WHERE c.EmailTemplateKey IS NOT NULL AND ISNULL(c.Inactive,'N') <> 'Y'", false);
+                foreach (System.Data.DataRow r in dt.Rows)
+                {
+                    string acc = Convert.ToString(r["DebtorCode"]).Trim().ToUpperInvariant();
+                    if (acc.Length == 0 || _perDebtorTpl.ContainsKey(acc)) continue;   // first contract wins
+                    _perDebtorTpl[acc] = ServiceContractPhotocopier.Classes.ScpEmailTemplates.FromRow(r);
+                }
+            }
+            catch { }   // no per-customer wording is a downgrade, not a failure
+        }
+
         private string _mailStyle = "PLAIN";    // template style: PLAIN / STYLED (frame) / HTML (user-authored)
         private string _mailSenderCompany = ""; // header-bar company for the styled frame
 
@@ -620,6 +656,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             InvoiceBatchMailEntity ent = entity as InvoiceBatchMailEntity;
             if (ent == null) return;
             if (_sentEntities != null) _sentEntities.Add(ent);
+            // Per-customer wording, but ONLY while the operator has left the batch text alone. If
+            // they typed their own subject/body in the dialog, that is a deliberate one-off for this
+            // send and it wins for everyone - silently replacing what they just wrote would be worse
+            // than ignoring a stored preference.
+            _mailStyle = _tplDefaultStyle;
+            if (_perDebtorTpl != null && subject == _tplDefaultSubject && message == _tplDefaultBody)
+            {
+                ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template own;
+                if (_perDebtorTpl.TryGetValue((ent.AccNo ?? "").Trim().ToUpperInvariant(), out own) && own != null)
+                {
+                    subject = own.Subject;
+                    message = own.Body;
+                    _mailStyle = own.Style;
+                }
+            }
             fromName = ReplaceTokens(fromName, ent);
             subject = ReplaceTokens(subject, ent);
             message = ReplaceTokens(message, ent);

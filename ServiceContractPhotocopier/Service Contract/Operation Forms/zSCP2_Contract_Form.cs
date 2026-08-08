@@ -677,6 +677,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (ChkGenerateSOA != null) ChkGenerateSOA.EditValueChanged += h;
             if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.EditValueChanged += h;
             if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValueChanged += h;
+            if (SluEmailTemplate != null) SluEmailTemplate.EditValueChanged += h;
             if (SluSOATemplate != null) SluSOATemplate.EditValueChanged += h;
         }
 
@@ -777,10 +778,65 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkGenerateMeterListing.CheckedChanged += delegate { SluMeterListingTemplate.Enabled = ChkGenerateMeterListing.Checked; };
             SluMeterListingTemplate.ToolTip = "The report design used to print the listing. " +
                 "Empty = the default layout.";
+            ConfigureEmailTplLookup();
         }
 
         private bool _loadedGenListing;
         private string _loadedListingRpt = "";
+        private long _loadedEmailTplKey;
+
+        /// <summary>
+        /// Per-customer bulk-email wording. Empty = whichever template is marked as the default in
+        /// the Email Template module, so nobody has to choose unless this customer needs different
+        /// wording (another language, extra instructions).
+        /// </summary>
+        private void ConfigureEmailTplLookup()
+        {
+            if (SluEmailTemplate == null) return;
+            DataTable dt = new DataTable();
+            dt.Columns.Add("TemplateKey", typeof(long));
+            dt.Columns.Add("Name", typeof(string));
+            dt.Columns.Add("Subject", typeof(string));
+            try
+            {
+                DataTable src = ServiceContractPhotocopier.Classes.ScpEmailTemplates.List(_db);
+                foreach (DataRow r in src.Rows)
+                {
+                    bool isDef = Convert.ToString(r["IsDefault"]) == "Y";
+                    dt.Rows.Add(Convert.ToInt64(r["TemplateKey"]),
+                        Convert.ToString(r["Name"]) + (isDef ? "   ★ default" : ""),
+                        Convert.ToString(r["Subject"]));
+                }
+            }
+            catch { /* template store unavailable — picker stays empty, the saved key still applies */ }
+            SluEmailTemplate.Properties.DataSource = dt;
+            SluEmailTemplate.Properties.ValueMember = "TemplateKey";
+            SluEmailTemplate.Properties.DisplayMember = "Name";
+            SluEmailTemplate.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+            SluEmailTemplate.Properties.NullText = "(use the default template)";
+            SluEmailTemplate.Properties.PopupView = SluEmailTemplateView;
+            SluEmailTemplateView.OptionsBehavior.AutoPopulateColumns = false;
+            SluEmailTemplateView.OptionsView.ShowGroupPanel = false;
+            SluEmailTemplateView.Columns.Clear();
+            DevExpress.XtraGrid.Columns.GridColumn cn = SluEmailTemplateView.Columns.AddVisible("Name");
+            cn.Caption = "Template"; cn.Width = 200;
+            DevExpress.XtraGrid.Columns.GridColumn cs = SluEmailTemplateView.Columns.AddVisible("Subject");
+            cs.Caption = "Subject"; cs.Width = 260;
+            SluEmailTemplate.EditValue = _loadedEmailTplKey > 0 ? (object)_loadedEmailTplKey : null;
+            SluEmailTemplate.ToolTip =
+                "The bulk-email wording for THIS customer. Empty = the template marked as default " +
+                "in Meter Reading > Bulk Email > Template… — set it once there and every customer " +
+                "uses it unless you give them their own.";
+        }
+
+        /// <summary>Saved template key, or 0 when the contract follows the default.</summary>
+        private long EmailTplVal()
+        {
+            if (SluEmailTemplate == null) return _loadedEmailTplKey;
+            object v = SluEmailTemplate.EditValue;
+            if (v == null || v == DBNull.Value) return 0;
+            long k; return long.TryParse(Convert.ToString(v), out k) ? k : 0;
+        }
 
         /// <summary>Does this contract's customer get the Appendix A meter listing in the bulk send?</summary>
         internal static bool ContractWantsMeterListing(DataRow r)
@@ -1235,6 +1291,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loadedListingRpt = r.Table.Columns.Contains("MeterListingReportName") ? AsStr(r["MeterListingReportName"]).Trim() : "";
             if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.Checked = _loadedGenListing;
             if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValue = _loadedListingRpt.Length > 0 ? (object)_loadedListingRpt : null;
+            _loadedEmailTplKey = r.Table.Columns.Contains("EmailTemplateKey") && r["EmailTemplateKey"] != DBNull.Value
+                ? Convert.ToInt64(r["EmailTemplateKey"]) : 0L;
+            if (SluEmailTemplate != null) SluEmailTemplate.EditValue = _loadedEmailTplKey > 0 ? (object)_loadedEmailTplKey : null;
             SyncTermFromDates();
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
@@ -4477,9 +4536,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -4497,7 +4556,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
-                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, PeriodFollowContract=@pmode, " +
+                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
@@ -4544,6 +4603,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@soarpt", TplVal(SluSOATemplate, _loadedSOARpt));
             cmd.Parameters.AddWithValue("@genlist", ChkGenerateMeterListing != null ? (ChkGenerateMeterListing.Checked ? "Y" : "N") : (_loadedGenListing ? "Y" : "N"));
             cmd.Parameters.AddWithValue("@listrpt", TplVal(SluMeterListingTemplate, _loadedListingRpt));
+            long emailTpl = EmailTplVal();
+            cmd.Parameters.AddWithValue("@emailtpl", emailTpl > 0 ? (object)emailTpl : DBNull.Value);
             cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
@@ -5244,6 +5305,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loadedListingRpt = r.Table.Columns.Contains("MeterListingReportName") ? AsStr(r["MeterListingReportName"]).Trim() : "";
             if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.Checked = _loadedGenListing;
             if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValue = _loadedListingRpt.Length > 0 ? (object)_loadedListingRpt : null;
+            _loadedEmailTplKey = r.Table.Columns.Contains("EmailTemplateKey") && r["EmailTemplateKey"] != DBNull.Value
+                ? Convert.ToInt64(r["EmailTemplateKey"]) : 0L;
+            if (SluEmailTemplate != null) SluEmailTemplate.EditValue = _loadedEmailTplKey > 0 ? (object)_loadedEmailTplKey : null;
             SyncTermFromDates();
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;

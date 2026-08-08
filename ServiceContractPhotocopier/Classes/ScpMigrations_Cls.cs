@@ -170,6 +170,7 @@ namespace ServiceContractPhotocopier.Classes
             // v11: Demo 28/07 #16 — invoice display dates follow the contract cycle (opt-in flag).
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v11_PeriodMode.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v12_MeterListing.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v13_EmailTemplate.sql", asm);
             // Bulk Email send history (Emailed column / not-yet-emailed checklist / contract reminder).
             RunIfTableMissing(dbsetting, "zSCP2_EmailLog",              "02_CreateTable_zSCP2_EmailLog.sql", asm);
             // Named bulk-email templates (user-maintained versions, one default; seeds "Standard").

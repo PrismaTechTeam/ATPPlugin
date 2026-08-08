@@ -63,6 +63,9 @@
         private DevExpress.XtraGrid.Views.Grid.GridView SluMeterListingTemplateView;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem30;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem31;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluEmailTemplate;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluEmailTemplateView;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem32;
         private DevExpress.XtraEditors.SearchLookUpEdit SluAgent;
         private DevExpress.XtraGrid.Views.Grid.GridView SluAgentView;
         private DevExpress.XtraEditors.SpinEdit SpnBillingDay;
@@ -285,6 +288,9 @@
             this.SluMeterListingTemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.layoutControlItem30 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem31 = new DevExpress.XtraLayout.LayoutControlItem();
+            this.SluEmailTemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluEmailTemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.layoutControlItem32 = new DevExpress.XtraLayout.LayoutControlItem();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
             this.TxtRefNo = new DevExpress.XtraEditors.TextEdit();
             this.SluDept = new DevExpress.XtraEditors.SearchLookUpEdit();
@@ -414,6 +420,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplateView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem30)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem31)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplateView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem32)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRefNo.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).BeginInit();
@@ -1054,6 +1063,25 @@
             this.SluMeterListingTemplateView.Name = "SluMeterListingTemplateView";
             this.SluMeterListingTemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
             this.SluMeterListingTemplateView.OptionsView.ShowGroupPanel = false;
+            //
+            // SluEmailTemplate
+            //
+            this.SluEmailTemplate.Location = new System.Drawing.Point(160, 132);
+            this.SluEmailTemplate.Name = "SluEmailTemplate";
+            this.SluEmailTemplate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluEmailTemplate.Properties.NullText = "(use the default template)";
+            this.SluEmailTemplate.Properties.PopupView = this.SluEmailTemplateView;
+            this.SluEmailTemplate.Size = new System.Drawing.Size(244, 20);
+            this.SluEmailTemplate.StyleController = this.layoutControl2;
+            this.SluEmailTemplate.TabIndex = 53;
+            //
+            // SluEmailTemplateView
+            //
+            this.SluEmailTemplateView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluEmailTemplateView.Name = "SluEmailTemplateView";
+            this.SluEmailTemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluEmailTemplateView.OptionsView.ShowGroupPanel = false;
             // 
             // ChkInactive
             // 
@@ -2274,6 +2302,7 @@
             this.layoutControl2.Controls.Add(this.SluSOATemplate);
             this.layoutControl2.Controls.Add(this.ChkGenerateMeterListing);
             this.layoutControl2.Controls.Add(this.SluMeterListingTemplate);
+            this.layoutControl2.Controls.Add(this.SluEmailTemplate);
             this.layoutControl2.Controls.Add(this.ChkPeriodByContract);
             this.layoutControl2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
@@ -2298,9 +2327,10 @@
             this.layoutControlItem28,
             this.layoutControlItem27,
             this.layoutControlItem31,
+            this.layoutControlItem32,
             this.layoutControlItem30});
             this.layoutControlGroup1.Name = "layoutControlGroup1";
-            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 178);
+            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 202);
             this.layoutControlGroup1.TextVisible = false;
             // 
             // layoutControlItem21
@@ -2401,6 +2431,15 @@
             this.layoutControlItem31.Size = new System.Drawing.Size(342, 24);
             this.layoutControlItem31.Text = "Listing Template";
             this.layoutControlItem31.TextSize = new System.Drawing.Size(82, 13);
+            //
+            // layoutControlItem32
+            //
+            this.layoutControlItem32.Control = this.SluEmailTemplate;
+            this.layoutControlItem32.Location = new System.Drawing.Point(0, 72);
+            this.layoutControlItem32.Name = "layoutControlItem32";
+            this.layoutControlItem32.Size = new System.Drawing.Size(334, 24);
+            this.layoutControlItem32.Text = "Email Template";
+            this.layoutControlItem32.TextSize = new System.Drawing.Size(82, 13);
             // 
             // emptySpaceItem3
             // 
@@ -2468,6 +2507,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.SpnRentalDay.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplateView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem32)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplateView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem31)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem30)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplateView)).EndInit();
