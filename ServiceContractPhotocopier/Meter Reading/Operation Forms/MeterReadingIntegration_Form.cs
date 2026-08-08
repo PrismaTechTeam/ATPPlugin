@@ -837,16 +837,43 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             { XtraMessageBox.Show("Could not open the invoice:\r\n" + ex.Message, "Open Invoice"); }
         }
 
-        // FOC Qty display: a ladder meter's free copies come from the LADDER's 0.00 band, not the
-        // meter's own FOCQty column (which the engine ignores under a ladder).
+        // FOC Qty display: show the free allowance the CHARGE ENGINE actually deducts, so the
+        // customer's own arithmetic (NET = Usage - FOC, Charge = NET x Rate) reconciles off the
+        // screen every time. Two things make the raw FOCQty column lie:
+        //   - a LADDER meter's free copies come from the ladder's 0.00 band; the engine ignores the
+        //     meter's own FOCQty entirely when a ladder is in effect
+        //   - the FOC RESET accrual multiplies the allowance when a bill spans N reset periods
+        //     (weekly / every-N-days contracts), so the stored figure understates what was deducted
         private void GridViewMeter_CustomColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
         {
             if (e.Column == null || e.Column.FieldName != "FOCQty" || e.ListSourceRowIndex < 0) return;
-            if (_dtGrid == null || _ladders == null || e.ListSourceRowIndex >= _dtGrid.DefaultView.Count) return;
-            DataRow r = _dtGrid.DefaultView[e.ListSourceRowIndex].Row;
+            DataRow r = GridSourceRow(e.ListSourceRowIndex);
+            if (r == null) return;
+            int resetN = FocResetCountFor(r);
+            if (resetN < 1) resetN = 1;
             string code = S(r["MultiPriceCode"]);
-            if (code.Length == 0 || !ServiceContractPhotocopier.Classes.ScpMultiPrice.HasLadder(_ladders, code)) return;
-            e.DisplayText = ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(_ladders[code]).ToString("#,##0.##");
+            decimal applied;
+            if (_ladders != null && ServiceContractPhotocopier.Classes.ScpMultiPrice.HasLadder(_ladders, code))
+                applied = ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(_ladders[code]) * resetN;
+            else if (resetN > 1)
+                applied = Dec(r["FOCQty"]) * resetN;
+            else
+                return;   // plain meter, single reset period — the stored value is already the truth
+            e.DisplayText = applied.ToString("#,##0.##");
+        }
+
+        // Resolve a LIST-SOURCE index to its DataRow. The grid is bound to the tab's filtered
+        // DataView (ApplyTabFilter), NOT to _dtGrid.DefaultView — indexing the wrong one hands back
+        // a DIFFERENT machine's row, which is how the FOC Qty column ended up showing one meter's
+        // ladder allowance on another meter's line.
+        private DataRow GridSourceRow(int listSourceRowIndex)
+        {
+            if (listSourceRowIndex < 0) return null;
+            DataView dv = GridMeter.DataSource as DataView;
+            if (dv != null) return listSourceRowIndex < dv.Count ? dv[listSourceRowIndex].Row : null;
+            DataTable dt = GridMeter.DataSource as DataTable;
+            if (dt != null) return listSourceRowIndex < dt.Rows.Count ? dt.Rows[listSourceRowIndex] : null;
+            return null;
         }
 
         // Plain white rows (the per-item blue/white zebra shading was removed on request) — only
@@ -1981,6 +2008,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 cChgHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
                 cChgHl.AppearanceHeader.Options.UseFont = true;
             }
+
+            // Cell merging is for the IDENTITY columns only (one checkbox / contract / CSSI / serial
+            // spanning a machine's BK+CL rows). Every column carrying per-meter ARITHMETIC must keep
+            // its own cell on its own row: when two adjacent meters happen to share a value the
+            // merged cell reads as one figure covering both meters, and anyone reconciling
+            // NET = Usage - FOC off the screen is then reading the wrong line.
+            foreach (string nm in new string[] { "MeterType", "MeterTypeName", "MinCharges", "UnitPrice",
+                "FOCQty", "RebatePct", "LastReadDate", "LastAuditDate", "LastFetchDate", "LastReading",
+                "CurrentReading", "MeterUsage", "TotalCharges", "FetchedReading", "EntrySource",
+                "UseMin", "MultiPriceCode", "Role" })
+                if (GridViewMeter.Columns[nm] != null)
+                    GridViewMeter.Columns[nm].OptionsColumn.AllowMerge = DevExpress.Utils.DefaultBoolean.False;
 
             // Freeze the identifier columns on the left so they stay visible when scrolling horizontally.
             // (Requires ColumnAutoWidth = false, set above.)
