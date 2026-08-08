@@ -58,6 +58,11 @@
         private DevExpress.XtraEditors.CheckEdit ChkGenerateSOA;
         private DevExpress.XtraEditors.SearchLookUpEdit SluSOATemplate;
         private DevExpress.XtraGrid.Views.Grid.GridView SluSOATemplateView;
+        private DevExpress.XtraEditors.CheckEdit ChkGenerateMeterListing;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluMeterListingTemplate;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluMeterListingTemplateView;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem30;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem31;
         private DevExpress.XtraEditors.SearchLookUpEdit SluAgent;
         private DevExpress.XtraGrid.Views.Grid.GridView SluAgentView;
         private DevExpress.XtraEditors.SpinEdit SpnBillingDay;
@@ -275,6 +280,11 @@
             this.ChkGenerateSOA = new DevExpress.XtraEditors.CheckEdit();
             this.SluSOATemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluSOATemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.ChkGenerateMeterListing = new DevExpress.XtraEditors.CheckEdit();
+            this.SluMeterListingTemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluMeterListingTemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.layoutControlItem30 = new DevExpress.XtraLayout.LayoutControlItem();
+            this.layoutControlItem31 = new DevExpress.XtraLayout.LayoutControlItem();
             this.ChkInactive = new DevExpress.XtraEditors.CheckEdit();
             this.TxtRefNo = new DevExpress.XtraEditors.TextEdit();
             this.SluDept = new DevExpress.XtraEditors.SearchLookUpEdit();
@@ -399,6 +409,11 @@
             ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateSOA.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplateView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateMeterListing.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplateView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem30)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem31)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRefNo.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluDept.Properties)).BeginInit();
@@ -1011,6 +1026,34 @@
             this.SluSOATemplateView.Name = "SluSOATemplateView";
             this.SluSOATemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
             this.SluSOATemplateView.OptionsView.ShowGroupPanel = false;
+            //
+            // ChkGenerateMeterListing
+            //
+            this.ChkGenerateMeterListing.Location = new System.Drawing.Point(160, 108);
+            this.ChkGenerateMeterListing.Name = "ChkGenerateMeterListing";
+            this.ChkGenerateMeterListing.Properties.Caption = "Generate Summary sales invoice meter listing";
+            this.ChkGenerateMeterListing.Size = new System.Drawing.Size(524, 20);
+            this.ChkGenerateMeterListing.StyleController = this.layoutControl2;
+            this.ChkGenerateMeterListing.TabIndex = 51;
+            //
+            // SluMeterListingTemplate
+            //
+            this.SluMeterListingTemplate.Location = new System.Drawing.Point(440, 60);
+            this.SluMeterListingTemplate.Name = "SluMeterListingTemplate";
+            this.SluMeterListingTemplate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluMeterListingTemplate.Properties.NullText = "(default layout)";
+            this.SluMeterListingTemplate.Properties.PopupView = this.SluMeterListingTemplateView;
+            this.SluMeterListingTemplate.Size = new System.Drawing.Size(244, 20);
+            this.SluMeterListingTemplate.StyleController = this.layoutControl2;
+            this.SluMeterListingTemplate.TabIndex = 52;
+            //
+            // SluMeterListingTemplateView
+            //
+            this.SluMeterListingTemplateView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluMeterListingTemplateView.Name = "SluMeterListingTemplateView";
+            this.SluMeterListingTemplateView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluMeterListingTemplateView.OptionsView.ShowGroupPanel = false;
             // 
             // ChkInactive
             // 
@@ -2229,6 +2272,8 @@
             this.layoutControl2.Controls.Add(this.SluInvoiceTemplate);
             this.layoutControl2.Controls.Add(this.ChkGenerateSOA);
             this.layoutControl2.Controls.Add(this.SluSOATemplate);
+            this.layoutControl2.Controls.Add(this.ChkGenerateMeterListing);
+            this.layoutControl2.Controls.Add(this.SluMeterListingTemplate);
             this.layoutControl2.Controls.Add(this.ChkPeriodByContract);
             this.layoutControl2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
@@ -2251,9 +2296,11 @@
             this.layoutControlItem24,
             this.layoutControlItem26,
             this.layoutControlItem28,
-            this.layoutControlItem27});
+            this.layoutControlItem27,
+            this.layoutControlItem31,
+            this.layoutControlItem30});
             this.layoutControlGroup1.Name = "layoutControlGroup1";
-            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 130);
+            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 178);
             this.layoutControlGroup1.TextVisible = false;
             // 
             // layoutControlItem21
@@ -2336,6 +2383,24 @@
             this.layoutControlItem28.Size = new System.Drawing.Size(342, 24);
             this.layoutControlItem28.Text = "SOA Template";
             this.layoutControlItem28.TextSize = new System.Drawing.Size(82, 13);
+            //
+            // layoutControlItem30
+            //
+            this.layoutControlItem30.Control = this.ChkGenerateMeterListing;
+            this.layoutControlItem30.Location = new System.Drawing.Point(148, 120);
+            this.layoutControlItem30.Name = "layoutControlItem30";
+            this.layoutControlItem30.Size = new System.Drawing.Size(528, 34);
+            this.layoutControlItem30.TextSize = new System.Drawing.Size(0, 0);
+            this.layoutControlItem30.TextVisible = false;
+            //
+            // layoutControlItem31
+            //
+            this.layoutControlItem31.Control = this.SluMeterListingTemplate;
+            this.layoutControlItem31.Location = new System.Drawing.Point(334, 48);
+            this.layoutControlItem31.Name = "layoutControlItem31";
+            this.layoutControlItem31.Size = new System.Drawing.Size(342, 24);
+            this.layoutControlItem31.Text = "Listing Template";
+            this.layoutControlItem31.TextSize = new System.Drawing.Size(82, 13);
             // 
             // emptySpaceItem3
             // 
@@ -2403,6 +2468,11 @@
             ((System.ComponentModel.ISupportInitialize)(this.SpnRentalDay.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplateView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem31)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem30)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplateView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluMeterListingTemplate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateMeterListing.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkGenerateSOA.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluSOATemplateView)).EndInit();

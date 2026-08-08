@@ -875,6 +875,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v10_ReportTemplates.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v11_PeriodMode.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v12_MeterListing.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v3_CNCorrection.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailTemplate.sql" />

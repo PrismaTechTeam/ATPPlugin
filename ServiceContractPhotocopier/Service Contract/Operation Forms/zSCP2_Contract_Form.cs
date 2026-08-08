@@ -675,6 +675,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (cboTermUnit != null) cboTermUnit.EditValueChanged += h;
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValueChanged += h;
             if (ChkGenerateSOA != null) ChkGenerateSOA.EditValueChanged += h;
+            if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.EditValueChanged += h;
+            if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValueChanged += h;
             if (SluSOATemplate != null) SluSOATemplate.EditValueChanged += h;
         }
 
@@ -762,6 +764,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkGenerateSOA.CheckedChanged += delegate { SluSOATemplate.Enabled = ChkGenerateSOA.Checked; };
             SluSOATemplate.ToolTip = "The Debtor Statement report design for this customer's SOA. " +
                 "Empty = the default statement layout.";
+
+            // Customer feedback 07/08: the month-end bulk email must also carry the "Summary sales
+            // invoice meter listing" (Appendix A) — one row per CSSI with the readings, FOC, rates
+            // and charges behind that month's invoice. Same shape as the SOA pair above.
+            ConfigureTplLookup(SluMeterListingTemplate, SluMeterListingTemplateView, "Invoice Document", _loadedListingRpt);
+            ChkGenerateMeterListing.Checked = _loadedGenListing;
+            ChkGenerateMeterListing.ToolTip =
+                "This customer receives the Summary sales invoice meter listing (Appendix A) each " +
+                "cycle, sent with the invoice and the SOA.";
+            SluMeterListingTemplate.Enabled = ChkGenerateMeterListing.Checked;
+            ChkGenerateMeterListing.CheckedChanged += delegate { SluMeterListingTemplate.Enabled = ChkGenerateMeterListing.Checked; };
+            SluMeterListingTemplate.ToolTip = "The report design used to print the listing. " +
+                "Empty = the default layout.";
+        }
+
+        private bool _loadedGenListing;
+        private string _loadedListingRpt = "";
+
+        /// <summary>Does this contract's customer get the Appendix A meter listing in the bulk send?</summary>
+        internal static bool ContractWantsMeterListing(DataRow r)
+        {
+            return r != null && r.Table.Columns.Contains("GenerateMeterListing") &&
+                   Convert.ToString(r["GenerateMeterListing"]) == "Y";
         }
 
         // CLAUDE.md rule 8: mirror AutoCount's create/edit behaviour — closing with unsaved changes
@@ -1206,6 +1231,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
             if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
             if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            _loadedGenListing = r.Table.Columns.Contains("GenerateMeterListing") && AsStr(r["GenerateMeterListing"]) == "Y";
+            _loadedListingRpt = r.Table.Columns.Contains("MeterListingReportName") ? AsStr(r["MeterListingReportName"]).Trim() : "";
+            if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.Checked = _loadedGenListing;
+            if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValue = _loadedListingRpt.Length > 0 ? (object)_loadedListingRpt : null;
             SyncTermFromDates();
             // FOC reset: capture into fields; the controls may not exist yet (BuildStrategyTab runs
             // AFTER the constructor's LoadContract), so the UI binding happens in ApplyFocResetToUi —
@@ -2831,7 +2860,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             dt.Columns.Add("TaxAmount", typeof(decimal));
             dt.Columns.Add("AmountAfterTax", typeof(decimal));
             dt.Columns.Add("Pos", typeof(int));
+            // Parts ISSUED from stock against a machine (Stock Issue detail line carrying the
+            // ServiceItemNo UDF). They are a VIEW of the stock document, not contract data: never
+            // editable, never removable here, never written back.
+            dt.Columns.Add("ServiceItemNo", typeof(string));   // the CSSI the part went to
+            dt.Columns.Add("StockIssueDocNo", typeof(string)); // non-empty = owned by that Stock Issue
+            dt.Columns.Add("StockIssueDate", typeof(DateTime));
             return dt;
+        }
+
+        /// <summary>A spare-part row that belongs to a Stock Issue document, not to the contract.</summary>
+        private static bool IsStockIssueRow(DataRow r)
+        {
+            if (r == null || !r.Table.Columns.Contains("StockIssueDocNo")) return false;
+            return r["StockIssueDocNo"] != DBNull.Value &&
+                   Convert.ToString(r["StockIssueDocNo"]).Trim().Length > 0;
         }
 
         private void SetupSparePartsGrid()
@@ -2850,6 +2893,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewSpareParts.CellValueChanged += new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(SpareParts_CellValueChanged);
             GridViewSpareParts.ShowingEditor += new System.ComponentModel.CancelEventHandler(SpareParts_ShowingEditor);
             GridViewSpareParts.CustomRowCellEditForEditing += new DevExpress.XtraGrid.Views.Grid.CustomRowCellEditEventHandler(SpareParts_SerialEditor);
+            // Issued-from-stock lines read as a different KIND of row — grey, so "why can't I delete
+            // this" is answered before the user tries.
+            GridViewSpareParts.RowStyle += new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(SpareParts_RowStyle);
 
             _spareParts = CreateSparePartsTable();
             GridSpareParts.DataSource = _spareParts.DefaultView;
@@ -2932,25 +2978,32 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             v.Columns.Clear();
             v.PopulateColumns();
             SpHide(v, "SparePartKey"); SpHide(v, "ItemKey"); SpHide(v, "Bound"); SpHide(v, "Pos");
-            SpCol2(v, "No", "No", 40, 0, true);
-            SpCol2(v, "ItemCode", "Item Code", 130, 1);
+            SpHide(v, "StockIssueDate");
+            // Which machine the part is for. Blank on hand-keyed contract lines, filled on lines that
+            // came from a Stock Issue — that is the whole point of the ServiceItemNo UDF.
+            SpCol2(v, "ServiceItemNo", "Service Item", 130, 0, true);
+            SpCol2(v, "No", "No", 40, 1, true);
+            SpCol2(v, "ItemCode", "Item Code", 130, 2);
             if (itemRepo != null && v.Columns["ItemCode"] != null) v.Columns["ItemCode"].ColumnEdit = itemRepo;
-            SpCol2(v, "Description", "Description", 220, 2);
+            SpCol2(v, "Description", "Description", 220, 3);
             // Serial No has NO ColumnEdit: cells display their raw value (a filtered lookup as ColumnEdit
             // would blank out every serial that isn't in the current filter). The searchable, per-row
             // filtered picker is supplied at EDIT time via CustomRowCellEditForEditing in each form.
-            SpCol2(v, "SerialNumber", "Serial No", 120, 3);
-            SpBool2(v, check, "Unlimited", "Unlimited", 70, 4);
-            SpCol2(v, "UOM", "UOM", 70, 5);
-            SpCol2(v, "Quantity", "Quantity", 80, 6);
-            SpCol2(v, "Discount", "Discount", 80, 7);
-            SpCol2(v, "UnitPrice", "Unit Price", 90, 8);
-            SpCol2(v, "Amount", "Amount", 90, 9, true);
-            SpCol2(v, "TaxType", "Tax Type", 80, 10);
-            SpBool2(v, check, "TaxInclusive", "Tax Inclusive", 90, 11);
-            SpCol2(v, "TaxRate", "Tax (%)", 70, 12);
-            SpCol2(v, "TaxAmount", "Tax Amount", 90, 13, true);
-            SpCol2(v, "AmountAfterTax", "Amount After Tax", 110, 14, true);
+            SpCol2(v, "SerialNumber", "Serial No", 120, 4);
+            SpBool2(v, check, "Unlimited", "Unlimited", 70, 5);
+            SpCol2(v, "UOM", "UOM", 70, 6);
+            SpCol2(v, "Quantity", "Quantity", 80, 7);
+            SpCol2(v, "Discount", "Discount", 80, 8);
+            SpCol2(v, "UnitPrice", "Unit Price", 90, 9);
+            SpCol2(v, "Amount", "Amount", 90, 10, true);
+            SpCol2(v, "TaxType", "Tax Type", 80, 11);
+            SpBool2(v, check, "TaxInclusive", "Tax Inclusive", 90, 12);
+            SpCol2(v, "TaxRate", "Tax (%)", 70, 13);
+            SpCol2(v, "TaxAmount", "Tax Amount", 90, 14, true);
+            SpCol2(v, "AmountAfterTax", "Amount After Tax", 110, 15, true);
+            // Last: where the line came from. Empty = keyed on this contract; a document number =
+            // issued from stock, and the row is a read-only mirror of that document.
+            SpCol2(v, "StockIssueDocNo", "Stock Issue", 110, 16, true);
         }
 
         private static void SpHide(DevExpress.XtraGrid.Views.Grid.GridView v, string field)
@@ -2975,6 +3028,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Item-bound lines are read-only on the contract (they belong to a service item); block editing.
+        private void SpareParts_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
+        {
+            if (e.RowHandle < 0) return;
+            DataRowView drv = GridViewSpareParts.GetRow(e.RowHandle) as DataRowView;
+            if (drv == null || !IsStockIssueRow(drv.Row)) return;
+            e.Appearance.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+            e.Appearance.ForeColor = System.Drawing.Color.FromArgb(70, 70, 70);
+        }
+
         private void SpareParts_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
             int rh = GridViewSpareParts.FocusedRowHandle;
@@ -3064,7 +3126,79 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 }
             }
             catch { }
+            LoadIssuedSpareParts();
             RenumberSpareParts();
+        }
+
+        /// <summary>
+        /// Parts ISSUED from stock against this contract's machines. A Stock Issue detail line
+        /// (ISSDTL) that carries the ServiceItemNo UDF is shown here so the contract answers
+        /// "what has this customer's fleet actually consumed" — feedback A2, cost and revenue per
+        /// machine. These rows are a live VIEW of the stock document: read-only, not removable,
+        /// never written back. UnitCost is what a stock issue carries (there is no selling price on
+        /// an issue), so it lands in Unit Price and Amount with no tax.
+        /// </summary>
+        private void LoadIssuedSpareParts()
+        {
+            if (_spareParts == null || _isNew || _contractKey == 0) return;
+            try
+            {
+                // Nothing to match against until the contract has numbered service items.
+                DataTable nos = _db.GetDataTable(
+                    "SELECT ISNULL(ServiceItemNo,'') AS N FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + _contractKey, false);
+                System.Text.StringBuilder inList = new System.Text.StringBuilder();
+                foreach (DataRow n in nos.Rows)
+                {
+                    string s = Convert.ToString(n["N"]).Trim();
+                    if (s.Length == 0) continue;
+                    if (inList.Length > 0) inList.Append(",");
+                    inList.Append("'").Append(s.Replace("'", "''")).Append("'");
+                }
+                if (inList.Length == 0) return;
+
+                // UDF_ServiceItemNo only exists once ScpUdf_Cls has provisioned it (BeforeLoad), but
+                // an older book opened by an older build may not have it yet — check, don't assume.
+                DataTable has = _db.GetDataTable(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='ISSDTL' AND COLUMN_NAME='" +
+                    ScpUdf_Cls.COL_SERVICE_ITEM_NO + "'", false);
+                if (has == null || has.Rows.Count == 0) return;
+
+                DataTable dt = _db.GetDataTable(
+                    "SELECT h.DocNo, h.DocDate, ISNULL(d." + ScpUdf_Cls.COL_SERVICE_ITEM_NO + ",'') AS ServiceItemNo, " +
+                    "ISNULL(d.ItemCode,'') AS ItemCode, ISNULL(d.Description,'') AS Description, " +
+                    "ISNULL(d.SerialNoList,'') AS SerialNumber, ISNULL(d.UOM,'') AS UOM, " +
+                    "ISNULL(d.Qty,0) AS Qty, ISNULL(d.UnitCost,0) AS UnitCost, ISNULL(d.SubTotal,0) AS SubTotal " +
+                    "FROM dbo.ISSDTL d JOIN dbo.ISS h ON h.DocKey = d.DocKey " +
+                    "WHERE ISNULL(h.Cancelled,'F') <> 'T' " +
+                    "AND ISNULL(d." + ScpUdf_Cls.COL_SERVICE_ITEM_NO + ",'') IN (" + inList + ") " +
+                    "ORDER BY h.DocDate, h.DocNo, d.Seq", false);
+
+                foreach (DataRow s in dt.Rows)
+                {
+                    DataRow r = _spareParts.NewRow();
+                    r["SparePartKey"] = 0L;
+                    r["ItemKey"] = DBNull.Value;
+                    r["Bound"] = true;                       // blocks the in-place editor
+                    r["ServiceItemNo"] = s["ServiceItemNo"];
+                    r["StockIssueDocNo"] = s["DocNo"];
+                    r["StockIssueDate"] = s["DocDate"];
+                    r["ItemCode"] = s["ItemCode"];
+                    r["Description"] = s["Description"];
+                    r["SerialNumber"] = s["SerialNumber"];
+                    r["Unlimited"] = false;
+                    r["UOM"] = s["UOM"];
+                    r["Quantity"] = s["Qty"];
+                    r["Discount"] = "";
+                    r["UnitPrice"] = s["UnitCost"];
+                    r["Amount"] = s["SubTotal"];
+                    r["TaxType"] = ""; r["TaxInclusive"] = false; r["TaxRate"] = 0m;
+                    r["TaxAmount"] = 0m;
+                    r["AmountAfterTax"] = s["SubTotal"];
+                    r["Pos"] = _spareParts.Rows.Count;
+                    _spareParts.Rows.Add(r);
+                }
+            }
+            catch { }   // the tab must still open if the stock side is unavailable
         }
 
         private void RenumberSpareParts()
@@ -3097,6 +3231,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (rh < 0) return;
             DataRowView drv = GridViewSpareParts.GetRow(rh) as DataRowView;
             if (drv == null) return;
+            if (IsStockIssueRow(drv.Row))
+            {
+                XtraMessageBox.Show(
+                    "This part was ISSUED FROM STOCK on " + Convert.ToString(drv.Row["StockIssueDocNo"]) +
+                    " and cannot be removed here — the contract only shows it.\r\n\r\n" +
+                    "To change or reverse it, edit that Stock Issue in the Stock module; this list follows it.",
+                    "Bound to a Stock Issue", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             if (drv.Row["ItemKey"] != DBNull.Value)
             { XtraMessageBox.Show("This spare part belongs to a service item and cannot be removed here. Edit it on the service item.", "Read-only"); return; }
             drv.Row.Delete();
@@ -3119,6 +3262,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataRowView a = GridViewSpareParts.GetRow(rh) as DataRowView;
             DataRowView b = GridViewSpareParts.GetRow(target) as DataRowView;
             if (a == null || b == null) return;
+            // Ordering is contract data; issued-from-stock lines are not ours to reorder (and their
+            // Pos is never saved anyway, so a swap would silently undo itself on the next load).
+            if (IsStockIssueRow(a.Row) || IsStockIssueRow(b.Row)) return;
             int pa = Convert.ToInt32(a.Row["Pos"]), pb = Convert.ToInt32(b.Row["Pos"]);
             a.Row["Pos"] = pb; b.Row["Pos"] = pa;
             _dirty = true;
@@ -3168,6 +3314,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 DataRow r = drv.Row;
                 if (r["ItemKey"] != DBNull.Value) continue;   // item-bound: not owned here
+                // Issued-from-stock lines are a VIEW of the Stock Issue document. Writing them into
+                // zSCP2_ContractSparePart would duplicate them on every save/reload and orphan them
+                // the moment that issue is amended.
+                if (IsStockIssueRow(r)) continue;
                 string code = r["ItemCode"] == DBNull.Value ? "" : Convert.ToString(r["ItemCode"]).Trim();
                 if (code.Length == 0 && Convert.ToString(r["Description"]).Trim().Length == 0) continue;
                 ExecNonQuery(conn, tx,
@@ -4327,9 +4477,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -4346,7 +4496,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "BillingDay=@bday, BillOnMonthEnd=@monthend, BillingMode=@bmode, Address1=@addr, Attention=@attn, Phone=@phone, TermCode=@term, " +
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
-                "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, PeriodFollowContract=@pmode, " +
+                "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
+                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, PeriodFollowContract=@pmode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
@@ -4391,6 +4542,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@invrpt", TplVal(SluInvoiceTemplate, _loadedInvRpt));
             cmd.Parameters.AddWithValue("@gensoa", ChkGenerateSOA != null ? (ChkGenerateSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
             cmd.Parameters.AddWithValue("@soarpt", TplVal(SluSOATemplate, _loadedSOARpt));
+            cmd.Parameters.AddWithValue("@genlist", ChkGenerateMeterListing != null ? (ChkGenerateMeterListing.Checked ? "Y" : "N") : (_loadedGenListing ? "Y" : "N"));
+            cmd.Parameters.AddWithValue("@listrpt", TplVal(SluMeterListingTemplate, _loadedListingRpt));
             cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
@@ -5087,6 +5240,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (SluInvoiceTemplate != null) SluInvoiceTemplate.EditValue = _loadedInvRpt.Length > 0 ? (object)_loadedInvRpt : null;
             if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = _loadedGenSOA;
             if (SluSOATemplate != null) SluSOATemplate.EditValue = _loadedSOARpt.Length > 0 ? (object)_loadedSOARpt : null;
+            _loadedGenListing = r.Table.Columns.Contains("GenerateMeterListing") && AsStr(r["GenerateMeterListing"]) == "Y";
+            _loadedListingRpt = r.Table.Columns.Contains("MeterListingReportName") ? AsStr(r["MeterListingReportName"]).Trim() : "";
+            if (ChkGenerateMeterListing != null) ChkGenerateMeterListing.Checked = _loadedGenListing;
+            if (SluMeterListingTemplate != null) SluMeterListingTemplate.EditValue = _loadedListingRpt.Length > 0 ? (object)_loadedListingRpt : null;
             SyncTermFromDates();
                 _focResetUnitDb = r.Table.Columns.Contains("FOCResetUnit") ? AsStr(r["FOCResetUnit"]) : "M";
                 _focResetNDb = r.Table.Columns.Contains("FOCResetN") ? AsInt(r["FOCResetN"], 0) : 0;
