@@ -364,8 +364,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             bool stmt = CmbEmailSource.SelectedIndex == 1;
             string field = stmt ? "StatementEmail" : "EmailAddress";
             string fieldLabel = stmt ? "Statement Email" : "Email Address";
-            string accNo = Convert.ToString(r["AccNo"]).Trim();
-            string company = Convert.ToString(r["CompanyName"]).Trim();
+            string accNo = Convert.ToString(r["DebtorCode"]).Trim();
+            string company = Convert.ToString(r["DebtorName"]).Trim();
             string current = Convert.ToString(r[field]).Trim();
 
             string entered;
@@ -404,7 +404,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Every row of this customer shows the same address — update them all, not just the
             // focused one, or the grid contradicts itself.
             foreach (DataRow x in _dt.Rows)
-                if (string.Equals(Convert.ToString(x["AccNo"]).Trim(), accNo, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(Convert.ToString(x["DebtorCode"]).Trim(), accNo, StringComparison.OrdinalIgnoreCase))
                     x[field] = entered;
             FillEmailColumn();
             GridInv.RefreshDataSource();
