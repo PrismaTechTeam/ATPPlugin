@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.MeterReading.OperationForms
+﻿namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     partial class BulkEmailInvoice_Form
     {
@@ -45,6 +45,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbEmailSource = new DevExpress.XtraEditors.ComboBoxEdit();
             this.BtnSelectAll = new DevExpress.XtraEditors.SimpleButton();
             this.BtnMailSetting = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnChangeEmail = new DevExpress.XtraEditors.SimpleButton();
             this.BtnEmail = new DevExpress.XtraEditors.SimpleButton();
             this.LblCount = new DevExpress.XtraEditors.LabelControl();
             this.GridInv = new DevExpress.XtraGrid.GridControl();
@@ -85,6 +86,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelFilter.Controls.Add(this.GrpFilter);
             this.PanelFilter.Controls.Add(this.BtnSelectAll);
             this.PanelFilter.Controls.Add(this.BtnMailSetting);
+            this.PanelFilter.Controls.Add(this.BtnChangeEmail);
             this.PanelFilter.Controls.Add(this.BtnEmail);
             this.PanelFilter.Controls.Add(this.LblCount);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
@@ -250,9 +252,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnSelectAll.Text = "Select All";
             this.BtnSelectAll.Click += new System.EventHandler(this.BtnSelectAll_Click);
             //
+            // BtnChangeEmail
+            //
+            this.BtnChangeEmail.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnChangeEmail.Appearance.Options.UseFont = true;
+            this.BtnChangeEmail.Location = new System.Drawing.Point(740, 8);
+            this.BtnChangeEmail.Name = "BtnChangeEmail";
+            this.BtnChangeEmail.Size = new System.Drawing.Size(150, 50);
+            this.BtnChangeEmail.TabIndex = 3;
+            this.BtnChangeEmail.Text = "Change Email";
+            this.BtnChangeEmail.Click += new System.EventHandler(this.BtnChangeEmail_Click);
+            //
             this.BtnMailSetting.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnMailSetting.Appearance.Options.UseFont = true;
-            this.BtnMailSetting.Location = new System.Drawing.Point(740, 8);
+            this.BtnMailSetting.Location = new System.Drawing.Point(896, 8);
             this.BtnMailSetting.Name = "BtnMailSetting";
             this.BtnMailSetting.Size = new System.Drawing.Size(150, 50);
             this.BtnMailSetting.TabIndex = 2;
@@ -265,7 +278,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnEmail.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnEmail.Appearance.Options.UseFont = true;
             this.BtnEmail.Appearance.Options.UseForeColor = true;
-            this.BtnEmail.Location = new System.Drawing.Point(896, 8);
+            this.BtnEmail.Location = new System.Drawing.Point(1052, 8);
             this.BtnEmail.Name = "BtnEmail";
             this.BtnEmail.Size = new System.Drawing.Size(170, 50);
             this.BtnEmail.TabIndex = 3;
@@ -370,6 +383,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.ComboBoxEdit CmbEmailSource;
         private DevExpress.XtraEditors.SimpleButton BtnSelectAll;
         private DevExpress.XtraEditors.SimpleButton BtnMailSetting;
+        private DevExpress.XtraEditors.SimpleButton BtnChangeEmail;
         private DevExpress.XtraEditors.SimpleButton BtnEmail;
         private DevExpress.XtraEditors.LabelControl LblCount;
         private DevExpress.XtraGrid.GridControl GridInv;

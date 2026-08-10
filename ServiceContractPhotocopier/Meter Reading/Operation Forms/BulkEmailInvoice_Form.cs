@@ -340,6 +340,150 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridInv.RefreshDataSource();
         }
 
+        /// <summary>
+        /// Fix a customer's email without leaving this screen. The Batch Mail dialog can already
+        /// override an address for ONE send; this writes it back to the customer so the next run
+        /// (and the SOA, and everything else) has it too — which is what you actually want when the
+        /// cell is blank because nobody ever filled it in.
+        ///
+        /// Whether it edits the Debtor's Email Address or the Statement Email follows the
+        /// "Email to:" selector, so the field you are looking at is the field you change.
+        /// </summary>
+        private void BtnChangeEmail_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            int rh = GridViewInv.FocusedRowHandle;
+            DataRow r = rh < 0 ? null : GridViewInv.GetDataRow(rh);
+            if (r == null)
+            {
+                XtraMessageBox.Show("Pick the invoice row of the customer whose email you want to change.",
+                    "Change Email", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            bool stmt = CmbEmailSource.SelectedIndex == 1;
+            string field = stmt ? "StatementEmail" : "EmailAddress";
+            string fieldLabel = stmt ? "Statement Email" : "Email Address";
+            string accNo = Convert.ToString(r["AccNo"]).Trim();
+            string company = Convert.ToString(r["CompanyName"]).Trim();
+            string current = Convert.ToString(r[field]).Trim();
+
+            string entered;
+            if (!PromptForEmail(accNo, company, fieldLabel, current, out entered)) return;
+            if (entered == current) return;
+
+            try
+            {
+                using (SqlConnection cn = new SqlConnection(_dbSetting.ConnectionString))
+                {
+                    cn.Open();
+                    using (SqlCommand cmd = new SqlCommand(
+                        "UPDATE dbo.Debtor SET " + field + " = @v WHERE AccNo = @a", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@v", entered);
+                        cmd.Parameters.AddWithValue("@a", accNo);
+                        cmd.ExecuteNonQuery();
+                    }
+                    // AutoCount caches the debtor list and only re-reads it when this counter moves.
+                    // Without the bump, its own screens keep showing the OLD address indefinitely —
+                    // a restart does not help, because the cache is keyed to the counter, not the run.
+                    using (SqlCommand bump = new SqlCommand(
+                        "UPDATE dbo.ChangeCount SET Counter = Counter + 1 WHERE TableName = 'Debtor'", cn))
+                    {
+                        bump.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not save the email:\r\n" + ex.Message,
+                    "Change Email", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Every row of this customer shows the same address — update them all, not just the
+            // focused one, or the grid contradicts itself.
+            foreach (DataRow x in _dt.Rows)
+                if (string.Equals(Convert.ToString(x["AccNo"]).Trim(), accNo, StringComparison.OrdinalIgnoreCase))
+                    x[field] = entered;
+            FillEmailColumn();
+            GridInv.RefreshDataSource();
+        }
+
+        /// <summary>Small prompt for one email address. Returns false when cancelled.</summary>
+        private bool PromptForEmail(string accNo, string company, string fieldLabel, string current, out string entered)
+        {
+            entered = "";
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = "Change Email";
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.ClientSize = new System.Drawing.Size(460, 152);
+                dlg.MinimizeBox = false; dlg.MaximizeBox = false;
+                dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+
+                LabelControl who = new LabelControl();
+                who.Text = accNo + "   " + company;
+                who.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+                who.Appearance.Options.UseFont = true;
+                who.AutoSizeMode = LabelAutoSizeMode.None;
+                who.Location = new System.Drawing.Point(14, 14);
+                who.Size = new System.Drawing.Size(430, 18);
+                dlg.Controls.Add(who);
+
+                LabelControl lbl = new LabelControl();
+                lbl.Text = fieldLabel + ":";
+                lbl.Location = new System.Drawing.Point(14, 46);
+                dlg.Controls.Add(lbl);
+
+                TextEdit txt = new TextEdit();
+                txt.Location = new System.Drawing.Point(14, 64);
+                txt.Size = new System.Drawing.Size(430, 22);
+                txt.Text = current;
+                txt.Properties.NullValuePrompt = "name@company.com";
+                txt.Properties.NullValuePromptShowForEmptyValue = true;
+                dlg.Controls.Add(txt);
+
+                LabelControl hint = new LabelControl();
+                hint.Text = "Saved onto the customer, so the next run and the SOA use it too.";
+                hint.Appearance.ForeColor = System.Drawing.Color.FromArgb(110, 110, 110);
+                hint.Appearance.Options.UseForeColor = true;
+                hint.Location = new System.Drawing.Point(14, 92);
+                dlg.Controls.Add(hint);
+
+                SimpleButton ok = new SimpleButton();
+                ok.Text = "Save"; ok.Size = new System.Drawing.Size(90, 28);
+                ok.Location = new System.Drawing.Point(264, 114);
+                dlg.Controls.Add(ok);
+
+                SimpleButton cancel = new SimpleButton();
+                cancel.Text = "Cancel"; cancel.Size = new System.Drawing.Size(90, 28);
+                cancel.Location = new System.Drawing.Point(358, 114);
+                cancel.DialogResult = DialogResult.Cancel;
+                dlg.Controls.Add(cancel);
+                dlg.CancelButton = cancel;
+
+                string captured = null;
+                ok.Click += new EventHandler(delegate
+                {
+                    string v = (txt.Text ?? "").Trim();
+                    // Clearing it on purpose is allowed; anything else must at least look like an address.
+                    if (v.Length > 0 && (v.IndexOf('@') <= 0 || v.IndexOf('.', v.IndexOf('@')) < 0))
+                    {
+                        XtraMessageBox.Show("That does not look like an email address.",
+                            "Change Email", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    captured = v;
+                    dlg.DialogResult = DialogResult.OK;
+                });
+
+                if (dlg.ShowDialog(this) != DialogResult.OK || captured == null) return false;
+                entered = captured;
+                return true;
+            }
+        }
+
         private void BtnSelectAll_Click(object sender, EventArgs e)
         {
             if (_dt == null) return;
