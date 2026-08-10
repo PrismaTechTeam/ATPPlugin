@@ -120,9 +120,11 @@ namespace ServiceContractPhotocopier
                 "    AND pv.Reading = lg.LastReading ORDER BY pv.LogKey DESC) pi " +
                 // And the invoice that starts where this one ends — the one still holding the copies
                 // ABOVE our Max, which must be corrected before this invoice can be touched.
+                // t.MeterTransReading is this invoice's Max meter — the lg apply only carries
+                // LastReading, so referencing lg.Reading was an invalid column.
                 "OUTER APPLY (SELECT TOP 1 nx.DocNo AS NextInvNo FROM dbo.zSCP2_MeterReadingLog nx " +
                 "  WHERE nx.ItemMeterKey = t.ServiceItemMeterTypeKey AND nx.Source = 'INVOICE' " +
-                "    AND nx.LastReading = lg.Reading ORDER BY nx.LogKey) nn " +
+                "    AND nx.LastReading = t.MeterTransReading ORDER BY nx.LogKey) nn " +
                 "OUTER APPLY (SELECT TOP 1 p.MeterTransReading AS PrevCorrectReading FROM dbo.zSCP_MeterTrans p " +
                 "  WHERE p.CNDocKey IS NOT NULL " +
                 "    AND p.ServiceItemMeterTypeKey = t.ServiceItemMeterTypeKey ORDER BY p.MeterTransKey DESC) pc " +
