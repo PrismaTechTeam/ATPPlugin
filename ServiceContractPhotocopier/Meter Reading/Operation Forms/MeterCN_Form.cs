@@ -92,7 +92,7 @@ namespace ServiceContractPhotocopier
                 "ISNULL(me.PeriodMonth, MONTH(t.MeterTransDate)) AS PeriodMonth, " +
                 "lg.LastReading, lg.[Usage] AS BilledUsage, lg.UnitPrice AS BilledRate, lg.Charge AS BilledCharge, " +
                 "ISNULL(m.ChargesRate,0) AS CurrentRate, pc.PrevCorrectReading, " +
-                "ISNULL(pi.PrevInvNo,'') AS PrevInvNo " +
+                "ISNULL(pi.PrevInvNo,'') AS PrevInvNo, ISNULL(nn.NextInvNo,'') AS NextInvNo " +
                 "FROM dbo.zSCP_MeterTrans t " +
                 "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = t.ServiceItemMeterTypeKey " +
                 "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
@@ -118,6 +118,11 @@ namespace ServiceContractPhotocopier
                 "OUTER APPLY (SELECT TOP 1 pv.DocNo AS PrevInvNo FROM dbo.zSCP2_MeterReadingLog pv " +
                 "  WHERE pv.ItemMeterKey = t.ServiceItemMeterTypeKey AND pv.Source = 'INVOICE' " +
                 "    AND pv.Reading = lg.LastReading ORDER BY pv.LogKey DESC) pi " +
+                // And the invoice that starts where this one ends — the one still holding the copies
+                // ABOVE our Max, which must be corrected before this invoice can be touched.
+                "OUTER APPLY (SELECT TOP 1 nx.DocNo AS NextInvNo FROM dbo.zSCP2_MeterReadingLog nx " +
+                "  WHERE nx.ItemMeterKey = t.ServiceItemMeterTypeKey AND nx.Source = 'INVOICE' " +
+                "    AND nx.LastReading = lg.Reading ORDER BY nx.LogKey) nn " +
                 "OUTER APPLY (SELECT TOP 1 p.MeterTransReading AS PrevCorrectReading FROM dbo.zSCP_MeterTrans p " +
                 "  WHERE p.CNDocKey IS NOT NULL " +
                 "    AND p.ServiceItemMeterTypeKey = t.ServiceItemMeterTypeKey ORDER BY p.MeterTransKey DESC) pc " +
@@ -142,11 +147,19 @@ namespace ServiceContractPhotocopier
             _dt.Columns.Add("CreditCopies", typeof(decimal));
             _dt.Columns.Add("CreditAmount", typeof(decimal));
             _dt.Columns.Add("AmountOverridden", typeof(bool));
+            // The ceiling a CN on THIS invoice may correct up to. Every invoice owns exactly the
+            // range it billed, so the window can never reach into a neighbour's:
+            //   MaxAllowed = MIN(this invoice's Max meter, the machine's current reading)
+            // The Max term stops us crediting copies a LATER invoice charged for; the current-reading
+            // term stops a second CN un-crediting what an earlier one already gave back.
+            _dt.Columns.Add("MaxAllowed", typeof(decimal));
             foreach (DataRow r in _dt.Rows)
             {
                 r["Rate"] = r["BilledRate"] == DBNull.Value ? Dec(r["CurrentRate"]) : Dec(r["BilledRate"]);
                 r["BaseReading"] = r["PrevCorrectReading"] == DBNull.Value
                     ? Dec(r["BilledReading"]) : Dec(r["PrevCorrectReading"]);
+                decimal invMax = Dec(r["BilledReading"]), baseRd = Dec(r["BaseReading"]);
+                r["MaxAllowed"] = baseRd < invMax ? baseRd : invMax;
                 r["CorrectReading"] = Dec(r["BaseReading"]);   // credit 0 until edited
                 r["CreditCopies"] = 0m;
                 r["CreditAmount"] = 0m;
@@ -208,7 +221,7 @@ namespace ServiceContractPhotocopier
             if (e.Column.FieldName == "CorrectReading")
             {
                 decimal keyed = Dec(r["CorrectReading"]);
-                if (keyed < Dec(r["LastReading"]) || keyed > Dec(r["BaseReading"]))
+                if (keyed < Dec(r["LastReading"]) || keyed > Dec(r["MaxAllowed"]))
                 {
                     e.Appearance.ForeColor = System.Drawing.Color.White;
                     e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
@@ -232,17 +245,36 @@ namespace ServiceContractPhotocopier
             // Pre-pass: every hard block surfaces BEFORE any confirmation prompt.
             foreach (DataRow r in _dt.Rows)
             {
-                // HARD CEILING: the meter's CURRENT reading (the base). Not the invoice's Max — after
-                // an earlier CN the base sits lower, and correcting back UP to the old Max would
-                // un-credit money that CN already gave back.
-                if (Dec(r["CreditCopies"]) < 0m)
+                // The machine still stands ABOVE this invoice's range — a later invoice is holding
+                // those copies and has to be corrected first. Correcting here would credit copies
+                // this invoice never charged for, the mirror image of the Min-meter case.
+                if (Dec(r["BaseReading"]) > Dec(r["BilledReading"]))
+                {
+                    string nextInv = Convert.ToString(r["NextInvNo"] == DBNull.Value ? "" : r["NextInvNo"]).Trim();
+                    XtraMessageBox.Show(
+                        "Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
+                        Convert.ToString(r["MeterTypeCode"]) + "\r\n\r\n" +
+                        "This machine currently reads " + Dec(r["BaseReading"]).ToString("n0") +
+                        ", which is above this invoice's range (" + Dec(r["LastReading"]).ToString("n0") +
+                        " to " + Dec(r["BilledReading"]).ToString("n0") + ").\r\n\r\n" +
+                        (nextInv.Length > 0
+                            ? "Correct " + nextInv + " down to " + Dec(r["BilledReading"]).ToString("n0") +
+                              " first — that invoice still holds the copies above this one."
+                            : "Correct the LATER invoice down to " + Dec(r["BilledReading"]).ToString("n0") +
+                              " first — it still holds the copies above this one."),
+                        "Correct with CN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                // HARD CEILING: MaxAllowed. A CN only gives copies BACK, and only the ones this
+                // invoice charged for.
+                if (Dec(r["CorrectReading"]) > Dec(r["MaxAllowed"]))
                 {
                     XtraMessageBox.Show(
                         "Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
                         Convert.ToString(r["MeterTypeCode"]) + "\r\n\r\n" +
                         "You keyed " + Dec(r["CorrectReading"]).ToString("n0") +
-                        ", which is HIGHER than this machine's current reading of " +
-                        Dec(r["BaseReading"]).ToString("n0") + ".\r\n\r\n" +
+                        ", above the highest this invoice can be corrected to (" +
+                        Dec(r["MaxAllowed"]).ToString("n0") + ").\r\n\r\n" +
                         "A credit note only gives copies back. Extra usage is billed with a " +
                         "supplementary invoice, not corrected here.",
                         "Correct with CN", MessageBoxButtons.OK, MessageBoxIcon.Warning);

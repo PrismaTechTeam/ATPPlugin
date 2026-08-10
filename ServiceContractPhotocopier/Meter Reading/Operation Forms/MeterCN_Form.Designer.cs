@@ -45,6 +45,7 @@
             this.ColMeter = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledReading = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColMinReading = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMaxReading = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledUsage = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledCharge = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -203,6 +204,7 @@
             this.ColMeter,
             this.ColBilledReading,
             this.ColMinReading,
+            this.ColMaxReading,
             this.ColBilledUsage,
             this.ColRate,
             this.ColBilledCharge,
@@ -274,6 +276,21 @@
             this.ColMinReading.VisibleIndex = 4;
             this.ColMinReading.Width = 90;
             //
+            // ColMaxReading
+            //
+            this.ColMaxReading.Caption = "Max Reading";
+            this.ColMaxReading.DisplayFormat.FormatString = "n0";
+            this.ColMaxReading.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            // The ceiling: MIN(this invoice's Max meter, the machine's current reading). Shown so
+            // the allowed window reads straight off the row - Min Reading .. Max Reading.
+            this.ColMaxReading.FieldName = "MaxAllowed";
+            this.ColMaxReading.Name = "ColMaxReading";
+            this.ColMaxReading.OptionsColumn.AllowEdit = false;
+            this.ColMaxReading.ToolTip = "A CN on this invoice cannot correct above this reading.";
+            this.ColMaxReading.Visible = true;
+            this.ColMaxReading.VisibleIndex = 5;
+            this.ColMaxReading.Width = 90;
+            //
             // ColBilledUsage
             //
             this.ColBilledUsage.Caption = "Billed Usage";
@@ -283,7 +300,7 @@
             this.ColBilledUsage.Name = "ColBilledUsage";
             this.ColBilledUsage.OptionsColumn.AllowEdit = false;
             this.ColBilledUsage.Visible = true;
-            this.ColBilledUsage.VisibleIndex = 5;
+            this.ColBilledUsage.VisibleIndex = 6;
             this.ColBilledUsage.Width = 85;
             //
             // ColRate
@@ -295,7 +312,7 @@
             this.ColRate.Name = "ColRate";
             this.ColRate.OptionsColumn.AllowEdit = false;
             this.ColRate.Visible = true;
-            this.ColRate.VisibleIndex = 6;
+            this.ColRate.VisibleIndex = 7;
             this.ColRate.Width = 70;
             //
             // ColBilledCharge
@@ -307,7 +324,7 @@
             this.ColBilledCharge.Name = "ColBilledCharge";
             this.ColBilledCharge.OptionsColumn.AllowEdit = false;
             this.ColBilledCharge.Visible = true;
-            this.ColBilledCharge.VisibleIndex = 7;
+            this.ColBilledCharge.VisibleIndex = 8;
             this.ColBilledCharge.Width = 85;
             //
             // ColCorrectReading
@@ -321,7 +338,7 @@
             this.ColCorrectReading.FieldName = "CorrectReading";
             this.ColCorrectReading.Name = "ColCorrectReading";
             this.ColCorrectReading.Visible = true;
-            this.ColCorrectReading.VisibleIndex = 8;
+            this.ColCorrectReading.VisibleIndex = 9;
             this.ColCorrectReading.Width = 100;
             //
             // ColCreditCopies
@@ -333,7 +350,7 @@
             this.ColCreditCopies.Name = "ColCreditCopies";
             this.ColCreditCopies.OptionsColumn.AllowEdit = false;
             this.ColCreditCopies.Visible = true;
-            this.ColCreditCopies.VisibleIndex = 9;
+            this.ColCreditCopies.VisibleIndex = 10;
             this.ColCreditCopies.Width = 90;
             //
             // ColCreditAmount
@@ -345,7 +362,7 @@
             this.ColCreditAmount.FieldName = "CreditAmount";
             this.ColCreditAmount.Name = "ColCreditAmount";
             this.ColCreditAmount.Visible = true;
-            this.ColCreditAmount.VisibleIndex = 10;
+            this.ColCreditAmount.VisibleIndex = 11;
             this.ColCreditAmount.Width = 95;
             //
             // RepoNum
@@ -457,6 +474,7 @@
         private DevExpress.XtraGrid.Columns.GridColumn ColMeter;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledReading;
         private DevExpress.XtraGrid.Columns.GridColumn ColMinReading;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMaxReading;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledUsage;
         private DevExpress.XtraGrid.Columns.GridColumn ColRate;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledCharge;
