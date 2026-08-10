@@ -255,8 +255,11 @@ namespace ServiceContractPhotocopier
                     XtraMessageBox.Show(
                         "Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
                         Convert.ToString(r["MeterTypeCode"]) + "\r\n\r\n" +
+                        // The invoice's OWN range (Min meter -> Max meter), not the current base:
+                        // after an earlier CN the base sits lower, and quoting that would misstate
+                        // what this invoice charged for.
                         "This invoice billed from " + minRead.ToString("n0") + " to " +
-                        Dec(r["BaseReading"]).ToString("n0") + ", so the lowest it can be corrected to is " +
+                        Dec(r["BilledReading"]).ToString("n0") + ", so the lowest it can be corrected to is " +
                         minRead.ToString("n0") + ".\r\n" +
                         "You keyed " + Dec(r["CorrectReading"]).ToString("n0") +
                         " — that would credit copies this invoice never charged for.\r\n\r\n" +
