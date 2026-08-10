@@ -153,6 +153,7 @@
     <Compile Include="Classes\ScpMigrations_Cls.cs" />
     <Compile Include="Classes\ScpUdf_Cls.cs" />
     <Compile Include="Classes\ScpMeterListing.cs" />
+    <Compile Include="Classes\ScpEmailJob.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
@@ -763,6 +764,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterListingInquiry_Form.Designer.cs">
       <DependentUpon>MeterListingInquiry_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailJob_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\BulkEmailJob_Form.Designer.cs">
+      <DependentUpon>BulkEmailJob_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="About\FormAbout.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -892,6 +899,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v11_PeriodMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v12_MeterListing.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v13_EmailTemplate.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailJob.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v3_CNCorrection.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailTemplate.sql" />
@@ -1215,6 +1223,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterListingInquiry_Form.resx">
       <DependentUpon>MeterListingInquiry_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\BulkEmailJob_Form.resx">
+      <DependentUpon>BulkEmailJob_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingHistory_Form.resx">
       <DependentUpon>MeterReadingHistory_Form.cs</DependentUpon>

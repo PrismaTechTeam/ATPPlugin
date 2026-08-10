@@ -46,6 +46,7 @@
             this.BtnSelectAll = new DevExpress.XtraEditors.SimpleButton();
             this.BtnMailSetting = new DevExpress.XtraEditors.SimpleButton();
             this.BtnChangeEmail = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnProgress = new DevExpress.XtraEditors.SimpleButton();
             this.BtnEmail = new DevExpress.XtraEditors.SimpleButton();
             this.LblCount = new DevExpress.XtraEditors.LabelControl();
             this.GridInv = new DevExpress.XtraGrid.GridControl();
@@ -87,6 +88,7 @@
             this.PanelFilter.Controls.Add(this.BtnSelectAll);
             this.PanelFilter.Controls.Add(this.BtnMailSetting);
             this.PanelFilter.Controls.Add(this.BtnChangeEmail);
+            this.PanelFilter.Controls.Add(this.BtnProgress);
             this.PanelFilter.Controls.Add(this.BtnEmail);
             this.PanelFilter.Controls.Add(this.LblCount);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
@@ -263,6 +265,17 @@
             this.BtnChangeEmail.Text = "Change Email";
             this.BtnChangeEmail.Click += new System.EventHandler(this.BtnChangeEmail_Click);
             //
+            // BtnProgress
+            //
+            this.BtnProgress.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnProgress.Appearance.Options.UseFont = true;
+            this.BtnProgress.Location = new System.Drawing.Point(1052, 8);
+            this.BtnProgress.Name = "BtnProgress";
+            this.BtnProgress.Size = new System.Drawing.Size(150, 50);
+            this.BtnProgress.TabIndex = 5;
+            this.BtnProgress.Text = "Send Progress";
+            this.BtnProgress.Click += new System.EventHandler(this.BtnProgress_Click);
+            //
             this.BtnMailSetting.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnMailSetting.Appearance.Options.UseFont = true;
             this.BtnMailSetting.Location = new System.Drawing.Point(896, 8);
@@ -278,7 +291,7 @@
             this.BtnEmail.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnEmail.Appearance.Options.UseFont = true;
             this.BtnEmail.Appearance.Options.UseForeColor = true;
-            this.BtnEmail.Location = new System.Drawing.Point(1052, 8);
+            this.BtnEmail.Location = new System.Drawing.Point(1208, 8);
             this.BtnEmail.Name = "BtnEmail";
             this.BtnEmail.Size = new System.Drawing.Size(170, 50);
             this.BtnEmail.TabIndex = 3;
@@ -384,6 +397,7 @@
         private DevExpress.XtraEditors.SimpleButton BtnSelectAll;
         private DevExpress.XtraEditors.SimpleButton BtnMailSetting;
         private DevExpress.XtraEditors.SimpleButton BtnChangeEmail;
+        private DevExpress.XtraEditors.SimpleButton BtnProgress;
         private DevExpress.XtraEditors.SimpleButton BtnEmail;
         private DevExpress.XtraEditors.LabelControl LblCount;
         private DevExpress.XtraGrid.GridControl GridInv;

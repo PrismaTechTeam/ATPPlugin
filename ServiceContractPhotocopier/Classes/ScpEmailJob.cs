@@ -1,0 +1,448 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Threading;
+using AutoCount.Data;
+
+namespace ServiceContractPhotocopier.Classes
+{
+    /// <summary>
+    /// Bulk invoice email as a background JOB (customer 10/08).
+    ///
+    /// Why a job and not a dialog: sending 200 customers takes minutes, and the operator should not
+    /// have to babysit a modal window. Closing the form must not abandon a half-finished run — so
+    /// the worker thread is owned by this class, not by any form, and every step is written to the
+    /// database as it happens. The progress screen is a VIEW of those rows, which means it also
+    /// shows a run someone else started on another PC.
+    ///
+    /// Double-send protection is a real distributed lock: one row per invoice in zSCP2_EmailLock,
+    /// taken by INSERT so the primary key does the arbitration. Two operators clicking Send at the
+    /// same moment cannot both win. A run that dies mid-way leaves stale rows, so they are taken
+    /// over after LOCK_STALE_MINUTES rather than blocking that invoice forever.
+    ///
+    /// Sending the same invoice twice is ALLOWED (the customer asked for it) — it is only ever
+    /// blocked while another send is actually in flight. Every send is recorded in zSCP2_EmailLog,
+    /// so a second one shows up as a second row, not as a silent overwrite.
+    /// </summary>
+    public static class ScpEmailJob
+    {
+        /// <summary>A lock older than this is presumed abandoned and may be taken over.</summary>
+        private const int LOCK_STALE_MINUTES = 15;
+
+        public class Recipient
+        {
+            public string DebtorCode = "";
+            public string DebtorName = "";
+            public string Email = "";
+            public List<long> DocKeys = new List<long>();
+            public List<string> DocNos = new List<string>();
+            /// <summary>Resolved per-customer wording; null = use the default template.</summary>
+            public ScpEmailTemplates.Template Template;
+            /// <summary>PDFs rendered BEFORE the job starts. Report rendering needs the UI thread
+            /// (XtraReport + AutoCount's report option plumbing), and it is the deterministic part
+            /// anyway — the job owns only the slow, failure-prone half: the actual sending.</summary>
+            public List<AutoCount.Mail.AttachmentData> Attachments = new List<AutoCount.Mail.AttachmentData>();
+        }
+
+        private static readonly object _gate = new object();
+        private static Thread _worker;
+        private static long _currentJobKey;
+
+        /// <summary>True while this process is running a job. Another PC's job is not visible here —
+        /// look at the job table for that.</summary>
+        public static bool IsRunning
+        {
+            get { lock (_gate) { return _worker != null && _worker.IsAlive; } }
+        }
+
+        public static long CurrentJobKey
+        {
+            get { lock (_gate) { return _currentJobKey; } }
+        }
+
+        /// <summary>
+        /// Queue the run and return immediately with the new JobKey. The caller can close its form;
+        /// the thread is a foreground thread on purpose so an in-flight send is not torn down when
+        /// the UI goes away.
+        /// </summary>
+        public static long Start(DBSetting db, List<Recipient> recipients, string fromName, string fromEmail,
+            ScpEmailTemplates.Template defaultTemplate)
+        {
+            if (db == null || recipients == null || recipients.Count == 0) return 0;
+            lock (_gate)
+            {
+                if (_worker != null && _worker.IsAlive)
+                    throw new InvalidOperationException(
+                        "A bulk email run is already in progress on this PC. Open Send Progress to watch it.");
+
+                long jobKey = CreateJob(db, recipients);
+                _currentJobKey = jobKey;
+                _worker = new Thread(delegate ()
+                {
+                    try { Run(db, jobKey, recipients, fromName, fromEmail, defaultTemplate); }
+                    catch (Exception ex) { AbortJob(db, jobKey, ex.Message); }
+                    finally { lock (_gate) { _worker = null; } }
+                });
+                _worker.IsBackground = false;   // survive the form; do NOT die with the UI
+                _worker.Name = "SCP bulk email job";
+                _worker.SetApartmentState(ApartmentState.STA);
+                _worker.Start();
+                return jobKey;
+            }
+        }
+
+        // ───────────────────────── job rows ─────────────────────────
+
+        private static long CreateJob(DBSetting db, List<Recipient> recipients)
+        {
+            string who = "", machine = "";
+            try { who = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID; } catch { }
+            try { machine = Environment.MachineName; } catch { }
+
+            long jobKey;
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                using (SqlCommand cmd = new SqlCommand(
+                    "INSERT INTO dbo.zSCP2_EmailJob (CreatedBy, MachineName, Status, TotalCount, LastHeartbeat) " +
+                    "VALUES (@u,@m,'RUNNING',@t,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
+                {
+                    cmd.Parameters.AddWithValue("@u", (object)who ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@m", (object)machine ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@t", recipients.Count);
+                    jobKey = Convert.ToInt64(cmd.ExecuteScalar());
+                }
+                foreach (Recipient r in recipients)
+                {
+                    using (SqlCommand cmd = new SqlCommand(
+                        "INSERT INTO dbo.zSCP2_EmailJobItem (JobKey, DebtorCode, DebtorName, Email, DocNos, DocKeys, Status) " +
+                        "VALUES (@j,@c,@n,@e,@dn,@dk,'PENDING')", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@j", jobKey);
+                        cmd.Parameters.AddWithValue("@c", Cut(r.DebtorCode, 30));
+                        cmd.Parameters.AddWithValue("@n", Cut(r.DebtorName, 200));
+                        cmd.Parameters.AddWithValue("@e", Cut(r.Email, 200));
+                        cmd.Parameters.AddWithValue("@dn", Cut(string.Join(", ", r.DocNos.ToArray()), 900));
+                        cmd.Parameters.AddWithValue("@dk", Cut(JoinKeys(r.DocKeys), 900));
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            return jobKey;
+        }
+
+        // ───────────────────────── the run ─────────────────────────
+
+        private static void Run(DBSetting db, long jobKey, List<Recipient> recipients,
+            string fromName, string fromEmail, ScpEmailTemplates.Template defaultTemplate)
+        {
+            int ok = 0, failed = 0, skipped = 0;
+
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                DataTable items = GetItems(cn, jobKey);
+                int idx = 0;
+
+                foreach (Recipient r in recipients)
+                {
+                    long itemKey = idx < items.Rows.Count ? Convert.ToInt64(items.Rows[idx]["ItemKey"]) : 0;
+                    idx++;
+                    Heartbeat(cn, jobKey);
+
+                    if (string.IsNullOrEmpty((r.Email ?? "").Trim()))
+                    {
+                        SetItem(cn, itemKey, "SKIPPED", "No email address on the customer.");
+                        skipped++; Counts(cn, jobKey, ok, failed, skipped); continue;
+                    }
+
+                    // Take the lock on every invoice in this email, all or nothing. A partial grab
+                    // would leave the customer's set split across two senders.
+                    List<long> held = new List<long>();
+                    string blockedBy;
+                    if (!TryLockAll(cn, jobKey, r.DocKeys, held, out blockedBy))
+                    {
+                        ReleaseAll(cn, held);
+                        SetItem(cn, itemKey, "SKIPPED",
+                            "Another send is already in progress for these invoices" +
+                            (string.IsNullOrEmpty(blockedBy) ? "." : " (" + blockedBy + ")."));
+                        skipped++; Counts(cn, jobKey, ok, failed, skipped); continue;
+                    }
+
+                    try
+                    {
+                        SendOne(db, r, fromName, fromEmail, defaultTemplate);
+                        SetItem(cn, itemKey, "SENT", null);
+                        WriteLog(cn, r);
+                        ok++;
+                    }
+                    catch (Exception ex)
+                    {
+                        // One bad address must never stop the run — that is the whole reason this is
+                        // a job. Record it and carry on to the next customer.
+                        SetItem(cn, itemKey, "FAILED", Cut(ShortError(ex), 500));
+                        failed++;
+                    }
+                    finally
+                    {
+                        ReleaseAll(cn, held);
+                        Counts(cn, jobKey, ok, failed, skipped);
+                    }
+                }
+
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.zSCP2_EmailJob SET Status='DONE', FinishedAt=GETDATE(), LastHeartbeat=GETDATE(), " +
+                    "SuccessCount=@s, FailedCount=@f, SkippedCount=@k WHERE JobKey=@j", cn))
+                {
+                    cmd.Parameters.AddWithValue("@s", ok);
+                    cmd.Parameters.AddWithValue("@f", failed);
+                    cmd.Parameters.AddWithValue("@k", skipped);
+                    cmd.Parameters.AddWithValue("@j", jobKey);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        private static void SendOne(DBSetting db, Recipient r, string fromName, string fromEmail,
+            ScpEmailTemplates.Template defaultTemplate)
+        {
+            ScpEmailTemplates.Template tpl = r.Template ?? defaultTemplate;
+            string subject = tpl == null ? "" : (tpl.Subject ?? "");
+            string body = tpl == null ? "" : (tpl.Body ?? "");
+            string style = tpl == null ? "PLAIN" : (tpl.Style ?? "PLAIN");
+            string docNos = string.Join(", ", r.DocNos.ToArray());
+
+            subject = Tokens(subject, r, docNos);
+            body = Tokens(body, r, docNos);
+            if (style == "STYLED") body = ScpMailHtml.BuildStyled(body, fromName);
+            else if (style == "HTML") body = ScpMailHtml.EnsureHtml(body);
+
+            if (r.Attachments == null || r.Attachments.Count == 0)
+                throw new Exception("No invoice PDF was attached for " + docNos + ".");
+
+            AutoCount.Mail.EmailData data = new AutoCount.Mail.EmailData();
+            data.Email = r.Email.Trim();
+            data.RecipientName = r.DebtorName;
+            data.Subject = subject;
+            data.EmailBody = body;
+            data.FromName = fromName;
+            data.FromEmail = fromEmail;
+            data.Attachments = r.Attachments.ToArray();
+
+            // Uses the SMTP configured in Email Setting — the same transport AutoCount's own
+            // Batch Mail uses, so there is one place to configure and one place to fix.
+            AutoCount.Mail.MailHelper.SendMailWithDefaultMailServerSetting(db, data);
+        }
+
+        private static string Tokens(string text, Recipient r, string docNos)
+        {
+            if (text == null) return "";
+            text = text.Replace("{AccNo}", r.DebtorCode ?? "");
+            text = text.Replace("{CompanyName}", r.DebtorName ?? "");
+            text = text.Replace("{DocNos}", docNos ?? "");
+            return text;
+        }
+
+        // ───────────────────────── distributed lock ─────────────────────────
+
+        /// <summary>Take the lock on every doc, or none. Returns false and names the holder when
+        /// any of them is already being sent elsewhere.</summary>
+        private static bool TryLockAll(SqlConnection cn, long jobKey, List<long> docKeys,
+            List<long> held, out string blockedBy)
+        {
+            blockedBy = "";
+            string who = "", machine = "";
+            try { who = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID; } catch { }
+            try { machine = Environment.MachineName; } catch { }
+
+            foreach (long dk in docKeys)
+            {
+                // Clear an abandoned lock first, then INSERT. The PK is the arbiter: if a second PC
+                // inserts the same DocKey a microsecond earlier, ours throws and we back off.
+                using (SqlCommand del = new SqlCommand(
+                    "DELETE FROM dbo.zSCP2_EmailLock WHERE DocKey=@d AND LockedAt < DATEADD(MINUTE,-" +
+                    LOCK_STALE_MINUTES + ",GETDATE())", cn))
+                {
+                    del.Parameters.AddWithValue("@d", dk);
+                    del.ExecuteNonQuery();
+                }
+                try
+                {
+                    using (SqlCommand ins = new SqlCommand(
+                        "INSERT INTO dbo.zSCP2_EmailLock (DocKey, JobKey, LockedBy, MachineName) VALUES (@d,@j,@u,@m)", cn))
+                    {
+                        ins.Parameters.AddWithValue("@d", dk);
+                        ins.Parameters.AddWithValue("@j", jobKey);
+                        ins.Parameters.AddWithValue("@u", (object)who ?? DBNull.Value);
+                        ins.Parameters.AddWithValue("@m", (object)machine ?? DBNull.Value);
+                        ins.ExecuteNonQuery();
+                    }
+                    held.Add(dk);
+                }
+                catch (SqlException)
+                {
+                    using (SqlCommand q = new SqlCommand(
+                        "SELECT TOP 1 ISNULL(LockedBy,'') + ' on ' + ISNULL(MachineName,'?') " +
+                        "FROM dbo.zSCP2_EmailLock WHERE DocKey=@d", cn))
+                    {
+                        q.Parameters.AddWithValue("@d", dk);
+                        object o = q.ExecuteScalar();
+                        blockedBy = o == null || o == DBNull.Value ? "" : Convert.ToString(o);
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static void ReleaseAll(SqlConnection cn, List<long> held)
+        {
+            foreach (long dk in held)
+            {
+                try
+                {
+                    using (SqlCommand cmd = new SqlCommand("DELETE FROM dbo.zSCP2_EmailLock WHERE DocKey=@d", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@d", dk);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                catch { }   // a lock we cannot release will time out on its own
+            }
+        }
+
+        // ───────────────────────── small helpers ─────────────────────────
+
+        private static DataTable GetItems(SqlConnection cn, long jobKey)
+        {
+            DataTable t = new DataTable();
+            using (SqlCommand cmd = new SqlCommand(
+                "SELECT ItemKey FROM dbo.zSCP2_EmailJobItem WHERE JobKey=@j ORDER BY ItemKey", cn))
+            {
+                cmd.Parameters.AddWithValue("@j", jobKey);
+                using (SqlDataAdapter da = new SqlDataAdapter(cmd)) da.Fill(t);
+            }
+            return t;
+        }
+
+        private static void SetItem(SqlConnection cn, long itemKey, string status, string error)
+        {
+            if (itemKey <= 0) return;
+            try
+            {
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.zSCP2_EmailJobItem SET Status=@s, ErrorMsg=@e, " +
+                    "SentAt=CASE WHEN @s='SENT' THEN GETDATE() ELSE SentAt END WHERE ItemKey=@k", cn))
+                {
+                    cmd.Parameters.AddWithValue("@s", status);
+                    cmd.Parameters.AddWithValue("@e", (object)error ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@k", itemKey);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
+        }
+
+        private static void Counts(SqlConnection cn, long jobKey, int ok, int failed, int skipped)
+        {
+            try
+            {
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.zSCP2_EmailJob SET SuccessCount=@s, FailedCount=@f, SkippedCount=@k, " +
+                    "LastHeartbeat=GETDATE() WHERE JobKey=@j", cn))
+                {
+                    cmd.Parameters.AddWithValue("@s", ok);
+                    cmd.Parameters.AddWithValue("@f", failed);
+                    cmd.Parameters.AddWithValue("@k", skipped);
+                    cmd.Parameters.AddWithValue("@j", jobKey);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
+        }
+
+        private static void Heartbeat(SqlConnection cn, long jobKey)
+        {
+            try
+            {
+                using (SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.zSCP2_EmailJob SET LastHeartbeat=GETDATE() WHERE JobKey=@j", cn))
+                {
+                    cmd.Parameters.AddWithValue("@j", jobKey);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Permanent per-invoice history. A resend adds a row; it never overwrites one.</summary>
+        private static void WriteLog(SqlConnection cn, Recipient r)
+        {
+            string by = "";
+            try { by = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID; } catch { }
+            for (int i = 0; i < r.DocKeys.Count; i++)
+            {
+                try
+                {
+                    using (SqlCommand cmd = new SqlCommand(
+                        "INSERT INTO dbo.zSCP2_EmailLog (DocKey, DocNo, DebtorCode, Email, SentAt, SentBy) " +
+                        "VALUES (@dk,@dn,@acc,@em,GETDATE(),@by)", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@dk", r.DocKeys[i]);
+                        cmd.Parameters.AddWithValue("@dn", r.DocNos[i]);
+                        cmd.Parameters.AddWithValue("@acc", r.DebtorCode ?? "");
+                        cmd.Parameters.AddWithValue("@em", r.Email ?? "");
+                        cmd.Parameters.AddWithValue("@by", by);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                catch { }   // the email already went out; history must never undo that
+            }
+        }
+
+        private static void AbortJob(DBSetting db, long jobKey, string message)
+        {
+            try
+            {
+                using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+                {
+                    cn.Open();
+                    using (SqlCommand cmd = new SqlCommand(
+                        "UPDATE dbo.zSCP2_EmailJob SET Status='ABORTED', FinishedAt=GETDATE() WHERE JobKey=@j", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@j", jobKey);
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (SqlCommand cmd = new SqlCommand(
+                        "DELETE FROM dbo.zSCP2_EmailLock WHERE JobKey=@j", cn))
+                    {
+                        cmd.Parameters.AddWithValue("@j", jobKey);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static string JoinKeys(List<long> keys)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (long k in keys) { if (sb.Length > 0) sb.Append(","); sb.Append(k); }
+            return sb.ToString();
+        }
+
+        private static string Cut(string s, int max)
+        {
+            if (s == null) return "";
+            return s.Length <= max ? s : s.Substring(0, max);
+        }
+
+        private static string ShortError(Exception ex)
+        {
+            Exception e = ex;
+            while (e.InnerException != null) e = e.InnerException;
+            return e.Message;
+        }
+    }
+}

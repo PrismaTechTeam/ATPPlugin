@@ -12,6 +12,7 @@ using AutoCount.Report;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Columns;
 using DevExpress.XtraReports.UI;
+using ServiceContractPhotocopier.Classes;
 
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
@@ -675,7 +676,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
-            // Sender = the company profile; subject/message support {AccNo} {CompanyName} {DocNos}.
+            // Sender = the company profile.
             string fromName = "", fromEmail = "";
             try
             {
@@ -688,44 +689,55 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
             }
             catch { }
-
-            // #9a: send with the DEFAULT template from the user-maintained versions (Template…
-            // dialog). "Professional" style wraps the plain text into the styled HTML frame PER
-            // RECIPIENT (inside ConvertBatchMessage, after token substitution) — the Batch Mail
-            // dialog still shows clean editable text, and AutoCount's MailHelper auto-detects
-            // the HTML body.
-            ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template tplDef =
-                ServiceContractPhotocopier.Classes.ScpEmailTemplates.LoadDefault(_dbSetting);
-            string subject = tplDef.Subject;
-            string message = tplDef.Body;
-            _mailStyle = tplDef.Style;
-            // A customer whose contract names its own template gets THAT wording instead (another
-            // language, extra instructions). Applied per recipient in ConvertBatchMessage, so one
-            // batch can still carry several templates - no need to send in separate runs.
-            LoadPerDebtorTemplates();
-            _tplDefaultSubject = subject;
-            _tplDefaultBody = message;
-            _tplDefaultStyle = tplDef.Style;
-            _mailSenderCompany = fromName;
-            ColumnNameCaption[] cols = new ColumnNameCaption[3];
-            cols[0] = new ColumnNameCaption(); cols[0].ColumnName = "AccNo"; cols[0].Caption = "Customer"; cols[0].AllowEdit = false;
-            cols[1] = new ColumnNameCaption(); cols[1].ColumnName = "CompanyName"; cols[1].Caption = "Company Name"; cols[1].AllowEdit = false;
-            cols[2] = new ColumnNameCaption(); cols[2].ColumnName = "DocNos"; cols[2].Caption = "Invoices"; cols[2].AllowEdit = false;
-
-            // Send detection: dbo.Mail rows are only written by a background timer AFTER the SMTP
-            // send, so polling the table right after the dialog closes under-reports. The exact
-            // signal is FormBatchMail2 itself — clicking Send invokes our ConvertMessage handler
-            // once per recipient (Cancel never does), so those entities ARE the sent set.
-            _sentEntities = new HashSet<InvoiceBatchMailEntity>();
-            using (FormBatchMail2 f = new FormBatchMail2(_userSession, subject, message, fromName, fromEmail,
-                new List<BatchMail2Entity>(entities.ToArray()), cols))
+            if (fromEmail.Trim().Length == 0)
             {
-                f.SetConvertMessageHandler(new ConvertMessageEventHandler(ConvertBatchMessage));
-                f.ShowDialog(this);
+                XtraMessageBox.Show(
+                    "The company profile has no email address, so there is nothing to send FROM.\r\n\r\n" +
+                    "Fill it in on the company profile first - most mail servers reject a message with no sender.",
+                    "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
-            LogEmailed(_sentEntities);
-            _sentEntities = null;
+
+            // Each customer's wording comes from THEIR contract's template; the book default fills
+            // in for everyone else. Resolved here, once, and handed to the job - the operator never
+            // retypes it, which is the whole reason this no longer uses AutoCount's Batch Mail box.
+            ScpEmailTemplates.Template tplDef = ScpEmailTemplates.LoadDefault(_dbSetting);
+            LoadPerDebtorTemplates();
+
+            List<ScpEmailJob.Recipient> recipients = new List<ScpEmailJob.Recipient>();
+            foreach (InvoiceBatchMailEntity ent in entities)
+            {
+                ScpEmailJob.Recipient rec = new ScpEmailJob.Recipient();
+                rec.DebtorCode = ent.AccNo;
+                rec.DebtorName = ent.CompanyName;
+                rec.Email = (ent.Email ?? "").Trim();
+                rec.DocKeys = ent.DocKeyList;
+                rec.DocNos = ent.DocNoList;
+                rec.Attachments = ent.AttachmentList;
+                ScpEmailTemplates.Template own;
+                if (_perDebtorTpl != null &&
+                    _perDebtorTpl.TryGetValue((ent.AccNo ?? "").Trim().ToUpperInvariant(), out own))
+                    rec.Template = own;
+                recipients.Add(rec);
+            }
+
+            using (BulkEmailJob_Form dlg = new BulkEmailJob_Form(
+                _dbSetting, recipients, fromName, fromEmail, tplDef))
+            {
+                dlg.ShowDialog(this);
+            }
             LoadData();   // refresh the Emailed column / checklist
+        }
+
+        /// <summary>Watch the current (or last) send, including one another PC started.</summary>
+        private void BtnProgress_Click(object sender, EventArgs e)
+        {
+            if (_dbSetting == null) return;
+            using (BulkEmailJob_Form dlg = new BulkEmailJob_Form(_dbSetting, 0))
+            {
+                dlg.ShowDialog(this);
+            }
+            LoadData();
         }
 
         // #9b: write one zSCP2_EmailLog row per invoice of every recipient the user really sent to
