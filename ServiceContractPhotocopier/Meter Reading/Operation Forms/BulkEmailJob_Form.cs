@@ -115,20 +115,31 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             BtnConfirm.Visible = false;
             PanelStatus.Visible = true;
-            LblHeadline.Text = "Sending";
-            LblSub.Text = "You can close this window — the send keeps running. " +
-                "Reopen it any time from Send Progress.";
             _grid = NewGridTable();
             BindGrid();
+            // Every label is set from the REAL state inside RefreshProgress — nothing is assumed
+            // here. Saying "Sending..." before looking is how this screen ended up claiming a send
+            // was in flight when no job existed at all.
             RefreshProgress();
-            Ticker.Enabled = true;
         }
 
         private void Ticker_Tick(object sender, EventArgs e) { RefreshProgress(); }
 
         private void RefreshProgress()
         {
-            if (_db == null || _jobKey <= 0) { Ticker.Enabled = false; return; }
+            // Nothing has ever been sent from this book: say so plainly instead of leaving the
+            // designer's placeholder text on screen.
+            if (_db == null || _jobKey <= 0)
+            {
+                Ticker.Enabled = false;
+                Marquee.Visible = false;
+                LblHeadline.Text = "Send history";
+                LblSub.Text = "This screen shows the most recent send, including one started on another PC.";
+                LblBig.Text = "No send has been run yet";
+                LblBig.Appearance.ForeColor = System.Drawing.Color.FromArgb(110, 110, 110);
+                LblCounts.Text = "Tick the invoices on the previous screen and press Email Selected to start one.";
+                return;
+            }
             string status = "RUNNING";
             int total = 0, ok = 0, failed = 0, skipped = 0;
             try
@@ -171,14 +182,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LblCounts.Text = done + " of " + total + " processed     ✔ " + ok + " sent     ✖ " + failed +
                 " failed     ⊘ " + skipped + " skipped";
 
+            Ticker.Enabled = running;   // only poll while there is something to poll for
             if (running)
             {
                 LblBig.Text = "Sending email...";
                 LblBig.Appearance.ForeColor = System.Drawing.Color.FromArgb(27, 94, 32);
+                LblHeadline.Text = "Sending";
+                LblSub.Text = "You can close this window — the send keeps running. " +
+                    "Reopen it any time from Send Progress.";
             }
             else
             {
-                Ticker.Enabled = false;
                 LblBig.Text = status == "ABORTED" ? "Stopped before finishing" : "Completed";
                 LblBig.Appearance.ForeColor = failed > 0
                     ? System.Drawing.Color.FromArgb(198, 40, 40)
