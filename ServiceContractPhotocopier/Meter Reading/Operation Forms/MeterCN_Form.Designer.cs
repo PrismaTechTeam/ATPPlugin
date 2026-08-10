@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier
+﻿namespace ServiceContractPhotocopier
 {
     partial class MeterCN_Form
     {
@@ -44,6 +44,7 @@ namespace ServiceContractPhotocopier
             this.ColSerial = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColMeter = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledReading = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMinReading = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledUsage = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilledCharge = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -201,6 +202,7 @@ namespace ServiceContractPhotocopier
             this.ColSerial,
             this.ColMeter,
             this.ColBilledReading,
+            this.ColMinReading,
             this.ColBilledUsage,
             this.ColRate,
             this.ColBilledCharge,
@@ -257,6 +259,21 @@ namespace ServiceContractPhotocopier
             this.ColBilledReading.VisibleIndex = 3;
             this.ColBilledReading.Width = 90;
             //
+            // ColMinReading
+            //
+            this.ColMinReading.Caption = "Min Reading";
+            this.ColMinReading.DisplayFormat.FormatString = "n0";
+            this.ColMinReading.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            // The floor a CN on THIS invoice may correct down to - the reading it started from.
+            // Going lower belongs to the earlier invoice, so the limit is shown, not just enforced.
+            this.ColMinReading.FieldName = "LastReading";
+            this.ColMinReading.Name = "ColMinReading";
+            this.ColMinReading.OptionsColumn.AllowEdit = false;
+            this.ColMinReading.ToolTip = "A CN on this invoice cannot correct below this reading.";
+            this.ColMinReading.Visible = true;
+            this.ColMinReading.VisibleIndex = 4;
+            this.ColMinReading.Width = 90;
+            //
             // ColBilledUsage
             //
             this.ColBilledUsage.Caption = "Billed Usage";
@@ -266,7 +283,7 @@ namespace ServiceContractPhotocopier
             this.ColBilledUsage.Name = "ColBilledUsage";
             this.ColBilledUsage.OptionsColumn.AllowEdit = false;
             this.ColBilledUsage.Visible = true;
-            this.ColBilledUsage.VisibleIndex = 4;
+            this.ColBilledUsage.VisibleIndex = 5;
             this.ColBilledUsage.Width = 85;
             //
             // ColRate
@@ -278,7 +295,7 @@ namespace ServiceContractPhotocopier
             this.ColRate.Name = "ColRate";
             this.ColRate.OptionsColumn.AllowEdit = false;
             this.ColRate.Visible = true;
-            this.ColRate.VisibleIndex = 5;
+            this.ColRate.VisibleIndex = 6;
             this.ColRate.Width = 70;
             //
             // ColBilledCharge
@@ -290,7 +307,7 @@ namespace ServiceContractPhotocopier
             this.ColBilledCharge.Name = "ColBilledCharge";
             this.ColBilledCharge.OptionsColumn.AllowEdit = false;
             this.ColBilledCharge.Visible = true;
-            this.ColBilledCharge.VisibleIndex = 6;
+            this.ColBilledCharge.VisibleIndex = 7;
             this.ColBilledCharge.Width = 85;
             //
             // ColCorrectReading
@@ -304,7 +321,7 @@ namespace ServiceContractPhotocopier
             this.ColCorrectReading.FieldName = "CorrectReading";
             this.ColCorrectReading.Name = "ColCorrectReading";
             this.ColCorrectReading.Visible = true;
-            this.ColCorrectReading.VisibleIndex = 7;
+            this.ColCorrectReading.VisibleIndex = 8;
             this.ColCorrectReading.Width = 100;
             //
             // ColCreditCopies
@@ -316,7 +333,7 @@ namespace ServiceContractPhotocopier
             this.ColCreditCopies.Name = "ColCreditCopies";
             this.ColCreditCopies.OptionsColumn.AllowEdit = false;
             this.ColCreditCopies.Visible = true;
-            this.ColCreditCopies.VisibleIndex = 8;
+            this.ColCreditCopies.VisibleIndex = 9;
             this.ColCreditCopies.Width = 90;
             //
             // ColCreditAmount
@@ -328,7 +345,7 @@ namespace ServiceContractPhotocopier
             this.ColCreditAmount.FieldName = "CreditAmount";
             this.ColCreditAmount.Name = "ColCreditAmount";
             this.ColCreditAmount.Visible = true;
-            this.ColCreditAmount.VisibleIndex = 9;
+            this.ColCreditAmount.VisibleIndex = 10;
             this.ColCreditAmount.Width = 95;
             //
             // RepoNum
@@ -439,6 +456,7 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraGrid.Columns.GridColumn ColSerial;
         private DevExpress.XtraGrid.Columns.GridColumn ColMeter;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledReading;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMinReading;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledUsage;
         private DevExpress.XtraGrid.Columns.GridColumn ColRate;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilledCharge;

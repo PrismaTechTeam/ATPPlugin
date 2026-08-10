@@ -91,7 +91,8 @@ namespace ServiceContractPhotocopier
                 "ISNULL(me.PeriodYear, YEAR(t.MeterTransDate)) AS PeriodYear, " +
                 "ISNULL(me.PeriodMonth, MONTH(t.MeterTransDate)) AS PeriodMonth, " +
                 "lg.LastReading, lg.[Usage] AS BilledUsage, lg.UnitPrice AS BilledRate, lg.Charge AS BilledCharge, " +
-                "ISNULL(m.ChargesRate,0) AS CurrentRate, pc.PrevCorrectReading " +
+                "ISNULL(m.ChargesRate,0) AS CurrentRate, pc.PrevCorrectReading, " +
+                "ISNULL(pi.PrevInvNo,'') AS PrevInvNo " +
                 "FROM dbo.zSCP_MeterTrans t " +
                 "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = t.ServiceItemMeterTypeKey " +
                 "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
@@ -111,6 +112,12 @@ namespace ServiceContractPhotocopier
                 // the agreed scenario corrects a LATER invoice first and then an EARLIER one, and
                 // that second CN must start from where the first one left the meter, not from the
                 // older invoice's own billed figure.
+                // The invoice that billed the range BELOW this one (its Max reading = our Min). Named
+                // in the block message so the user is told exactly where the rest of the correction
+                // belongs instead of just being stopped.
+                "OUTER APPLY (SELECT TOP 1 pv.DocNo AS PrevInvNo FROM dbo.zSCP2_MeterReadingLog pv " +
+                "  WHERE pv.ItemMeterKey = t.ServiceItemMeterTypeKey AND pv.Source = 'INVOICE' " +
+                "    AND pv.Reading = lg.LastReading ORDER BY pv.LogKey DESC) pi " +
                 "OUTER APPLY (SELECT TOP 1 p.MeterTransReading AS PrevCorrectReading FROM dbo.zSCP_MeterTrans p " +
                 "  WHERE p.CNDocKey IS NOT NULL " +
                 "    AND p.ServiceItemMeterTypeKey = t.ServiceItemMeterTypeKey ORDER BY p.MeterTransKey DESC) pc " +
@@ -185,9 +192,19 @@ namespace ServiceContractPhotocopier
         // Negative credit (correct reading HIGHER than billed) = red — blocked at Generate.
         private void GridViewLines_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
-            if (e.Column == null || e.Column.FieldName != "CreditCopies") return;
+            if (e.Column == null) return;
             DataRow r = this.GridViewLines.GetDataRow(e.RowHandle);
-            if (r != null && Dec(r["CreditCopies"]) < 0m)
+            if (r == null) return;
+            if (e.Column.FieldName == "CreditCopies" && Dec(r["CreditCopies"]) < 0m)
+            {
+                e.Appearance.ForeColor = System.Drawing.Color.White;
+                e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
+                return;
+            }
+            // Below this invoice's Min meter: flag it AS THEY TYPE, so the floor is obvious long
+            // before Generate refuses. The block itself lives in the pre-pass.
+            if (e.Column.FieldName == "CorrectReading" &&
+                Dec(r["CreditCopies"]) > 0m && Dec(r["CorrectReading"]) < Dec(r["LastReading"]))
             {
                 e.Appearance.ForeColor = System.Drawing.Color.White;
                 e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
@@ -225,6 +242,32 @@ namespace ServiceContractPhotocopier
                         "Correct with CN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                // HARD FLOOR (customer 10/08): a CN may never credit more copies than THIS invoice
+                // billed. The floor is the invoice's own Min meter — the reading it started from.
+                // Their Q1 case: INV2609 billed 3,000 -> 4,500, so its CN can only bring the meter
+                // back to 3,000; reaching 2,800 needs a SECOND CN on INV2608, which billed the
+                // 1,000 -> 3,000 range. Letting one CN jump straight to 2,800 would credit copies
+                // that invoice never charged for.
+                decimal minRead = Dec(r["LastReading"]);
+                if (Dec(r["CreditCopies"]) > 0m && Dec(r["CorrectReading"]) < minRead)
+                {
+                    string prevInv = Convert.ToString(r["PrevInvNo"] == DBNull.Value ? "" : r["PrevInvNo"]).Trim();
+                    XtraMessageBox.Show(
+                        "Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
+                        Convert.ToString(r["MeterTypeCode"]) + "\r\n\r\n" +
+                        "This invoice billed from " + minRead.ToString("n0") + " to " +
+                        Dec(r["BaseReading"]).ToString("n0") + ", so the lowest it can be corrected to is " +
+                        minRead.ToString("n0") + ".\r\n" +
+                        "You keyed " + Dec(r["CorrectReading"]).ToString("n0") +
+                        " — that would credit copies this invoice never charged for.\r\n\r\n" +
+                        (prevInv.Length > 0
+                            ? "To go below " + minRead.ToString("n0") + ", correct " + prevInv +
+                              " as well — that is the invoice which billed the range underneath."
+                            : "To go below " + minRead.ToString("n0") + ", correct the EARLIER invoice " +
+                              "that billed the range underneath."),
+                        "Correct with CN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
             }
 
             List<CnCorrectionLine> lines = new List<CnCorrectionLine>();
@@ -233,15 +276,8 @@ namespace ServiceContractPhotocopier
             {
                 decimal copies = Dec(r["CreditCopies"]);
                 if (copies <= 0m) continue;
-                if (r["BilledUsage"] != DBNull.Value && copies > Dec(r["BilledUsage"]))
-                {
-                    if (XtraMessageBox.Show("Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
-                            Convert.ToString(r["MeterTypeCode"]) + ": crediting " + copies.ToString("0.##") +
-                            " copies is MORE than this invoice billed (" + Dec(r["BilledUsage"]).ToString("0.##") +
-                            ").\r\nContinue anyway?", "Correct with CN",
-                            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                        return;
-                }
+                // (The "more copies than this invoice billed" case is now a HARD block in the
+                // pre-pass above — the Min-meter floor — not a prompt the user can click past.)
                 CnCorrectionLine l = new CnCorrectionLine();
                 l.ItemMeterKey = Convert.ToInt64(r["ItemMeterKey"]);
                 l.ItemKey = Convert.ToInt64(r["ItemKey"]);
