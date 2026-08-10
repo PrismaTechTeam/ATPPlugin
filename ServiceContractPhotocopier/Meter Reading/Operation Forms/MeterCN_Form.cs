@@ -201,13 +201,18 @@ namespace ServiceContractPhotocopier
                 e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
                 return;
             }
-            // Below this invoice's Min meter: flag it AS THEY TYPE, so the floor is obvious long
-            // before Generate refuses. The block itself lives in the pre-pass.
-            if (e.Column.FieldName == "CorrectReading" &&
-                Dec(r["CreditCopies"]) > 0m && Dec(r["CorrectReading"]) < Dec(r["LastReading"]))
+            // Outside the allowed window, flagged AS THEY TYPE so both limits are obvious long
+            // before Generate refuses. The blocks themselves live in the pre-pass.
+            //   floor = this invoice's Min meter (going lower belongs to the earlier invoice)
+            //   ceiling = the machine's current reading (a CN only gives copies BACK)
+            if (e.Column.FieldName == "CorrectReading")
             {
-                e.Appearance.ForeColor = System.Drawing.Color.White;
-                e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
+                decimal keyed = Dec(r["CorrectReading"]);
+                if (keyed < Dec(r["LastReading"]) || keyed > Dec(r["BaseReading"]))
+                {
+                    e.Appearance.ForeColor = System.Drawing.Color.White;
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
+                }
             }
         }
 
@@ -227,11 +232,19 @@ namespace ServiceContractPhotocopier
             // Pre-pass: every hard block surfaces BEFORE any confirmation prompt.
             foreach (DataRow r in _dt.Rows)
             {
+                // HARD CEILING: the meter's CURRENT reading (the base). Not the invoice's Max — after
+                // an earlier CN the base sits lower, and correcting back UP to the old Max would
+                // un-credit money that CN already gave back.
                 if (Dec(r["CreditCopies"]) < 0m)
                 {
-                    XtraMessageBox.Show("Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
-                        Convert.ToString(r["MeterTypeCode"]) + ": the correct reading is HIGHER than the billed " +
-                        "reading - that is extra usage, issue a supplementary invoice instead of a CN.",
+                    XtraMessageBox.Show(
+                        "Machine " + Convert.ToString(r["ServiceItemNo"]) + " / " +
+                        Convert.ToString(r["MeterTypeCode"]) + "\r\n\r\n" +
+                        "You keyed " + Dec(r["CorrectReading"]).ToString("n0") +
+                        ", which is HIGHER than this machine's current reading of " +
+                        Dec(r["BaseReading"]).ToString("n0") + ".\r\n\r\n" +
+                        "A credit note only gives copies back. Extra usage is billed with a " +
+                        "supplementary invoice, not corrected here.",
                         "Correct with CN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
