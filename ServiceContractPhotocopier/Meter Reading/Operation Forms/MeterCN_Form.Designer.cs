@@ -329,8 +329,16 @@
             //
             // ColCorrectReading
             //
-            this.ColCorrectReading.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(255)))), ((int)(((byte)(192)))));
+            // THE input column: a clear yellow and bold text so it is obvious this is the one cell
+            // the user fills in. Every other column on this row is read-only history.
+            this.ColCorrectReading.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(241)))), ((int)(((byte)(118)))));
             this.ColCorrectReading.AppearanceCell.Options.UseBackColor = true;
+            this.ColCorrectReading.AppearanceCell.FontStyleDelta = System.Drawing.FontStyle.Bold;
+            this.ColCorrectReading.AppearanceCell.Options.UseFont = true;
+            this.ColCorrectReading.AppearanceHeader.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(241)))), ((int)(((byte)(118)))));
+            this.ColCorrectReading.AppearanceHeader.Options.UseBackColor = true;
+            this.ColCorrectReading.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
+            this.ColCorrectReading.AppearanceHeader.Options.UseFont = true;
             this.ColCorrectReading.Caption = "Correct Reading";
             this.ColCorrectReading.ColumnEdit = this.RepoNum;
             this.ColCorrectReading.DisplayFormat.FormatString = "n0";

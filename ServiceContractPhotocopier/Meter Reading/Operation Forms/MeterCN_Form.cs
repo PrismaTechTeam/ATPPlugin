@@ -227,6 +227,7 @@ namespace ServiceContractPhotocopier
                 {
                     e.Appearance.ForeColor = System.Drawing.Color.White;
                     e.Appearance.BackColor = System.Drawing.Color.FromArgb(198, 40, 40);
+                    e.Appearance.FontStyleDelta = System.Drawing.FontStyle.Bold;   // stays bold when it turns red
                 }
             }
         }
