@@ -610,14 +610,22 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         }
                         if (xr == null)
                         {
-                            List<NameReportEntity> reports = ReportTool.SelectReport("Invoice Document", ds, _userSession, true, rpt.GetBasicReportOption());
-                            if (reports == null || reports.Count == 0)
+                            // The layout is the CONTRACT's decision, so nothing may interrupt a bulk
+                            // run to ask. ReportTool.SelectReport falls back to a modal picker when
+                            // the book has no default "Invoice Document" set - one dialog would stall
+                            // a 200-customer send, and the operator has no way to answer it per
+                            // customer anyway. Resolve silently instead:
+                            //   contract template (above) -> book default -> first available layout.
+                            xr = ResolveDefaultInvoiceReport(ds, rpt, ref _fallbackLayoutUsed);
+                            if (xr == null)
                             {
-                                XtraMessageBox.Show("No default 'Invoice Document' report layout found — set a default report first.",
+                                XtraMessageBox.Show(
+                                    "No 'Invoice Document' report layout exists in this book, so the invoices " +
+                                    "cannot be rendered.\r\n\r\nCreate one in the Report Designer, then set it " +
+                                    "on the contract (Maintain Service Contract > Invoice Template).",
                                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                 return;
                             }
-                            xr = reports[0].Report;
                         }
                         tplCache[tplName] = xr;
                     }
@@ -665,6 +673,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 UpdateCount();
             }
 
+            // Said once, after rendering, rather than interrupting: the operator should know which
+            // layout was used when the contract did not name one — silently guessing is how people
+            // end up emailing customers the wrong-looking invoice.
+            if (_fallbackLayoutUsed.Length > 0)
+            {
+                XtraMessageBox.Show(
+                    "Some contracts have no Invoice Template set, so their invoices were rendered with:\r\n\r\n" +
+                    "    " + _fallbackLayoutUsed + "\r\n\r\n" +
+                    "Set the layout you want on the contract (Maintain Service Contract > Invoice Template) " +
+                    "to control this per customer.",
+                    "Invoice layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                _fallbackLayoutUsed = "";
+            }
+
             if (tplMissing.Count > 0)
             {
                 string[] missArr = new string[tplMissing.Count];
@@ -676,24 +698,41 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
-            // Sender = the company profile.
+            // Sender: the From configured in EMAIL SETTING is the authority — that dialog is where
+            // the operator sets it, and it is the same From AutoCount's own Batch Mail applies. The
+            // company profile is only a fallback for books that never filled Email Setting in.
             string fromName = "", fromEmail = "";
             try
             {
-                DataTable p = _dbSetting.GetDataTable(
-                    "SELECT CompanyName, ISNULL(EmailAddress,'') AS EmailAddress FROM dbo.Profile", false);
-                if (p.Rows.Count > 0)
+                AutoCount.Settings.MailServerSetting ms = AutoCount.Settings.MailServerSetting.GetOrCreate(_dbSetting);
+                if (ms != null)
                 {
-                    fromName = Convert.ToString(p.Rows[0]["CompanyName"]);
-                    fromEmail = Convert.ToString(p.Rows[0]["EmailAddress"]);
+                    fromName = (ms.FromName ?? "").Trim();
+                    fromEmail = (ms.FromEmail ?? "").Trim();
                 }
             }
             catch { }
-            if (fromEmail.Trim().Length == 0)
+            if (fromEmail.Length == 0)
+            {
+                try
+                {
+                    DataTable p = _dbSetting.GetDataTable(
+                        "SELECT CompanyName, ISNULL(EmailAddress,'') AS EmailAddress FROM dbo.Profile", false);
+                    if (p.Rows.Count > 0)
+                    {
+                        if (fromName.Length == 0) fromName = Convert.ToString(p.Rows[0]["CompanyName"]);
+                        fromEmail = Convert.ToString(p.Rows[0]["EmailAddress"]).Trim();
+                    }
+                }
+                catch { }
+            }
+            if (fromEmail.Length == 0)
             {
                 XtraMessageBox.Show(
-                    "The company profile has no email address, so there is nothing to send FROM.\r\n\r\n" +
-                    "Fill it in on the company profile first - most mail servers reject a message with no sender.",
+                    "There is no sender address to send FROM.\r\n\r\n" +
+                    "Set From Email in Email Setting (the button on this screen) — that is the address " +
+                    "your customers will see the invoice come from.\r\n\r\n" +
+                    "This is not the customer's address; that one is already on the grid.",
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -727,6 +766,55 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 dlg.ShowDialog(this);
             }
             LoadData();   // refresh the Emailed column / checklist
+        }
+
+        /// <summary>Name of the layout a document fell back to, so it can be reported ONCE at the
+        /// end instead of per invoice.</summary>
+        private string _fallbackLayoutUsed = "";
+
+        /// <summary>
+        /// The "Invoice Document" layout to use when the contract names none: the book's default
+        /// if one is set, otherwise the first layout that exists. Never prompts — during a bulk run
+        /// a modal picker is worse than any choice it could offer.
+        /// </summary>
+        private XtraReport ResolveDefaultInvoiceReport(object ds, InvoiceListingReport rpt, ref string usedName)
+        {
+            AutoCount.Report.AutoCountReport api = AutoCount.Report.AutoCountReport.GetInstance();
+
+            string name = "";
+            try { name = AutoCount.Report.ReportDBUtil.Create(_dbSetting).GetDefaultReport("Invoice Document"); }
+            catch { }
+            if (string.IsNullOrEmpty(name))
+            {
+                try
+                {
+                    DataTable list = api.GetReportList(_dbSetting, "Invoice Document");
+                    if (list != null && list.Rows.Count > 0)
+                        name = Convert.ToString(list.Rows[0]["ReportName"]).Trim();
+                }
+                catch { }
+            }
+            if (string.IsNullOrEmpty(name)) return null;
+
+            try
+            {
+                AutoCount.Report.ReportTemplate t = api.GetReport(name, ds, _userSession, true);
+                XtraReport xr = t != null ? t.Report as XtraReport : null;
+                if (xr == null) return null;
+                // Match the option handling the default path would have applied (margins, paper,
+                // print-in-black); ApplyReportOption is private, so reflect. A miss just leaves the
+                // layout exactly as designed.
+                try
+                {
+                    System.Reflection.MethodInfo aro = typeof(ReportTool).GetMethod("ApplyReportOption",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (aro != null) aro.Invoke(null, new object[] { xr, rpt.GetBasicReportOption() });
+                }
+                catch { }
+                if (string.IsNullOrEmpty(usedName)) usedName = name;
+                return xr;
+            }
+            catch { return null; }
         }
 
         /// <summary>Watch the current (or last) send, including one another PC started.</summary>
