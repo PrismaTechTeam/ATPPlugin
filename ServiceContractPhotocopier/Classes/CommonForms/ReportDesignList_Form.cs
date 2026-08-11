@@ -335,6 +335,17 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         /// </summary>
         private void InitNewReport(XtraReport xr)
         {
+            // AutoCount seeds every new report with a script that touches AutoCount.Report.BaseReport,
+            // which drags AutoCount.UI.dll in as a script reference — the one reference most likely
+            // not to resolve, and when it does not the whole preview is replaced by "There are errors
+            // in scripts". A listing has no use for __report, so the handler stays (Scripts.
+            // OnBeforePrint names it) and the dependency goes.
+            xr.ScriptsSource =
+                "private void Report_BeforePrint(object sender, System.ComponentModel.CancelEventArgs e)\r\n" +
+                "{\r\n" +
+                "}\r\n";
+            xr.Scripts.OnBeforePrint = "Report_BeforePrint";
+
             xr.Landscape = true;
             xr.PaperKind = System.Drawing.Printing.PaperKind.A4;
             xr.Margins = new System.Drawing.Printing.Margins(40, 40, 45, 45);
