@@ -767,7 +767,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
 
-            // Group the ticked invoices per customer — one email per customer, their PDFs attached.
             Dictionary<string, InvoiceBatchMailEntity> byDebtor = new Dictionary<string, InvoiceBatchMailEntity>(StringComparer.OrdinalIgnoreCase);
             List<InvoiceBatchMailEntity> entities = new List<InvoiceBatchMailEntity>();
             List<DataRow> ticked = new List<DataRow>();
@@ -779,176 +778,74 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
 
-            // Demo 28/07 #9c: per-contract invoice template — each invoice renders with the
-            // layout its CONTRACT names (resolved through the meter-billing stamps). '' or a
-            // renamed/deleted name falls back to the default layout.
-            Dictionary<long, string> tplByDoc = new Dictionary<long, string>();
-            try
+            // Group the ticked rows into one email per customer. NOTHING is rendered here — the
+            // form used to build every PDF before the operator got control back, which froze it for
+            // the whole batch. The job renders each customer's invoices as it reaches them.
+            foreach (DataRow r in ticked)
             {
-                DataTable tpl = _dbSetting.GetDataTable(
-                    "SELECT me.InvoicedDocKey AS DocKey, MAX(ISNULL(c.InvoiceReportName,'')) AS Tpl " +
-                    "FROM dbo.zSCP2_MeterEntry me " +
-                    "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = me.ItemMeterKey " +
-                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
-                    "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
-                    "WHERE me.InvoicedDocKey IS NOT NULL AND ISNULL(c.InvoiceReportName,'') <> '' " +
-                    "GROUP BY me.InvoicedDocKey", false);
-                foreach (DataRow t in tpl.Rows)
-                    tplByDoc[Convert.ToInt64(t["DocKey"])] = Convert.ToString(t["Tpl"]).Trim();
-            }
-            catch { /* no templates resolvable -> everything uses the default layout */ }
-
-            InvoiceListingReport rpt = InvoiceListingReport.Create(_userSession);
-            Dictionary<string, XtraReport> tplCache = new Dictionary<string, XtraReport>(StringComparer.OrdinalIgnoreCase);
-            HashSet<string> tplMissing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            BtnEmail.Enabled = false;
-            try
-            {
-                int n = 0;
-                foreach (DataRow r in ticked)
+                string acc = Convert.ToString(r["DebtorCode"]);
+                InvoiceBatchMailEntity ent;
+                if (!byDebtor.TryGetValue(acc, out ent))
                 {
-                    n++;
-                    string docNo = Convert.ToString(r["DocNo"]);
-                    LblCount.Text = "Rendering " + n + " of " + ticked.Count + " — " + docNo + "…";
-                    Application.DoEvents();
-
-                    long docKey = Convert.ToInt64(r["DocKey"]);
-                    object ds = rpt.GetReportDataSource(docKey);
-                    // #9c: the contract's named layout wins; one XtraReport per layout, reused
-                    // across documents (DataSource swap — same pattern as before).
-                    string tplName;
-                    if (!tplByDoc.TryGetValue(docKey, out tplName) || tplName == null) tplName = "";
-                    XtraReport xr;
-                    if (!tplCache.TryGetValue(tplName, out xr))
-                    {
-                        if (tplName.Length > 0)
-                        {
-                            try
-                            {
-                                AutoCount.Report.ReportTemplate named =
-                                    AutoCount.Report.AutoCountReport.GetInstance().GetReport(tplName, ds, _userSession, true);
-                                xr = named != null ? named.Report as XtraReport : null;
-                            }
-                            catch { xr = null; }
-                            if (xr == null) tplMissing.Add(tplName);
-                            else
-                            {
-                                // The default path gets the book's report option (margins, Letter->A4
-                                // resize, custom paper name, print-in-black) applied inside
-                                // ReportTool.SelectReport — the named path must match, but
-                                // ApplyReportOption is private, so invoke it reflectively; a miss
-                                // just leaves the layout exactly as designed.
-                                try
-                                {
-                                    System.Reflection.MethodInfo aro = typeof(ReportTool).GetMethod("ApplyReportOption",
-                                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                                    if (aro != null) aro.Invoke(null, new object[] { xr, rpt.GetBasicReportOption() });
-                                }
-                                catch { }
-                            }
-                        }
-                        if (xr == null)
-                        {
-                            // The layout is the CONTRACT's decision, so nothing may interrupt a bulk
-                            // run to ask. ReportTool.SelectReport falls back to a modal picker when
-                            // the book has no default "Invoice Document" set - one dialog would stall
-                            // a 200-customer send, and the operator has no way to answer it per
-                            // customer anyway. Resolve silently instead:
-                            //   contract template (above) -> book default -> first available layout.
-                            xr = ResolveDefaultInvoiceReport(ds, rpt, ref _fallbackLayoutUsed);
-                            if (xr == null)
-                            {
-                                XtraMessageBox.Show(
-                                    "No 'Invoice Document' report layout exists in this book, so the invoices " +
-                                    "cannot be rendered.\r\n\r\nCreate one in the Report Designer, then set it " +
-                                    "on the contract (Maintain Service Contract > Invoice Template).",
-                                    "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                return;
-                            }
-                        }
-                        tplCache[tplName] = xr;
-                    }
-                    xr.DataSource = ds;
-                    xr.CreateDocument();
-                    byte[] pdf;
-                    using (MemoryStream ms = new MemoryStream())
-                    {
-                        xr.ExportToPdf(ms);
-                        pdf = ms.ToArray();
-                    }
-
-                    string acc = Convert.ToString(r["DebtorCode"]);
-                    InvoiceBatchMailEntity ent;
-                    if (!byDebtor.TryGetValue(acc, out ent))
-                    {
-                        ent = new InvoiceBatchMailEntity();
-                        ent.AccNo = acc;
-                        ent.CompanyName = Convert.ToString(r["DebtorName"]);
-                        ent.RecipientName = ent.CompanyName;
-                        ent.Email = Convert.ToString(r["Email"]).Trim();
-                        ent.DocNos = "";
-                        ent.AttachmentList = new List<AttachmentData>();
-                        byDebtor[acc] = ent;
-                        entities.Add(ent);
-                    }
-                    ent.DocNos = ent.DocNos.Length == 0 ? docNo : ent.DocNos + ", " + docNo;
-                    ent.DocKeyList.Add(Convert.ToInt64(r["DocKey"]));
-                    ent.DocNoList.Add(docNo);
-                    AttachmentData att = new AttachmentData();
-                    att.FileName = "Invoice " + SafeFileName(docNo) + ".pdf";
-                    att.Binary = pdf;
-                    ent.AttachmentList.Add(att);
+                    ent = new InvoiceBatchMailEntity();
+                    ent.AccNo = acc;
+                    ent.CompanyName = Convert.ToString(r["DebtorName"]);
+                    ent.RecipientName = ent.CompanyName;
+                    ent.Email = Convert.ToString(r["Email"]).Trim();
+                    ent.DocNos = "";
+                    byDebtor[acc] = ent;
+                    entities.Add(ent);
                 }
+                string docNo = Convert.ToString(r["DocNo"]);
+                ent.DocNos = ent.DocNos.Length == 0 ? docNo : ent.DocNos + ", " + docNo;
+                ent.DocKeyList.Add(Convert.ToInt64(r["DocKey"]));
+                ent.DocNoList.Add(docNo);
             }
-            catch (Exception ex)
+
+            // Resolving WHICH layout each invoice needs still touches AutoCount's report registry,
+            // so it stays on this thread — but that is a handful of designs, not one pass per invoice.
+            List<long> allDocKeys = new List<long>();
+            foreach (DataRow r in ticked) allDocKeys.Add(Convert.ToInt64(r["DocKey"]));
+
+            ScpInvoicePdfRenderer renderer = new ScpInvoicePdfRenderer(_dbSetting, _userSession);
+            string prepErr;
+            bool prepared;
+            Cursor.Current = Cursors.WaitCursor;
+            try { prepared = renderer.Prepare(allDocKeys, out prepErr); }
+            finally { Cursor.Current = Cursors.Default; }
+            if (!prepared)
             {
-                XtraMessageBox.Show("Rendering invoices failed — nothing was sent.\r\n\r\n" + ex.Message,
+                XtraMessageBox.Show(
+                    "The invoices cannot be rendered:\r\n\r\n" + prepErr + "\r\n\r\n" +
+                    "Create an 'Invoice Document' layout in the Report Designer, then set it on the " +
+                    "contract (Maintain Service Contract > Invoice Template).",
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            finally
-            {
-                BtnEmail.Enabled = true;
-                UpdateCount();
-            }
-
-            // Said once, after rendering, rather than interrupting: the operator should know which
-            // layout was used when the contract did not name one — silently guessing is how people
-            // end up emailing customers the wrong-looking invoice.
-            if (_fallbackLayoutUsed.Length > 0)
-            {
+            if (renderer.MissingTemplates.Count > 0)
                 XtraMessageBox.Show(
-                    "Some contracts have no Invoice Template set, so their invoices were rendered with:\r\n\r\n" +
-                    "    " + _fallbackLayoutUsed + "\r\n\r\n" +
-                    "Set the layout you want on the contract (Maintain Service Contract > Invoice Template) " +
-                    "to control this per customer.",
-                    "Invoice layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                _fallbackLayoutUsed = "";
-            }
-
-            if (tplMissing.Count > 0)
-            {
-                string[] missArr = new string[tplMissing.Count];
-                tplMissing.CopyTo(missArr);
-                XtraMessageBox.Show("These contract invoice template(s) were NOT found (renamed or deleted in the " +
-                    "Report Designer?) \u2014 the DEFAULT layout was used for their invoices:\r\n\r\n" +
-                    string.Join("\r\n", missArr) +
+                    "These contract invoice template(s) were NOT found (renamed or deleted in the " +
+                    "Report Designer?) - the DEFAULT layout will be used for their invoices:\r\n\r\n" +
+                    string.Join("\r\n", renderer.MissingTemplates.ToArray()) +
                     "\r\n\r\nFix the template name on the contract (Maintain Service Contract).",
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+            else if (renderer.FallbackTemplateUsed.Length > 0)
+                XtraMessageBox.Show(
+                    "Some contracts have no Invoice Template set, so their invoices will be rendered with:\r\n\r\n" +
+                    "    " + renderer.FallbackTemplateUsed + "\r\n\r\n" +
+                    "Set the layout you want on the contract to control this per customer.",
+                    "Invoice layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            // Sender: the From configured in EMAIL SETTING is the authority — that dialog is where
-            // the operator sets it, and it is the same From AutoCount's own Batch Mail applies. The
-            // company profile is only a fallback for books that never filled Email Setting in.
+            // Sender: the From configured in EMAIL SETTING is the authority. Email Setting keeps it
+            // on THIS PC (%APPDATA%\AutoCount\...\MailServer.setting), separate from the SMTP host
+            // and user which live in the book - so the local pair wins: it is what the operator
+            // actually typed, and what AutoCount's own Batch Mail shows.
             string fromName = "", fromEmail = "";
             try
             {
                 AutoCount.Settings.MailServerSetting ms = AutoCount.Settings.MailServerSetting.GetOrCreate(_dbSetting);
                 if (ms != null)
                 {
-                    // Email Setting keeps the From on THIS PC (%APPDATA%\AutoCount\...\MailServer.setting),
-                    // separate from the SMTP host/user which live in the book. So the local pair wins:
-                    // it is what the operator actually typed, and what AutoCount's own Batch Mail shows.
                     fromName = (ms.LocalPCFromName ?? "").Trim();
                     fromEmail = (ms.LocalPCFromEmail ?? "").Trim();
                     if (fromEmail.Length == 0) fromEmail = (ms.FromEmail ?? "").Trim();
@@ -974,16 +871,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 XtraMessageBox.Show(
                     "There is no sender address to send FROM.\r\n\r\n" +
-                    "Set From Email in Email Setting (the button on this screen) — that is the address " +
+                    "Set From Email in Email Setting (the button on this screen) - that is the address " +
                     "your customers will see the invoice come from.\r\n\r\n" +
                     "This is not the customer's address; that one is already on the grid.",
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // Each customer's wording comes from THEIR contract's template; the book default fills
-            // in for everyone else. Resolved here, once, and handed to the job - the operator never
-            // retypes it, which is the whole reason this no longer uses AutoCount's Batch Mail box.
             ScpEmailTemplates.Template tplDef = ScpEmailTemplates.LoadDefault(_dbSetting);
             LoadPerDebtorTemplates();
 
@@ -996,7 +890,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 rec.Email = (ent.Email ?? "").Trim();
                 rec.DocKeys = ent.DocKeyList;
                 rec.DocNos = ent.DocNoList;
-                rec.Attachments = ent.AttachmentList;
                 ScpEmailTemplates.Template own;
                 if (_perDebtorTpl != null &&
                     _perDebtorTpl.TryGetValue((ent.AccNo ?? "").Trim().ToUpperInvariant(), out own))
@@ -1005,61 +898,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
 
             using (BulkEmailJob_Form dlg = new BulkEmailJob_Form(
-                _dbSetting, recipients, fromName, fromEmail, tplDef))
+                _dbSetting, recipients, fromName, fromEmail, tplDef, renderer))
             {
                 dlg.ShowDialog(this);
             }
             LoadData();   // refresh the Emailed column / checklist
         }
 
-        /// <summary>Name of the layout a document fell back to, so it can be reported ONCE at the
-        /// end instead of per invoice.</summary>
-        private string _fallbackLayoutUsed = "";
-
-        /// <summary>
-        /// The "Invoice Document" layout to use when the contract names none: the book's default
-        /// if one is set, otherwise the first layout that exists. Never prompts — during a bulk run
-        /// a modal picker is worse than any choice it could offer.
-        /// </summary>
-        private XtraReport ResolveDefaultInvoiceReport(object ds, InvoiceListingReport rpt, ref string usedName)
-        {
-            AutoCount.Report.AutoCountReport api = AutoCount.Report.AutoCountReport.GetInstance();
-
-            string name = "";
-            try { name = AutoCount.Report.ReportDBUtil.Create(_dbSetting).GetDefaultReport("Invoice Document"); }
-            catch { }
-            if (string.IsNullOrEmpty(name))
-            {
-                try
-                {
-                    DataTable list = api.GetReportList(_dbSetting, "Invoice Document");
-                    if (list != null && list.Rows.Count > 0)
-                        name = Convert.ToString(list.Rows[0]["ReportName"]).Trim();
-                }
-                catch { }
-            }
-            if (string.IsNullOrEmpty(name)) return null;
-
-            try
-            {
-                AutoCount.Report.ReportTemplate t = api.GetReport(name, ds, _userSession, true);
-                XtraReport xr = t != null ? t.Report as XtraReport : null;
-                if (xr == null) return null;
-                // Match the option handling the default path would have applied (margins, paper,
-                // print-in-black); ApplyReportOption is private, so reflect. A miss just leaves the
-                // layout exactly as designed.
-                try
-                {
-                    System.Reflection.MethodInfo aro = typeof(ReportTool).GetMethod("ApplyReportOption",
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (aro != null) aro.Invoke(null, new object[] { xr, rpt.GetBasicReportOption() });
-                }
-                catch { }
-                if (string.IsNullOrEmpty(usedName)) usedName = name;
-                return xr;
-            }
-            catch { return null; }
-        }
 
         /// <summary>Watch the current (or last) send, including one another PC started.</summary>
         private void BtnProgress_Click(object sender, EventArgs e)

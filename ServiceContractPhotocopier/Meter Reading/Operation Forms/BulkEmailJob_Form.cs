@@ -28,6 +28,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private List<ScpEmailJob.Recipient> _pending;   // CONFIRM mode
         private string _fromName = "", _fromEmail = "";
         private ScpEmailTemplates.Template _defaultTpl;
+        private ScpInvoicePdfRenderer _renderer;        // renders each PDF inside the job
         private long _jobKey;                           // PROGRESS mode
         private DataTable _grid;
 
@@ -38,10 +39,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         /// <summary>CONFIRM mode: review, then start the job.</summary>
         public BulkEmailJob_Form(DBSetting db, List<ScpEmailJob.Recipient> recipients,
-            string fromName, string fromEmail, ScpEmailTemplates.Template defaultTpl) : this()
+            string fromName, string fromEmail, ScpEmailTemplates.Template defaultTpl,
+            ScpInvoicePdfRenderer renderer) : this()
         {
             _db = db; _pending = recipients; _fromName = fromName; _fromEmail = fromEmail;
-            _defaultTpl = defaultTpl;
+            _defaultTpl = defaultTpl; _renderer = renderer;
             BuildConfirmGrid();
         }
 
@@ -95,16 +97,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 "and message come from each contract's own email template." +
                 (noEmail > 0 ? "   ⚠ " + noEmail + " customer(s) have no email address and will be skipped." : "");
 
-            // The safety net has to be loud. Somebody eventually runs a real month-end with it still
-            // on, and "why did nobody get their invoice" must be answerable from this screen.
-            if (ScpEmailJob.WhitelistOn(_db))
-            {
-                PanelTop.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 205, 210);
-                LblHeadline.Text = "⚠ EMAIL WHITELIST IS ON — " + LblHeadline.Text;
-                LblSub.Text = "Only whitelisted addresses will actually receive mail" +
-                    (blockedCount > 0 ? "; " + blockedCount + " of these will be BLOCKED" : "") +
-                    ".   Turn it off in Plugin Option when you are ready to email real customers.";
-            }
+            // Stated, not shouted (user call): the per-row BLOCKED status already carries the detail,
+            // so a plain sentence is enough here.
+            if (ScpEmailJob.WhitelistOn(_db) && blockedCount > 0)
+                LblSub.Text += "   Email whitelist is on — " + blockedCount + " will not be sent.";
             BtnConfirm.Visible = true;
         }
 
@@ -119,7 +115,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             try
             {
-                _jobKey = ScpEmailJob.Start(_db, _pending, _fromName, _fromEmail, _defaultTpl);
+                _jobKey = ScpEmailJob.Start(_db, _pending, _fromName, _fromEmail, _defaultTpl, _renderer);
             }
             catch (Exception ex)
             {

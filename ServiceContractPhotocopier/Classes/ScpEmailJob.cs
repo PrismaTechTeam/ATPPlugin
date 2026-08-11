@@ -95,9 +95,9 @@ namespace ServiceContractPhotocopier.Classes
             public List<string> DocNos = new List<string>();
             /// <summary>Resolved per-customer wording; null = use the default template.</summary>
             public ScpEmailTemplates.Template Template;
-            /// <summary>PDFs rendered BEFORE the job starts. Report rendering needs the UI thread
-            /// (XtraReport + AutoCount's report option plumbing), and it is the deterministic part
-            /// anyway — the job owns only the slow, failure-prone half: the actual sending.</summary>
+            /// <summary>Filled by the job as it goes. Rendering used to happen up front on the UI
+            /// thread, which froze the form for the whole batch before the operator got control
+            /// back; it now runs here, spread through the send it feeds.</summary>
             public List<AutoCount.Mail.AttachmentData> Attachments = new List<AutoCount.Mail.AttachmentData>();
         }
 
@@ -123,7 +123,7 @@ namespace ServiceContractPhotocopier.Classes
         /// the UI goes away.
         /// </summary>
         public static long Start(DBSetting db, List<Recipient> recipients, string fromName, string fromEmail,
-            ScpEmailTemplates.Template defaultTemplate)
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
         {
             if (db == null || recipients == null || recipients.Count == 0) return 0;
             lock (_gate)
@@ -136,7 +136,7 @@ namespace ServiceContractPhotocopier.Classes
                 _currentJobKey = jobKey;
                 _worker = new Thread(delegate ()
                 {
-                    try { Run(db, jobKey, recipients, fromName, fromEmail, defaultTemplate); }
+                    try { Run(db, jobKey, recipients, fromName, fromEmail, defaultTemplate, renderer); }
                     catch (Exception ex) { AbortJob(db, jobKey, ex.Message); }
                     finally { lock (_gate) { _worker = null; } }
                 });
@@ -191,7 +191,8 @@ namespace ServiceContractPhotocopier.Classes
         // ───────────────────────── the run ─────────────────────────
 
         private static void Run(DBSetting db, long jobKey, List<Recipient> recipients,
-            string fromName, string fromEmail, ScpEmailTemplates.Template defaultTemplate)
+            string fromName, string fromEmail, ScpEmailTemplates.Template defaultTemplate,
+            ScpInvoicePdfRenderer renderer)
         {
             int ok = 0, failed = 0, skipped = 0;
 
@@ -239,7 +240,7 @@ namespace ServiceContractPhotocopier.Classes
 
                     try
                     {
-                        SendOne(db, r, fromName, fromEmail, defaultTemplate);
+                        SendOne(db, r, fromName, fromEmail, defaultTemplate, renderer);
                         SetItem(cn, itemKey, "SENT", null);
                         WriteLog(cn, r);
                         ok++;
@@ -272,7 +273,7 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         private static void SendOne(DBSetting db, Recipient r, string fromName, string fromEmail,
-            ScpEmailTemplates.Template defaultTemplate)
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
         {
             ScpEmailTemplates.Template tpl = r.Template ?? defaultTemplate;
             string subject = tpl == null ? "" : (tpl.Subject ?? "");
@@ -285,8 +286,24 @@ namespace ServiceContractPhotocopier.Classes
             if (style == "STYLED") body = ScpMailHtml.BuildStyled(body, fromName);
             else if (style == "HTML") body = ScpMailHtml.EnsureHtml(body);
 
-            if (r.Attachments == null || r.Attachments.Count == 0)
-                throw new Exception("No invoice PDF was attached for " + docNos + ".");
+            // Render this customer's invoices now, not at the start of the batch — the operator
+            // is already back in the UI and the work is spread across the run.
+            if (r.Attachments == null) r.Attachments = new List<AutoCount.Mail.AttachmentData>();
+            if (r.Attachments.Count == 0 && renderer != null)
+            {
+                for (int i = 0; i < r.DocKeys.Count; i++)
+                {
+                    string fileName;
+                    byte[] pdf = renderer.Render(r.DocKeys[i], r.DocNos[i], out fileName);
+                    if (pdf == null || pdf.Length == 0) continue;
+                    AutoCount.Mail.AttachmentData a = new AutoCount.Mail.AttachmentData();
+                    a.FileName = fileName;
+                    a.Binary = pdf;
+                    r.Attachments.Add(a);
+                }
+            }
+            if (r.Attachments.Count == 0)
+                throw new Exception("No invoice PDF could be produced for " + docNos + ".");
 
             AutoCount.Mail.EmailData data = new AutoCount.Mail.EmailData();
             data.Email = r.Email.Trim();
