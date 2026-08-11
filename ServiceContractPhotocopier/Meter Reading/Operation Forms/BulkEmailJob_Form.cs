@@ -134,14 +134,32 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void Preview_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             if (_pending == null) return;
+
+            // Resolve the row the button belongs to. Every failure below SAYS something: a preview
+            // button that silently does nothing is indistinguishable from a broken one.
             DataRow g = GridViewItems.GetDataRow(GridViewItems.FocusedRowHandle);
-            if (g == null) return;
+            if (g == null)
+            {
+                int[] sel = GridViewItems.GetSelectedRows();
+                if (sel != null && sel.Length > 0) g = GridViewItems.GetDataRow(sel[0]);
+            }
+            if (g == null)
+            {
+                XtraMessageBox.Show("Click the button on a customer's invoice row.",
+                    "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
             string customer = Convert.ToString(g["Customer"]);
             ScpEmailJob.Recipient rec = null;
             foreach (ScpEmailJob.Recipient r in _pending)
                 if (customer == r.DebtorCode + "  " + r.DebtorName) { rec = r; break; }
-            if (rec == null) return;
+            if (rec == null)
+            {
+                XtraMessageBox.Show("Could not match this row back to a customer in the send.",
+                    "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             List<DevExpress.XtraReports.UI.XtraReport> docs =
                 new List<DevExpress.XtraReports.UI.XtraReport>();
@@ -180,7 +198,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
                 DevExpress.XtraPrinting.PrintingSystem ps =
                     merged.PrintingSystem as DevExpress.XtraPrinting.PrintingSystem;
-                if (ps != null) ps.PreviewFormEx.ShowDialog(this);
+                if (ps == null)
+                {
+                    XtraMessageBox.Show("The documents were produced but the preview window could not "
+                        + "be opened.", "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                ps.PreviewFormEx.ShowDialog(this);
             }
             catch (Exception ex)
             {
@@ -447,6 +471,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // The grid has to accept edits for a button column to be clickable at all; every other
             // column stays read-only so nothing here can be typed over.
             GridViewItems.OptionsBehavior.Editable = _pending != null;
+            // Without this the FIRST click only activates the cell editor and the button swallows it:
+            // the operator clicks, nothing happens, and they have no way to know a second click was
+            // expected. MouseDown makes one click do what one click looks like it should do.
+            GridViewItems.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
             foreach (GridColumn gc in GridViewItems.Columns)
                 if (gc != null && gc.FieldName != "Preview") gc.OptionsColumn.AllowEdit = false;
             // Grouped by customer and expanded, so the "one email per customer" shape is the first
