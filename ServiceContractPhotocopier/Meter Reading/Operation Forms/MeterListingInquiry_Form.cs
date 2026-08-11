@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Globalization;
 using System.Windows.Forms;
@@ -419,15 +419,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// the printed report does not carry it either — which is what "design what I am looking at"
         /// has to mean for it to be worth anything.
         /// </summary>
-        private System.Collections.Generic.List<ReportDesignList_Form.ReportColumn> LayoutColumns()
+        private System.Collections.Generic.List<ScpListingLayout.Column> LayoutColumns()
         {
-            System.Collections.Generic.List<ReportDesignList_Form.ReportColumn> cols =
-                new System.Collections.Generic.List<ReportDesignList_Form.ReportColumn>();
+            System.Collections.Generic.List<ScpListingLayout.Column> cols =
+                new System.Collections.Generic.List<ScpListingLayout.Column>();
             for (int i = 0; i < GridViewListing.VisibleColumns.Count; i++)
             {
                 GridColumn c = GridViewListing.VisibleColumns[i];
                 if (c == null || string.IsNullOrEmpty(c.FieldName)) continue;
-                ReportDesignList_Form.ReportColumn rc = new ReportDesignList_Form.ReportColumn();
+                ScpListingLayout.Column rc = new ScpListingLayout.Column();
                 rc.Field = c.FieldName;
                 rc.Caption = c.Caption;
                 rc.Width = c.Width <= 0 ? 90 : c.Width;

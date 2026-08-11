@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Windows.Forms;
@@ -25,22 +25,11 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
     /// </summary>
     public partial class ReportDesignList_Form : XtraForm
     {
-        /// <summary>One column to lay out in a new design: what to bind, what to call it, how wide
-        /// relative to its neighbours, and how to format it.</summary>
-        public class ReportColumn
-        {
-            public string Field = "";
-            public string Caption = "";
-            public int Width = 100;
-            public string Format = "";      // "n0", "n2", "dd/MM/yyyy"; empty = plain text
-            public bool RightAlign = false;
-        }
-
         private DBSetting _db;
         private UserSession _us;
         private string _reportType = "";
         private object _designerDataSource;
-        private List<ReportColumn> _columns;
+        private List<ScpListingLayout.Column> _columns;
         private bool _pickMode;
         private string _picked;
 
@@ -50,7 +39,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         }
 
         private ReportDesignList_Form(DBSetting db, UserSession us, string reportType,
-            object designerDataSource, List<ReportColumn> columns, bool pickMode, string prompt) : this()
+            object designerDataSource, List<ScpListingLayout.Column> columns, bool pickMode, string prompt) : this()
         {
             _db = db;
             _us = us;
@@ -67,7 +56,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
 
         /// <summary>Open the manager. Everything happens inside; nothing is returned.</summary>
         public static void Manage(IWin32Window owner, DBSetting db, UserSession us, string reportType,
-            object designerDataSource, List<ReportColumn> columns)
+            object designerDataSource, List<ScpListingLayout.Column> columns)
         {
             using (ReportDesignList_Form f = new ReportDesignList_Form(db, us, reportType,
                 designerDataSource, columns, false, null))
@@ -81,7 +70,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         /// With nothing saved yet it offers to create one rather than showing an empty list.
         /// </summary>
         public static string Pick(IWin32Window owner, DBSetting db, UserSession us, string reportType,
-            object designerDataSource, List<ReportColumn> columns, string prompt)
+            object designerDataSource, List<ScpListingLayout.Column> columns, string prompt)
         {
             using (ReportDesignList_Form f = new ReportDesignList_Form(db, us, reportType,
                 designerDataSource, columns, true, prompt))
@@ -170,7 +159,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                InitNewReport(xr);
+                ScpListingLayout.Apply(xr, _reportType, _columns,
+                    _designerDataSource as System.Data.DataTable);
                 ScpReportScripts.FixReferences(xr);
                 // "" as the name is what tells AutoCount's designer this is NEW: its Save prompts for
                 // a name instead of silently overwriting something.
@@ -323,123 +313,5 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             UpdateButtons();
         }
 
-        // ───────────────────────── new-design layout ─────────────────────────
-
-        /// <summary>
-        /// Give a brand-new design the shape a listing needs: A4 landscape, sensible margins, a title
-        /// block, a repeating column-heading row and a detail row bound to the same columns the
-        /// operator is looking at on screen.
-        ///
-        /// AutoCount's NewReport returns a report with NO bands at all — the DevExpress design panel
-        /// would add only margins and a detail band, which is why "New" used to open on a blank page.
-        /// </summary>
-        private void InitNewReport(XtraReport xr)
-        {
-            // AutoCount seeds every new report with a script that touches AutoCount.Report.BaseReport,
-            // which drags AutoCount.UI.dll in as a script reference — the one reference most likely
-            // not to resolve, and when it does not the whole preview is replaced by "There are errors
-            // in scripts". A listing has no use for __report, so the handler stays (Scripts.
-            // OnBeforePrint names it) and the dependency goes.
-            xr.ScriptsSource =
-                "private void Report_BeforePrint(object sender, System.ComponentModel.CancelEventArgs e)\r\n" +
-                "{\r\n" +
-                "}\r\n";
-            xr.Scripts.OnBeforePrint = "Report_BeforePrint";
-
-            xr.Landscape = true;
-            xr.PaperKind = System.Drawing.Printing.PaperKind.A4;
-            xr.Margins = new System.Drawing.Printing.Margins(40, 40, 45, 45);
-
-            TopMarginBand top = new TopMarginBand();
-            top.HeightF = 45f;
-            xr.Bands.Add(top);
-
-            ReportHeaderBand rh = new ReportHeaderBand();
-            rh.HeightF = 46f;
-            xr.Bands.Add(rh);
-
-            PageHeaderBand ph = new PageHeaderBand();
-            ph.HeightF = 24f;
-            xr.Bands.Add(ph);
-
-            DetailBand detail = new DetailBand();
-            detail.HeightF = 22f;
-            xr.Bands.Add(detail);
-
-            BottomMarginBand bottom = new BottomMarginBand();
-            bottom.HeightF = 45f;
-            xr.Bands.Add(bottom);
-
-            float usable = UsableWidth(xr);
-
-            XRLabel title = new XRLabel();
-            title.Text = _reportType;
-            title.Font = new System.Drawing.Font("Segoe UI", 13f, System.Drawing.FontStyle.Bold);
-            title.LocationF = new DevExpress.Utils.PointFloat(0f, 6f);
-            title.SizeF = new System.Drawing.SizeF(usable, 26f);
-            rh.Controls.Add(title);
-
-            if (_columns == null || _columns.Count == 0) return;
-
-            float totalWidth = 0f;
-            for (int i = 0; i < _columns.Count; i++)
-                totalWidth += _columns[i].Width <= 0 ? 100 : _columns[i].Width;
-            float scale = totalWidth > 0f ? usable / totalWidth : 1f;
-
-            XRTable headRow = NewTable(usable, 22f);
-            XRTableRow hr = new XRTableRow();
-            headRow.Rows.Add(hr);
-            XRTable dataRow = NewTable(usable, 20f);
-            XRTableRow dr = new XRTableRow();
-            dataRow.Rows.Add(dr);
-
-            for (int i = 0; i < _columns.Count; i++)
-            {
-                ReportColumn c = _columns[i];
-                float w = (c.Width <= 0 ? 100 : c.Width) * scale;
-
-                XRTableCell hc = new XRTableCell();
-                hc.Text = c.Caption;
-                hc.WidthF = w;
-                hc.Font = new System.Drawing.Font("Segoe UI", 8f, System.Drawing.FontStyle.Bold);
-                hc.Borders = DevExpress.XtraPrinting.BorderSide.Bottom | DevExpress.XtraPrinting.BorderSide.Top;
-                hc.TextAlignment = c.RightAlign
-                    ? DevExpress.XtraPrinting.TextAlignment.MiddleRight
-                    : DevExpress.XtraPrinting.TextAlignment.MiddleLeft;
-                hr.Cells.Add(hc);
-
-                XRTableCell dc = new XRTableCell();
-                dc.WidthF = w;
-                dc.Font = new System.Drawing.Font("Segoe UI", 8f);
-                dc.Borders = DevExpress.XtraPrinting.BorderSide.Bottom;
-                dc.TextAlignment = c.RightAlign
-                    ? DevExpress.XtraPrinting.TextAlignment.MiddleRight
-                    : DevExpress.XtraPrinting.TextAlignment.MiddleLeft;
-                if (c.Format.Length > 0) dc.TextFormatString = "{0:" + c.Format + "}";
-                dc.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[" + c.Field + "]"));
-                dr.Cells.Add(dc);
-            }
-
-            ph.Controls.Add(headRow);
-            detail.Controls.Add(dataRow);
-        }
-
-        private static XRTable NewTable(float width, float height)
-        {
-            XRTable t = new XRTable();
-            t.LocationF = new DevExpress.Utils.PointFloat(0f, 0f);
-            t.SizeF = new System.Drawing.SizeF(width, height);
-            return t;
-        }
-
-        /// <summary>Printable width in report units. PageWidth/PageHeight describe the PAPER, so the
-        /// landscape swap has to be applied here rather than assumed.</summary>
-        private static float UsableWidth(XtraReport xr)
-        {
-            int w = xr.PageWidth, h = xr.PageHeight;
-            int across = xr.Landscape ? Math.Max(w, h) : Math.Min(w, h);
-            float usable = across - xr.Margins.Left - xr.Margins.Right;
-            return usable < 100f ? 100f : usable;
-        }
     }
 }
