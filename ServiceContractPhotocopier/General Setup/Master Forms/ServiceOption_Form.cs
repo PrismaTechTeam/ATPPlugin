@@ -70,6 +70,12 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ChkInvDescFromItem.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_DESC_FROM_ITEM);
+                ChkLegacyDataBlock.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_LEGACY_DATA_BLOCK,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_LEGACY_DATA_BLOCK);
+                ChkLegacyDataBlock.ToolTip = "The old V8 invoice design reads 17 coded lines out of Further " +
+                    "Description BY POSITION. On any other layout they print as raw numbers, which is why " +
+                    "this is off - the readable reading rows are already on the invoice.";
 
                 // #10: numbering format for meter-correction CREDIT NOTES (DocType 'CN');
                 // empty = the book's default CN numbering.
@@ -350,6 +356,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_DESC_FROM_ITEM,
                     ChkInvDescFromItem.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_LEGACY_DATA_BLOCK,
+                    ChkLegacyDataBlock.Checked);
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ADVANCED,
                     ChkInvFmtAdvanced.Checked);

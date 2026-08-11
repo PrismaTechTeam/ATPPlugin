@@ -24,6 +24,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private TextEdit TxtDefaultServiceStatus, TxtDefaultAppointmentPriority;
         private ComboBoxEdit CmbMeterInvFormat;
         private CheckEdit ChkInvDescFromItem;
+        private CheckEdit ChkLegacyDataBlock;
         private CheckEdit ChkInvFmtAdvanced;
         private LabelControl LblInvFmtOnline, LblInvFmtOffline;
         private ComboBoxEdit CmbInvFmtOnline, CmbInvFmtOffline;
@@ -72,6 +73,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblMeterInvFormat = new LabelControl(); this.CmbMeterInvFormat = new ComboBoxEdit();
             this.LblCnFormat = new LabelControl(); this.CmbCnFormat = new ComboBoxEdit();
             this.ChkInvDescFromItem = new CheckEdit();
+            this.ChkLegacyDataBlock = new CheckEdit();
             this.ChkInvFmtAdvanced = new CheckEdit();
             this.LblInvFmtOnline = new LabelControl(); this.CmbInvFmtOnline = new ComboBoxEdit();
             this.LblInvFmtOffline = new LabelControl(); this.CmbInvFmtOffline = new ComboBoxEdit();
@@ -130,7 +132,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.GrpDefaults.Text = "Defaults";
             this.GrpDefaults.Location = new Point(14, 154);
-            this.GrpDefaults.Size = new Size(660, 220);
+            this.GrpDefaults.Size = new Size(660, 244);
             Lbl(this.LblDefaultStatus, "Default Service Status", 16, 32);
             this.TxtDefaultServiceStatus.Location = new Point(190, 30); this.TxtDefaultServiceStatus.Width = 220;
             Lbl(this.LblDefaultPriority, "Default Appt. Priority", 16, 62);
@@ -145,12 +147,15 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.CmbInvFmtOnline.Location = new Point(292, 151); this.CmbInvFmtOnline.Width = 150;
             Lbl(this.LblInvFmtOffline, "Offline", 452, 154);
             this.CmbInvFmtOffline.Location = new Point(492, 151); this.CmbInvFmtOffline.Width = 150;
+            this.ChkLegacyDataBlock.Properties.Caption = "Legacy meter data block in Further Description (old report design only)";
+            this.ChkLegacyDataBlock.Location = new Point(16, 208); this.ChkLegacyDataBlock.Width = 620;
             Lbl(this.LblCnFormat, "Meter CN No. Format", 16, 182);
             this.CmbCnFormat.Location = new Point(190, 180); this.CmbCnFormat.Width = 220;
             this.GrpDefaults.Controls.Add(this.LblDefaultStatus); this.GrpDefaults.Controls.Add(this.TxtDefaultServiceStatus);
             this.GrpDefaults.Controls.Add(this.LblDefaultPriority); this.GrpDefaults.Controls.Add(this.TxtDefaultAppointmentPriority);
             this.GrpDefaults.Controls.Add(this.LblMeterInvFormat); this.GrpDefaults.Controls.Add(this.CmbMeterInvFormat);
             this.GrpDefaults.Controls.Add(this.ChkInvDescFromItem);
+            this.GrpDefaults.Controls.Add(this.ChkLegacyDataBlock);
             this.GrpDefaults.Controls.Add(this.ChkInvFmtAdvanced);
             this.GrpDefaults.Controls.Add(this.LblInvFmtOnline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOnline);
             this.GrpDefaults.Controls.Add(this.LblInvFmtOffline); this.GrpDefaults.Controls.Add(this.CmbInvFmtOffline);

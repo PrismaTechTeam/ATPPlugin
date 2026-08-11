@@ -56,6 +56,14 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
         public const string DEFAULT_BILLING_MODE_VALUE = "G";
 
+        /// <summary>Write the legacy 17-field meter block into each invoice line's Further
+        /// Description. It is machine-readable — the old V8 report design parses those lines BY
+        /// POSITION — so on any other layout it prints as a wall of raw numbers. OFF by default:
+        /// the human-readable reading rows are already on the invoice, and this is a second, coded
+        /// copy. Turn it ON only when using a report design that reads those fields.</summary>
+        public const string KEY_INVOICE_LEGACY_DATA_BLOCK = "INVOICE_LEGACY_DATA_BLOCK";
+        public const bool DEFAULT_INVOICE_LEGACY_DATA_BLOCK = false;
+
         /// <summary>Feedback #6 "Group Rental": one invoice line per RENTAL METER TYPE carrying the
         /// number of units ("RA-32 UNIT ... 32 UNIT x 908.20"), instead of one line per machine.
         /// ON by default — it is what the customer's own invoice looks like. Merging is display-only:

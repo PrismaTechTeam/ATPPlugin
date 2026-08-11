@@ -278,6 +278,10 @@ namespace ServiceContractPhotocopier.Classes
             // is analysed exactly like the contract it bills. Loaded once per distinct contract.
             System.Collections.Generic.Dictionary<long, string[]> contractDeptProj = LoadContractDeptProj(db, lines);
 
+            bool legacyDataBlock = ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_LEGACY_DATA_BLOCK,
+                ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INVOICE_LEGACY_DATA_BLOCK);
+
             // Invoice line description source (user decision 2026-07-27): DEFAULT = the AutoCount stock
             // item's own description (master convention — "BK COPY + PRINT A4&A3"); the Plugin Option
             // can switch back to the meter type name. One lookup per distinct item code.
@@ -340,7 +344,11 @@ namespace ServiceContractPhotocopier.Classes
                 else if (minBilled)
                     block = "*** Minimum Charges ***";
                 else
-                    block = ComposeBreakdown(ln, readingDate);
+                    // The 17-field block is CODED for the legacy V8 design, which reads those lines
+                    // by position. On any other layout it prints as a wall of raw numbers, and the
+                    // human-readable reading rows below the charge already say the same thing — so
+                    // it is off unless a design that parses it is in use.
+                    block = legacyDataBlock ? ComposeBreakdown(ln, readingDate) : "";
 
                 // Charge row (NET convention): Qty = billed copies (usage - FOC), UnitPrice = the resolved
                 // per-copy price (multi-price tier or flat rate), Rebate % as a line discount — so the line
