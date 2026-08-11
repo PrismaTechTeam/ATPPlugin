@@ -71,6 +71,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["DocNo"] = r.DocNos[i];
                     g["Email"] = r.Email;
                     g["Template"] = r.Template != null ? r.Template.Name : "(default)";
+                    // Which report design this invoice will be rendered with — shown per row so the
+                    // operator can see it where the invoice is, instead of being told in a popup.
+                    g["Layout"] = _renderer != null && i < r.DocKeys.Count
+                        ? _renderer.LayoutFor(r.DocKeys[i]) : "";
                     string dummy;
                     bool blocked = ScpEmailJob.IsBlockedByWhitelist(_db, r.Email, out dummy);
                     g["Status"] = string.IsNullOrEmpty((r.Email ?? "").Trim()) ? "NO EMAIL"
@@ -238,6 +242,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             t.Columns.Add("DocNo", typeof(string));
             t.Columns.Add("Email", typeof(string));
             t.Columns.Add("Template", typeof(string));
+            t.Columns.Add("Layout", typeof(string));
             t.Columns.Add("Status", typeof(string));
             t.Columns.Add("Note", typeof(string));
             return t;
@@ -251,9 +256,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             Col("Customer", "Customer", 260, 0);
             Col("DocNo", "Invoice No", 190, 1);
             Col("Email", "Email", 220, 2);
-            Col("Template", "Template", 130, 3);
-            Col("Status", "Status", 90, 4);
-            Col("Note", "Note", 300, 5);
+            Col("Template", "Email Template", 130, 3);
+            Col("Layout", "Invoice Layout", 170, 4);
+            Col("Status", "Status", 90, 5);
+            Col("Note", "Note", 300, 6);
             // Grouped by customer and expanded, so the "one email per customer" shape is the first
             // thing you see rather than something you have to work out from a flat list.
             GridColumn c = GridViewItems.Columns["Customer"];

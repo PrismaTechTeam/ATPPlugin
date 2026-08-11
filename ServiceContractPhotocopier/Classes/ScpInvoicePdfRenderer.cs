@@ -33,8 +33,15 @@ namespace ServiceContractPhotocopier.Classes
 
         /// <summary>Layout names named on a contract that no longer exist (renamed/deleted).</summary>
         public readonly List<string> MissingTemplates = new List<string>();
-        /// <summary>The layout used where a contract named none — reported once, not guessed at.</summary>
+        /// <summary>
+        /// The default layout, named ONLY when a document in this batch actually lands on it.
+        /// The default is always prepared as a safety net, so "it was resolved" says nothing about
+        /// whether anything uses it — that distinction is the whole point of this field.
+        /// </summary>
         public string FallbackTemplateUsed = "";
+        /// <summary>How many documents in the batch fall back to the default layout.</summary>
+        public int FallbackDocCount = 0;
+        private string _defaultName = "";
 
         public ScpInvoicePdfRenderer(DBSetting db, UserSession us)
         {
@@ -108,6 +115,13 @@ namespace ServiceContractPhotocopier.Classes
                     }
                     _byTemplate[name] = xr;
                 }
+
+                // Only NOW can the fallback be reported honestly: count the documents that really
+                // land on the default, rather than assuming any that resolved it are using it.
+                foreach (long dk in docKeys)
+                    if (ResolvedLayoutName(dk).Length == 0) FallbackDocCount++;
+                if (FallbackDocCount > 0) FallbackTemplateUsed = _defaultName;
+
                 return _byTemplate.ContainsKey("");
             }
             catch (Exception ex)
@@ -144,10 +158,30 @@ namespace ServiceContractPhotocopier.Classes
                 XtraReport xr = t != null ? t.Report as XtraReport : null;
                 if (xr == null) return null;
                 ApplyOption(xr);
-                FallbackTemplateUsed = name;
+                _defaultName = name;
                 return xr;
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// The layout a document will really be rendered with: the contract's, or "" when it named
+        /// none — or named one that has since gone missing, which falls back the same way.
+        /// </summary>
+        private string ResolvedLayoutName(long docKey)
+        {
+            string name;
+            if (!_templateByDoc.TryGetValue(docKey, out name) || name == null) return "";
+            name = name.Trim();
+            if (name.Length == 0) return "";
+            return _byTemplate.ContainsKey(name) ? name : "";
+        }
+
+        /// <summary>The layout name to show the operator for one invoice, before anything is sent.</summary>
+        public string LayoutFor(long docKey)
+        {
+            string name = ResolvedLayoutName(docKey);
+            return name.Length > 0 ? name : (_defaultName.Length > 0 ? _defaultName + "  (default)" : "(default)");
         }
 
         /// <summary>Margins / paper / print-in-black, the same treatment the default print path

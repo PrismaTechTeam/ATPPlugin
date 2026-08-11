@@ -822,6 +822,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
+            // A contract naming a layout that no longer exists is a MISTAKE — worth stopping for,
+            // because the customer would silently receive the wrong-looking invoice. Everything else
+            // about layouts is shown per invoice in the confirmation grid's Layout column; a popup
+            // that just reports the normal case is noise.
             if (renderer.MissingTemplates.Count > 0)
                 XtraMessageBox.Show(
                     "These contract invoice template(s) were NOT found (renamed or deleted in the " +
@@ -829,12 +833,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     string.Join("\r\n", renderer.MissingTemplates.ToArray()) +
                     "\r\n\r\nFix the template name on the contract (Maintain Service Contract).",
                     "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            else if (renderer.FallbackTemplateUsed.Length > 0)
-                XtraMessageBox.Show(
-                    "Some contracts have no Invoice Template set, so their invoices will be rendered with:\r\n\r\n" +
-                    "    " + renderer.FallbackTemplateUsed + "\r\n\r\n" +
-                    "Set the layout you want on the contract to control this per customer.",
-                    "Invoice layout", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             // Sender: the From configured in EMAIL SETTING is the authority. Email Setting keeps it
             // on THIS PC (%APPDATA%\AutoCount\...\MailServer.setting), separate from the SMTP host
