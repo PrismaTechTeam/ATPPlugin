@@ -39,6 +39,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         /// <summary>Distinct failure reasons in the current job, newest read first.</summary>
         private readonly List<string> _reasons = new List<string>();
+        private DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit _previewRepo;
 
         public BulkEmailJob_Form()
         {
@@ -117,6 +118,75 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (ScpEmailJob.WhitelistOn(_db) && blockedCount > 0)
                 LblSub.Text += "   Email whitelist is on — " + blockedCount + " will not be sent.";
             BtnConfirm.Visible = true;
+        }
+
+        /// <summary>
+        /// Show exactly what this customer is about to receive: their invoices, then the SOA and the
+        /// meter listing their contracts ask for, MERGED into one preview in attachment order.
+        ///
+        /// Merged rather than one window per document, because the question being asked is "is this
+        /// email right?" — and that is answered by paging through the whole envelope, not by opening
+        /// four windows and holding them in your head.
+        ///
+        /// Nothing is rendered until the button is pressed: the send path builds its documents inside
+        /// the job, and previewing every customer up front is what used to freeze this screen.
+        /// </summary>
+        private void Preview_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (_pending == null) return;
+            DataRow g = GridViewItems.GetDataRow(GridViewItems.FocusedRowHandle);
+            if (g == null) return;
+
+            string customer = Convert.ToString(g["Customer"]);
+            ScpEmailJob.Recipient rec = null;
+            foreach (ScpEmailJob.Recipient r in _pending)
+                if (customer == r.DebtorCode + "  " + r.DebtorName) { rec = r; break; }
+            if (rec == null) return;
+
+            List<DevExpress.XtraReports.UI.XtraReport> docs =
+                new List<DevExpress.XtraReports.UI.XtraReport>();
+            Cursor.Current = Cursors.WaitCursor;
+            try
+            {
+                if (_renderer != null)
+                    for (int i = 0; i < rec.DocKeys.Count; i++)
+                    {
+                        DevExpress.XtraReports.UI.XtraReport inv = _renderer.BuildDocument(rec.DocKeys[i]);
+                        if (inv != null) docs.Add(inv);
+                    }
+                if (_extras != null) docs.AddRange(_extras.BuildDocuments(rec.DebtorCode, rec.DebtorName));
+            }
+            catch (Exception ex)
+            {
+                Cursor.Current = Cursors.Default;
+                XtraMessageBox.Show(ex.Message, "Preview Attachment",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            finally { Cursor.Current = Cursors.Default; }
+
+            if (docs.Count == 0)
+            {
+                XtraMessageBox.Show("Nothing could be produced for " + rec.DebtorName + ".",
+                    "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            try
+            {
+                DevExpress.XtraReports.UI.XtraReport merged = docs[0];
+                for (int i = 1; i < docs.Count; i++) merged.Pages.AddRange(docs[i].Pages);
+                merged.PrintingSystem.ContinuousPageNumbering = true;
+
+                DevExpress.XtraPrinting.PrintingSystem ps =
+                    merged.PrintingSystem as DevExpress.XtraPrinting.PrintingSystem;
+                if (ps != null) ps.PreviewFormEx.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not open the preview:\r\n" + ex.Message,
+                    "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void BtnConfirm_Click(object sender, EventArgs e)
@@ -325,6 +395,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             t.Columns.Add("Template", typeof(string));
             t.Columns.Add("Layout", typeof(string));
             t.Columns.Add("Also", typeof(string));
+            t.Columns.Add("Preview", typeof(string));
             t.Columns.Add("Status", typeof(string));
             t.Columns.Add("Note", typeof(string));
             return t;
@@ -346,6 +417,38 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             Col("Template", "Email Template", 110, 5);
             Col("Layout", "Invoice Layout", 125, 6);
             Col("Also", "Also Attached", 110, 7);
+            // Confirm mode only: previewing is about deciding whether to send. Once a job has run,
+            // the documents are gone and re-rendering them would be a re-creation, not a record.
+            GridColumn prev = GridViewItems.Columns["Preview"];
+            if (prev != null)
+            {
+                prev.Caption = " ";
+                prev.Width = 150;
+                prev.Visible = _pending != null;
+                prev.VisibleIndex = 8;
+                prev.OptionsColumn.AllowEdit = _pending != null;
+                prev.OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
+                prev.OptionsFilter.AllowFilter = false;
+                if (_previewRepo == null)
+                {
+                    _previewRepo = new DevExpress.XtraEditors.Repository.RepositoryItemButtonEdit();
+                    _previewRepo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.HideTextEditor;
+                    _previewRepo.Buttons.Clear();
+                    DevExpress.XtraEditors.Controls.EditorButton pb =
+                        new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Glyph);
+                    pb.Caption = "Preview Attachment";
+                    pb.Width = 140;
+                    _previewRepo.Buttons.Add(pb);
+                    _previewRepo.ButtonClick += new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(Preview_ButtonClick);
+                    GridItems.RepositoryItems.Add(_previewRepo);
+                }
+                prev.ColumnEdit = _previewRepo;
+            }
+            // The grid has to accept edits for a button column to be clickable at all; every other
+            // column stays read-only so nothing here can be typed over.
+            GridViewItems.OptionsBehavior.Editable = _pending != null;
+            foreach (GridColumn gc in GridViewItems.Columns)
+                if (gc != null && gc.FieldName != "Preview") gc.OptionsColumn.AllowEdit = false;
             // Grouped by customer and expanded, so the "one email per customer" shape is the first
             // thing you see rather than something you have to work out from a flat list.
             GridColumn c = GridViewItems.Columns["Customer"];

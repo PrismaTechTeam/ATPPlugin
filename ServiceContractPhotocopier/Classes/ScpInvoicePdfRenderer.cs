@@ -232,6 +232,30 @@ namespace ServiceContractPhotocopier.Classes
             }
         }
 
+        /// <summary>
+        /// A rendered, previewable document for one invoice — the same layout and the same data the
+        /// job will attach, on its OWN report instance so showing it cannot disturb a run in flight.
+        /// UI thread: it touches the report registry.
+        /// </summary>
+        public XtraReport BuildDocument(long docKey)
+        {
+            string name = ResolvedLayoutName(docKey);
+            if (name.Length == 0) name = _defaultName;
+            if (name.Length == 0 || _rpt == null) return null;
+
+            object ds = _rpt.GetReportDataSource(docKey);
+            ReportTemplate t = AutoCountReport.GetInstance().GetReport(name, ds, _us, true);
+            XtraReport xr = t != null ? t.Report as XtraReport : null;
+            if (xr == null) return null;
+
+            ApplyOption(xr);
+            ScpReportScripts.Prepare(xr);
+            xr.DataSource = ds;
+            try { xr.CreateDocument(); }
+            catch (Exception ex) { throw ScpReportScripts.Explain(ex, name); }
+            return xr;
+        }
+
         private static string SafeFileName(string s)
         {
             string name = s ?? "";

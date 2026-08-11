@@ -236,20 +236,7 @@ namespace ServiceContractPhotocopier.Classes
             DateTime to = PeriodEnd(w);
             DateTime from = new DateTime(to.Year, to.Month, 1);
 
-            AutoCount.ARAP.DebtorStatement.DebtorStatement st =
-                AutoCount.ARAP.DebtorStatement.DebtorStatement.Create(_us);
-            AutoCount.ARAP.DebtorStatement.DebtorStatementCriteria c =
-                new AutoCount.ARAP.DebtorStatement.DebtorStatementCriteria();
-            c.DebtorFilter.ByOne(accNo);
-            c.FromDate = from;
-            c.ToDate = to;
-            // With this left false AutoCount adds "AND IsGroupCompany = 'F'" and a group-company
-            // debtor comes back with no statement at all. We asked for ONE named debtor — give us
-            // that debtor whichever kind they are.
-            c.ShowGroupCompany = true;
-            st.Inquire(c);
-
-            object ds = st.GetReportDataSource();
+            object ds = StatementData(accNo, to);
             if (ds == null) return null;
 
             string layout = ResolveLayout(
@@ -257,7 +244,7 @@ namespace ServiceContractPhotocopier.Classes
             if (layout.Length == 0) return null;
 
             fileName = "Statement " + SafeFileName(accNo) + " " + to.ToString("yyyy-MM") + ".pdf";
-            return RenderTo(layout, ds);
+            return ToPdf(BuildDocument(layout, ds));
         }
 
         // ───────────────────────── meter listing ─────────────────────────
@@ -277,33 +264,101 @@ namespace ServiceContractPhotocopier.Classes
 
             fileName = "Meter Listing " + SafeFileName(w.ContractNo) + " " +
                 w.Year.ToString("0000") + "-" + w.Month.ToString("00") + ".pdf";
-            return RenderTo(layout, data);
+            return ToPdf(BuildDocument(layout, data));
         }
 
         // ───────────────────────── shared plumbing ─────────────────────────
 
-        private byte[] RenderTo(string layoutName, object dataSource)
+        /// <summary>
+        /// Load the design, bind the data and lay the pages out. Shared by the send and by Preview
+        /// Attachment, so what the operator previews is produced by the same code that mails it —
+        /// a preview built a different way is only evidence about the preview.
+        /// </summary>
+        private XtraReport BuildDocument(string layoutName, object dataSource)
         {
             ReportTemplate tpl = AutoCountReport.GetInstance().GetReport(layoutName, dataSource, _us, true);
             XtraReport xr = tpl != null ? tpl.Report as XtraReport : null;
             if (xr == null) return null;
             ScpReportScripts.Prepare(xr);
             xr.DataSource = dataSource;
-            try
-            {
-                xr.CreateDocument();
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    xr.ExportToPdf(ms);
-                    return ms.ToArray();
-                }
-            }
+            try { xr.CreateDocument(); }
             catch (Exception ex)
             {
                 // Name the design and say what to do — the raw text is a C# compiler dump about a
                 // class the operator has never heard of.
                 throw ScpReportScripts.Explain(ex, layoutName);
             }
+            return xr;
+        }
+
+        private static byte[] ToPdf(XtraReport xr)
+        {
+            if (xr == null) return null;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                xr.ExportToPdf(ms);
+                return ms.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// The extra documents for one customer, rendered and ready to preview — in the order they
+        /// are attached. UI thread: it touches the report registry.
+        /// </summary>
+        public List<XtraReport> BuildDocuments(string debtorCode, string debtorName)
+        {
+            List<XtraReport> docs = new List<XtraReport>();
+            List<Want> list;
+            if (!_byDebtor.TryGetValue((debtorCode ?? "").Trim(), out list)) return docs;
+
+            Want soaWant = null;
+            foreach (Want w in list) if (w.Soa) { soaWant = w; break; }
+            if (soaWant != null)
+            {
+                DateTime to = PeriodEnd(soaWant);
+                string layout = ResolveLayout(
+                    AutoCount.ARAP.DebtorStatement.DebtorStatementReport.ReportType, soaWant.SoaLayout, _soaDefault);
+                if (layout.Length > 0)
+                {
+                    object ds = StatementData(debtorCode, to);
+                    if (ds != null)
+                    {
+                        XtraReport xr = BuildDocument(layout, ds);
+                        if (xr != null) docs.Add(xr);
+                    }
+                }
+            }
+
+            foreach (Want w in list)
+            {
+                if (!w.Listing || w.Year <= 0 || w.Month <= 0) continue;
+                DataTable data = ScpMeterListing.Build(_db, w.Year, w.Month, w.DebtorCode, w.DebtorCode, w.ContractNo);
+                if (data == null || data.Rows.Count == 0) continue;
+                string layout = ResolveLayout(ScpMeterListing.REPORT_TYPE, w.ListingLayout, _listingDefault);
+                if (layout.Length == 0) continue;
+                XtraReport xr = BuildDocument(layout, data);
+                if (xr != null) docs.Add(xr);
+            }
+            return docs;
+        }
+
+        /// <summary>The statement datasource for one debtor as at a date. Kept in one place so the
+        /// preview and the send cannot drift into asking AutoCount two different questions.</summary>
+        private object StatementData(string accNo, DateTime to)
+        {
+            AutoCount.ARAP.DebtorStatement.DebtorStatement st =
+                AutoCount.ARAP.DebtorStatement.DebtorStatement.Create(_us);
+            AutoCount.ARAP.DebtorStatement.DebtorStatementCriteria c =
+                new AutoCount.ARAP.DebtorStatement.DebtorStatementCriteria();
+            c.DebtorFilter.ByOne(accNo);
+            c.FromDate = new DateTime(to.Year, to.Month, 1);
+            c.ToDate = to;
+            // With this left false AutoCount adds "AND IsGroupCompany = 'F'" and a group-company
+            // debtor comes back with no statement at all. We asked for ONE named debtor — give us
+            // that debtor whichever kind they are.
+            c.ShowGroupCompany = true;
+            st.Inquire(c);
+            return st.GetReportDataSource();
         }
 
         /// <summary>The contract's own layout when it exists, else the book default. Returns "" when
