@@ -707,8 +707,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 AutoCount.Settings.MailServerSetting ms = AutoCount.Settings.MailServerSetting.GetOrCreate(_dbSetting);
                 if (ms != null)
                 {
-                    fromName = (ms.FromName ?? "").Trim();
-                    fromEmail = (ms.FromEmail ?? "").Trim();
+                    // Email Setting keeps the From on THIS PC (%APPDATA%\AutoCount\...\MailServer.setting),
+                    // separate from the SMTP host/user which live in the book. So the local pair wins:
+                    // it is what the operator actually typed, and what AutoCount's own Batch Mail shows.
+                    fromName = (ms.LocalPCFromName ?? "").Trim();
+                    fromEmail = (ms.LocalPCFromEmail ?? "").Trim();
+                    if (fromEmail.Length == 0) fromEmail = (ms.FromEmail ?? "").Trim();
+                    if (fromName.Length == 0) fromName = (ms.FromName ?? "").Trim();
                 }
             }
             catch { }
