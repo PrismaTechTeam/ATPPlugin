@@ -172,6 +172,7 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v12_MeterListing.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v13_EmailTemplate.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_EmailJob", "02_CreateTable_zSCP2_EmailJob.sql", asm);
+            RunDDL(dbsetting, "02_UpdateTable_zSCP2_EmailJobItem_v1.1.0.sql", asm);
             // Bulk Email send history (Emailed column / not-yet-emailed checklist / contract reminder).
             RunIfTableMissing(dbsetting, "zSCP2_EmailLog",              "02_CreateTable_zSCP2_EmailLog.sql", asm);
             // Named bulk-email templates (user-maintained versions, one default; seeds "Standard").

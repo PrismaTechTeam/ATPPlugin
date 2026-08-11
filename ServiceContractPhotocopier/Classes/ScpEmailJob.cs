@@ -132,7 +132,7 @@ namespace ServiceContractPhotocopier.Classes
                     throw new InvalidOperationException(
                         "A bulk email run is already in progress on this PC. Open Send Progress to watch it.");
 
-                long jobKey = CreateJob(db, recipients);
+                long jobKey = CreateJob(db, recipients, defaultTemplate, renderer);
                 _currentJobKey = jobKey;
                 _worker = new Thread(delegate ()
                 {
@@ -150,7 +150,8 @@ namespace ServiceContractPhotocopier.Classes
 
         // ───────────────────────── job rows ─────────────────────────
 
-        private static long CreateJob(DBSetting db, List<Recipient> recipients)
+        private static long CreateJob(DBSetting db, List<Recipient> recipients,
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
         {
             string who = "", machine = "";
             try { who = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID; } catch { }
@@ -172,8 +173,9 @@ namespace ServiceContractPhotocopier.Classes
                 foreach (Recipient r in recipients)
                 {
                     using (SqlCommand cmd = new SqlCommand(
-                        "INSERT INTO dbo.zSCP2_EmailJobItem (JobKey, DebtorCode, DebtorName, Email, DocNos, DocKeys, Status) " +
-                        "VALUES (@j,@c,@n,@e,@dn,@dk,'PENDING')", cn))
+                        "INSERT INTO dbo.zSCP2_EmailJobItem (JobKey, DebtorCode, DebtorName, Email, DocNos, DocKeys, " +
+                        "EmailTemplateName, InvoiceLayoutName, Status) " +
+                        "VALUES (@j,@c,@n,@e,@dn,@dk,@tpl,@lay,'PENDING')", cn))
                     {
                         cmd.Parameters.AddWithValue("@j", jobKey);
                         cmd.Parameters.AddWithValue("@c", Cut(r.DebtorCode, 30));
@@ -181,11 +183,48 @@ namespace ServiceContractPhotocopier.Classes
                         cmd.Parameters.AddWithValue("@e", Cut(r.Email, 200));
                         cmd.Parameters.AddWithValue("@dn", Cut(string.Join(", ", r.DocNos.ToArray()), 900));
                         cmd.Parameters.AddWithValue("@dk", Cut(JoinKeys(r.DocKeys), 900));
+                        // Stamped now, while the answer is knowable — the history has to survive a
+                        // template being renamed or a contract being pointed somewhere else later.
+                        cmd.Parameters.AddWithValue("@tpl", Cut(TemplateNameOf(r, defaultTemplate), 200));
+                        cmd.Parameters.AddWithValue("@lay", Cut(LayoutNameOf(r, renderer), 200));
                         cmd.ExecuteNonQuery();
                     }
                 }
             }
             return jobKey;
+        }
+
+        /// <summary>
+        /// The email wording this customer gets: their contract's template, or the book default.
+        /// Public so the confirmation screen and the history show the SAME name — the operator
+        /// should never see one word before sending and a different one after.
+        /// </summary>
+        public static string TemplateNameOf(Recipient r, ScpEmailTemplates.Template defaultTemplate)
+        {
+            if (r != null && r.Template != null && !string.IsNullOrEmpty(r.Template.Name))
+                return r.Template.Name;
+            if (defaultTemplate != null && !string.IsNullOrEmpty(defaultTemplate.Name))
+                return defaultTemplate.Name + "  (default)";
+            return "(default)";
+        }
+
+        /// <summary>
+        /// The report design this customer's invoices are rendered with. One customer can hold
+        /// invoices from several contracts, so the layouts can genuinely differ — say so rather
+        /// than picking one and implying it covers them all.
+        /// </summary>
+        public static string LayoutNameOf(Recipient r, ScpInvoicePdfRenderer renderer)
+        {
+            if (r == null || renderer == null || r.DocKeys == null) return "";
+            List<string> seen = new List<string>();
+            foreach (long dk in r.DocKeys)
+            {
+                string n = renderer.LayoutFor(dk);
+                if (!seen.Contains(n)) seen.Add(n);
+            }
+            if (seen.Count == 0) return "";
+            if (seen.Count == 1) return seen[0];
+            return string.Join(" / ", seen.ToArray());
         }
 
         // ───────────────────────── the run ─────────────────────────

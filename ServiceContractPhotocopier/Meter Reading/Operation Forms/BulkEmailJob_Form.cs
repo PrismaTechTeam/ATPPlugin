@@ -70,7 +70,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["Customer"] = r.DebtorCode + "  " + r.DebtorName;
                     g["DocNo"] = r.DocNos[i];
                     g["Email"] = r.Email;
-                    g["Template"] = r.Template != null ? r.Template.Name : "(default)";
+                    g["Template"] = ScpEmailJob.TemplateNameOf(r, _defaultTpl);
                     // Which report design this invoice will be rendered with — shown per row so the
                     // operator can see it where the invoice is, instead of being told in a popup.
                     g["Layout"] = _renderer != null && i < r.DocKeys.Count
@@ -178,7 +178,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
 
                 DataTable items = _db.GetDataTable(
-                    "SELECT DebtorCode, DebtorName, Email, DocNos, Status, ISNULL(ErrorMsg,'') AS ErrorMsg, SentAt " +
+                    "SELECT DebtorCode, DebtorName, Email, DocNos, Status, ISNULL(ErrorMsg,'') AS ErrorMsg, SentAt, " +
+                    "ISNULL(EmailTemplateName,'') AS EmailTemplateName, ISNULL(InvoiceLayoutName,'') AS InvoiceLayoutName " +
                     "FROM dbo.zSCP2_EmailJobItem WHERE JobKey=" + _jobKey + " ORDER BY ItemKey", false);
                 _grid.Rows.Clear();
                 foreach (DataRow s in items.Rows)
@@ -187,7 +188,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["Customer"] = Convert.ToString(s["DebtorCode"]) + "  " + Convert.ToString(s["DebtorName"]);
                     g["DocNo"] = Convert.ToString(s["DocNos"]);
                     g["Email"] = Convert.ToString(s["Email"]);
-                    g["Template"] = "";
+                    // Blank for jobs sent before these were recorded; nothing to invent for those.
+                    g["Template"] = Convert.ToString(s["EmailTemplateName"]);
+                    g["Layout"] = Convert.ToString(s["InvoiceLayoutName"]);
                     g["Status"] = Convert.ToString(s["Status"]);
                     g["Note"] = Convert.ToString(s["ErrorMsg"]);
                     _grid.Rows.Add(g);
