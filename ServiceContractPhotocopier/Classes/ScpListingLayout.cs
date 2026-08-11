@@ -40,17 +40,12 @@ namespace ServiceContractPhotocopier.Classes
         {
             if (xr == null) return;
 
-            // AutoCount seeds every new report with a script that touches AutoCount.Report.BaseReport,
-            // which drags AutoCount.UI.dll in as a script reference — the one reference most likely not
-            // to resolve, and when it does not the whole preview is replaced by "There are errors in
-            // scripts". A listing has no use for __report, so the handler stays (Scripts.OnBeforePrint
-            // names it by string) and the dependency goes.
-            xr.ScriptsSource =
-                "private void Report_BeforePrint(object sender, System.ComponentModel.CancelEventArgs e)\r\n" +
-                "{\r\n" +
-                "}\r\n";
-            xr.Scripts.OnBeforePrint = "Report_BeforePrint";
-
+            // The script AutoCount seeded in NewReport is left EXACTLY as it is. Overwriting it with
+            // our own Report_BeforePrint was a mistake: a design then had one handler while every
+            // other AutoCount report had another, and any later paste of the "correct" snippet gave
+            // the design two — which does not compile, so neither preview nor send produces a page.
+            // The reason for overwriting it (an unresolvable AutoCount.UI reference) is fixed
+            // properly in ScpReportScripts.Prepare, so there is nothing left to work around here.
             xr.Landscape = true;
             xr.PaperKind = System.Drawing.Printing.PaperKind.A4;
             xr.Margins = new System.Drawing.Printing.Margins(40, 40, 45, 45);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -287,7 +287,7 @@ namespace ServiceContractPhotocopier.Classes
             ReportTemplate tpl = AutoCountReport.GetInstance().GetReport(layoutName, dataSource, _us, true);
             XtraReport xr = tpl != null ? tpl.Report as XtraReport : null;
             if (xr == null) return null;
-            ScpReportScripts.FixReferences(xr);
+            ScpReportScripts.Prepare(xr);
             xr.DataSource = dataSource;
             try
             {

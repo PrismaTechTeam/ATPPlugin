@@ -161,7 +161,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                 }
                 ScpListingLayout.Apply(xr, _reportType, _columns,
                     _designerDataSource as System.Data.DataTable);
-                ScpReportScripts.FixReferences(xr);
+                ScpReportScripts.Prepare(xr);
                 // "" as the name is what tells AutoCount's designer this is NEW: its Save prompts for
                 // a name instead of silently overwriting something.
                 ReportDesigner.DesignReport(tpl, "", _us, DesignerSaved);
@@ -182,7 +182,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                 ReportTemplate tpl = AutoCountReport.GetInstance()
                     .GetReport(name, _designerDataSource, _us, true);
                 if (tpl == null) return;
-                ScpReportScripts.FixReferences(tpl.Report as XtraReport);
+                ScpReportScripts.Prepare(tpl.Report as XtraReport);
                 ReportDesigner.DesignReport(tpl, name, _us, DesignerSaved);
             }
             catch (Exception ex)

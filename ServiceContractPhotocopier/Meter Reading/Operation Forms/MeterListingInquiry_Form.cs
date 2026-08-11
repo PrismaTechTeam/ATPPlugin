@@ -446,7 +446,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Every AutoCount report carries a script, and its references are built from the host
             // EXE's folder — repoint them at the assemblies actually loaded or the preview renders
             // nothing but "There are errors in scripts".
-            if (tpl != null) ScpReportScripts.FixReferences(tpl.Report as DevExpress.XtraReports.UI.XtraReport);
+            if (tpl != null) ScpReportScripts.Prepare(tpl.Report as DevExpress.XtraReports.UI.XtraReport);
             return tpl;
         }
 
