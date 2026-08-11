@@ -44,6 +44,10 @@
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="AutoCount.ARAP">
+      <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.ARAP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="AutoCount.Accounting.UI">
       <HintPath>C:\Program Files\AutoCount\Accounting 2.2\AutoCount.Accounting.UI.dll</HintPath>
       <Private>False</Private>
@@ -157,6 +161,7 @@
     <Compile Include="Classes\ScpInvoicePdfRenderer.cs" />
     <Compile Include="Classes\ScpReportScripts.cs" />
     <Compile Include="Classes\ScpListingLayout.cs" />
+    <Compile Include="Classes\ScpExtraDocs.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />

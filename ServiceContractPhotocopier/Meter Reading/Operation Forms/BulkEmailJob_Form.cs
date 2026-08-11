@@ -29,8 +29,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private string _fromName = "", _fromEmail = "";
         private ScpEmailTemplates.Template _defaultTpl;
         private ScpInvoicePdfRenderer _renderer;        // renders each PDF inside the job
+        private ScpExtraDocs _extras;                   // SOA / meter listing the contract asks for
         private long _jobKey;                           // PROGRESS mode
         private DataTable _grid;
+
+        /// <summary>Longer than this without a heartbeat and the run is presumed dead. Matches the
+        /// window after which the job's per-invoice locks are taken over, so the two agree.</summary>
+        private const int STALE_MINUTES = 15;
 
         public BulkEmailJob_Form()
         {
@@ -40,10 +45,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// <summary>CONFIRM mode: review, then start the job.</summary>
         public BulkEmailJob_Form(DBSetting db, List<ScpEmailJob.Recipient> recipients,
             string fromName, string fromEmail, ScpEmailTemplates.Template defaultTpl,
-            ScpInvoicePdfRenderer renderer) : this()
+            ScpInvoicePdfRenderer renderer, ScpExtraDocs extras) : this()
         {
             _db = db; _pending = recipients; _fromName = fromName; _fromEmail = fromEmail;
-            _defaultTpl = defaultTpl; _renderer = renderer;
+            _defaultTpl = defaultTpl; _renderer = renderer; _extras = extras;
             BuildConfirmGrid();
         }
 
@@ -75,6 +80,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // operator can see it where the invoice is, instead of being told in a popup.
                     g["Layout"] = _renderer != null && i < r.DocKeys.Count
                         ? _renderer.LayoutFor(r.DocKeys[i]) : "";
+                    // The SOA / meter listing this customer's contracts ask for, named before the
+                    // send rather than discovered from what lands in their inbox.
+                    g["Also"] = _extras != null ? _extras.DescribeFor(r.DebtorCode) : "";
                     string dummy;
                     bool blocked = ScpEmailJob.IsBlockedByWhitelist(_db, r.Email, out dummy);
                     g["Status"] = string.IsNullOrEmpty((r.Email ?? "").Trim()) ? "NO EMAIL"
@@ -119,7 +127,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             try
             {
-                _jobKey = ScpEmailJob.Start(_db, _pending, _fromName, _fromEmail, _defaultTpl, _renderer);
+                _jobKey = ScpEmailJob.Start(_db, _pending, _fromName, _fromEmail, _defaultTpl, _renderer, _extras);
             }
             catch (Exception ex)
             {
@@ -166,7 +174,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 DataTable hdr = _db.GetDataTable(
-                    "SELECT Status, TotalCount, SuccessCount, FailedCount, SkippedCount " +
+                    "SELECT Status, TotalCount, SuccessCount, FailedCount, SkippedCount, " +
+                    "  DATEDIFF(minute, ISNULL(LastHeartbeat, CreatedAt), GETDATE()) AS QuietMinutes " +
                     "FROM dbo.zSCP2_EmailJob WHERE JobKey=" + _jobKey, false);
                 if (hdr.Rows.Count > 0)
                 {
@@ -175,11 +184,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     ok = Convert.ToInt32(hdr.Rows[0]["SuccessCount"]);
                     failed = Convert.ToInt32(hdr.Rows[0]["FailedCount"]);
                     skipped = Convert.ToInt32(hdr.Rows[0]["SkippedCount"]);
+                    // A job whose heartbeat stopped is not running — the process was killed, the PC
+                    // rebooted, AutoCount crashed. The row stays RUNNING forever, and this screen
+                    // used to keep the marquee spinning and say "Sending email..." on every PC in
+                    // the office. The heartbeat was written four times a run and read nowhere.
+                    if (status == "RUNNING" &&
+                        hdr.Rows[0]["QuietMinutes"] != DBNull.Value &&
+                        Convert.ToInt32(hdr.Rows[0]["QuietMinutes"]) >= STALE_MINUTES &&
+                        !ScpEmailJob.IsRunning)
+                        status = "STALLED";
                 }
 
                 DataTable items = _db.GetDataTable(
                     "SELECT DebtorCode, DebtorName, Email, DocNos, Status, ISNULL(ErrorMsg,'') AS ErrorMsg, SentAt, " +
-                    "ISNULL(EmailTemplateName,'') AS EmailTemplateName, ISNULL(InvoiceLayoutName,'') AS InvoiceLayoutName " +
+                    "ISNULL(EmailTemplateName,'') AS EmailTemplateName, ISNULL(InvoiceLayoutName,'') AS InvoiceLayoutName, " +
+                    "ISNULL(ExtraDocs,'') AS ExtraDocs " +
                     "FROM dbo.zSCP2_EmailJobItem WHERE JobKey=" + _jobKey + " ORDER BY ItemKey", false);
                 _grid.Rows.Clear();
                 foreach (DataRow s in items.Rows)
@@ -191,6 +210,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // Blank for jobs sent before these were recorded; nothing to invent for those.
                     g["Template"] = Convert.ToString(s["EmailTemplateName"]);
                     g["Layout"] = Convert.ToString(s["InvoiceLayoutName"]);
+                    g["Also"] = Convert.ToString(s["ExtraDocs"]);
                     g["Status"] = Convert.ToString(s["Status"]);
                     g["Note"] = Convert.ToString(s["ErrorMsg"]);
                     _grid.Rows.Add(g);
@@ -202,6 +222,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             int done = ok + failed + skipped;
             bool running = status == "RUNNING";
+            bool stalled = status == "STALLED";
             Marquee.Visible = running;
             LblCounts.Text = done + " of " + total + " processed     ✔ " + ok + " sent     ✖ " + failed +
                 " failed     ⊘ " + skipped + " skipped";
@@ -214,6 +235,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 LblHeadline.Text = "Sending";
                 LblSub.Text = "You can close this window — the send keeps running. " +
                     "Reopen it any time from Send Progress.";
+            }
+            else if (stalled)
+            {
+                LblBig.Text = "Stopped unexpectedly";
+                LblBig.Appearance.ForeColor = System.Drawing.Color.FromArgb(198, 40, 40);
+                LblHeadline.Text = "Send did not finish";
+                LblSub.Text = "This run went quiet for over " + STALE_MINUTES + " minutes — the program was " +
+                    "probably closed or the PC restarted mid-send. The " + (total - done) + " customer(s) " +
+                    "still pending were NOT emailed; tick their invoices and send again.";
             }
             else
             {
@@ -246,6 +276,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             t.Columns.Add("Email", typeof(string));
             t.Columns.Add("Template", typeof(string));
             t.Columns.Add("Layout", typeof(string));
+            t.Columns.Add("Also", typeof(string));
             t.Columns.Add("Status", typeof(string));
             t.Columns.Add("Note", typeof(string));
             return t;
@@ -261,8 +292,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             Col("Email", "Email", 220, 2);
             Col("Template", "Email Template", 130, 3);
             Col("Layout", "Invoice Layout", 170, 4);
-            Col("Status", "Status", 90, 5);
-            Col("Note", "Note", 300, 6);
+            Col("Also", "Also Attached", 130, 5);
+            Col("Status", "Status", 90, 6);
+            Col("Note", "Note", 300, 7);
             // Grouped by customer and expanded, so the "one email per customer" shape is the first
             // thing you see rather than something you have to work out from a flat list.
             GridColumn c = GridViewItems.Columns["Customer"];

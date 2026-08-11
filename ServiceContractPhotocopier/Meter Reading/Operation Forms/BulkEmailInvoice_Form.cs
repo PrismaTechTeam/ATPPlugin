@@ -18,10 +18,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     /// <summary>
     /// Bulk Email Invoice — filter posted sales invoices (date range / customer / meter-billing
-    /// only / any-column auto-filter), tick the ones to send, and hand them to AutoCount's Batch
-    /// Mail dialog: each customer receives ONE email with THEIR invoice PDFs attached (the invoice
-    /// report is rendered per document with the DEFAULT "Invoice Document" layout). Sending rides
-    /// AutoCount's own mail queue — every email is logged in the Server Mailing List with Resend.
+    /// only / any-column auto-filter), tick the ones to send, and hand them to a background JOB:
+    /// each customer receives ONE email with THEIR documents attached — the invoices, plus the SOA
+    /// and the Summary sales invoice meter listing where their contract asks for them. Every layout
+    /// and every word comes from the contract, never from a dialog typed at send time.
+    ///
+    /// Sending is DIRECT SMTP through AutoCount's mail settings (MailHelper), not AutoCount's server
+    /// mail queue — so there is no Server Mailing List entry and no Resend button for these. The
+    /// record of what went out is ours: zSCP2_EmailLog, and the job tables behind Send Progress.
+    ///
     /// AutoCount ships batch email only for the Debtor Statement; this form fills the invoice gap.
     /// </summary>
     [AutoCount.PlugIn.MenuItem("Bulk Email Invoice", MenuOrder = 460, ShowAsDialog = false)]
@@ -33,10 +38,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DataTable _dt;
         private CheckEdit _chkUnsentOnly;     // #9b: "ready but not yet emailed" checklist filter
         private SimpleButton _btnTemplate;    // #9a: saved subject/body template
-        private HashSet<InvoiceBatchMailEntity> _sentEntities;   // #9b: recipients Send actually dispatched
 
-        // One email per customer: their invoice PDFs are the attachments. AccNo/CompanyName/DocNos
-        // are reflected into the Batch Mail grid columns and usable as {tokens} in the message.
+        // One email per customer: their documents are the attachments. Kept as a small grouping
+        // struct — the Batch Mail dialog that once reflected over these properties is long gone.
         private class InvoiceBatchMailEntity : BatchMail2Entity
         {
             public string AccNo { get; set; }
@@ -769,14 +773,37 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             Dictionary<string, InvoiceBatchMailEntity> byDebtor = new Dictionary<string, InvoiceBatchMailEntity>(StringComparer.OrdinalIgnoreCase);
             List<InvoiceBatchMailEntity> entities = new List<InvoiceBatchMailEntity>();
+            // ONLY what is both ticked AND on screen. Walking the whole table instead let this
+            // sequence re-mail every already-sent invoice: Select All, then tick "Not yet emailed
+            // only", then Email Selected — the ticks of the now-hidden rows survived, and the
+            // operator sent a hundred duplicates having been shown thirty rows.
             List<DataRow> ticked = new List<DataRow>();
-            foreach (DataRow r in _dt.Rows)
+            int hiddenTicks = 0;
+            for (int h = 0; h < GridViewInv.RowCount; h++)
+            {
+                DataRow r = GridViewInv.GetDataRow(h);
+                if (r == null) continue;   // group row
                 if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"])) ticked.Add(r);
+            }
+            foreach (DataRow r in _dt.Rows)
+                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]) && !ticked.Contains(r))
+                    hiddenTicks++;
+
             if (ticked.Count == 0)
             {
-                XtraMessageBox.Show("Tick at least one invoice to email.", "Bulk Email Invoice");
+                XtraMessageBox.Show(hiddenTicks > 0
+                        ? "The " + hiddenTicks + " ticked invoice(s) are hidden by the current filter, so " +
+                          "nothing on screen is selected.\r\n\r\nClear the filter to send them."
+                        : "Tick at least one invoice to email.",
+                    "Bulk Email Invoice", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (hiddenTicks > 0 &&
+                XtraMessageBox.Show(
+                    hiddenTicks + " more invoice(s) are ticked but hidden by the current filter.\r\n\r\n" +
+                    "Only the " + ticked.Count + " you can see will be sent. Continue?",
+                    "Bulk Email Invoice", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
 
             // Group the ticked rows into one email per customer. NOTHING is rendered here — the
             // form used to build every PDF before the operator got control back, which froze it for
@@ -876,6 +903,25 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
 
+            // What else these contracts ask to be sent with the invoice. Resolved here, on the UI
+            // thread, so anything unproducible is said NOW rather than discovered one failed
+            // customer at a time halfway through the run.
+            ScpExtraDocs extras = new ScpExtraDocs(_dbSetting, _userSession);
+            Cursor.Current = Cursors.WaitCursor;
+            try { extras.Prepare(allDocKeys); }
+            finally { Cursor.Current = Cursors.Default; }
+            if (extras.Warnings.Count > 0)
+            {
+                if (XtraMessageBox.Show(
+                        "Some contracts ask for documents that cannot be produced:\r\n\r\n" +
+                        string.Join("\r\n", extras.Warnings.ToArray()) +
+                        "\r\n\r\nThose customers will FAIL rather than receive an incomplete email.\r\n\r\n" +
+                        "Continue anyway?",
+                        "Bulk Email Invoice", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    return;
+            }
+
             ScpEmailTemplates.Template tplDef = ScpEmailTemplates.LoadDefault(_dbSetting);
             LoadPerDebtorTemplates();
 
@@ -896,7 +942,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
 
             using (BulkEmailJob_Form dlg = new BulkEmailJob_Form(
-                _dbSetting, recipients, fromName, fromEmail, tplDef, renderer))
+                _dbSetting, recipients, fromName, fromEmail, tplDef, renderer, extras))
             {
                 dlg.ShowDialog(this);
             }
@@ -915,45 +961,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LoadData();
         }
 
-        // #9b: write one zSCP2_EmailLog row per invoice of every recipient the user really sent to
-        // (FormBatchMail2 copies the grid's possibly-edited Email back onto the entity before it
-        // dispatches, so ent.Email is the final address).
-        private void LogEmailed(HashSet<InvoiceBatchMailEntity> sentEntities)
-        {
-            if (_dbSetting == null || sentEntities == null || sentEntities.Count == 0) return;
-            try
-            {
-                string by = _userSession != null ? Convert.ToString(_userSession.LoginUserID) : "";
-                using (SqlConnection conn = new SqlConnection(_dbSetting.ConnectionString))
-                {
-                    conn.Open();
-                    foreach (InvoiceBatchMailEntity ent in sentEntities)
-                    {
-                        string email = (ent.Email ?? "").Trim();
-                        for (int i = 0; i < ent.DocKeyList.Count; i++)
-                            using (SqlCommand cmd = new SqlCommand(
-                                "INSERT INTO dbo.zSCP2_EmailLog (DocKey, DocNo, DebtorCode, Email, SentAt, SentBy) " +
-                                "VALUES (@dk,@dn,@acc,@em,GETDATE(),@by)", conn))
-                            {
-                                cmd.Parameters.AddWithValue("@dk", ent.DocKeyList[i]);
-                                cmd.Parameters.AddWithValue("@dn", ent.DocNoList[i]);
-                                cmd.Parameters.AddWithValue("@acc", ent.AccNo ?? "");
-                                cmd.Parameters.AddWithValue("@em", email);
-                                cmd.Parameters.AddWithValue("@by", by);
-                                cmd.ExecuteNonQuery();
-                            }
-                    }
-                }
-            }
-            catch { /* the send already happened - history logging must never break it */ }
-        }
-
-        // Per-customer email wording (contract.EmailTemplateKey -> template), plus the batch default
-        // we handed to the dialog so ConvertBatchMessage can tell "untouched" from "operator typed".
+        // Per-customer email wording, resolved from the contract's EmailTemplateKey.
         private System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template> _perDebtorTpl;
-        private string _tplDefaultSubject = "";
-        private string _tplDefaultBody = "";
-        private string _tplDefaultStyle = "PLAIN";
 
         /// <summary>Debtor -> the template their contract asks for. Debtors with no contract-level
         /// choice are simply absent, and fall through to the default.</summary>
@@ -978,38 +987,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         private string _mailStyle = "PLAIN";    // template style: PLAIN / STYLED (frame) / HTML (user-authored)
-        private string _mailSenderCompany = ""; // header-bar company for the styled frame
-
-        // {token} substitution per recipient — mirrors the Debtor Statement's Batch Mail behaviour.
-        // Also the SEND signal: FormBatchMail2 only calls this while dispatching (Send clicked).
-        private void ConvertBatchMessage(BatchMail2Entity entity, ref string fromName, ref string subject, ref string message)
-        {
-            InvoiceBatchMailEntity ent = entity as InvoiceBatchMailEntity;
-            if (ent == null) return;
-            if (_sentEntities != null) _sentEntities.Add(ent);
-            // Per-customer wording, but ONLY while the operator has left the batch text alone. If
-            // they typed their own subject/body in the dialog, that is a deliberate one-off for this
-            // send and it wins for everyone - silently replacing what they just wrote would be worse
-            // than ignoring a stored preference.
-            _mailStyle = _tplDefaultStyle;
-            if (_perDebtorTpl != null && subject == _tplDefaultSubject && message == _tplDefaultBody)
-            {
-                ServiceContractPhotocopier.Classes.ScpEmailTemplates.Template own;
-                if (_perDebtorTpl.TryGetValue((ent.AccNo ?? "").Trim().ToUpperInvariant(), out own) && own != null)
-                {
-                    subject = own.Subject;
-                    message = own.Body;
-                    _mailStyle = own.Style;
-                }
-            }
-            fromName = ReplaceTokens(fromName, ent);
-            subject = ReplaceTokens(subject, ent);
-            message = ReplaceTokens(message, ent);
-            if (_mailStyle == "STYLED")
-                message = ServiceContractPhotocopier.Classes.ScpMailHtml.BuildStyled(message, _mailSenderCompany);
-            else if (_mailStyle == "HTML")
-                message = ServiceContractPhotocopier.Classes.ScpMailHtml.EnsureHtml(message);
-        }
 
         private static string ReplaceTokens(string text, InvoiceBatchMailEntity ent)
         {
@@ -1018,13 +995,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             text = text.Replace("{CompanyName}", ent.CompanyName ?? "");
             text = text.Replace("{DocNos}", ent.DocNos ?? "");
             return text;
-        }
-
-        private static string SafeFileName(string name)
-        {
-            char[] bad = Path.GetInvalidFileNameChars();
-            foreach (char c in bad) name = name.Replace(c, '-');
-            return name;
         }
 
         // AutoCount's own SMTP configuration dialog — the same one the Batch Mail window opens.

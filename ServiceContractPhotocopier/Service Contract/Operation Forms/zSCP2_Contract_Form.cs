@@ -759,8 +759,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SluInvoiceTemplate.ToolTip = "The AutoCount report design used for THIS contract's invoices " +
                 "(bulk email / preview). Empty = the book's default Invoice Document layout.";
             ChkGenerateSOA.Checked = _loadedGenSOA;
-            ChkGenerateSOA.ToolTip = "This customer receives a Statement of Account each cycle " +
-                "(sent via A/R > Debtor Statement > Batch Mail).";
+            ChkGenerateSOA.ToolTip = "This customer receives a Statement of Account each cycle, " +
+                "attached to the same Bulk Email Invoice send as their invoice.";
             SluSOATemplate.Enabled = ChkGenerateSOA.Checked;
             ChkGenerateSOA.CheckedChanged += delegate { SluSOATemplate.Enabled = ChkGenerateSOA.Checked; };
             SluSOATemplate.ToolTip = "The Debtor Statement report design for this customer's SOA. " +
@@ -841,7 +841,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             long k; return long.TryParse(Convert.ToString(v), out k) ? k : 0;
         }
 
-        /// <summary>Does this contract's customer get the Appendix A meter listing in the bulk send?</summary>
+        /// <summary>Does this contract's customer get the Appendix A meter listing in the bulk send?
+        /// The send itself resolves this per contract in ScpExtraDocs; this stays for grid/list
+        /// screens that want to show the flag without going through the job.</summary>
         internal static bool ContractWantsMeterListing(DataRow r)
         {
             return r != null && r.Table.Columns.Contains("GenerateMeterListing") &&
@@ -4942,7 +4944,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
               .Append(Tsv(TplVal(SluInvoiceTemplate, _loadedInvRpt))).Append('\t')
               .Append(ChkGenerateSOA != null && ChkGenerateSOA.Checked ? "Y" : "N").Append('\t')
               .Append(Tsv(TplVal(SluSOATemplate, _loadedSOARpt))).Append('\t')
-              .Append(ChkPeriodByContract.Checked ? "Y" : "N").AppendLine();
+              .Append(ChkPeriodByContract.Checked ? "Y" : "N").Append('\t')
+              // Carried so a copied contract keeps the customer's agreed listing design and email
+              // wording. Leaving these out quietly downgraded every copy to the book defaults.
+              .Append(ChkGenerateMeterListing != null && ChkGenerateMeterListing.Checked ? "Y" : "N").Append('\t')
+              .Append(Tsv(TplVal(SluMeterListingTemplate, _loadedListingRpt))).Append('\t')
+              .Append(EmailTplVal().ToString()).AppendLine();
             foreach (ItemEditData d in _items)
             {
                 sb.Append("I\t").Append(Tsv(d.ServiceItemNo)).Append('\t').Append(Tsv(d.SerialNumber)).Append('\t')
@@ -5090,6 +5097,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         if (ChkGenerateSOA != null) ChkGenerateSOA.Checked = At(p, 23) == "Y";
                         if (SluSOATemplate != null && At(p, 24).Length > 0) SluSOATemplate.EditValue = At(p, 24);
                         if (p.Length > 25) ChkPeriodByContract.Checked = At(p, 25) == "Y";
+                        if (ChkGenerateMeterListing != null && p.Length > 26)
+                            ChkGenerateMeterListing.Checked = At(p, 26) == "Y";
+                        if (SluMeterListingTemplate != null && At(p, 27).Length > 0)
+                            SluMeterListingTemplate.EditValue = At(p, 27);
+                        if (SluEmailTemplate != null && At(p, 28).Length > 0)
+                        {
+                            long etk;
+                            if (long.TryParse(At(p, 28), out etk) && etk > 0) SluEmailTemplate.EditValue = etk;
+                        }
                     }
                 }
                 else if (p[0] == "I") { last = ItemFromTsv(p, 1); _items.Add(last); }

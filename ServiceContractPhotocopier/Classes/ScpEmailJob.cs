@@ -123,7 +123,7 @@ namespace ServiceContractPhotocopier.Classes
         /// the UI goes away.
         /// </summary>
         public static long Start(DBSetting db, List<Recipient> recipients, string fromName, string fromEmail,
-            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer, ScpExtraDocs extras)
         {
             if (db == null || recipients == null || recipients.Count == 0) return 0;
             lock (_gate)
@@ -132,11 +132,11 @@ namespace ServiceContractPhotocopier.Classes
                     throw new InvalidOperationException(
                         "A bulk email run is already in progress on this PC. Open Send Progress to watch it.");
 
-                long jobKey = CreateJob(db, recipients, defaultTemplate, renderer);
+                long jobKey = CreateJob(db, recipients, defaultTemplate, renderer, extras);
                 _currentJobKey = jobKey;
                 _worker = new Thread(delegate ()
                 {
-                    try { Run(db, jobKey, recipients, fromName, fromEmail, defaultTemplate, renderer); }
+                    try { Run(db, jobKey, recipients, fromName, fromEmail, defaultTemplate, renderer, extras); }
                     catch (Exception ex) { AbortJob(db, jobKey, ex.Message); }
                     finally { lock (_gate) { _worker = null; } }
                 });
@@ -151,7 +151,8 @@ namespace ServiceContractPhotocopier.Classes
         // ───────────────────────── job rows ─────────────────────────
 
         private static long CreateJob(DBSetting db, List<Recipient> recipients,
-            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer,
+            ScpExtraDocs extras)
         {
             string who = "", machine = "";
             try { who = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID; } catch { }
@@ -174,8 +175,8 @@ namespace ServiceContractPhotocopier.Classes
                 {
                     using (SqlCommand cmd = new SqlCommand(
                         "INSERT INTO dbo.zSCP2_EmailJobItem (JobKey, DebtorCode, DebtorName, Email, DocNos, DocKeys, " +
-                        "EmailTemplateName, InvoiceLayoutName, Status) " +
-                        "VALUES (@j,@c,@n,@e,@dn,@dk,@tpl,@lay,'PENDING')", cn))
+                        "EmailTemplateName, InvoiceLayoutName, ExtraDocs, Status) " +
+                        "VALUES (@j,@c,@n,@e,@dn,@dk,@tpl,@lay,@extra,'PENDING')", cn))
                     {
                         cmd.Parameters.AddWithValue("@j", jobKey);
                         cmd.Parameters.AddWithValue("@c", Cut(r.DebtorCode, 30));
@@ -187,6 +188,8 @@ namespace ServiceContractPhotocopier.Classes
                         // template being renamed or a contract being pointed somewhere else later.
                         cmd.Parameters.AddWithValue("@tpl", Cut(TemplateNameOf(r, defaultTemplate), 200));
                         cmd.Parameters.AddWithValue("@lay", Cut(LayoutNameOf(r, renderer), 200));
+                        cmd.Parameters.AddWithValue("@extra",
+                            Cut(extras == null ? "" : extras.DescribeFor(r.DebtorCode), 200));
                         cmd.ExecuteNonQuery();
                     }
                 }
@@ -231,7 +234,7 @@ namespace ServiceContractPhotocopier.Classes
 
         private static void Run(DBSetting db, long jobKey, List<Recipient> recipients,
             string fromName, string fromEmail, ScpEmailTemplates.Template defaultTemplate,
-            ScpInvoicePdfRenderer renderer)
+            ScpInvoicePdfRenderer renderer, ScpExtraDocs extras)
         {
             int ok = 0, failed = 0, skipped = 0;
 
@@ -279,7 +282,7 @@ namespace ServiceContractPhotocopier.Classes
 
                     try
                     {
-                        SendOne(db, r, fromName, fromEmail, defaultTemplate, renderer);
+                        SendOne(db, r, fromName, fromEmail, defaultTemplate, renderer, extras);
                         SetItem(cn, itemKey, "SENT", null);
                         WriteLog(cn, r);
                         ok++;
@@ -312,7 +315,7 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         private static void SendOne(DBSetting db, Recipient r, string fromName, string fromEmail,
-            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer)
+            ScpEmailTemplates.Template defaultTemplate, ScpInvoicePdfRenderer renderer, ScpExtraDocs extras)
         {
             ScpEmailTemplates.Template tpl = r.Template ?? defaultTemplate;
             string subject = tpl == null ? "" : (tpl.Subject ?? "");
@@ -325,21 +328,31 @@ namespace ServiceContractPhotocopier.Classes
             if (style == "STYLED") body = ScpMailHtml.BuildStyled(body, fromName);
             else if (style == "HTML") body = ScpMailHtml.EnsureHtml(body);
 
-            // Render this customer's invoices now, not at the start of the batch — the operator
-            // is already back in the UI and the work is spread across the run.
+            // Render this customer's documents now, not at the start of the batch — the operator is
+            // already back in the UI and the work is spread across the run.
             if (r.Attachments == null) r.Attachments = new List<AutoCount.Mail.AttachmentData>();
             if (r.Attachments.Count == 0 && renderer != null)
             {
+                List<string> failed = new List<string>();
                 for (int i = 0; i < r.DocKeys.Count; i++)
                 {
                     string fileName;
                     byte[] pdf = renderer.Render(r.DocKeys[i], r.DocNos[i], out fileName);
-                    if (pdf == null || pdf.Length == 0) continue;
+                    if (pdf == null || pdf.Length == 0) { failed.Add(r.DocNos[i]); continue; }
                     AutoCount.Mail.AttachmentData a = new AutoCount.Mail.AttachmentData();
                     a.FileName = fileName;
                     a.Binary = pdf;
                     r.Attachments.Add(a);
                 }
+                // A customer with five invoices who receives one PDF used to be recorded as fully
+                // sent. Any missing invoice fails the whole recipient: sending someone a partial
+                // bill and calling it done is worse than not sending at all.
+                if (failed.Count > 0)
+                    throw new Exception("Could not produce the invoice PDF for " +
+                        string.Join(", ", failed.ToArray()) + " — nothing was sent to this customer.");
+
+                // Extras the contract asks for: the statement, the meter listing, or both.
+                if (extras != null) extras.Attach(db, r);
             }
             if (r.Attachments.Count == 0)
                 throw new Exception("No invoice PDF could be produced for " + docNos + ".");
@@ -355,7 +368,15 @@ namespace ServiceContractPhotocopier.Classes
 
             // Uses the SMTP configured in Email Setting — the same transport AutoCount's own
             // Batch Mail uses, so there is one place to configure and one place to fix.
-            AutoCount.Mail.MailHelper.SendMailWithDefaultMailServerSetting(db, data);
+            //
+            // The RESULT IS NOT OPTIONAL. AutoCount returns false without throwing when the mail
+            // server has no host name, so ignoring it marked every recipient SENT, wrote a log row,
+            // greened the Emailed column and reported "Completed" for a run that sent nothing.
+            bool sent = AutoCount.Mail.MailHelper.SendMailWithDefaultMailServerSetting(db, data);
+            if (!sent)
+                throw new Exception(
+                    "The mail server rejected the message or is not configured. " +
+                    "Check Email Setting — SMTP Server, port, user and password — then send again.");
         }
 
         private static string Tokens(string text, Recipient r, string docNos)
