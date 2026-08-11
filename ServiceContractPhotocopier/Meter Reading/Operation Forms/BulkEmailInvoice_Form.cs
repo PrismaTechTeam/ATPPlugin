@@ -73,6 +73,89 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _chkUnsentOnly.Size = new System.Drawing.Size(240, 22);
             _chkUnsentOnly.CheckedChanged += delegate { ApplyUnsentFilter(); };
             this.GrpFilter.Controls.Add(_chkUnsentOnly);
+
+            // DEV/TEST: Ctrl+Shift+3 clears the send history so the same invoices can be emailed
+            // again from a clean slate. Same combo the Meter Reading screen uses for its wipe, so
+            // there is one thing to remember. Key combo only — no button, on purpose.
+            this.KeyPreview = true;
+            this.KeyDown += new KeyEventHandler(DevShortcut_KeyDown);
+        }
+
+        private void DevShortcut_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (!e.Control || !e.Shift || e.KeyCode != Keys.D3) return;
+            e.Handled = true;
+            DevWipeSendHistory();
+        }
+
+        /// <summary>
+        /// Wipe every trace of past sends: the per-invoice log (which drives the Emailed column),
+        /// the job rows behind Send Progress, and any leftover locks — a lock abandoned by a killed
+        /// test run would otherwise block those invoices for fifteen minutes.
+        /// The emails themselves are already gone; this only clears OUR record of them.
+        /// </summary>
+        private void DevWipeSendHistory()
+        {
+            if (_dbSetting == null) return;
+            int logs = 0, jobs = 0, locks = 0;
+            try
+            {
+                DataTable c = _dbSetting.GetDataTable(
+                    "SELECT (SELECT COUNT(*) FROM dbo.zSCP2_EmailLog) AS L, " +
+                    "       (SELECT COUNT(*) FROM dbo.zSCP2_EmailJob) AS J, " +
+                    "       (SELECT COUNT(*) FROM dbo.zSCP2_EmailLock) AS K", false);
+                if (c.Rows.Count > 0)
+                {
+                    logs = Convert.ToInt32(c.Rows[0]["L"]);
+                    jobs = Convert.ToInt32(c.Rows[0]["J"]);
+                    locks = Convert.ToInt32(c.Rows[0]["K"]);
+                }
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not read the send history:\r\n" + ex.Message,
+                    "Dev Wipe", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (logs == 0 && jobs == 0 && locks == 0)
+            {
+                XtraMessageBox.Show("There is no send history to clear.", "Dev Wipe",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (ScpEmailJob.IsRunning)
+            {
+                XtraMessageBox.Show("A send is running right now — let it finish before clearing the history.",
+                    "Dev Wipe", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (XtraMessageBox.Show(
+                    "TESTING SHORTCUT\r\n\r\nClear ALL send history so the same invoices can be emailed again?\r\n\r\n" +
+                    "    " + logs + " sent-invoice record(s)\r\n" +
+                    "    " + jobs + " send job(s) and their detail\r\n" +
+                    "    " + locks + " leftover lock(s)\r\n\r\n" +
+                    "The emails already went out — this only erases OUR record that they did. Cannot be undone.",
+                    "Dev Wipe — Send History", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+
+            try
+            {
+                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP2_EmailJobItem");
+                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP2_EmailJob");
+                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP2_EmailLock");
+                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP2_EmailLog");
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Clearing failed:\r\n" + ex.Message, "Dev Wipe",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            LoadData();
+            XtraMessageBox.Show("Send history cleared — every invoice is 'not yet emailed' again.",
+                "Dev Wipe", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void ApplyUnsentFilter()
