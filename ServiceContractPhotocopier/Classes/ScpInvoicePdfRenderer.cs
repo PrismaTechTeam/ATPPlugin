@@ -216,11 +216,18 @@ namespace ServiceContractPhotocopier.Classes
 
                 object ds = _rpt.GetReportDataSource(docKey);
                 xr.DataSource = ds;
-                xr.CreateDocument();
-                using (MemoryStream ms = new MemoryStream())
+                try
                 {
-                    xr.ExportToPdf(ms);
-                    return ms.ToArray();
+                    xr.CreateDocument();
+                    using (MemoryStream ms = new MemoryStream())
+                    {
+                        xr.ExportToPdf(ms);
+                        return ms.ToArray();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw ScpReportScripts.Explain(ex, name.Length > 0 ? name : _defaultName);
                 }
             }
         }

@@ -37,6 +37,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// window after which the job's per-invoice locks are taken over, so the two agree.</summary>
         private const int STALE_MINUTES = 15;
 
+        /// <summary>Distinct failure reasons in the current job, newest read first.</summary>
+        private readonly List<string> _reasons = new List<string>();
+
         public BulkEmailJob_Form()
         {
             InitializeComponent();
@@ -201,8 +204,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "ISNULL(ExtraDocs,'') AS ExtraDocs " +
                     "FROM dbo.zSCP2_EmailJobItem WHERE JobKey=" + _jobKey + " ORDER BY ItemKey", false);
                 _grid.Rows.Clear();
+                _reasons.Clear();
                 foreach (DataRow s in items.Rows)
                 {
+                    // Collect WHY, distinctly: ten customers failing for one reason is one thing to
+                    // fix, and the operator should be told it without hunting along a scrollbar.
+                    if (Convert.ToString(s["Status"]) == "FAILED")
+                    {
+                        string why = Convert.ToString(s["ErrorMsg"]).Trim();
+                        if (why.Length > 0 && !_reasons.Contains(why)) _reasons.Add(why);
+                    }
                     DataRow g = _grid.NewRow();
                     g["Customer"] = Convert.ToString(s["DebtorCode"]) + "  " + Convert.ToString(s["DebtorName"]);
                     g["DocNo"] = Convert.ToString(s["DocNos"]);
@@ -247,13 +258,50 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             else
             {
-                LblBig.Text = status == "ABORTED" ? "Stopped before finishing" : "Completed";
+                // "Completed" for a run where nothing went out is the same lie in a friendlier font.
+                // Name what actually happened.
+                if (status == "ABORTED")
+                {
+                    LblBig.Text = "Stopped before finishing";
+                    LblHeadline.Text = "Send did not finish";
+                }
+                else if (failed > 0 && ok == 0)
+                {
+                    LblBig.Text = "Nothing was sent";
+                    LblHeadline.Text = "Send failed";
+                }
+                else if (failed > 0)
+                {
+                    LblBig.Text = "Sent " + ok + ", failed " + failed;
+                    LblHeadline.Text = "Send finished with failures";
+                }
+                else
+                {
+                    LblBig.Text = "Completed";
+                    LblHeadline.Text = "Send finished";
+                }
                 LblBig.Appearance.ForeColor = failed > 0
                     ? System.Drawing.Color.FromArgb(198, 40, 40)
                     : System.Drawing.Color.FromArgb(27, 94, 32);
-                LblHeadline.Text = "Send finished";
-                LblSub.Text = "Every send is recorded — a customer can be sent to again, and both times are kept.";
+                LblSub.Text = failed > 0
+                    ? Why()
+                    : "Every send is recorded — a customer can be sent to again, and both times are kept.";
             }
+        }
+
+        /// <summary>The failure reasons, up front. They are in the Note column too, but that is the
+        /// far end of a horizontal scrollbar — no use to someone asking "why did it fail?".</summary>
+        private string Why()
+        {
+            if (_reasons.Count == 0)
+                return "The failed customers were not emailed. See the Note column for the reason.";
+            string head = _reasons.Count == 1 ? "Why: " : "Why (" + _reasons.Count + " reasons): ";
+            int show = Math.Min(_reasons.Count, 3);
+            string[] parts = new string[show];
+            for (int i = 0; i < show; i++) parts[i] = _reasons[i];
+            string text = head + string.Join("   •   ", parts);
+            if (_reasons.Count > show) text += "   •   (+" + (_reasons.Count - show) + " more in the Note column)";
+            return text;
         }
 
         private static long LatestJobKey(DBSetting db)
@@ -287,14 +335,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridItems.DataSource = _grid;
             GridViewItems.Columns.Clear();
             GridViewItems.PopulateColumns();
+            // Status and the reason come FIRST, before the configuration columns. When a row failed,
+            // "why" is the only thing being looked for — it has no business at the far end of a
+            // horizontal scrollbar behind four columns describing settings that worked.
             Col("Customer", "Customer", 260, 0);
-            Col("DocNo", "Invoice No", 190, 1);
-            Col("Email", "Email", 220, 2);
-            Col("Template", "Email Template", 130, 3);
-            Col("Layout", "Invoice Layout", 170, 4);
-            Col("Also", "Also Attached", 130, 5);
-            Col("Status", "Status", 90, 6);
-            Col("Note", "Note", 300, 7);
+            Col("DocNo", "Invoice No", 130, 1);
+            Col("Status", "Status", 75, 2);
+            Col("Note", "Reason / Note", 330, 3);
+            Col("Email", "Email", 175, 4);
+            Col("Template", "Email Template", 110, 5);
+            Col("Layout", "Invoice Layout", 125, 6);
+            Col("Also", "Also Attached", 110, 7);
             // Grouped by customer and expanded, so the "one email per customer" shape is the first
             // thing you see rather than something you have to work out from a flat list.
             GridColumn c = GridViewItems.Columns["Customer"];

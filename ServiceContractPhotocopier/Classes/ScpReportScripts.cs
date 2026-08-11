@@ -48,6 +48,33 @@ namespace ServiceContractPhotocopier.Classes
             catch { }   // never let reference tidying be the thing that stops a report opening
         }
 
+        /// <summary>
+        /// Turn a report-rendering failure into something the operator can act on. A script that will
+        /// not compile surfaces as a wall of C# compiler output naming a class nobody has heard of;
+        /// what the reader needs is WHICH design is broken and WHERE to fix it.
+        /// </summary>
+        public static Exception Explain(Exception ex, string layoutName)
+        {
+            string raw = ex == null ? "" : (ex.Message ?? "");
+            string design = string.IsNullOrEmpty(layoutName) ? "the report design" : "report design '" + layoutName + "'";
+
+            if (raw.IndexOf("CS0111", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                raw.IndexOf("already defines a member", StringComparison.OrdinalIgnoreCase) >= 0)
+                return new Exception(
+                    "The script in " + design + " declares Report_BeforePrint twice, so it will not " +
+                    "compile and no page can be produced.\r\n\r\n" +
+                    "Open that design (Report Design > Design > Scripts tab) and delete the duplicate — " +
+                    "keep ONE copy of the method.\r\n\r\n" + raw, ex);
+
+            if (raw.IndexOf("errors in script", StringComparison.OrdinalIgnoreCase) >= 0)
+                return new Exception(
+                    "The script in " + design + " will not compile, so no page can be produced.\r\n\r\n" +
+                    "Open that design (Report Design > Design > Scripts tab) and fix the error below, " +
+                    "or clear the script entirely if the design does not need one.\r\n\r\n" + raw, ex);
+
+            return new Exception("Could not render " + design + ": " + raw, ex);
+        }
+
         /// <summary>The loaded assembly's location if we have it, else the original path when the
         /// file really is there, else nothing.</summary>
         private static string Locate(string reference)

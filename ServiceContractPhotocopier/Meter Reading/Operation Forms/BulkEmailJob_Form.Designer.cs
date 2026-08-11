@@ -1,4 +1,4 @@
-namespace ServiceContractPhotocopier.MeterReading.OperationForms
+﻿namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     partial class BulkEmailJob_Form
     {
@@ -63,7 +63,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelTop.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelTop.Location = new System.Drawing.Point(0, 0);
             this.PanelTop.Name = "PanelTop";
-            this.PanelTop.Size = new System.Drawing.Size(940, 64);
+            this.PanelTop.Size = new System.Drawing.Size(940, 84);
             this.PanelTop.TabIndex = 0;
             //
             // LblHeadline
@@ -85,7 +85,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblSub.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblSub.Location = new System.Drawing.Point(16, 36);
             this.LblSub.Name = "LblSub";
-            this.LblSub.Size = new System.Drawing.Size(900, 18);
+            this.LblSub.Size = new System.Drawing.Size(908, 40);
             this.LblSub.TabIndex = 1;
             this.LblSub.Text = "One email per customer, with that customer\'s invoices attached.";
             //
@@ -96,7 +96,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelStatus.Controls.Add(this.LblCounts);
             this.PanelStatus.Controls.Add(this.Marquee);
             this.PanelStatus.Dock = System.Windows.Forms.DockStyle.Top;
-            this.PanelStatus.Location = new System.Drawing.Point(0, 64);
+            this.PanelStatus.Location = new System.Drawing.Point(0, 84);
             this.PanelStatus.Name = "PanelStatus";
             this.PanelStatus.Size = new System.Drawing.Size(940, 78);
             this.PanelStatus.TabIndex = 1;
@@ -136,10 +136,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // GridItems
             //
             this.GridItems.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.GridItems.Location = new System.Drawing.Point(0, 142);
+            this.GridItems.Location = new System.Drawing.Point(0, 162);
             this.GridItems.MainView = this.GridViewItems;
             this.GridItems.Name = "GridItems";
-            this.GridItems.Size = new System.Drawing.Size(940, 402);
+            this.GridItems.Size = new System.Drawing.Size(940, 382);
             this.GridItems.TabIndex = 2;
             this.GridItems.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewItems});

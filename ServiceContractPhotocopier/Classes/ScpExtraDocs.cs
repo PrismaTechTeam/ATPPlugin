@@ -289,11 +289,20 @@ namespace ServiceContractPhotocopier.Classes
             if (xr == null) return null;
             ScpReportScripts.FixReferences(xr);
             xr.DataSource = dataSource;
-            xr.CreateDocument();
-            using (MemoryStream ms = new MemoryStream())
+            try
             {
-                xr.ExportToPdf(ms);
-                return ms.ToArray();
+                xr.CreateDocument();
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    xr.ExportToPdf(ms);
+                    return ms.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Name the design and say what to do — the raw text is a C# compiler dump about a
+                // class the operator has never heard of.
+                throw ScpReportScripts.Explain(ex, layoutName);
             }
         }
 
