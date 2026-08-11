@@ -915,6 +915,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v13_EmailTemplate.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailJob.sql" />
     <EmbeddedResource Include="SQL\02_UpdateTable_zSCP2_EmailJobItem_v1.1.0.sql" />
+    <EmbeddedResource Include="SQL\02_UpdateTable_zSCP2_EmailJobItem_v1.2.0.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterTrans_v3_CNCorrection.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailLog.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_EmailTemplate.sql" />
