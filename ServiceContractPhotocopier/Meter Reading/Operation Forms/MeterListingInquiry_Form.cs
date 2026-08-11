@@ -7,6 +7,7 @@ using AutoCount.Data;
 using DevExpress.XtraEditors;
 using DevExpress.XtraGrid.Columns;
 using ServiceContractPhotocopier.Classes;
+using ServiceContractPhotocopier.Classes.CommonForms;
 
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
@@ -26,6 +27,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DBSetting _dbSetting;
         private UserSession _userSession;
         private DataTable _data;
+        private DataTable _contracts;   // picker source, re-filtered as the debtor range changes
 
         public MeterListingInquiry_Form()
         {
@@ -49,6 +51,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void InitDefaults()
         {
+            LoadLookups();
             CmbMonth.Properties.Items.Clear();
             for (int m = 1; m <= 12; m++)
                 CmbMonth.Properties.Items.Add(new CultureInfo("en-US").DateTimeFormat.GetMonthName(m));
@@ -63,6 +66,120 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridListing.DataSource = _data;
             ConfigureGrid();
         }
+
+        // ───────────────────── filter ─────────────────────
+
+        /// <summary>
+        /// Fill the three pickers. Only customers and contracts that HAVE a contract in this book are
+        /// offered — a filter listing names that can never match anything wastes the operator's time
+        /// and makes an empty result look like a bug.
+        /// </summary>
+        private void LoadLookups()
+        {
+            if (_dbSetting == null) return;
+            try
+            {
+                DataTable deb = _dbSetting.GetDataTable(
+                    "SELECT DISTINCT c.DebtorCode, ISNULL(d.CompanyName,'') AS CompanyName " +
+                    "FROM dbo.zSCP2_Contract c LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
+                    "WHERE ISNULL(c.DebtorCode,'') <> '' ORDER BY c.DebtorCode", false);
+                BindDebtor(SluDebtorFrom, SluDebtorFromView, deb);
+                BindDebtor(SluDebtorTo, SluDebtorToView, deb.Copy());
+            }
+            catch { }
+
+            try
+            {
+                _contracts = _dbSetting.GetDataTable(
+                    "SELECT c.ContractNo, c.DebtorCode, ISNULL(d.CompanyName,'') AS CompanyName, " +
+                    "  ISNULL(c.Description,'') AS Description " +
+                    "FROM dbo.zSCP2_Contract c LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
+                    "ORDER BY c.ContractNo", false);
+                BindContract();
+            }
+            catch { }
+
+            // Narrowing the customer range narrows the contract list with it — picking a contract that
+            // the debtor range already excludes is a contradiction the screen should not offer.
+            SluDebtorFrom.EditValueChanged += new EventHandler(DebtorRange_Changed);
+            SluDebtorTo.EditValueChanged += new EventHandler(DebtorRange_Changed);
+        }
+
+        private void BindDebtor(SearchLookUpEdit edit, DevExpress.XtraGrid.Views.Grid.GridView view, DataTable src)
+        {
+            edit.Properties.DataSource = src;
+            edit.Properties.ValueMember = "DebtorCode";
+            edit.Properties.DisplayMember = "DebtorCode";
+            edit.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+            view.OptionsBehavior.AutoPopulateColumns = false;
+            view.Columns.Clear();
+            GridColumn c1 = view.Columns.AddVisible("DebtorCode");
+            c1.Caption = "Code"; c1.Width = 90;
+            GridColumn c2 = view.Columns.AddVisible("CompanyName");
+            c2.Caption = "Customer"; c2.Width = 260;
+            view.OptionsView.ShowAutoFilterRow = true;
+            view.OptionsView.ShowIndicator = false;
+        }
+
+        private void BindContract()
+        {
+            if (_contracts == null) return;
+            DataView dv = new DataView(_contracts);
+            dv.RowFilter = ContractRowFilter();
+            SluContract.Properties.DataSource = dv;
+            SluContract.Properties.ValueMember = "ContractNo";
+            SluContract.Properties.DisplayMember = "ContractNo";
+            SluContract.Properties.AllowNullInput = DevExpress.Utils.DefaultBoolean.True;
+            SluContractView.OptionsBehavior.AutoPopulateColumns = false;
+            SluContractView.Columns.Clear();
+            GridColumn c1 = SluContractView.Columns.AddVisible("ContractNo");
+            c1.Caption = "Contract No"; c1.Width = 120;
+            GridColumn c2 = SluContractView.Columns.AddVisible("DebtorCode");
+            c2.Caption = "Code"; c2.Width = 80;
+            GridColumn c3 = SluContractView.Columns.AddVisible("CompanyName");
+            c3.Caption = "Customer"; c3.Width = 240;
+            GridColumn c4 = SluContractView.Columns.AddVisible("Description");
+            c4.Caption = "Description"; c4.Width = 200;
+            SluContractView.OptionsView.ShowAutoFilterRow = true;
+            SluContractView.OptionsView.ShowIndicator = false;
+        }
+
+        private string ContractRowFilter()
+        {
+            string from = DebtorFrom(), to = DebtorTo();
+            string f = "";
+            if (from.Length > 0) f = "DebtorCode >= '" + from.Replace("'", "''") + "'";
+            if (to.Length > 0)
+                f += (f.Length > 0 ? " AND " : "") + "DebtorCode <= '" + to.Replace("'", "''") + "'";
+            return f;
+        }
+
+        private void DebtorRange_Changed(object sender, EventArgs e)
+        {
+            if (_contracts == null) return;
+            // A contract already picked that the new range excludes would silently contradict the
+            // range, so it is dropped rather than left sitting there looking selected.
+            string picked = ContractNo();
+            DataView dv = SluContract.Properties.DataSource as DataView;
+            if (dv != null) { try { dv.RowFilter = ContractRowFilter(); } catch { } }
+            if (picked.Length > 0 && dv != null && dv.Find(picked) < 0) SluContract.EditValue = null;
+        }
+
+        /// <summary>Codes may be picked OR typed, so read the value and fall back to the text.</summary>
+        private static string LookupText(SearchLookUpEdit edit)
+        {
+            if (edit.EditValue != null && edit.EditValue != DBNull.Value)
+            {
+                string v = Convert.ToString(edit.EditValue).Trim();
+                if (v.Length > 0) return v;
+            }
+            string t = (edit.Text ?? "").Trim();
+            return t == edit.Properties.NullText ? "" : t;
+        }
+
+        private string DebtorFrom() { return LookupText(SluDebtorFrom); }
+        private string DebtorTo() { return LookupText(SluDebtorTo); }
+        private string ContractNo() { return LookupText(SluContract); }
 
         private int SelectedMonth() { return CmbMonth.SelectedIndex < 0 ? DateTime.Today.Month : CmbMonth.SelectedIndex + 1; }
 
@@ -173,11 +290,24 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnInquiry_Click(object sender, EventArgs e)
         {
             if (_dbSetting == null) return;
+            string from = DebtorFrom(), to = DebtorTo();
+            // An inverted range matches nothing. Say so, rather than returning an empty grid that
+            // looks identical to "this month was never invoiced".
+            if (from.Length > 0 && to.Length > 0 &&
+                string.Compare(from, to, StringComparison.OrdinalIgnoreCase) > 0)
+            {
+                XtraMessageBox.Show(
+                    "Debtor From (" + from + ") is after Debtor To (" + to + "), so no customer can fall " +
+                    "inside that range.\r\n\r\nSwap them, or clear one for an open-ended range.",
+                    "Filter Options", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             Cursor.Current = Cursors.WaitCursor;
             try
             {
                 _data = ScpMeterListing.Build(_dbSetting, SelectedYear(), SelectedMonth(),
-                    TxtDebtorFrom.Text.Trim(), TxtDebtorTo.Text.Trim(), TxtContract.Text.Trim());
+                    from, to, ContractNo());
                 GridListing.DataSource = _data;
                 ConfigureGrid();
                 GridViewListing.BestFitColumns();
@@ -194,10 +324,33 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void BtnReset_Click(object sender, EventArgs e)
         {
-            TxtDebtorFrom.Text = ""; TxtDebtorTo.Text = ""; TxtContract.Text = "";
+            SluDebtorFrom.EditValue = null;
+            SluDebtorTo.EditValue = null;
+            SluContract.EditValue = null;
             CmbMonth.SelectedIndex = DateTime.Today.Month - 1;
             CmbYear.SelectedItem = DateTime.Today.Year;
+            // Reset means reset: the grid's own filter and grouping go too, or the operator clears
+            // the filter box and still cannot see rows they know are there.
             try { GridViewListing.ActiveFilterString = ""; } catch { }
+            try { GridViewListing.ClearColumnsFilter(); } catch { }
+            try { GridViewListing.ClearGrouping(); } catch { }
+            BindContract();
+        }
+
+        /// <summary>
+        /// AutoCount's inquiry screens all end in the same place: a filter builder over the columns
+        /// in front of you. This is that — conditions across any column, ANDs and ORs, on the rows
+        /// already loaded.
+        /// </summary>
+        private void BtnAdvFilter_Click(object sender, EventArgs e)
+        {
+            if (!HasRows()) return;
+            try { GridViewListing.ShowFilterEditor(null); }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not open the filter builder:\r\n" + ex.Message,
+                    "Advanced Filter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private string MonthLabel()
@@ -227,8 +380,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnPreview_Click(object sender, EventArgs e)
         {
             if (!HasRows()) return;
-            string name = PickDesign("Preview with which report design?", false);
-            if (name == null) return;   // cancelled
+            string name = ReportDesignList_Form.Pick(this, _dbSetting, _userSession,
+                ScpMeterListing.REPORT_TYPE, VisibleRows(), LayoutColumns(),
+                "Preview with which report design?");
+            if (string.IsNullOrEmpty(name)) return;   // cancelled, or nothing saved yet
             try
             {
                 AutoCount.Report.ReportTemplate tpl = LoadTemplate(name, VisibleRows());
@@ -254,23 +409,33 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Design against REAL rows where possible: an empty datasource gives the designer no
             // fields to drag, which is the most common "the designer is useless" complaint.
             DataTable ds = HasRows(false) ? VisibleRows() : ScpMeterListing.NewTable();
-            string name = PickDesign("Create a new design, or modify which one?", true);
-            if (name == null) return;
-            try
+            ReportDesignList_Form.Manage(this, _dbSetting, _userSession,
+                ScpMeterListing.REPORT_TYPE, ds, LayoutColumns());
+        }
+
+        /// <summary>
+        /// The columns a NEW design starts with: exactly the ones on screen, in the order and the
+        /// relative widths the operator arranged them. Hiding a column here and pressing New means
+        /// the printed report does not carry it either — which is what "design what I am looking at"
+        /// has to mean for it to be worth anything.
+        /// </summary>
+        private System.Collections.Generic.List<ReportDesignList_Form.ReportColumn> LayoutColumns()
+        {
+            System.Collections.Generic.List<ReportDesignList_Form.ReportColumn> cols =
+                new System.Collections.Generic.List<ReportDesignList_Form.ReportColumn>();
+            for (int i = 0; i < GridViewListing.VisibleColumns.Count; i++)
             {
-                AutoCount.Report.ReportTemplate tpl = name.Length == 0
-                    ? AutoCount.Report.AutoCountReport.GetInstance().NewReport(ScpMeterListing.REPORT_TYPE, ds, _userSession)
-                    : LoadTemplate(name, ds);
-                if (tpl == null) return;
-                // AutoCount's own designer — Save inside it writes back to dbo.Report under our type,
-                // so the design immediately shows up in the contract's Listing Template picker.
-                AutoCount.Report.ReportDesigner.DesignReport(tpl, name, _userSession, null);
+                GridColumn c = GridViewListing.VisibleColumns[i];
+                if (c == null || string.IsNullOrEmpty(c.FieldName)) continue;
+                ReportDesignList_Form.ReportColumn rc = new ReportDesignList_Form.ReportColumn();
+                rc.Field = c.FieldName;
+                rc.Caption = c.Caption;
+                rc.Width = c.Width <= 0 ? 90 : c.Width;
+                rc.Format = c.DisplayFormat.FormatString ?? "";
+                rc.RightAlign = c.DisplayFormat.FormatType == DevExpress.Utils.FormatType.Numeric;
+                cols.Add(rc);
             }
-            catch (Exception ex)
-            {
-                XtraMessageBox.Show("Could not open the report designer:\r\n" + ex.Message,
-                    "Report Design", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+            return cols;
         }
 
         private AutoCount.Report.ReportTemplate LoadTemplate(string name, DataTable ds)
@@ -278,78 +443,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (string.IsNullOrEmpty(name))
                 return AutoCount.Report.AutoCountReport.GetInstance().NewReport(ScpMeterListing.REPORT_TYPE, ds, _userSession);
             return AutoCount.Report.AutoCountReport.GetInstance().GetReport(name, ds, _userSession, true);
-        }
-
-        /// <summary>
-        /// Choose among this type's saved designs. Returns the design name, "" for a brand-new
-        /// layout, or null when the user cancels. With no designs saved yet it goes straight to a
-        /// new one rather than showing an empty list.
-        /// </summary>
-        private string PickDesign(string prompt, bool allowNew)
-        {
-            DataTable list = null;
-            try { list = AutoCount.Report.AutoCountReport.GetInstance().GetReportList(_dbSetting, ScpMeterListing.REPORT_TYPE); }
-            catch { }
-            int count = list == null ? 0 : list.Rows.Count;
-            if (count == 0) return allowNew ? "" : "";
-
-            using (XtraForm dlg = new XtraForm())
-            {
-                dlg.Text = "Report Design";
-                dlg.StartPosition = FormStartPosition.CenterParent;
-                dlg.ClientSize = new System.Drawing.Size(460, 320);
-                dlg.MinimizeBox = false; dlg.MaximizeBox = false;
-
-                LabelControl lbl = new LabelControl();
-                lbl.Text = prompt;
-                lbl.Location = new System.Drawing.Point(12, 12);
-                lbl.AutoSizeMode = LabelAutoSizeMode.None;
-                lbl.Size = new System.Drawing.Size(436, 18);
-                dlg.Controls.Add(lbl);
-
-                ListBoxControl lst = new ListBoxControl();
-                lst.Location = new System.Drawing.Point(12, 36);
-                lst.Size = new System.Drawing.Size(436, 206);
-                lst.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-                foreach (DataRow r in list.Rows) lst.Items.Add(Convert.ToString(r["ReportName"]));
-                lst.SelectedIndex = 0;
-                dlg.Controls.Add(lst);
-
-                string picked = null;
-                SimpleButton bOk = new SimpleButton();
-                bOk.Text = allowNew ? "Modify Selected" : "Use Selected";
-                bOk.Size = new System.Drawing.Size(130, 28);
-                bOk.Location = new System.Drawing.Point(12, 252);
-                bOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-                bOk.Click += delegate
-                {
-                    picked = lst.SelectedIndex >= 0 ? Convert.ToString(lst.SelectedItem) : "";
-                    dlg.DialogResult = DialogResult.OK;
-                };
-                dlg.Controls.Add(bOk);
-
-                if (allowNew)
-                {
-                    SimpleButton bNew = new SimpleButton();
-                    bNew.Text = "New Design";
-                    bNew.Size = new System.Drawing.Size(110, 28);
-                    bNew.Location = new System.Drawing.Point(148, 252);
-                    bNew.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-                    bNew.Click += delegate { picked = ""; dlg.DialogResult = DialogResult.OK; };
-                    dlg.Controls.Add(bNew);
-                }
-
-                SimpleButton bCancel = new SimpleButton();
-                bCancel.Text = "Cancel";
-                bCancel.Size = new System.Drawing.Size(90, 28);
-                bCancel.Location = new System.Drawing.Point(358, 252);
-                bCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                bCancel.DialogResult = DialogResult.Cancel;
-                dlg.Controls.Add(bCancel);
-                dlg.CancelButton = bCancel;
-
-                return dlg.ShowDialog(this) == DialogResult.OK ? picked : null;
-            }
         }
 
         private void BtnExport_Click(object sender, EventArgs e)

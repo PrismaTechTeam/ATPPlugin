@@ -32,16 +32,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelFilter = new DevExpress.XtraEditors.PanelControl();
             this.GrpFilter = new DevExpress.XtraEditors.GroupControl();
             this.LblDebtorFrom = new DevExpress.XtraEditors.LabelControl();
-            this.TxtDebtorFrom = new DevExpress.XtraEditors.TextEdit();
+            this.SluDebtorFrom = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluDebtorFromView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblDebtorTo = new DevExpress.XtraEditors.LabelControl();
-            this.TxtDebtorTo = new DevExpress.XtraEditors.TextEdit();
+            this.SluDebtorTo = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluDebtorToView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblContract = new DevExpress.XtraEditors.LabelControl();
-            this.TxtContract = new DevExpress.XtraEditors.TextEdit();
+            this.SluContract = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluContractView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.LblMonth = new DevExpress.XtraEditors.LabelControl();
             this.CmbMonth = new DevExpress.XtraEditors.ComboBoxEdit();
             this.LblYear = new DevExpress.XtraEditors.LabelControl();
             this.CmbYear = new DevExpress.XtraEditors.ComboBoxEdit();
             this.BtnInquiry = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnAdvFilter = new DevExpress.XtraEditors.SimpleButton();
             this.BtnReset = new DevExpress.XtraEditors.SimpleButton();
             this.BtnPreview = new DevExpress.XtraEditors.SimpleButton();
             this.BtnDesign = new DevExpress.XtraEditors.SimpleButton();
@@ -53,9 +57,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelFilter.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpFilter)).BeginInit();
             this.GrpFilter.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDebtorFrom.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDebtorTo.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtContract.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorFrom.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorFromView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorTo.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorToView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContract.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbMonth.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbYear.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridListing)).BeginInit();
@@ -86,25 +93,26 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelFilter.Location = new System.Drawing.Point(0, 56);
             this.PanelFilter.Name = "PanelFilter";
-            this.PanelFilter.Size = new System.Drawing.Size(1280, 130);
+            this.PanelFilter.Size = new System.Drawing.Size(1280, 162);
             this.PanelFilter.TabIndex = 1;
             //
             // GrpFilter
             //
             this.GrpFilter.Controls.Add(this.LblDebtorFrom);
-            this.GrpFilter.Controls.Add(this.TxtDebtorFrom);
+            this.GrpFilter.Controls.Add(this.SluDebtorFrom);
             this.GrpFilter.Controls.Add(this.LblDebtorTo);
-            this.GrpFilter.Controls.Add(this.TxtDebtorTo);
+            this.GrpFilter.Controls.Add(this.SluDebtorTo);
             this.GrpFilter.Controls.Add(this.LblContract);
-            this.GrpFilter.Controls.Add(this.TxtContract);
+            this.GrpFilter.Controls.Add(this.SluContract);
             this.GrpFilter.Controls.Add(this.LblMonth);
             this.GrpFilter.Controls.Add(this.CmbMonth);
             this.GrpFilter.Controls.Add(this.LblYear);
             this.GrpFilter.Controls.Add(this.CmbYear);
+            this.GrpFilter.Controls.Add(this.BtnAdvFilter);
             this.GrpFilter.Controls.Add(this.BtnReset);
             this.GrpFilter.Location = new System.Drawing.Point(8, 6);
             this.GrpFilter.Name = "GrpFilter";
-            this.GrpFilter.Size = new System.Drawing.Size(600, 118);
+            this.GrpFilter.Size = new System.Drawing.Size(600, 150);
             this.GrpFilter.TabIndex = 0;
             this.GrpFilter.Text = "Filter Options";
             //
@@ -116,52 +124,79 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblDebtorFrom.TabIndex = 0;
             this.LblDebtorFrom.Text = "Debtor From:";
             //
-            // TxtDebtorFrom
+            // SluDebtorFrom
             //
-            this.TxtDebtorFrom.Location = new System.Drawing.Point(92, 29);
-            this.TxtDebtorFrom.Name = "TxtDebtorFrom";
-            this.TxtDebtorFrom.Properties.NullValuePrompt = "(all)";
-            this.TxtDebtorFrom.Properties.NullValuePromptShowForEmptyValue = true;
-            this.TxtDebtorFrom.Size = new System.Drawing.Size(130, 20);
-            this.TxtDebtorFrom.TabIndex = 1;
+            this.SluDebtorFrom.Location = new System.Drawing.Point(92, 29);
+            this.SluDebtorFrom.Name = "SluDebtorFrom";
+            this.SluDebtorFrom.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluDebtorFrom.Properties.NullText = "(all)";
+            this.SluDebtorFrom.Properties.PopupView = this.SluDebtorFromView;
+            this.SluDebtorFrom.Size = new System.Drawing.Size(190, 20);
+            this.SluDebtorFrom.TabIndex = 1;
+            //
+            // SluDebtorFromView
+            //
+            this.SluDebtorFromView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluDebtorFromView.Name = "SluDebtorFromView";
+            this.SluDebtorFromView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluDebtorFromView.OptionsView.ShowGroupPanel = false;
             //
             // LblDebtorTo
             //
-            this.LblDebtorTo.Location = new System.Drawing.Point(236, 32);
+            this.LblDebtorTo.Location = new System.Drawing.Point(292, 32);
             this.LblDebtorTo.Name = "LblDebtorTo";
             this.LblDebtorTo.Size = new System.Drawing.Size(16, 13);
             this.LblDebtorTo.TabIndex = 2;
             this.LblDebtorTo.Text = "To:";
             //
-            // TxtDebtorTo
+            // SluDebtorTo
             //
-            this.TxtDebtorTo.Location = new System.Drawing.Point(262, 29);
-            this.TxtDebtorTo.Name = "TxtDebtorTo";
-            this.TxtDebtorTo.Properties.NullValuePrompt = "(all)";
-            this.TxtDebtorTo.Properties.NullValuePromptShowForEmptyValue = true;
-            this.TxtDebtorTo.Size = new System.Drawing.Size(130, 20);
-            this.TxtDebtorTo.TabIndex = 3;
+            this.SluDebtorTo.Location = new System.Drawing.Point(316, 29);
+            this.SluDebtorTo.Name = "SluDebtorTo";
+            this.SluDebtorTo.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluDebtorTo.Properties.NullText = "(all)";
+            this.SluDebtorTo.Properties.PopupView = this.SluDebtorToView;
+            this.SluDebtorTo.Size = new System.Drawing.Size(190, 20);
+            this.SluDebtorTo.TabIndex = 3;
+            //
+            // SluDebtorToView
+            //
+            this.SluDebtorToView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluDebtorToView.Name = "SluDebtorToView";
+            this.SluDebtorToView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluDebtorToView.OptionsView.ShowGroupPanel = false;
             //
             // LblContract
             //
-            this.LblContract.Location = new System.Drawing.Point(408, 32);
+            this.LblContract.Location = new System.Drawing.Point(12, 62);
             this.LblContract.Name = "LblContract";
             this.LblContract.Size = new System.Drawing.Size(48, 13);
             this.LblContract.TabIndex = 4;
             this.LblContract.Text = "Contract:";
             //
-            // TxtContract
+            // SluContract
             //
-            this.TxtContract.Location = new System.Drawing.Point(462, 29);
-            this.TxtContract.Name = "TxtContract";
-            this.TxtContract.Properties.NullValuePrompt = "(all)";
-            this.TxtContract.Properties.NullValuePromptShowForEmptyValue = true;
-            this.TxtContract.Size = new System.Drawing.Size(126, 20);
-            this.TxtContract.TabIndex = 5;
+            this.SluContract.Location = new System.Drawing.Point(92, 59);
+            this.SluContract.Name = "SluContract";
+            this.SluContract.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluContract.Properties.NullText = "(all)";
+            this.SluContract.Properties.PopupView = this.SluContractView;
+            this.SluContract.Size = new System.Drawing.Size(190, 20);
+            this.SluContract.TabIndex = 5;
+            //
+            // SluContractView
+            //
+            this.SluContractView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluContractView.Name = "SluContractView";
+            this.SluContractView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluContractView.OptionsView.ShowGroupPanel = false;
             //
             // LblMonth
             //
-            this.LblMonth.Location = new System.Drawing.Point(12, 66);
+            this.LblMonth.Location = new System.Drawing.Point(292, 62);
             this.LblMonth.Name = "LblMonth";
             this.LblMonth.Size = new System.Drawing.Size(38, 13);
             this.LblMonth.TabIndex = 6;
@@ -169,17 +204,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // CmbMonth
             //
-            this.CmbMonth.Location = new System.Drawing.Point(92, 63);
+            this.CmbMonth.Location = new System.Drawing.Point(340, 59);
             this.CmbMonth.Name = "CmbMonth";
             this.CmbMonth.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
             new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbMonth.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
-            this.CmbMonth.Size = new System.Drawing.Size(130, 20);
+            this.CmbMonth.Size = new System.Drawing.Size(120, 20);
             this.CmbMonth.TabIndex = 7;
             //
             // LblYear
             //
-            this.LblYear.Location = new System.Drawing.Point(236, 66);
+            this.LblYear.Location = new System.Drawing.Point(470, 62);
             this.LblYear.Name = "LblYear";
             this.LblYear.Size = new System.Drawing.Size(26, 13);
             this.LblYear.TabIndex = 8;
@@ -187,20 +222,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // CmbYear
             //
-            this.CmbYear.Location = new System.Drawing.Point(262, 63);
+            this.CmbYear.Location = new System.Drawing.Point(502, 59);
             this.CmbYear.Name = "CmbYear";
             this.CmbYear.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
             new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbYear.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
-            this.CmbYear.Size = new System.Drawing.Size(90, 20);
+            this.CmbYear.Size = new System.Drawing.Size(86, 20);
             this.CmbYear.TabIndex = 9;
+            //
+            // BtnAdvFilter
+            //
+            this.BtnAdvFilter.Location = new System.Drawing.Point(92, 92);
+            this.BtnAdvFilter.Name = "BtnAdvFilter";
+            this.BtnAdvFilter.Size = new System.Drawing.Size(190, 26);
+            this.BtnAdvFilter.TabIndex = 10;
+            this.BtnAdvFilter.Text = "Advanced Filter...";
+            this.BtnAdvFilter.Click += new System.EventHandler(this.BtnAdvFilter_Click);
             //
             // BtnReset
             //
-            this.BtnReset.Location = new System.Drawing.Point(462, 61);
+            this.BtnReset.Location = new System.Drawing.Point(316, 92);
             this.BtnReset.Name = "BtnReset";
-            this.BtnReset.Size = new System.Drawing.Size(126, 24);
-            this.BtnReset.TabIndex = 10;
+            this.BtnReset.Size = new System.Drawing.Size(190, 26);
+            this.BtnReset.TabIndex = 11;
             this.BtnReset.Text = "Reset Filter";
             this.BtnReset.Click += new System.EventHandler(this.BtnReset_Click);
             //
@@ -248,14 +292,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblHint.Appearance.Options.UseForeColor = true;
             this.LblHint.Location = new System.Drawing.Point(620, 66);
             this.LblHint.Name = "LblHint";
-            this.LblHint.Size = new System.Drawing.Size(600, 13);
+            this.LblHint.Size = new System.Drawing.Size(620, 40);
             this.LblHint.TabIndex = 5;
-            this.LblHint.Text = "Right-click a column header for the filter row, grouping and column chooser. Report Design creates or edits the layout used here and by the bulk email.";
+            this.LblHint.Text = "Filter Options narrows what is READ; Advanced Filter narrows what you already see, on any column.\r\nPreview and Report Design work on the rows on screen — filter first, then print.";
             //
             // GridListing
             //
             this.GridListing.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.GridListing.Location = new System.Drawing.Point(0, 186);
+            this.GridListing.Location = new System.Drawing.Point(0, 218);
             this.GridListing.MainView = this.GridViewListing;
             this.GridListing.Name = "GridListing";
             this.GridListing.Size = new System.Drawing.Size(1280, 542);
@@ -290,9 +334,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridListing)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbYear.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbMonth.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtContract.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDebtorTo.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.TxtDebtorFrom.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContractView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluContract.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorToView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorTo.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorFromView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluDebtorFrom.Properties)).EndInit();
             this.GrpFilter.ResumeLayout(false);
             this.GrpFilter.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GrpFilter)).EndInit();
@@ -308,16 +355,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.PanelControl PanelFilter;
         private DevExpress.XtraEditors.GroupControl GrpFilter;
         private DevExpress.XtraEditors.LabelControl LblDebtorFrom;
-        private DevExpress.XtraEditors.TextEdit TxtDebtorFrom;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluDebtorFrom;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluDebtorFromView;
         private DevExpress.XtraEditors.LabelControl LblDebtorTo;
-        private DevExpress.XtraEditors.TextEdit TxtDebtorTo;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluDebtorTo;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluDebtorToView;
         private DevExpress.XtraEditors.LabelControl LblContract;
-        private DevExpress.XtraEditors.TextEdit TxtContract;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluContract;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluContractView;
         private DevExpress.XtraEditors.LabelControl LblMonth;
         private DevExpress.XtraEditors.ComboBoxEdit CmbMonth;
         private DevExpress.XtraEditors.LabelControl LblYear;
         private DevExpress.XtraEditors.ComboBoxEdit CmbYear;
         private DevExpress.XtraEditors.SimpleButton BtnInquiry;
+        private DevExpress.XtraEditors.SimpleButton BtnAdvFilter;
         private DevExpress.XtraEditors.SimpleButton BtnReset;
         private DevExpress.XtraEditors.SimpleButton BtnPreview;
         private DevExpress.XtraEditors.SimpleButton BtnDesign;

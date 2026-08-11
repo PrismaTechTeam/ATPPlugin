@@ -208,6 +208,12 @@
     <Compile Include="Classes\CommonForms\MultiPricePicker_Form.Designer.cs">
       <DependentUpon>MultiPricePicker_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Classes\CommonForms\ReportDesignList_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\ReportDesignList_Form.Designer.cs">
+      <DependentUpon>ReportDesignList_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Data\StockRequestRepository.cs" />
     <Compile Include="Data\PumsTaskLock.cs" />
     <Compile Include="Data\PumsConfig.cs" />
@@ -1009,6 +1015,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Classes\CommonForms\MultiPricePicker_Form.resx">
       <DependentUpon>MultiPricePicker_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\ReportDesignList_Form.resx">
+      <DependentUpon>ReportDesignList_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceContractType_Form.resx">
       <DependentUpon>ServiceContractType_Form.cs</DependentUpon>
