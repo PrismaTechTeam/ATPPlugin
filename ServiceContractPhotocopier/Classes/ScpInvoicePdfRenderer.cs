@@ -100,7 +100,7 @@ namespace ServiceContractPhotocopier.Classes
                         }
                         catch { xr = null; }
                         if (xr == null) MissingTemplates.Add(name);
-                        else ApplyOption(xr);
+                        else { ApplyOption(xr); ScpReportScripts.FixReferences(xr); }
                     }
                     if (xr == null && name.Length > 0)
                     {
@@ -158,6 +158,7 @@ namespace ServiceContractPhotocopier.Classes
                 XtraReport xr = t != null ? t.Report as XtraReport : null;
                 if (xr == null) return null;
                 ApplyOption(xr);
+                ScpReportScripts.FixReferences(xr);
                 _defaultName = name;
                 return xr;
             }

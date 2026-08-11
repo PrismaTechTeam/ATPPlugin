@@ -155,6 +155,7 @@
     <Compile Include="Classes\ScpMeterListing.cs" />
     <Compile Include="Classes\ScpEmailJob.cs" />
     <Compile Include="Classes\ScpInvoicePdfRenderer.cs" />
+    <Compile Include="Classes\ScpReportScripts.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />

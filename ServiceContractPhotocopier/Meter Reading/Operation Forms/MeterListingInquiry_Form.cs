@@ -440,9 +440,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private AutoCount.Report.ReportTemplate LoadTemplate(string name, DataTable ds)
         {
-            if (string.IsNullOrEmpty(name))
-                return AutoCount.Report.AutoCountReport.GetInstance().NewReport(ScpMeterListing.REPORT_TYPE, ds, _userSession);
-            return AutoCount.Report.AutoCountReport.GetInstance().GetReport(name, ds, _userSession, true);
+            AutoCount.Report.ReportTemplate tpl = string.IsNullOrEmpty(name)
+                ? AutoCount.Report.AutoCountReport.GetInstance().NewReport(ScpMeterListing.REPORT_TYPE, ds, _userSession)
+                : AutoCount.Report.AutoCountReport.GetInstance().GetReport(name, ds, _userSession, true);
+            // Every AutoCount report carries a script, and its references are built from the host
+            // EXE's folder — repoint them at the assemblies actually loaded or the preview renders
+            // nothing but "There are errors in scripts".
+            if (tpl != null) ScpReportScripts.FixReferences(tpl.Report as DevExpress.XtraReports.UI.XtraReport);
+            return tpl;
         }
 
         private void BtnExport_Click(object sender, EventArgs e)
