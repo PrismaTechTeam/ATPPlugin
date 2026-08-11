@@ -45,6 +45,9 @@ namespace ServiceContractPhotocopier.Classes
             new Dictionary<string, List<Want>>(StringComparer.OrdinalIgnoreCase);
         private string _soaDefault = "";
         private string _listingDefault = "";
+        /// <summary>Debtors flagged IsGroupCompany — the statement query treats them as a different
+        /// population, so asking the wrong way returns an empty statement rather than an error.</summary>
+        private readonly List<string> _groupCompany = new List<string>();
 
         /// <summary>Problems worth showing BEFORE the send starts, not one failed email at a time.</summary>
         public readonly List<string> Warnings = new List<string>();
@@ -124,13 +127,17 @@ namespace ServiceContractPhotocopier.Classes
             // to fail that customer mid-send.
             try
             {
-                DataTable mute = _db.GetDataTable(
-                    "SELECT AccNo FROM dbo.Debtor WHERE ISNULL(StatementType,'') = 'N'", false);
-                foreach (DataRow m in mute.Rows)
+                _groupCompany.Clear();
+                DataTable deb = _db.GetDataTable(
+                    "SELECT AccNo, ISNULL(StatementType,'') AS StatementType, " +
+                    "  ISNULL(IsGroupCompany,'F') AS IsGroupCompany FROM dbo.Debtor", false);
+                foreach (DataRow m in deb.Rows)
                 {
                     string acc = Str(m["AccNo"]);
                     List<Want> l;
                     if (!_byDebtor.TryGetValue(acc, out l)) continue;
+                    if (Str(m["IsGroupCompany"]) == "T") _groupCompany.Add(acc);
+                    if (Str(m["StatementType"]) != "N") continue;
                     foreach (Want w in l)
                         if (w.Soa)
                         {
@@ -237,7 +244,10 @@ namespace ServiceContractPhotocopier.Classes
             DateTime from = new DateTime(to.Year, to.Month, 1);
 
             object ds = StatementData(accNo, to);
-            if (ds == null) return null;
+            if (ds == null)
+                throw new Exception("AutoCount produced no statement for " + accNo + " for " +
+                    to.ToString("MMMM yyyy") + " — the account has no statement rows for that period. " +
+                    "Check it under A/R > Debtor Statement for the same dates.");
 
             string layout = ResolveLayout(
                 AutoCount.ARAP.DebtorStatement.DebtorStatementReport.ReportType, w.SoaLayout, _soaDefault);
@@ -291,6 +301,21 @@ namespace ServiceContractPhotocopier.Classes
             return xr;
         }
 
+        /// <summary>
+        /// How many debtor rows the statement dataset actually carries. AutoCount returns a fully
+        /// formed DataSet with a populated "Report Option" table even when the debtor query matched
+        /// nothing — which is why an empty statement still prints a title and a statement date, and
+        /// why "it rendered" is not evidence that it contains anything.
+        /// </summary>
+        private static int MasterRowCount(object ds)
+        {
+            DataSet set = ds as DataSet;
+            if (set == null) return 0;
+            if (set.Tables.Contains("Master")) return set.Tables["Master"].Rows.Count;
+            if (set.Tables.Contains("DebtorMain")) return set.Tables["DebtorMain"].Rows.Count;
+            return 0;
+        }
+
         private static byte[] ToPdf(XtraReport xr)
         {
             if (xr == null) return null;
@@ -321,11 +346,12 @@ namespace ServiceContractPhotocopier.Classes
                 if (layout.Length > 0)
                 {
                     object ds = StatementData(debtorCode, to);
-                    if (ds != null)
-                    {
-                        XtraReport xr = BuildDocument(layout, ds);
-                        if (xr != null) docs.Add(xr);
-                    }
+                    if (ds == null)
+                        throw new Exception("AutoCount produced no statement for " + debtorCode +
+                            " for " + to.ToString("MMMM yyyy") + " — the account has no statement rows " +
+                            "for that period. Check it under A/R > Debtor Statement for the same dates.");
+                    XtraReport xr = BuildDocument(layout, ds);
+                    if (xr != null) docs.Add(xr);
                 }
             }
 
@@ -353,12 +379,19 @@ namespace ServiceContractPhotocopier.Classes
             c.DebtorFilter.ByOne(accNo);
             c.FromDate = new DateTime(to.Year, to.Month, 1);
             c.ToDate = to;
-            // With this left false AutoCount adds "AND IsGroupCompany = 'F'" and a group-company
-            // debtor comes back with no statement at all. We asked for ONE named debtor — give us
-            // that debtor whichever kind they are.
-            c.ShowGroupCompany = true;
+            // Match the debtor we are actually asking for. Both flags false is AutoCount's own
+            // default and means "sub-companies only" — it appends AND IsGroupCompany = 'F', which
+            // returns nothing for a group company. Turning it on unconditionally is no better: it
+            // switches the query to the group side and returns nothing for an ordinary debtor, which
+            // is exactly how a statement came out with no account number, no name and no lines.
+            c.ShowGroupCompany = _groupCompany.Contains((accNo ?? "").Trim());
             st.Inquire(c);
-            return st.GetReportDataSource();
+
+            object ds = st.GetReportDataSource();
+            // A statement with no debtor row renders as an empty form — headings, a date, and
+            // nothing else. Refuse to hand that to a customer.
+            if (MasterRowCount(ds) == 0) return null;
+            return ds;
         }
 
         /// <summary>The contract's own layout when it exists, else the book default. Returns "" when
