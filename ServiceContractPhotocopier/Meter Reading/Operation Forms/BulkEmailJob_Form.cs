@@ -196,15 +196,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 for (int i = 1; i < docs.Count; i++) merged.Pages.AddRange(docs[i].Pages);
                 merged.PrintingSystem.ContinuousPageNumbering = true;
 
-                DevExpress.XtraPrinting.PrintingSystem ps =
-                    merged.PrintingSystem as DevExpress.XtraPrinting.PrintingSystem;
-                if (ps == null)
-                {
-                    XtraMessageBox.Show("The documents were produced but the preview window could not "
-                        + "be opened.", "Preview Attachment", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-                ps.PreviewFormEx.ShowDialog(this);
+                // AutoCount's own way of previewing a report it holds in hand (see
+                // FormResetADMINPassword). ReportPrintTool lives in DevExpress.XtraPrinting, not
+                // XtraReports — looking in the obvious assembly is what led to the earlier
+                // PrintingSystem cast that quietly returned null and previewed nothing.
+                DevExpress.XtraReports.UI.ReportPrintTool tool =
+                    new DevExpress.XtraReports.UI.ReportPrintTool(merged);
+                tool.PreviewRibbonForm.WindowState = FormWindowState.Maximized;
+                tool.ShowRibbonPreviewDialog(this, this.LookAndFeel);
             }
             catch (Exception ex)
             {

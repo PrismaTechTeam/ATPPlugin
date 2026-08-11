@@ -388,13 +388,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 AutoCount.Report.ReportTemplate tpl = LoadTemplate(name, VisibleRows());
                 if (tpl == null) return;
-                // The DX build shipped with AutoCount 2.2 has neither XtraReport.ShowPreviewDialog()
-                // nor ReportPrintTool (both live in assemblies AutoCount does not ship). Build the
-                // document and show the printing system's own preview — the same window AutoCount's
-                // report screens use.
+                // ReportPrintTool DOES ship with AutoCount 2.2 — in DevExpress.XtraPrinting, not in
+                // XtraReports where you would look for it. The previous note here claimed otherwise
+                // and used a PrintingSystem cast that returns null, so this button silently did
+                // nothing at all. Same call AutoCount makes in FormResetADMINPassword.
                 tpl.Report.CreateDocument();
-                DevExpress.XtraPrinting.PrintingSystem ps = tpl.Report.PrintingSystem as DevExpress.XtraPrinting.PrintingSystem;
-                if (ps != null) ps.PreviewFormEx.ShowDialog(this);
+                DevExpress.XtraReports.UI.ReportPrintTool tool =
+                    new DevExpress.XtraReports.UI.ReportPrintTool(tpl.Report);
+                tool.PreviewRibbonForm.WindowState = FormWindowState.Maximized;
+                tool.ShowRibbonPreviewDialog(this, this.LookAndFeel);
             }
             catch (Exception ex)
             {
