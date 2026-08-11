@@ -17,6 +17,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private GroupControl GrpGeneral, GrpDefaults, GrpApi, GrpItemNo;
         private CheckEdit ChkItemRefFromContract, ChkItemNoFromContract, ChkItemNoRenumber;
         private LabelControl LblItemNoHint, LblRenumberWarn;
+        private GroupControl GrpWhitelist;
+        private CheckEdit ChkWhitelistOn;
+        private MemoEdit MemoWhitelist;
+        private LabelControl LblWhitelistHint;
         private CheckEdit ChkShowStockPicture, ChkUseAlternativeItem, ChkNegativeStockChecking;
         private CheckEdit ChkAutoGenSalesInvoice, ChkAutoCloseNote, ChkAllowEditClosed;
         private LabelControl LblDefaultStatus, LblDefaultPriority, LblMeterInvFormat, LblCnFormat;
@@ -53,6 +57,10 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.ChkItemNoRenumber = new CheckEdit();
             this.LblItemNoHint = new LabelControl();
             this.LblRenumberWarn = new LabelControl();
+            this.GrpWhitelist = new GroupControl();
+            this.ChkWhitelistOn = new CheckEdit();
+            this.MemoWhitelist = new MemoEdit();
+            this.LblWhitelistHint = new LabelControl();
             this.LblApiProfile = new LabelControl(); this.CmbApiProfile = new ComboBoxEdit();
             this.LblApiUrl = new LabelControl(); this.TxtApiBaseUrl = new TextEdit();
             this.LblApiToken = new LabelControl(); this.TxtApiToken = new TextEdit();
@@ -81,7 +89,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             this.SuspendLayout();
             this.Text = "Plugin Option";
-            this.ClientSize = new Size(720, 540);
+            this.ClientSize = new Size(720, 624);
             this.StartPosition = FormStartPosition.CenterParent;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false; this.MinimizeBox = false;
@@ -109,7 +117,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.PanelToolbar.Controls.Add(this.BtnCancel);
 
             this.TabMain.Location = new Point(12, 130);
-            this.TabMain.Size = new Size(696, 396);
+            this.TabMain.Size = new Size(696, 480);
             this.PageServiceOption.Text = "1. Service Option";
             this.PageNoteControl.Text = "2. Service Note Control";
             this.PageApi.Text = "3. API";
@@ -168,7 +176,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             // contract it sits under (customer feedback 07/08, items "A" and "B").
             this.GrpItemNo.Text = "Service Item No. && Reference No.";
             this.GrpItemNo.Location = new Point(14, 12);
-            this.GrpItemNo.Size = new Size(660, 300);
+            this.GrpItemNo.Size = new Size(660, 296);
             this.ChkItemRefFromContract.Properties.Caption =
                 "A new service item takes the contract's Reference No.";
             this.ChkItemRefFromContract.Location = new Point(16, 32); this.ChkItemRefFromContract.Width = 620;
@@ -211,6 +219,32 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GrpItemNo.Controls.Add(this.ChkItemNoRenumber);
             this.GrpItemNo.Controls.Add(this.LblRenumberWarn);
             this.PageNumbering.Controls.Add(this.GrpItemNo);
+
+            // Email whitelist — a development safety net, on the same tab because it is the same
+            // kind of "how this book behaves" switch.
+            this.GrpWhitelist.Text = "Email Whitelist (development safety)";
+            this.GrpWhitelist.Location = new Point(14, 318);
+            this.GrpWhitelist.Size = new Size(660, 44);
+            this.ChkWhitelistOn.Properties.Caption = "Only send invoice emails to the addresses listed below";
+            this.ChkWhitelistOn.Location = new Point(16, 20); this.ChkWhitelistOn.Width = 620;
+            this.GrpWhitelist.Controls.Add(this.ChkWhitelistOn);
+            this.PageNumbering.Controls.Add(this.GrpWhitelist);
+
+            this.MemoWhitelist.Location = new Point(30, 366);
+            this.MemoWhitelist.Size = new Size(644, 60);
+            this.PageNumbering.Controls.Add(this.MemoWhitelist);
+            Lbl(this.LblWhitelistHint,
+                "One address per line. While this is ON, everyone else is SKIPPED and told so on the " +
+                "send log - so a test run against real customer data cannot reach them. An empty list " +
+                "blocks everything, on purpose.", 30, 430);
+            this.LblWhitelistHint.Width = 640;
+            this.LblWhitelistHint.AutoSizeMode = LabelAutoSizeMode.None;
+            this.LblWhitelistHint.Height = 32;
+            this.LblWhitelistHint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            this.LblWhitelistHint.Appearance.Options.UseTextOptions = true;
+            this.LblWhitelistHint.Appearance.ForeColor = Color.FromArgb(110, 110, 110);
+            this.LblWhitelistHint.Appearance.Options.UseForeColor = true;
+            this.PageNumbering.Controls.Add(this.LblWhitelistHint);
 
             // API tab — Meter API connection profiles (maintained in dbo.zSCP2_ApiProfile).
             this.GrpApi.Text = "Meter Reading API";

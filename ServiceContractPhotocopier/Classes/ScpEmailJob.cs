@@ -30,6 +30,62 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>A lock older than this is presumed abandoned and may be taken over.</summary>
         private const int LOCK_STALE_MINUTES = 15;
 
+        /// <summary>
+        /// Development safety net: while the whitelist is on, only these addresses may actually
+        /// receive mail. Everything else is skipped and says why. The point is that running a test
+        /// against a live book cannot reach real customers — so this is checked in the JOB, the last
+        /// place before the send, not merely in the UI where it could be bypassed.
+        /// </summary>
+        public static bool IsBlockedByWhitelist(DBSetting db, string email, out string allowedList)
+        {
+            allowedList = "";
+            bool on;
+            try
+            {
+                on = ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST_ON,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST_ON);
+            }
+            catch { on = ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST_ON; }
+            if (!on) return false;
+
+            string raw;
+            try
+            {
+                raw = ServiceContractPhotocopier.Data.PumsConfig.Get(db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST);
+            }
+            catch { raw = ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST; }
+
+            List<string> allowed = new List<string>();
+            foreach (string part in (raw ?? "").Split(new char[] { '\r', '\n', ',', ';' }))
+            {
+                string a = part.Trim();
+                if (a.Length > 0) allowed.Add(a);
+            }
+            allowedList = string.Join(", ", allowed.ToArray());
+
+            // An EMPTY list while the switch is on blocks everything on purpose: "protection turned
+            // on but nothing listed" must fail closed, never silently mail the whole customer base.
+            string test = (email ?? "").Trim();
+            foreach (string a in allowed)
+                if (string.Equals(a, test, StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
+        }
+
+        /// <summary>True when the safety net is active — the screens shout about it.</summary>
+        public static bool WhitelistOn(DBSetting db)
+        {
+            try
+            {
+                return ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST_ON,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST_ON);
+            }
+            catch { return ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST_ON; }
+        }
+
         public class Recipient
         {
             public string DebtorCode = "";
@@ -154,6 +210,17 @@ namespace ServiceContractPhotocopier.Classes
                     if (string.IsNullOrEmpty((r.Email ?? "").Trim()))
                     {
                         SetItem(cn, itemKey, "SKIPPED", "No email address on the customer.");
+                        skipped++; Counts(cn, jobKey, ok, failed, skipped); continue;
+                    }
+
+                    // Checked HERE, immediately before the send, rather than only in the UI — the
+                    // whole value of the safety net is that no code path can get around it.
+                    string allowed;
+                    if (IsBlockedByWhitelist(db, r.Email, out allowed))
+                    {
+                        SetItem(cn, itemKey, "SKIPPED",
+                            "BLOCKED by the email whitelist (development safety). Allowed: " +
+                            (allowed.Length == 0 ? "(nothing listed)" : allowed));
                         skipped++; Counts(cn, jobKey, ok, failed, skipped); continue;
                     }
 

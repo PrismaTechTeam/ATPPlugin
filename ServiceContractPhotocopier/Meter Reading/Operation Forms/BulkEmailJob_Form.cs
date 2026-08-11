@@ -69,8 +69,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["DocNo"] = r.DocNos[i];
                     g["Email"] = r.Email;
                     g["Template"] = r.Template != null ? r.Template.Name : "(default)";
-                    g["Status"] = string.IsNullOrEmpty((r.Email ?? "").Trim()) ? "NO EMAIL" : "";
-                    g["Note"] = "";
+                    string dummy;
+                    bool blocked = ScpEmailJob.IsBlockedByWhitelist(_db, r.Email, out dummy);
+                    g["Status"] = string.IsNullOrEmpty((r.Email ?? "").Trim()) ? "NO EMAIL"
+                        : (blocked ? "BLOCKED" : "");
+                    g["Note"] = blocked ? "Not on the email whitelist — will NOT be sent" : "";
                     _grid.Rows.Add(g);
                 }
             }
@@ -80,10 +83,28 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             foreach (ScpEmailJob.Recipient r in _pending)
                 if (string.IsNullOrEmpty((r.Email ?? "").Trim())) noEmail++;
 
+            int blockedCount = 0;
+            foreach (ScpEmailJob.Recipient r in _pending)
+            {
+                string d2;
+                if (ScpEmailJob.IsBlockedByWhitelist(_db, r.Email, out d2)) blockedCount++;
+            }
+
             LblHeadline.Text = "Confirm: " + _pending.Count + " email(s), " + docs + " invoice(s)";
             LblSub.Text = "One email per customer with that customer's invoices attached. The subject " +
                 "and message come from each contract's own email template." +
                 (noEmail > 0 ? "   ⚠ " + noEmail + " customer(s) have no email address and will be skipped." : "");
+
+            // The safety net has to be loud. Somebody eventually runs a real month-end with it still
+            // on, and "why did nobody get their invoice" must be answerable from this screen.
+            if (ScpEmailJob.WhitelistOn(_db))
+            {
+                PanelTop.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 205, 210);
+                LblHeadline.Text = "⚠ EMAIL WHITELIST IS ON — " + LblHeadline.Text;
+                LblSub.Text = "Only whitelisted addresses will actually receive mail" +
+                    (blockedCount > 0 ? "; " + blockedCount + " of these will be BLOCKED" : "") +
+                    ".   Turn it off in Plugin Option when you are ready to email real customers.";
+            }
             BtnConfirm.Visible = true;
         }
 

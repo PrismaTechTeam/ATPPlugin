@@ -105,6 +105,13 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FOLLOW_CONTRACT_RENAME);
                 OnItemNoFromContractChanged(null, EventArgs.Empty);
 
+                ChkWhitelistOn.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST_ON,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST_ON);
+                MemoWhitelist.Text = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_EMAIL_WHITELIST);
+
                 // Advanced No. Format by machine status: same IV format list as the default combo.
                 try
                 {
@@ -359,6 +366,12 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INVOICE_LEGACY_DATA_BLOCK,
                     ChkLegacyDataBlock.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST_ON,
+                    ChkWhitelistOn.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST,
+                    MemoWhitelist.Text ?? "");
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_INV_FORMAT_ADVANCED,
                     ChkInvFmtAdvanced.Checked);

@@ -56,6 +56,19 @@ namespace ServiceContractPhotocopier.Data
         public const string KEY_DEFAULT_BILLING_MODE = "DEFAULT_BILLING_MODE";
         public const string DEFAULT_BILLING_MODE_VALUE = "G";
 
+        /// <summary>DEVELOPMENT SAFETY NET. While on, an invoice email is only sent when the
+        /// recipient address is in <see cref="KEY_EMAIL_WHITELIST"/>; everyone else is skipped and
+        /// says so on the send log. Exists so a test run against a live book full of real customer
+        /// addresses cannot reach those customers.</summary>
+        public const string KEY_EMAIL_WHITELIST_ON = "EMAIL_WHITELIST_ON";
+        public const bool DEFAULT_EMAIL_WHITELIST_ON = true;
+
+        /// <summary>Addresses allowed to receive mail while the whitelist is on — one per line or
+        /// comma separated, matched case-insensitively on the whole address.</summary>
+        public const string KEY_EMAIL_WHITELIST = "EMAIL_WHITELIST";
+        public const string DEFAULT_EMAIL_WHITELIST =
+            "admin@prismatechnology.com.my\r\ndhai@prismatechnology.com.my\r\naskjtmk@gmail.com";
+
         /// <summary>Write the legacy 17-field meter block into each invoice line's Further
         /// Description. It is machine-readable — the old V8 report design parses those lines BY
         /// POSITION — so on any other layout it prints as a wall of raw numbers. OFF by default:
