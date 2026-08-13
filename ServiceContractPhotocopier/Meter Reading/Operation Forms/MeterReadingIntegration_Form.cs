@@ -1208,12 +1208,42 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (c != null) cols.Add(c);
             }
             if (cols.Count == 0) return;
+
+            GridView view = ActiveView;
+            System.Collections.Generic.List<GridColumn> wasVisible = new System.Collections.Generic.List<GridColumn>();
+            foreach (GridColumn c in view.Columns) if (c.Visible) wasVisible.Add(c);
+
             using (MeterViewSetting_Form f = new MeterViewSetting_Form(cols))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
                 f.ApplySelection();
             }
+
+            // Scroll to the first newly-shown column. A column can come back anywhere along twenty-odd
+            // columns of horizontal scroll, and one that is on screen but out of sight is
+            // indistinguishable from one that never appeared.
+            GridColumn firstShown = null;
+            foreach (GridColumn c in view.Columns)
+                if (c.Visible && !wasVisible.Contains(c)) { firstShown = c; break; }
+            if (firstShown != null)
+            {
+                try { view.FocusedColumn = firstShown; } catch { }
+            }
+
+            // And say so if a column did NOT take. Twice now this has been reported as "not working"
+            // with nothing on screen to say why; a change that silently fails to apply must name
+            // itself rather than leave the operator to wonder whether they mis-clicked.
+            System.Text.StringBuilder stuck = new System.Text.StringBuilder();
+            foreach (GridColumn c in cols)
+                if (c.Visible && c.VisibleIndex < 0)
+                    stuck.Append(stuck.Length > 0 ? ", " : "").Append(c.Caption);
+            if (stuck.Length > 0)
+                XtraMessageBox.Show(
+                    "These columns were switched on but the grid did not place them: " + stuck +
+                    ".\r\n\r\nRight-click a column header > Column Chooser and drag them in from there.",
+                    "View Setting", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+
 
         // Snapshot the "Need Manual Key-In" membership per MACHINE: a machine needs key-in when NONE
         // of its meters has a reading from anywhere (no key-in, no API value). Called only at load
@@ -2238,6 +2268,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 cCurHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(255, 249, 196);
                 cCurHl.AppearanceCell.Options.UseBackColor = true;
+                // The HEADER is tinted too, a shade stronger than the cells. A coloured column whose
+                // header is grey like every other reads as an accident; carrying the colour up to the
+                // title says "this column is the one you type in" from across the room.
+                cCurHl.AppearanceHeader.BackColor = System.Drawing.Color.FromArgb(255, 236, 150);
+                cCurHl.AppearanceHeader.ForeColor = System.Drawing.Color.FromArgb(102, 60, 0);
+                cCurHl.AppearanceHeader.Options.UseBackColor = true;
+                cCurHl.AppearanceHeader.Options.UseForeColor = true;
                 cCurHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
                 cCurHl.AppearanceHeader.Options.UseFont = true;
             }
@@ -2246,6 +2283,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 cChgHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(223, 240, 216);
                 cChgHl.AppearanceCell.Options.UseBackColor = true;
+                cChgHl.AppearanceHeader.BackColor = System.Drawing.Color.FromArgb(198, 230, 190);
+                cChgHl.AppearanceHeader.ForeColor = System.Drawing.Color.FromArgb(27, 94, 32);
+                cChgHl.AppearanceHeader.Options.UseBackColor = true;
+                cChgHl.AppearanceHeader.Options.UseForeColor = true;
                 cChgHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
                 cChgHl.AppearanceHeader.Options.UseFont = true;
             }

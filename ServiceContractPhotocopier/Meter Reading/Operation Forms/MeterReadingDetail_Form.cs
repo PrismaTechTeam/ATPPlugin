@@ -226,6 +226,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 chg.AppearanceCell.BackColor = Color.FromArgb(223, 240, 216);
                 chg.AppearanceCell.Options.UseBackColor = true;
+                chg.AppearanceHeader.BackColor = Color.FromArgb(198, 230, 190);
+                chg.AppearanceHeader.ForeColor = Color.FromArgb(27, 94, 32);
+                chg.AppearanceHeader.Options.UseBackColor = true;
+                chg.AppearanceHeader.Options.UseForeColor = true;
+                chg.AppearanceHeader.FontStyleDelta = FontStyle.Bold;
+                chg.AppearanceHeader.Options.UseFont = true;
             }
             // Computation-only column stays hidden.
             if (this.GridViewDetail.Columns["UseMin"] != null) this.GridViewDetail.Columns["UseMin"].Visible = false;
@@ -245,9 +251,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (cur != null)
             {
                 cur.OptionsColumn.AllowEdit = true; cur.OptionsColumn.ReadOnly = false;
-                // Paint the editable column yellow so users see at a glance which one they key into.
+                // Paint the editable column yellow so users see at a glance which one they key into —
+                // header included, a shade stronger. The hint below says "the yellow column", and
+                // that instruction only works if the column is yellow all the way up to its title.
                 cur.AppearanceCell.BackColor = Color.FromArgb(255, 249, 196);
                 cur.AppearanceCell.Options.UseBackColor = true;
+                cur.AppearanceHeader.BackColor = Color.FromArgb(255, 236, 150);
+                cur.AppearanceHeader.ForeColor = Color.FromArgb(102, 60, 0);
+                cur.AppearanceHeader.Options.UseBackColor = true;
+                cur.AppearanceHeader.Options.UseForeColor = true;
+                cur.AppearanceHeader.FontStyleDelta = FontStyle.Bold;
+                cur.AppearanceHeader.Options.UseFont = true;
             }
             this.LblHint.Text = "Type the Manual Reading (yellow column) for this machine, or tick \'Use API Reading\' to use the API value instead.";
 
