@@ -7,8 +7,11 @@ using ServiceContractPhotocopier.Data;
 namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     /// <summary>
-    /// Meter Reading settings dialog. Currently one option: whether the meter list includes expired
-    /// service items. Persists to Z_PumsConfig (INCLUDE_EXPIRED_ITEMS) via PumsConfig.
+    /// Meter Reading settings, in four groups: what the list SHOWS (expired / inactive / late
+    /// readings), AUTO-FETCH and its cutoff, the INVOICING rules (grouping, the completeness guard,
+    /// rental grouping), and MAINTENANCE — clearing this period's staged readings.
+    ///
+    /// Everything persists to Z_PumsConfig via PumsConfig; nothing is written until OK.
     /// </summary>
     public partial class MeterReadingSetting_Form : XtraForm
     {
