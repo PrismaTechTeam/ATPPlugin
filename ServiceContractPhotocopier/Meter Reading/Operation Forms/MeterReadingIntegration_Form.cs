@@ -822,6 +822,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             _btnViewSetting = new SimpleButton();
             _btnViewSetting.Text = "View Setting";
+            // What every colour on the grid means, one click away and costing one button of space.
+            // Eight colours carry meaning here and the strip beside it can only explain two; the rest
+            // were knowledge you had to be told once and then remember.
+            _btnColourKey = new SimpleButton();
+            _btnColourKey.Text = "?";
+            _btnColourKey.Location = new Point(925, 94);
+            _btnColourKey.Size = new Size(28, 28);
+            _btnColourKey.ToolTip = "What the colours on this grid mean";
+            _btnColourKey.Click += new EventHandler(BtnColourKey_Click);
+            this.PanelFilter.Controls.Add(_btnColourKey);
+            _btnColourKey.BringToFront();
+
             _btnViewSetting.Location = new Point(958, 94);
             _btnViewSetting.Size = new Size(120, 28);
             _btnViewSetting.ToolTip = "Choose which columns this grid shows.";
@@ -906,6 +918,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 string docNo = S(r["LastInvNo"]).Trim();
                 if (docNo.Length > 0) { OpenInvoiceByDocNo(docNo); return; }
+            }
+            // Double-click the CONTRACT cell and you get the contract. The invoice columns already
+            // work this way, so the column you clicked deciding where you land is the rule here, not
+            // an exception. Everywhere else on the row still opens the machine's meter detail.
+            if (col != null && col.FieldName == "ContractNo")
+            {
+                OpenContractByKey(D64(r["ContractKey"]), S(r["ContractNo"]));
+                return;
             }
             if (_tabView != null && _tabView.SelectedTabPage == _pageDone)
             {
@@ -1017,6 +1037,30 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
+        /// <summary>Open the contract itself, from the meter row that bills it.</summary>
+        private void OpenContractByKey(long contractKey, string contractNo)
+        {
+            if (_dbSetting == null) return;
+            if (contractKey <= 0)
+            {
+                XtraMessageBox.Show("This row is not linked to a contract" +
+                    (contractNo.Length > 0 ? " (" + contractNo + ")" : "") + ".",
+                    "Open Contract", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            try
+            {
+                ServiceContractPhotocopier.ServiceContract.OperationForms.zSCP2_Contract_Form f =
+                    new ServiceContractPhotocopier.ServiceContract.OperationForms.zSCP2_Contract_Form(_dbSetting, contractKey);
+                f.Show();
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not open contract " + contractNo + ":\r\n" + ex.Message,
+                    "Open Contract", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private void TabView_SelectedPageChanged(object sender, TabPageChangedEventArgs e)
         {
             if (e.Page == null) return;
@@ -1120,6 +1164,100 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
+
+        private SimpleButton _btnColourKey;
+        private DevExpress.XtraEditors.PanelControl _pnlColourKey;
+
+        /// <summary>
+        /// Show / hide the colour key. Built the first time it is asked for and then reused — it is
+        /// a reference card, not something to pay for on every open.
+        /// </summary>
+        private void BtnColourKey_Click(object sender, EventArgs e)
+        {
+            if (_pnlColourKey == null) BuildColourKey();
+            _pnlColourKey.Visible = !_pnlColourKey.Visible;
+            if (_pnlColourKey.Visible) _pnlColourKey.BringToFront();
+        }
+
+        /// <summary>
+        /// The colour key: every tint the grid uses, with what it means, in the same colours the grid
+        /// actually paints — read from one place so the card cannot drift from the grid it explains.
+        /// </summary>
+        private void BuildColourKey()
+        {
+            _pnlColourKey = new DevExpress.XtraEditors.PanelControl();
+            _pnlColourKey.Size = new Size(470, 232);
+            _pnlColourKey.Appearance.BackColor = Color.White;
+            _pnlColourKey.Appearance.Options.UseBackColor = true;
+            _pnlColourKey.Visible = false;
+
+            LabelControl title = new LabelControl();
+            title.Text = "What the colours mean";
+            title.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            title.Appearance.Options.UseFont = true;
+            title.Location = new Point(10, 8);
+            title.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            title.Size = new Size(300, 16);
+            _pnlColourKey.Controls.Add(title);
+
+            LabelControl close = new LabelControl();
+            close.Text = "✕";
+            close.Appearance.ForeColor = Color.DimGray;
+            close.Appearance.Options.UseForeColor = true;
+            close.Location = new Point(446, 8);
+            close.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            close.Size = new Size(14, 16);
+            close.Cursor = Cursors.Hand;
+            close.Click += delegate { _pnlColourKey.Visible = false; };
+            _pnlColourKey.Controls.Add(close);
+
+            AddColourKeyRow(0, Color.FromArgb(255, 236, 214), Color.Black, false,
+                "Whole row — the contract EXPIRED before this billing month");
+            AddColourKeyRow(1, Color.FromArgb(255, 224, 178), Color.FromArgb(191, 87, 0), true,
+                "Machine Status — OFFLINE: the reading must be keyed in");
+            AddColourKeyRow(2, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
+                "Machine Status — ONLINE: the reading came from the API");
+            AddColourKeyRow(3, Color.FromArgb(255, 224, 224), Color.FromArgb(198, 40, 40), false,
+                "Whole row — CONFLICT: keyed reading differs from the fetched one");
+            AddColourKeyRow(4, Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
+                "Current Reading — MUST key in, still empty");
+            AddColourKeyRow(5, Color.FromArgb(255, 249, 196), Color.Black, false,
+                "Current Reading — the column you type in");
+            AddColourKeyRow(6, Color.FromArgb(223, 240, 216), Color.FromArgb(27, 94, 32), false,
+                "Total Charges — the money this row bills");
+            AddColourKeyRow(7, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
+                "Last Invoice No / Date — already invoiced this period");
+
+            this.Controls.Add(_pnlColourKey);
+            // Under the ? button, in form coordinates.
+            Point p = this.PanelFilter.PointToScreen(new Point(_btnColourKey.Left, _btnColourKey.Bottom + 2));
+            _pnlColourKey.Location = this.PointToClient(p);
+        }
+
+        private void AddColourKeyRow(int index, Color back, Color fore, bool bold, string meaning)
+        {
+            int y = 32 + index * 24;
+            LabelControl swatch = new LabelControl();
+            swatch.Text = "";
+            swatch.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            swatch.Size = new Size(30, 18);
+            swatch.Location = new Point(12, y);
+            swatch.Appearance.BackColor = back;
+            swatch.Appearance.Options.UseBackColor = true;
+            swatch.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.Simple;
+            _pnlColourKey.Controls.Add(swatch);
+
+            LabelControl text = new LabelControl();
+            text.Text = meaning;
+            text.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            text.Size = new Size(410, 18);
+            text.Location = new Point(50, y + 1);
+            text.Appearance.Font = new Font("Segoe UI", 8.25F, bold ? FontStyle.Bold : FontStyle.Regular);
+            text.Appearance.ForeColor = fore;
+            text.Appearance.Options.UseFont = true;
+            text.Appearance.Options.UseForeColor = true;
+            _pnlColourKey.Controls.Add(text);
+        }
 
         // A colour swatch label for the Current Reading legend — same colours the cell style paints.
         private LabelControl MakeLegend(string text, Color back, Color fore, bool bold, string tip)
