@@ -494,6 +494,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             _userSession = userSession;
             if (userSession != null) _dbSetting = userSession.DBSetting;
+            RestoreMeterFilter();   // needs _dbSetting, which only exists from here on
             PopulateDayCombo();
             InitApiStatus();
             LoadData();
@@ -502,6 +503,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         public MeterReadingIntegration_Form(DBSetting dbSetting) : this()
         {
             _dbSetting = dbSetting;
+            RestoreMeterFilter();   // needs _dbSetting, which only exists from here on
             PopulateDayCombo();
             InitApiStatus();
             LoadData();
@@ -800,7 +802,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _cmbMeterFilter.SelectedIndex = 0;
             _cmbMeterFilter.Location = new Point(562, 96);
             _cmbMeterFilter.Size = new Size(110, 22);
-            _cmbMeterFilter.ToolTip = "Show only black-and-white (BK) or colour (CL) meter rows.";
+            _cmbMeterFilter.ToolTip = "Show only black-and-white (BK) or colour (CL) meter rows.\r\n" +
+                "Remembered per user — set it to BK today and it is still BK tomorrow.";
             _cmbMeterFilter.SelectedIndexChanged += new EventHandler(CmbMeterFilter_SelectedIndexChanged);
             this.PanelFilter.Controls.Add(_cmbMeterFilter);
             _cmbMeterFilter.BringToFront();
@@ -1149,12 +1152,53 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             return "";
         }
 
-        private void CmbMeterFilter_SelectedIndexChanged(object sender, EventArgs e) { ApplyTabFilter(); }
+        // The Meters choice is remembered per user: a clerk who works the BK run should not have to
+        // re-pick it every morning. It stays VISIBLE in the combo, so a filter that hides rows is
+        // never a mystery — the reason is on screen.
+        private string MeterFilterKey()
+        {
+            string user = "";
+            try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
+            return "METER_ROLE_FILTER_" + user;
+        }
+
+        private void RestoreMeterFilter()
+        {
+            if (_dbSetting == null || _cmbMeterFilter == null) return;
+            try
+            {
+                int i = ServiceContractPhotocopier.Data.PumsConfig.GetInt(_dbSetting, MeterFilterKey(), 0);
+                if (i < 0 || i >= _cmbMeterFilter.Properties.Items.Count) i = 0;
+                bool prev = _suppressFilterEvent;
+                _suppressFilterEvent = true;      // restoring is not the operator changing it
+                _cmbMeterFilter.SelectedIndex = i;
+                _suppressFilterEvent = prev;
+            }
+            catch { }
+        }
+
+        private void SaveMeterFilter()
+        {
+            if (_dbSetting == null || _cmbMeterFilter == null) return;
+            try
+            {
+                ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting, MeterFilterKey(),
+                    _cmbMeterFilter.SelectedIndex.ToString());
+            }
+            catch { }
+        }
+
+        private void CmbMeterFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_suppressFilterEvent) return;
+            SaveMeterFilter();
+            ApplyTabFilter();
+        }
 
         // #2(b): let the user choose which columns the grid shows. The column chooser can do this
-        // too, but only if you know to right-click the header — this is the discoverable door, and
-        // it only lists the columns that are actually the user's to decide (the tab-owned key-in
-        // columns and the system drivers stay out of reach).
+        // too, but only if you know to right-click the header — this is the discoverable door.
+        // It applies to the tab in front, which is the tab whose columns you are looking at; every
+        // tab now has its own grid, so each keeps its own choice.
         private void BtnViewSetting_Click(object sender, EventArgs e)
         {
             System.Collections.Generic.List<GridColumn> cols = new System.Collections.Generic.List<GridColumn>();
@@ -1760,8 +1804,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     ForView(v, delegate
                     {
                         ActiveGrid.DataSource = _dtGrid;   // columns come from the table
-                        ConfigureGrid();
-                        ApplyTabColumnLayout();            // this tab's factory columns
+                        ConfigureGrid();                   // shapes once, incl. this tab's factory columns
                     });
                 }
                 WireNativeGridLayout();   // #1a: AutoCount-native layout restore + header menu, per tab
@@ -2033,10 +2076,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Hidden by DEFAULT but user-selectable (column chooser / View Setting).
         private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role" };
 
-        // Everything View Setting lets the user toggle. Excludes the columns ApplyTabColumnLayout
-        // owns (it re-forces their Visible on every tab switch, so a user choice there would not
-        // stick), the Customer group column and the system drivers above.
-        private static readonly string[] _viewSettingCols = new string[] { "ContractNo", "ServiceItemNo", "SerialNo", "Mode", "BillingDay", "MeterType", "MeterTypeName", "LastReadDate", "LastFetchDate", "LastReading", "LastInvNo", "LastInvDate", "UseMin", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Role" };
+        // Everything View Setting lets the operator toggle — now including the reading and pricing
+        // columns. They used to be excluded because ApplyTabColumnLayout re-forced them on every tab
+        // switch, so choosing them did nothing; it now runs once, when a tab's grid is first built,
+        // and the arrangement is the operator's from then on.
+        //
+        // Two are deliberately NOT here: Select (hiding it would leave no way to pick a row for
+        // Generate) and Customer (the group header the rows hang from).
+        private static readonly string[] _viewSettingCols = new string[] {
+            "ContractNo", "ServiceItemNo", "SerialNo", "Mode", "BillingDay", "MeterType", "MeterTypeName",
+            "MachineStatus", "MinCharges", "UnitPrice", "FOCQty", "RebatePct",
+            "LastReadDate", "LastAuditDate", "LastFetchDate", "LastReading",
+            "CurrentReading", "MeterUsage", "TotalCharges",
+            "LastInvNo", "LastInvDate", "InvTotal", "UseMin", "Status", "EntrySource", "FetchedReading",
+            "HasConflict", "BillGroupCode", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Role" };
 
         // ConfigureGrid is pure column/view SHAPING (captions, widths, default visibility, appearance,
         // summaries) — the DataTable schema is identical on every load, so re-running it only undoes
@@ -2050,6 +2103,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             // Once per GRID. It used to be once per form, which was the same thing when there was
             // one grid and is emphatically not now.
+            //
+            // ApplyTabColumnLayout belongs HERE, inside the once-only path. Calling it on every load
+            // put the eleven key-in columns back on every Refresh, Filter and Day click — which is
+            // exactly how View Setting looked broken: the operator hid a column, touched the filter,
+            // and it returned.
             if (_shaped.Contains(ActiveView)) return;
             _shaped.Add(ActiveView);
             ActiveView.OptionsBehavior.Editable = true;
@@ -2229,6 +2287,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 cSt.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Count;
                 cSt.SummaryItem.DisplayFormat = "{0} meters";
             }
+        
+            // Last, so it lands on top of the columns just shaped: this tab's factory
+            // visibility (the Invoiced tab reads as invoice history, the others as key-in
+            // sheets). From here the arrangement belongs to the operator.
+            ApplyTabColumnLayout();
         }
 
         private void SetCol(string field, string caption, int width, bool editable)
