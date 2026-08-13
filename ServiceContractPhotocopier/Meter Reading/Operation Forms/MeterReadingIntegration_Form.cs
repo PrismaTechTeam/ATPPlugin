@@ -742,15 +742,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // hovering shows the per-day machine counts as a tooltip; clicking still opens the
             // message box for a copyable view.
             _btnMonthOverview = new SimpleButton();
-            _btnMonthOverview.Text = "";
+            // It had no label, so "how many machines do I bill this month?" was answered by an
+            // unmarked 26px icon that you had to already know about. The gap before Filter was
+            // sitting empty; the button now says what it is and nothing else moved.
+            _btnMonthOverview.Text = "This Month";
             _btnMonthOverview.Location = new Point(242, 88);
-            _btnMonthOverview.Size = new Size(26, 26);
+            _btnMonthOverview.Size = new Size(100, 26);
             _btnMonthOverview.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             SetBtnSvgIcon(_btnMonthOverview, "svgimages/xaf/action_aboutinfo.svg");
-            _btnMonthOverview.ImageOptions.ImageToTextIndent = 0;
-            _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
-            _btnMonthOverview.ToolTipTitle = "Month Overview";
-            _btnMonthOverview.ToolTip = "hover to load...";
+            _btnMonthOverview.ImageOptions.ImageToTextIndent = 4;
+            _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            _btnMonthOverview.ToolTipTitle = "This Month — machines to bill";
+            _btnMonthOverview.ToolTip = "How many machines fall on each billing day this month, and how " +
+                "many are already invoiced. Hover for the summary, click for the full list.";
             _btnMonthOverview.MouseEnter += new EventHandler(BtnMonthOverview_MouseEnter);
             _btnMonthOverview.Click += new EventHandler(BtnMonthOverview_Click);
             this.GrpFilter.Controls.Add(_btnMonthOverview);
