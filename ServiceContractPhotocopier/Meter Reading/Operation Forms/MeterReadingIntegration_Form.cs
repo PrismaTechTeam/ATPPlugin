@@ -1172,77 +1172,70 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
 
         private SimpleButton _btnColourKey;
-        private DevExpress.XtraEditors.PanelControl _pnlColourKey;
+        private Form _colourKeyWin;
 
         /// <summary>
-        /// Show / hide the colour key. Built the first time it is asked for and then reused — it is
-        /// a reference card, not something to pay for on every open.
+        /// Show / hide the colour key.
+        ///
+        /// It lives in its OWN small window, not as a panel on this form. Added to the form it
+        /// became part of the form's scroll region, and a control positioned past the client edge
+        /// pushed the whole screen out of place — the title clipped, the tabs cut off at the left.
+        /// A reference card must not be able to move the thing it explains.
         /// </summary>
         private void BtnColourKey_Click(object sender, EventArgs e)
         {
-            if (_pnlColourKey == null) BuildColourKey();
-            _pnlColourKey.Visible = !_pnlColourKey.Visible;
-            if (_pnlColourKey.Visible) _pnlColourKey.BringToFront();
+            if (_colourKeyWin != null && !_colourKeyWin.IsDisposed)
+            {
+                _colourKeyWin.Close();
+                _colourKeyWin = null;
+                return;
+            }
+            _colourKeyWin = BuildColourKeyWindow();
+            Point p = _btnColourKey.Parent.PointToScreen(
+                new Point(_btnColourKey.Left, _btnColourKey.Bottom + 2));
+            _colourKeyWin.Location = p;
+            _colourKeyWin.Show(this);           // owned: it closes with the module
         }
 
         /// <summary>
-        /// The colour key: every tint the grid uses, with what it means, in the same colours the grid
-        /// actually paints — read from one place so the card cannot drift from the grid it explains.
+        /// The colour key: every tint the grid uses, with what it means, painted in the same colours
+        /// the grid paints — read from one place so the card cannot drift from the grid it explains.
         /// </summary>
-        private void BuildColourKey()
+        private Form BuildColourKeyWindow()
         {
-            _pnlColourKey = new DevExpress.XtraEditors.PanelControl();
-            _pnlColourKey.Size = new Size(470, 232);
-            _pnlColourKey.Appearance.BackColor = Color.White;
-            _pnlColourKey.Appearance.Options.UseBackColor = true;
-            _pnlColourKey.Visible = false;
+            Form w = new Form();
+            w.FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            w.Text = "What the colours mean";
+            w.StartPosition = FormStartPosition.Manual;
+            w.ShowInTaskbar = false;
+            w.MinimizeBox = false;
+            w.MaximizeBox = false;
+            w.ClientSize = new Size(470, 214);
+            w.BackColor = Color.White;
+            w.FormClosed += delegate { _colourKeyWin = null; };
 
-            LabelControl title = new LabelControl();
-            title.Text = "What the colours mean";
-            title.Appearance.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            title.Appearance.Options.UseFont = true;
-            title.Location = new Point(10, 8);
-            title.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            title.Size = new Size(300, 16);
-            _pnlColourKey.Controls.Add(title);
-
-            LabelControl close = new LabelControl();
-            close.Text = "✕";
-            close.Appearance.ForeColor = Color.DimGray;
-            close.Appearance.Options.UseForeColor = true;
-            close.Location = new Point(446, 8);
-            close.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            close.Size = new Size(14, 16);
-            close.Cursor = Cursors.Hand;
-            close.Click += delegate { _pnlColourKey.Visible = false; };
-            _pnlColourKey.Controls.Add(close);
-
-            AddColourKeyRow(0, Color.FromArgb(255, 236, 214), Color.Black, false,
+            AddColourKeyRow(w, 0, Color.FromArgb(255, 236, 214), Color.Black, false,
                 "Whole row — the contract EXPIRED before this billing month");
-            AddColourKeyRow(1, Color.FromArgb(255, 224, 178), Color.FromArgb(191, 87, 0), true,
+            AddColourKeyRow(w, 1, Color.FromArgb(255, 224, 178), Color.FromArgb(191, 87, 0), true,
                 "Machine Status — OFFLINE: the reading must be keyed in");
-            AddColourKeyRow(2, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
+            AddColourKeyRow(w, 2, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
                 "Machine Status — ONLINE: the reading came from the API");
-            AddColourKeyRow(3, Color.FromArgb(255, 224, 224), Color.FromArgb(198, 40, 40), false,
+            AddColourKeyRow(w, 3, Color.FromArgb(255, 224, 224), Color.FromArgb(198, 40, 40), false,
                 "Whole row — CONFLICT: keyed reading differs from the fetched one");
-            AddColourKeyRow(4, Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
+            AddColourKeyRow(w, 4, Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
                 "Current Reading — MUST key in, still empty");
-            AddColourKeyRow(5, Color.FromArgb(255, 249, 196), Color.Black, false,
+            AddColourKeyRow(w, 5, Color.FromArgb(255, 249, 196), Color.Black, false,
                 "Current Reading — the column you type in");
-            AddColourKeyRow(6, Color.FromArgb(223, 240, 216), Color.FromArgb(27, 94, 32), false,
+            AddColourKeyRow(w, 6, Color.FromArgb(223, 240, 216), Color.FromArgb(27, 94, 32), false,
                 "Total Charges — the money this row bills");
-            AddColourKeyRow(7, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
+            AddColourKeyRow(w, 7, Color.FromArgb(200, 230, 201), Color.FromArgb(27, 94, 32), true,
                 "Last Invoice No / Date — already invoiced this period");
-
-            this.Controls.Add(_pnlColourKey);
-            // Under the ? button, in form coordinates.
-            Point p = this.PanelFilter.PointToScreen(new Point(_btnColourKey.Left, _btnColourKey.Bottom + 2));
-            _pnlColourKey.Location = this.PointToClient(p);
+            return w;
         }
 
-        private void AddColourKeyRow(int index, Color back, Color fore, bool bold, string meaning)
+        private void AddColourKeyRow(Form w, int index, Color back, Color fore, bool bold, string meaning)
         {
-            int y = 32 + index * 24;
+            int y = 10 + index * 25;
             LabelControl swatch = new LabelControl();
             swatch.Text = "";
             swatch.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
@@ -1251,7 +1244,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             swatch.Appearance.BackColor = back;
             swatch.Appearance.Options.UseBackColor = true;
             swatch.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.Simple;
-            _pnlColourKey.Controls.Add(swatch);
+            w.Controls.Add(swatch);
 
             LabelControl text = new LabelControl();
             text.Text = meaning;
@@ -1262,7 +1255,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             text.Appearance.ForeColor = fore;
             text.Appearance.Options.UseFont = true;
             text.Appearance.Options.UseForeColor = true;
-            _pnlColourKey.Controls.Add(text);
+            w.Controls.Add(text);
         }
 
         // A colour swatch label for the Current Reading legend — same colours the cell style paints.
