@@ -78,6 +78,10 @@ namespace ServiceContractPhotocopier.Classes
             doc.DebtorCode = debtorCode;
             doc.DocDate = cnDate;
             doc.Description = Trunc("Meter correction - Invoice " + invoiceDocNo, 80);   // CN.Description nvarchar(80)
+            // Same distinction as the invoice: the box labelled "Ref" on the entry screen is CN.Ref,
+            // not CN.RefDocNo. Fill both, so the invoice this credit note corrects is visible where
+            // the operator looks for it.
+            doc.Ref = invoiceDocNo;
             doc.RefDocNo = invoiceDocNo;
             doc.OurInvoiceNo = Trunc(invoiceDocNo, 100);
             doc.Reason = Trunc(reason ?? "", 80);                                        // CN.Reason nvarchar(80)

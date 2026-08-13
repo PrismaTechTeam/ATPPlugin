@@ -270,6 +270,11 @@ namespace ServiceContractPhotocopier.Classes
             doc.DebtorCode = debtorCode;
             doc.DocDate = docDate;
             doc.Description = description;
+            // THREE different fields, and only one of them is the box labelled "Ref" on AutoCount's
+            // invoice screen — that one is IV.Ref. We were writing RefDocNo (IV.RefDocNo) and Remark1,
+            // both of which held the offline tracking id correctly and neither of which the operator
+            // can see there. Hence "the Ref is still empty" on an invoice whose id was stamped fine.
+            doc.Ref = refDocNo ?? "";
             doc.RefDocNo = refDocNo ?? "";
             doc.Remark1 = refDocNo ?? "";
             if (doc.DetailCount > 0) doc.ClearDetails();
