@@ -8,7 +8,9 @@ using System.Windows.Forms;
 using AutoCount.Authentication;
 using AutoCount.Data;
 using DevExpress.XtraEditors;
+using DevExpress.XtraGrid;
 using DevExpress.XtraGrid.Columns;
+using DevExpress.XtraGrid.Views.Grid;
 using DevExpress.XtraTab;
 using ServiceContractPhotocopier.Classes;
 using ServiceContractPhotocopier.MeterReading.Services;
@@ -77,7 +79,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.KeyDown += new KeyEventHandler(DevShortcut_KeyDown);
             // #2(a): a reading typed and left un-posted must save before the form dies (FormClosing
             // runs BEFORE the FormClosed layout auto-save below).
-            this.FormClosing += delegate { try { GridViewMeter.CloseEditor(); GridViewMeter.UpdateCurrentRow(); } catch { } };
+            this.FormClosing += delegate { try { ActiveView.CloseEditor(); ActiveView.UpdateCurrentRow(); } catch { } };
             // #1a: the user's grid layout (sorting/filter/columns) survives closing the module —
             // silently saved into AutoCount's native dbo.Layout as this user's assigned layout.
             this.FormClosed += delegate { SaveGridLayoutForCurrentUser(); };
@@ -526,20 +528,106 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.CmbDay.SelectedIndexChanged += new EventHandler(CmbDay_SelectedIndexChanged);
             this.ChkShowAll.CheckedChanged += new EventHandler(ChkShowAll_CheckedChanged);
 
-            this.GridViewMeter.CellValueChanged +=
-                new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewMeter_CellValueChanged);
-            // MERGED cells never activate their in-place editor, so the merged Select checkbox is
-            // toggled by hand on mouse-down (SetRowCellValue fires CellValueChanged -> the existing
-            // whole-CSSI propagation runs exactly as if the editor had been used).
-            this.GridViewMeter.MouseDown += new System.Windows.Forms.MouseEventHandler(GridViewMeter_MouseDown);
-            this.GridViewMeter.CellMerge +=
-                new DevExpress.XtraGrid.Views.Grid.CellMergeEventHandler(GridViewMeter_CellMerge);
 
             SetupTabs();
         }
 
-        // Two views over the SAME in-memory data: switching tabs only re-filters by Status
-        // (data is never reloaded/erased until Refresh or Fetch). One grid, re-parented per tab.
+        // ───────────────────── one grid per tab ─────────────────────
+        //
+        // Each tab owns a REAL GridControl + GridView over the same in-memory table, filtered to
+        // that tab's rows. It used to be one grid re-parented from tab to tab, which meant one set
+        // of columns and one saved layout shared by all of them: arrange the Invoiced tab and the
+        // arrangement followed you to Ready to Invoice, then got overwritten on the way back. A
+        // grid per tab makes each tab's columns, sort, grouping and saved layouts simply its own.
+
+        private readonly System.Collections.Generic.List<XtraTabPage> _pages =
+            new System.Collections.Generic.List<XtraTabPage>();
+        private readonly System.Collections.Generic.Dictionary<XtraTabPage, GridControl> _gridByPage =
+            new System.Collections.Generic.Dictionary<XtraTabPage, GridControl>();
+        private readonly System.Collections.Generic.Dictionary<XtraTabPage, GridView> _viewByPage =
+            new System.Collections.Generic.Dictionary<XtraTabPage, GridView>();
+
+        /// <summary>Set while a specific tab's grid is being built or reconfigured, so all the
+        /// existing column-shaping code operates on THAT grid without needing a parameter threaded
+        /// through every helper.</summary>
+        private GridView _targetView;
+
+        /// <summary>The grid the operator is looking at.</summary>
+        private GridView ActiveView
+        {
+            get
+            {
+                if (_targetView != null) return _targetView;
+                GridView v;
+                if (_tabView != null && _tabView.SelectedTabPage != null &&
+                    _viewByPage.TryGetValue(_tabView.SelectedTabPage, out v)) return v;
+                return this.GridViewMeter;   // before the tabs exist (ctor wiring)
+            }
+        }
+
+        private GridControl ActiveGrid
+        {
+            get
+            {
+                if (_targetView != null && _targetView.GridControl != null)
+                    return _targetView.GridControl as GridControl;
+                GridControl g;
+                if (_tabView != null && _tabView.SelectedTabPage != null &&
+                    _gridByPage.TryGetValue(_tabView.SelectedTabPage, out g)) return g;
+                return this.GridMeter;
+            }
+        }
+
+        /// <summary>Run an action against one tab's grid as if it were the active one.</summary>
+        private void ForView(GridView v, System.Action action)
+        {
+            GridView prev = _targetView;
+            _targetView = v;
+            try { action(); }
+            finally { _targetView = prev; }
+        }
+
+        /// <summary>
+        /// Every tab's grid behaves identically — same editing rules, same colours, same merged
+        /// cells — so they all get the same handlers. The handlers read the view from `sender`
+        /// or from ActiveView, both of which resolve to whichever tab is in front.
+        /// </summary>
+        /// <summary>
+        /// The view an event came FROM. Every tab's grid shares these handlers, and an event can
+        /// arrive from a tab that is not in front — reading the active view there would answer with
+        /// another grid's rows. `sender` is the truth; ActiveView is only the fallback.
+        /// </summary>
+        private GridView V(object sender)
+        {
+            GridView v = sender as GridView;
+            return v != null ? v : ActiveView;
+        }
+
+        private void WireViewEvents(GridView v)
+        {
+            if (v == null) return;
+            v.CellValueChanged +=
+                new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewMeter_CellValueChanged);
+            // MERGED cells never activate their in-place editor, so the merged Select checkbox is
+            // toggled by hand on mouse-down (SetRowCellValue fires CellValueChanged -> the existing
+            // whole-CSSI propagation runs exactly as if the editor had been used).
+            v.MouseDown += new System.Windows.Forms.MouseEventHandler(GridViewMeter_MouseDown);
+            v.CellMerge +=
+                new DevExpress.XtraGrid.Views.Grid.CellMergeEventHandler(GridViewMeter_CellMerge);
+            // Per-item alternating row colour (super-light-blue / white), so each service item's
+            // BK+CL pair is easy to tell apart at a glance. Conflicts override to light red.
+            v.RowStyle +=
+                new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewMeter_RowStyle);
+            v.ShowingEditor +=
+                new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditor);
+            // Double-click a contract → open its detail / override form.
+            v.DoubleClick += new EventHandler(GridViewMeter_DoubleClick);
+            // FOC Qty of a ladder meter displays the LADDER's free copies (the engine ignores the
+            // meter's own FOCQty when a ladder is in effect) — consistent with the contract grid.
+            v.CustomColumnDisplayText +=
+                new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewMeter_CustomColumnDisplayText);
+        }
+
         private void SetupTabs()
         {
             _tabView = new XtraTabControl();
@@ -579,32 +667,54 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _pageAll.PageVisible = false;   // hidden on request — not deleted
             _tabView.TabPages.AddRange(new XtraTabPage[] { _pageWith, _pageNo, _pageDone, _pageConflict, _pageAll });
 
+            // Tab one reuses the designer's grid; the rest get their own, styled from it so all
+            // five look identical and only their CONTENT and arrangement differ.
             this.Controls.Remove(this.GridMeter);
             this.GridMeter.Dock = DockStyle.Fill;
             _pageWith.Controls.Add(this.GridMeter);
+            _pages.Add(_pageWith); _pages.Add(_pageNo); _pages.Add(_pageDone);
+            _pages.Add(_pageConflict); _pages.Add(_pageAll);
+            for (int i = 0; i < _pages.Count; i++)
+            {
+                XtraTabPage page = _pages[i];
+                GridControl g;
+                GridView v;
+                if (i == 0) { g = this.GridMeter; v = this.GridViewMeter; }
+                else
+                {
+                    v = new GridView();
+                    v.Appearance.Assign(this.GridViewMeter.Appearance);
+                    v.OptionsView.ShowGroupPanel = this.GridViewMeter.OptionsView.ShowGroupPanel;
+                    v.OptionsView.ShowViewCaption = this.GridViewMeter.OptionsView.ShowViewCaption;
+                    v.ViewCaption = this.GridViewMeter.ViewCaption;
+                    v.OptionsView.EnableAppearanceEvenRow = false;
+                    v.OptionsView.EnableAppearanceOddRow = false;
+                    v.RowHeight = this.GridViewMeter.RowHeight;
+                    v.ColumnPanelRowHeight = this.GridViewMeter.ColumnPanelRowHeight;
+                    v.Name = "GridViewMeter_" + i;
+                    g = new GridControl();
+                    g.Dock = DockStyle.Fill;
+                    g.MainView = v;
+                    g.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] { v });
+                    g.Name = "GridMeter_" + i;
+                    page.Controls.Add(g);
+                }
+                v.Tag = page;      // ApplyTabColumnLayout asks the VIEW which tab it belongs to
+                _gridByPage[page] = g;
+                _viewByPage[page] = v;
+                if (i > 0) WireViewEvents(v);   // tab one is wired by the constructor
+            }
             _tabView.Dock = DockStyle.Fill;
             this.Controls.Add(_tabView);
             // A Dock=Fill control must sit at child-index 0 (same slot the designer used for
-            // GridMeter) so it is laid out AFTER the docked-Top panels and only fills the area
+            // ActiveGrid) so it is laid out AFTER the docked-Top panels and only fills the area
             // left below them. Otherwise it covers the whole form and hides its own tab strip +
             // the grid's column headers behind the title/filter panels.
             this.Controls.SetChildIndex(_tabView, 0);
             _tabView.SelectedTabPage = _pageWith;
             _tabView.SelectedPageChanged += new TabPageChangedEventHandler(TabView_SelectedPageChanged);
 
-            // Per-item alternating row colour (super-light-blue / white), so each service item's
-            // BK+CL pair is easy to tell apart at a glance. Conflicts override to light red.
-            this.GridViewMeter.RowStyle +=
-                new DevExpress.XtraGrid.Views.Grid.RowStyleEventHandler(GridViewMeter_RowStyle);
-            // Current Reading is read-only in the grid (manual key-in removed); values come from Fetch.
-            this.GridViewMeter.ShowingEditor +=
-                new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditor);
-            // Double-click a contract → open its detail / override form.
-            this.GridViewMeter.DoubleClick += new EventHandler(GridViewMeter_DoubleClick);
-            // FOC Qty of a ladder meter displays the LADDER's free copies (the engine ignores the
-            // meter's own FOCQty when a ladder is in effect) — consistent with the contract grid.
-            this.GridViewMeter.CustomColumnDisplayText +=
-                new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewMeter_CustomColumnDisplayText);
+            WireViewEvents(this.GridViewMeter);
 
             // Setting button (created in code to avoid touching the strict designer). Same 150x50 /
             // 156px rhythm as the rest of the toolbar row (510/666/822/978/1134).
@@ -786,9 +896,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // that explains how the invoice amount was produced).
         private void GridViewMeter_DoubleClick(object sender, EventArgs e)
         {
-            DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+            DataRow r = V(sender).GetDataRow(V(sender).FocusedRowHandle);
             if (r == null) return;
-            DevExpress.XtraGrid.Columns.GridColumn col = GridViewMeter.FocusedColumn;
+            DevExpress.XtraGrid.Columns.GridColumn col = V(sender).FocusedColumn;
             if (col != null && (col.FieldName == "LastInvNo" || col.FieldName == "LastInvDate"))
             {
                 string docNo = S(r["LastInvNo"]).Trim();
@@ -869,9 +979,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DataRow GridSourceRow(int listSourceRowIndex)
         {
             if (listSourceRowIndex < 0) return null;
-            DataView dv = GridMeter.DataSource as DataView;
+            DataView dv = ActiveGrid.DataSource as DataView;
             if (dv != null) return listSourceRowIndex < dv.Count ? dv[listSourceRowIndex].Row : null;
-            DataTable dt = GridMeter.DataSource as DataTable;
+            DataTable dt = ActiveGrid.DataSource as DataTable;
             if (dt != null) return listSourceRowIndex < dt.Rows.Count ? dt.Rows[listSourceRowIndex] : null;
             return null;
         }
@@ -881,7 +991,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void GridViewMeter_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;   // group rows
-            object cf = GridViewMeter.GetRowCellValue(e.RowHandle, "HasConflict");
+            object cf = V(sender).GetRowCellValue(e.RowHandle, "HasConflict");
             if (cf != null && cf != DBNull.Value && Convert.ToBoolean(cf))
             {
                 Color rc = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
@@ -893,7 +1003,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             // Pale orange = the machine's expiry is BEFORE this billing month ("Include expired"
             // setting is showing it) — visible at a glance so it is never billed by accident.
-            object xp = GridViewMeter.GetRowCellValue(e.RowHandle, "IsExpired");
+            object xp = V(sender).GetRowCellValue(e.RowHandle, "IsExpired");
             if (xp != null && xp != DBNull.Value && Convert.ToBoolean(xp))
             {
                 Color oc = Color.FromArgb(255, 236, 214);
@@ -907,22 +1017,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void TabView_SelectedPageChanged(object sender, TabPageChangedEventArgs e)
         {
             if (e.Page == null) return;
-            // The three tabs share ONE grid, so an arrangement made on one tab was being handed to
-            // the next one and then overwritten by that tab's factory columns — load a template on
-            // "Invoiced" and it came back as "Ready to Invoice". Each tab keeps its own arrangement:
-            // remember the one being left before the grid moves.
-            CaptureTabLayout(e.PrevPage);
-            this.GridMeter.Parent = e.Page;
-            this.GridMeter.Dock = DockStyle.Fill;
-            ApplyTabFilter();
+            // Nothing to move and nothing to re-shape: the tab already holds its own grid, with its
+            // own columns and its own rows. Switching tabs is now just switching tabs.
+            UpdateSelectAllButton();
         }
-
-        // ── per-tab grid layouts ──
-        // One GridView, three tabs, three arrangements. Kept per tab and per user, so "Load Layout"
-        // on the Invoiced tab stays on the Invoiced tab — and is still there tomorrow.
-
-        private readonly System.Collections.Generic.Dictionary<string, string> _tabLayouts =
-            new System.Collections.Generic.Dictionary<string, string>();
 
         private static string TabKey(XtraTabPage page)
         {
@@ -931,80 +1029,36 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         /// <summary>
-        /// Point the native layout menu at THIS tab's own set of saved layouts.
-        ///
-        /// CustomizeGridLayout reads its form name at call time for every operation that matters —
-        /// the Load Layout list, Save Layout, and the Layout Manager. Giving each tab its own name
-        /// means right-clicking on "Invoiced" offers the layouts saved for Invoiced, not the ones
-        /// saved for "Ready to Invoice".
-        ///
-        /// Done by setting the field rather than by building a second CustomizeGridLayout: its
-        /// constructor subscribes to the grid's PopupMenuShowing and Layout events and offers no way
-        /// to unsubscribe, so one instance per tab would stack three copies of the menu on one grid.
-        /// If the field ever moves, this quietly does nothing and every tab shares one list again —
-        /// the behaviour we had before, not a crash.
+        /// Re-bind EVERY tab, each to its own rows. All five grids read the same in-memory table
+        /// through their own DataView, so a tab switch shows what that tab already holds instead of
+        /// re-filtering and re-shaping one shared grid on the way in.
         /// </summary>
-        private void SetLayoutScope(XtraTabPage page)
-        {
-            string key = TabKey(page);
-            if (_gridLayout == null || key.Length == 0) return;
-            try
-            {
-                System.Reflection.FieldInfo f = typeof(AutoCount.XtraUtils.CustomizeGridLayout)
-                    .GetField("myFormName", System.Reflection.BindingFlags.NonPublic |
-                                            System.Reflection.BindingFlags.Instance);
-                if (f != null) f.SetValue(_gridLayout, GRID_LAYOUT_KEY + "." + key);
-            }
-            catch { }
-        }
-
-        /// <summary>Remember how this tab is arranged right now.</summary>
-        private void CaptureTabLayout(XtraTabPage page)
-        {
-            string key = TabKey(page);
-            if (key.Length == 0 || GridViewMeter == null) return;
-            try
-            {
-                using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
-                {
-                    GridViewMeter.SaveLayoutToStream(ms);
-                    _tabLayouts[key] = System.Text.Encoding.UTF8.GetString(ms.ToArray());
-                }
-            }
-            catch { }   // a layout we cannot capture simply falls back to the factory arrangement
-        }
-
-        /// <summary>
-        /// Put this tab's own arrangement back. Returns false when the tab has never been arranged,
-        /// so the caller applies the factory per-tab columns instead.
-        /// </summary>
-        private bool RestoreTabLayout(XtraTabPage page)
-        {
-            string key = TabKey(page);
-            string xml;
-            if (key.Length == 0 || !_tabLayouts.TryGetValue(key, out xml) || string.IsNullOrEmpty(xml))
-                return false;
-            try
-            {
-                byte[] raw = System.Text.Encoding.UTF8.GetBytes(xml);
-                using (System.IO.MemoryStream ms = new System.IO.MemoryStream(raw))
-                    GridViewMeter.RestoreLayoutFromStream(ms);
-                // The saved layout carries the grid's own filter with it. Tabs are driven by a
-                // DataView RowFilter, and the working agreement is that the filter row belongs to
-                // the operator and starts clean on every tab switch — so it does not come back here.
-                GridViewMeter.ActiveFilterString = "";
-                return true;
-            }
-            catch { return false; }
-        }
-
         private void ApplyTabFilter()
         {
             if (_tabView == null) return;
             // Demo #2(a): post any half-typed Current Reading BEFORE the DataView swap below —
             // posting fires CellValueChanged → Recalc + SaveInlineReading while the row is still
             // bound. Covers tab switches, the 0-usage toggle and the meter filter in one spot.
-            try { GridViewMeter.CloseEditor(); GridViewMeter.UpdateCurrentRow(); } catch { }
+            try { ActiveView.CloseEditor(); ActiveView.UpdateCurrentRow(); } catch { }
+            if (_dtGrid == null) { UpdateSelectAllButton(); return; }
+
+            for (int i = 0; i < _pages.Count; i++)
+            {
+                XtraTabPage page = _pages[i];
+                GridControl g;
+                GridView v;
+                if (!_gridByPage.TryGetValue(page, out g) || !_viewByPage.TryGetValue(page, out v)) continue;
+                DataView dv = new DataView(_dtGrid, TabRowFilter(page), "", DataViewRowState.CurrentRows);
+                g.DataSource = dv;
+                v.ActiveFilterString = "";
+                v.ExpandAllGroups();   // customer groups start open
+            }
+            UpdateSelectAllButton();   // caption follows the tab's selection state
+        }
+
+        /// <summary>The rows that belong to one tab.</summary>
+        private string TabRowFilter(XtraTabPage page)
+        {
             string f = "";
             // "Need Manual Key-In" membership is a SNAPSHOT (NeedManual flag, recomputed only at
             // load/fetch): keying a reading keeps the row on this tab so the operator can review what
@@ -1012,17 +1066,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Tabs are PER MACHINE (grouped by the NeedManual flag), so a machine's rental + BK/CL rows
             // always appear together on the same tab. Ready to Invoice = ready machines (all usage read, or
             // rental-only) that aren't invoiced yet; Need Manual = machines still missing a reading.
-            if (_tabView.SelectedTabPage == _pageWith) f = "[NeedManual] = False AND ISNULL([InvoicedDocNo],'') = ''";
-            else if (_tabView.SelectedTabPage == _pageNo) f = "[NeedManual] = True";
-            else if (_tabView.SelectedTabPage == _pageDone) f = "[InvoicedDocNo] <> ''";   // this month's billed machines
-            else if (_tabView.SelectedTabPage == _pageConflict) f = "[HasConflict] = True";
+            if (page == _pageWith) f = "[NeedManual] = False AND ISNULL([InvoicedDocNo],'') = ''";
+            else if (page == _pageNo) f = "[NeedManual] = True";
+            else if (page == _pageDone) f = "[InvoicedDocNo] <> ''";   // this month's billed machines
+            else if (page == _pageConflict) f = "[HasConflict] = True";
 
             // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked. Exceptions that never
             // hide: rows that still BILL (minimum charges -> TotalCharges > 0, or Generate would miss
             // them), rows ALREADY INVOICED for the selected month (usage reset to 0 on billing), and
             // the whole "Need Manual Key-In" tab — its rows are 0-usage BY DEFINITION (nothing keyed
             // yet), so the usage filter would blank the tab out.
-            if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked && _tabView.SelectedTabPage != _pageNo)
+            if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked && page != _pageNo)
             {
                 string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0 OR [InvoicedDocNo] <> '' OR [IsFlat] = True)";
                 f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
@@ -1035,20 +1089,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Each tab is its OWN datasource (DataView.RowFilter over the master table) — NOT the
             // grid's removable filter panel. The user can no longer X the system filter away and end
             // up selecting/generating from the wrong row set; the grid filter row stays purely theirs.
-            if (_dtGrid != null)
-            {
-                DataView dv = new DataView(_dtGrid, f, "", DataViewRowState.CurrentRows);
-                GridMeter.DataSource = dv;
-                GridViewMeter.ActiveFilterString = "";
-                GridViewMeter.ExpandAllGroups();   // customer groups start open on every tab switch
-            }
-            // The layout menu follows the tab, so Save/Load/Manager act on this tab's own layouts.
-            SetLayoutScope(_tabView.SelectedTabPage);
-            // This tab's own arrangement wins. Only a tab that has never been arranged falls back to
-            // the factory columns — otherwise ApplyTabColumnLayout would undo the template the
-            // operator just loaded, which is precisely what "it restores back" described.
-            if (!RestoreTabLayout(_tabView.SelectedTabPage)) ApplyTabColumnLayout();
-            UpdateSelectAllButton();   // caption follows the tab's selection state
+            return f;
         }
 
         // The Invoiced tab reads like an INVOICE HISTORY, not a key-in sheet: reading/pricing columns
@@ -1060,15 +1101,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void ApplyTabColumnLayout()
         {
-            bool inv = _tabView.SelectedTabPage == _pageDone;
+            // The view carries its own tab (set when the grid was built), so this is correct while
+            // configuring a tab that is not in front. Reading the tab strip instead is what put the
+            // key-in columns on the Invoiced tab.
+            bool inv = (ActiveView.Tag as XtraTabPage) == _pageDone;
             foreach (string c in _keyInLayoutCols)
-                if (GridViewMeter.Columns[c] != null) GridViewMeter.Columns[c].Visible = !inv;
-            GridColumn tot = GridViewMeter.Columns["InvTotal"];
+                if (ActiveView.Columns[c] != null) ActiveView.Columns[c].Visible = !inv;
+            GridColumn tot = ActiveView.Columns["InvTotal"];
             if (tot != null)
             {
                 tot.Visible = inv;
-                if (inv && GridViewMeter.Columns["LastInvDate"] != null)
-                    tot.VisibleIndex = GridViewMeter.Columns["LastInvDate"].VisibleIndex + 1;
+                if (inv && ActiveView.Columns["LastInvDate"] != null)
+                    tot.VisibleIndex = ActiveView.Columns["LastInvDate"].VisibleIndex + 1;
             }
         }
 
@@ -1116,7 +1160,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             System.Collections.Generic.List<GridColumn> cols = new System.Collections.Generic.List<GridColumn>();
             foreach (string fn in _viewSettingCols)
             {
-                GridColumn c = GridViewMeter.Columns[fn];
+                GridColumn c = ActiveView.Columns[fn];
                 if (c != null) cols.Add(c);
             }
             if (cols.Count == 0) return;
@@ -1272,15 +1316,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             bool perItem = (f == "ServiceItemNo" || f == "SerialNo" || f == "MachineStatus" || f == "SelCssi");
             if (!perContract && !perDebtor && !perItem) { e.Merge = false; e.Handled = true; return; }
             string keyField = perDebtor ? "DebtorCode" : (perContract ? "ContractKey" : "ItemKey");
-            object k1 = GridViewMeter.GetRowCellValue(e.RowHandle1, keyField);
-            object k2 = GridViewMeter.GetRowCellValue(e.RowHandle2, keyField);
+            object k1 = V(sender).GetRowCellValue(e.RowHandle1, keyField);
+            object k2 = V(sender).GetRowCellValue(e.RowHandle2, keyField);
             e.Merge = (k1 != null && k2 != null && k1.ToString() == k2.ToString());
             // Serial + status are per MACHINE: a multi-machine item's rows only merge within the same
             // machine serial (SelCssi stays per item — selection is per CSSI by design).
             if (e.Merge && (f == "SerialNo" || f == "MachineStatus"))
             {
-                string s1 = S(GridViewMeter.GetRowCellValue(e.RowHandle1, "SerialNo"));
-                string s2 = S(GridViewMeter.GetRowCellValue(e.RowHandle2, "SerialNo"));
+                string s1 = S(V(sender).GetRowCellValue(e.RowHandle1, "SerialNo"));
+                string s2 = S(V(sender).GetRowCellValue(e.RowHandle2, "SerialNo"));
                 e.Merge = string.Equals(s1.Trim(), s2.Trim(), StringComparison.OrdinalIgnoreCase);
             }
             e.Handled = true;
@@ -1706,9 +1750,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 AutoFillFlatMeters();
                 RecomputeNeedManual();
 
-                GridMeter.DataSource = _dtGrid;
-                ConfigureGrid();
-                WireNativeGridLayout();   // #1a: AutoCount-native layout restore + header menu
+                // Shape EVERY tab's grid, not just the one in front — each needs its columns built
+                // before it can be bound, and a tab the operator has not visited yet must already be
+                // right when they get there.
+                for (int i = 0; i < _pages.Count; i++)
+                {
+                    GridView v;
+                    if (!_viewByPage.TryGetValue(_pages[i], out v)) continue;
+                    ForView(v, delegate
+                    {
+                        ActiveGrid.DataSource = _dtGrid;   // columns come from the table
+                        ConfigureGrid();
+                        ApplyTabColumnLayout();            // this tab's factory columns
+                    });
+                }
+                WireNativeGridLayout();   // #1a: AutoCount-native layout restore + header menu, per tab
                 UpdateTabCounts();
                 ApplyTabFilter();
             }
@@ -1726,101 +1782,87 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // layout ("SCP Meter - <user>") and assign it, so the clerk never has to re-set anything.
 
         private const string GRID_LAYOUT_KEY = "SCP_METER_READING";   // dbo.Layout.FormName
-        private AutoCount.XtraUtils.CustomizeGridLayout _gridLayout;
+        private readonly System.Collections.Generic.Dictionary<XtraTabPage, AutoCount.XtraUtils.CustomizeGridLayout>
+            _layoutByPage = new System.Collections.Generic.Dictionary<XtraTabPage, AutoCount.XtraUtils.CustomizeGridLayout>();
 
+        /// <summary>
+        /// One CustomizeGridLayout per tab, each under its OWN form name. That is what makes the
+        /// right-click menu offer the layouts saved for THIS tab: Save Layout on Invoiced lands in
+        /// Invoiced's list and does not turn up on Ready to Invoice, where loading it made no sense.
+        /// Each instance also restores that tab's assigned layout on open.
+        /// </summary>
         private void WireNativeGridLayout()
         {
-            if (_gridLayout != null) return;
+            if (_layoutByPage.Count > 0) return;
             try
             {
                 AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
                 if (us == null) return;
-                // Ctor restores the layout from dbo.Layout (per-user assignment wins over default)
-                // and injects the layout menu into the column-header right-click popup.
-                _gridLayout = new AutoCount.XtraUtils.CustomizeGridLayout(us, GRID_LAYOUT_KEY, GridViewMeter);
-                // Our grid, our rules: every user gets the layout/column/export menu here (the
-                // native SYS_BHV_* rights default to admin-ish groups only).
-                _gridLayout.GetAccessRightSetting +=
-                    new AutoCount.XtraUtils.GetCustomizeGridLayoutAccessRightSettingEventHandler(delegate
-                    {
-                        AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting s =
-                            new AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting();
-                        s.AllowCustomizeGridLayout = true;
-                        s.AllowColumnChooser = true;
-                        s.AllowColumnCaption = true;
-                        s.AllowExportGridContent = true;
-                        s.AllowPrintGridContent = true;
-                        return s;
-                    });
-                LoadTabLayouts();         // this user's per-tab arrangements, if they have any
-                SetLayoutScope(_tabView != null ? _tabView.SelectedTabPage : null);
-                if (!RestoreTabLayout(_tabView != null ? _tabView.SelectedTabPage : null))
-                    ApplyTabColumnLayout();   // never arranged this tab -> factory columns
+                for (int i = 0; i < _pages.Count; i++)
+                {
+                    XtraTabPage page = _pages[i];
+                    GridView v;
+                    if (!_viewByPage.TryGetValue(page, out v)) continue;
+                    // Ctor restores this tab's layout from dbo.Layout (per-user assignment wins over
+                    // default) and injects the layout menu into its column-header right-click popup.
+                    AutoCount.XtraUtils.CustomizeGridLayout gl =
+                        new AutoCount.XtraUtils.CustomizeGridLayout(us, LayoutKey(page), v);
+                    // Our grid, our rules: every user gets the layout/column/export menu here (the
+                    // native SYS_BHV_* rights default to admin-ish groups only).
+                    gl.GetAccessRightSetting +=
+                        new AutoCount.XtraUtils.GetCustomizeGridLayoutAccessRightSettingEventHandler(delegate
+                        {
+                            AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting s =
+                                new AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting();
+                            s.AllowCustomizeGridLayout = true;
+                            s.AllowColumnChooser = true;
+                            s.AllowColumnCaption = true;
+                            s.AllowExportGridContent = true;
+                            s.AllowPrintGridContent = true;
+                            return s;
+                        });
+                    _layoutByPage[page] = gl;
+                }
             }
             catch { }   // layout plumbing must never break the screen
         }
 
-        // Silent per-user auto-save on close (#1a "no re-setting"): saved as a NAMED layout owned
-        // by this user and assigned via dbo.LayoutUsers, so the ctor restores it next open. The
-        // native Save Layout / templates / defaults keep working on top.
-        // Per-tab arrangements, per user. The native dbo.Layout holds ONE snapshot for the grid —
-        // it cannot hold three, because as far as AutoCount is concerned there is one grid. These
-        // live beside it rather than fighting it: the native layout still restores the grid, and
-        // each tab then puts its own arrangement on top.
-        private string TabLayoutKey(string tabKey)
+        private string LayoutKey(XtraTabPage page)
         {
-            string user = "";
-            try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
-            return "METER_TAB_LAYOUT_" + user + "_" + tabKey;
+            string key = TabKey(page);
+            return key.Length == 0 ? GRID_LAYOUT_KEY : GRID_LAYOUT_KEY + "." + key;
         }
 
-        private void SaveTabLayouts()
-        {
-            if (_dbSetting == null || _tabView == null) return;
-            CaptureTabLayout(_tabView.SelectedTabPage);   // the tab still on screen has not been captured yet
-            foreach (System.Collections.Generic.KeyValuePair<string, string> kv in _tabLayouts)
-            {
-                try { ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting, TabLayoutKey(kv.Key), kv.Value); }
-                catch { }
-            }
-        }
-
-        private void LoadTabLayouts()
-        {
-            if (_dbSetting == null || _tabView == null) return;
-            foreach (XtraTabPage p in _tabView.TabPages)
-            {
-                string key = TabKey(p);
-                if (key.Length == 0) continue;
-                try
-                {
-                    string xml = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting, TabLayoutKey(key), "");
-                    if (!string.IsNullOrEmpty(xml)) _tabLayouts[key] = xml;
-                }
-                catch { }
-            }
-        }
-
+        /// <summary>
+        /// Silent per-user auto-save on close, now once per TAB: each tab's arrangement is saved
+        /// under that tab's own layout scope and assigned to this user, so every tab comes back the
+        /// way it was left. One shared title across the tabs would have them overwriting each other.
+        /// </summary>
         private void SaveGridLayoutForCurrentUser()
         {
             try
             {
-                SaveTabLayouts();
-                if (_gridLayout == null || _dbSetting == null) return;
+                if (_dbSetting == null || _layoutByPage.Count == 0) return;
                 string user = "";
                 try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
                 if (user.Length == 0) return;
-                // Per tab as well as per user: the auto-save now lands under this tab's layout scope,
-                // and one shared title across three scopes would have the tabs overwriting each
-                // other's saved arrangement.
-                string tab = _tabView != null ? TabKey(_tabView.SelectedTabPage) : "";
-                string title = "SCP Meter - " + user + (tab.Length > 0 ? " - " + tab : "");
-                if (title.Length > 60) title = title.Substring(0, 60);
-                if (!_gridLayout.SaveLayout(title, false)) return;   // title owned by another grid — skip
-                string tEsc = title.Replace("'", "''"), uEsc = user.Replace("'", "''");
-                _dbSetting.ExecuteNonQuery(
-                    "IF NOT EXISTS (SELECT 1 FROM dbo.LayoutUsers WHERE Title = N'" + tEsc + "' AND UserID = N'" + uEsc + "') " +
-                    "INSERT INTO dbo.LayoutUsers (Title, UserID) VALUES (N'" + tEsc + "', N'" + uEsc + "')");
+
+                foreach (System.Collections.Generic.KeyValuePair<XtraTabPage, AutoCount.XtraUtils.CustomizeGridLayout> kv
+                         in _layoutByPage)
+                {
+                    string tab = TabKey(kv.Key);
+                    string title = "SCP Meter - " + user + (tab.Length > 0 ? " - " + tab : "");
+                    if (title.Length > 60) title = title.Substring(0, 60);
+                    try
+                    {
+                        if (!kv.Value.SaveLayout(title, false)) continue;   // title owned elsewhere — skip
+                        string tEsc = title.Replace("'", "''"), uEsc = user.Replace("'", "''");
+                        _dbSetting.ExecuteNonQuery(
+                            "IF NOT EXISTS (SELECT 1 FROM dbo.LayoutUsers WHERE Title = N'" + tEsc + "' AND UserID = N'" + uEsc + "') " +
+                            "INSERT INTO dbo.LayoutUsers (Title, UserID) VALUES (N'" + tEsc + "', N'" + uEsc + "')");
+                    }
+                    catch { }   // one tab failing to save must not cost the others theirs
+                }
             }
             catch { }
         }
@@ -2000,42 +2042,46 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // summaries) — the DataTable schema is identical on every load, so re-running it only undoes
         // the user's own layout: it would wipe the restored native layout and any View Setting choice
         // on every Refresh/Fetch. Shape once, then leave the grid alone.
-        private bool _gridShaped;
+
+        private readonly System.Collections.Generic.List<GridView> _shaped =
+            new System.Collections.Generic.List<GridView>();
 
         private void ConfigureGrid()
         {
-            if (_gridShaped) return;
-            _gridShaped = true;
-            GridViewMeter.OptionsBehavior.Editable = true;
+            // Once per GRID. It used to be once per form, which was the same thing when there was
+            // one grid and is emphatically not now.
+            if (_shaped.Contains(ActiveView)) return;
+            _shaped.Add(ActiveView);
+            ActiveView.OptionsBehavior.Editable = true;
             // Open the in-place editor on MOUSE DOWN: without this, the first click on a (merged)
             // Select cell only focuses it and the checkbox never toggles on a single click.
-            GridViewMeter.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
+            ActiveView.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
             // Merged-cell look (ONE checkbox / contract / CSSI / serial / status cell spanning the
             // machine's BK+CL rows) UNDER collapsible "Customer: ..." group rows.
-            GridViewMeter.OptionsView.AllowCellMerge = true;
-            GridViewMeter.OptionsView.ShowGroupPanel = false;
-            GridViewMeter.OptionsBehavior.AutoExpandAllGroups = true;
-            GridColumn cGrpCust = GridViewMeter.Columns["Customer"];
+            ActiveView.OptionsView.AllowCellMerge = true;
+            ActiveView.OptionsView.ShowGroupPanel = false;
+            ActiveView.OptionsBehavior.AutoExpandAllGroups = true;
+            GridColumn cGrpCust = ActiveView.Columns["Customer"];
             if (cGrpCust != null) cGrpCust.GroupIndex = 0;
-            GridViewMeter.OptionsView.ShowFooter = true;       // footer band for totals
-            GridViewMeter.OptionsView.ColumnAutoWidth = false;
+            ActiveView.OptionsView.ShowFooter = true;       // footer band for totals
+            ActiveView.OptionsView.ColumnAutoWidth = false;
 
             // "Sel" (per-meter) stays as the hidden data driver; the user only sees the merged
             // per-CSSI "Select" checkbox (SelCssi), which drives both meter rows.
             foreach (string h in _systemHiddenCols)
-                if (GridViewMeter.Columns[h] != null)
+                if (ActiveView.Columns[h] != null)
                 {
-                    GridViewMeter.Columns[h].Visible = false;
-                    GridViewMeter.Columns[h].OptionsColumn.ShowInCustomizationForm = false;
+                    ActiveView.Columns[h].Visible = false;
+                    ActiveView.Columns[h].OptionsColumn.ShowInCustomizationForm = false;
                 }
             // Locked rows: the Current Reading cell refuses to open its editor (snapshot is frozen).
-            GridViewMeter.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
-            GridViewMeter.ShowingEditor += new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
+            ActiveView.ShowingEditor -= new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
+            ActiveView.ShowingEditor += new System.ComponentModel.CancelEventHandler(GridViewMeter_ShowingEditorLock);
 
             // Advanced filtering: per-column auto-filter row under the headers (+ the header funnel
             // menus). User filters layer on top of the tab's own DataView — they can never break the
             // tab's system scope.
-            GridViewMeter.OptionsView.ShowAutoFilterRow = true;
+            ActiveView.OptionsView.ShowAutoFilterRow = true;
 
             // Secondary columns hidden BY DEFAULT to keep the grid focused — still available through
             // the column chooser (right-click the header -> Column Chooser).
@@ -2043,12 +2089,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // old Online/Offline tabs.
             foreach (string h in _optionalCols)
             {
-                GridColumn hc = GridViewMeter.Columns[h];
+                GridColumn hc = ActiveView.Columns[h];
                 if (hc == null) continue;
                 hc.Visible = false;
                 hc.OptionsColumn.ShowInCustomizationForm = true;
             }
-            GridColumn cBillGrp = GridViewMeter.Columns["BillGroupCode"];
+            GridColumn cBillGrp = ActiveView.Columns["BillGroupCode"];
             if (cBillGrp != null)
             {
                 cBillGrp.Caption = "Bill Group"; cBillGrp.Width = 70;
@@ -2059,7 +2105,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
 
             SetCol("SelCssi", "Select", 55, true);
-            GridColumn selc = GridViewMeter.Columns["SelCssi"];
+            GridColumn selc = ActiveView.Columns["SelCssi"];
             if (selc != null)
             {
                 // Sorting by the checkbox makes ticked rows jump position mid-click — disable it.
@@ -2070,7 +2116,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 {
                     _selCssiEditor = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
                     _selCssiEditor.EditValueChanged += new EventHandler(SelCssiEditor_EditValueChanged);
-                    GridMeter.RepositoryItems.Add(_selCssiEditor);
+                    ActiveGrid.RepositoryItems.Add(_selCssiEditor);
                 }
                 selc.ColumnEdit = _selCssiEditor;
             }
@@ -2091,7 +2137,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("LastReadDate", "Last Read Date", 100, false);
             SetCol("LastAuditDate", "Last Audit Date", 110, false);
             SetCol("LastFetchDate", "Last Fetch Date", 115, false);
-            GridColumn cFd = GridViewMeter.Columns["LastFetchDate"];
+            GridColumn cFd = ActiveView.Columns["LastFetchDate"];
             if (cFd != null)
             {
                 cFd.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
@@ -2103,14 +2149,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetNum("TotalCharges", "Total Charges", 95, false, "n2");
             SetCol("LastInvNo", "Last Invoice No", 110, false);
             SetCol("LastInvDate", "Last Invoice Date", 105, false);
-            GridColumn cInvDt = GridViewMeter.Columns["LastInvDate"];
+            GridColumn cInvDt = ActiveView.Columns["LastInvDate"];
             if (cInvDt != null)
             {
                 cInvDt.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
                 cInvDt.DisplayFormat.FormatString = "dd/MM/yyyy";
             }
             SetNum("InvTotal", "Invoice Total", 95, false, "n2");
-            GridColumn cInvTot = GridViewMeter.Columns["InvTotal"];
+            GridColumn cInvTot = ActiveView.Columns["InvTotal"];
             if (cInvTot != null)
             {
                 cInvTot.Visible = false;   // Invoiced tab only (ApplyTabColumnLayout shows it)
@@ -2123,13 +2169,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetCol("Status", "Status", 130, false);
             // Invoiced-this-period rows: paint the Last Invoice cells green so a 0 Current Reading is
             // unmistakably "already billed" rather than "no reading yet".
-            GridViewMeter.RowCellStyle -= new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
-            GridViewMeter.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
+            ActiveView.RowCellStyle -= new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
+            ActiveView.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewMeter_LastInvCellStyle);
 
             // Highlight the two columns the operator actually works with: Current Reading (amber —
             // the key-in column) and Total Charges (green — the money). Column-level cell appearance
             // outranks the RowStyle shading, so the tint shows on every row.
-            GridColumn cCurHl = GridViewMeter.Columns["CurrentReading"];
+            GridColumn cCurHl = ActiveView.Columns["CurrentReading"];
             if (cCurHl != null)
             {
                 cCurHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(255, 249, 196);
@@ -2137,7 +2183,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 cCurHl.AppearanceHeader.FontStyleDelta = System.Drawing.FontStyle.Bold;
                 cCurHl.AppearanceHeader.Options.UseFont = true;
             }
-            GridColumn cChgHl = GridViewMeter.Columns["TotalCharges"];
+            GridColumn cChgHl = ActiveView.Columns["TotalCharges"];
             if (cChgHl != null)
             {
                 cChgHl.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(223, 240, 216);
@@ -2155,29 +2201,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 "FOCQty", "RebatePct", "LastReadDate", "LastAuditDate", "LastFetchDate", "LastReading",
                 "CurrentReading", "MeterUsage", "TotalCharges", "FetchedReading", "EntrySource",
                 "UseMin", "MultiPriceCode", "Role" })
-                if (GridViewMeter.Columns[nm] != null)
-                    GridViewMeter.Columns[nm].OptionsColumn.AllowMerge = DevExpress.Utils.DefaultBoolean.False;
+                if (ActiveView.Columns[nm] != null)
+                    ActiveView.Columns[nm].OptionsColumn.AllowMerge = DevExpress.Utils.DefaultBoolean.False;
 
             // Freeze the identifier columns on the left so they stay visible when scrolling horizontally.
             // (Requires ColumnAutoWidth = false, set above.)
             foreach (string fx in new string[] { "SelCssi", "ContractNo", "ServiceItemNo", "SerialNo" })
-                if (GridViewMeter.Columns[fx] != null)
-                    GridViewMeter.Columns[fx].Fixed = DevExpress.XtraGrid.Columns.FixedStyle.Left;
+                if (ActiveView.Columns[fx] != null)
+                    ActiveView.Columns[fx].Fixed = DevExpress.XtraGrid.Columns.FixedStyle.Left;
 
             // Footer totals.
-            GridColumn cChg = GridViewMeter.Columns["TotalCharges"];
+            GridColumn cChg = ActiveView.Columns["TotalCharges"];
             if (cChg != null)
             {
                 cChg.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
                 cChg.SummaryItem.DisplayFormat = "Σ {0:n2}";
             }
-            GridColumn cUse = GridViewMeter.Columns["MeterUsage"];
+            GridColumn cUse = ActiveView.Columns["MeterUsage"];
             if (cUse != null)
             {
                 cUse.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Sum;
                 cUse.SummaryItem.DisplayFormat = "Σ {0:n0}";
             }
-            GridColumn cSt = GridViewMeter.Columns["Status"];
+            GridColumn cSt = ActiveView.Columns["Status"];
             if (cSt != null)
             {
                 cSt.SummaryItem.SummaryType = DevExpress.Data.SummaryItemType.Count;
@@ -2187,7 +2233,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void SetCol(string field, string caption, int width, bool editable)
         {
-            GridColumn c = GridViewMeter.Columns[field];
+            GridColumn c = ActiveView.Columns[field];
             if (c == null) return;
             c.Caption = caption; c.Width = width;
             c.OptionsColumn.AllowEdit = editable; c.OptionsColumn.ReadOnly = !editable;
@@ -2199,8 +2245,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Auto-fetch snapshot rows are FROZEN — no manual override of the Current Reading.
         private void GridViewMeter_ShowingEditorLock(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (GridViewMeter.FocusedColumn == null || GridViewMeter.FocusedColumn.FieldName != "CurrentReading") return;
-            DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+            if (V(sender).FocusedColumn == null || V(sender).FocusedColumn.FieldName != "CurrentReading") return;
+            DataRow r = V(sender).GetDataRow(V(sender).FocusedRowHandle);
             if (r == null) return;
             if (r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"])) e.Cancel = true;
         }
@@ -2220,7 +2266,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //   pale amber (column default) = keyed in already
             if (e.Column.FieldName == "CurrentReading")
             {
-                DataRow rc = GridViewMeter.GetDataRow(e.RowHandle);
+                DataRow rc = V(sender).GetDataRow(e.RowHandle);
                 if (rc == null) return;
                 if (!IsInlineEditable(rc))
                 {
@@ -2239,9 +2285,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             if (e.Column.FieldName == "LastAuditDate")
             {
-                object av = GridViewMeter.GetRowCellValue(e.RowHandle, "LastAuditDate");
+                object av = V(sender).GetRowCellValue(e.RowHandle, "LastAuditDate");
                 if (av == null || av == DBNull.Value || !_periodCutoff.HasValue) return;
-                object invd = GridViewMeter.GetRowCellValue(e.RowHandle, "InvoicedDocNo");
+                object invd = V(sender).GetRowCellValue(e.RowHandle, "InvoicedDocNo");
                 bool billed = invd != null && invd != DBNull.Value && invd.ToString().Trim().Length > 0;
                 if (!billed && Convert.ToDateTime(av).Date > _periodCutoff.Value.Date)
                 {
@@ -2253,7 +2299,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             if (e.Column.FieldName == "MachineStatus")
             {
-                object msv = GridViewMeter.GetRowCellValue(e.RowHandle, "MachineStatus");
+                object msv = V(sender).GetRowCellValue(e.RowHandle, "MachineStatus");
                 string ms = msv == null || msv == DBNull.Value ? "" : msv.ToString();
                 if (ms == "ONLINE")
                 {
@@ -2270,7 +2316,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
             if (e.Column.FieldName != "LastInvNo" && e.Column.FieldName != "LastInvDate") return;
-            object inv = GridViewMeter.GetRowCellValue(e.RowHandle, "InvoicedDocNo");
+            object inv = V(sender).GetRowCellValue(e.RowHandle, "InvoicedDocNo");
             if (inv == null || inv == DBNull.Value || inv.ToString().Trim().Length == 0) return;
             e.Appearance.BackColor = System.Drawing.Color.FromArgb(200, 230, 201);
             e.Appearance.ForeColor = System.Drawing.Color.FromArgb(27, 94, 32);
@@ -2279,7 +2325,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void SetNum(string field, string caption, int width, bool editable, string fmt)
         {
             SetCol(field, caption, width, editable);
-            GridColumn c = GridViewMeter.Columns[field];
+            GridColumn c = ActiveView.Columns[field];
             if (c == null) return;
             c.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             c.DisplayFormat.FormatString = fmt;
@@ -2324,18 +2370,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // that cleared only one of the three would leave the others to spring back.
                     _dbSetting.ExecuteNonQuery("DELETE FROM dbo.LayoutUsers WHERE Title LIKE N'" + t + "%'");
                     _dbSetting.ExecuteNonQuery("DELETE FROM dbo.Layout WHERE Title LIKE N'" + t + "%'");
-                    _gridLayout = null;   // stop the FormClosed auto-save from resurrecting it this session
-                    // The per-tab arrangements go too, or "reset to factory" would leave the tabs
-                    // exactly as they were and the escape hatch would not be one.
-                    foreach (XtraTabPage p in _tabView.TabPages)
-                    {
-                        string k = TabKey(p);
-                        if (k.Length > 0)
-                            try { ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting, TabLayoutKey(k), ""); }
-                            catch { }
-                    }
-                    _tabLayouts.Clear();
-                    XtraMessageBox.Show("Your saved grid layout was cleared — reopen the module for the factory layout.",
+                    // Every tab's auto-save, not just the one in front: the titles share the prefix
+                    // above, so the LIKE above already removed them all. Dropping the helpers stops
+                    // the FormClosed auto-save from writing them straight back this session.
+                    _layoutByPage.Clear();
+                    XtraMessageBox.Show("Your saved grid layouts were cleared — reopen the module for the factory layout.",
                         "Reset", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch { }
@@ -2354,8 +2393,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (_dtGrid == null || _dtGrid.Rows.Count == 0)
             { XtraMessageBox.Show("Nothing to fetch — the list is empty.", "Fetch"); return; }
-            GridViewMeter.CloseEditor();
-            GridViewMeter.UpdateCurrentRow();
+            ActiveView.CloseEditor();
+            ActiveView.UpdateCurrentRow();
 
             int month = SelectedMonth();
             int year = SelectedYear();
@@ -2528,7 +2567,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
                 SyncSelCssi();
                 RecomputeNeedManual();   // fetch results re-decide which machines still need key-in
-                GridMeter.RefreshDataSource();
+                ActiveGrid.RefreshDataSource();
                 UpdateTabCounts();
                 if (_tabView != null) _tabView.SelectedTabPage = conflicts > 0 ? _pageConflict : _pageWith;
                 ApplyTabFilter();
@@ -2672,12 +2711,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnSelfManualKeyIn_Click(object sender, EventArgs e)
         {
             if (_dtGrid == null) return;
-            GridViewMeter.CloseEditor();
+            ActiveView.CloseEditor();
 
             List<DataRow> visible = new List<DataRow>();
-            for (int rh = 0; rh < GridViewMeter.RowCount; rh++)
+            for (int rh = 0; rh < ActiveView.RowCount; rh++)
             {
-                DataRow r = GridViewMeter.GetDataRow(rh);
+                DataRow r = ActiveView.GetDataRow(rh);
                 if (r != null) visible.Add(r);
             }
             if (visible.Count == 0)
@@ -2689,7 +2728,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             foreach (DataRow r in visible) r["Sel"] = anyUnticked;
             SyncSelCssi();
-            GridMeter.RefreshDataSource();
+            ActiveGrid.RefreshDataSource();
             UpdateTabCounts();
             UpdateSelectAllButton();   // Select All <-> Unselect All
         }
@@ -2700,9 +2739,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             if (_dtGrid == null) return;
             bool anyRow = false, anyUnticked = false;
-            for (int rh = 0; rh < GridViewMeter.RowCount; rh++)
+            for (int rh = 0; rh < ActiveView.RowCount; rh++)
             {
-                DataRow r = GridViewMeter.GetDataRow(rh);
+                DataRow r = ActiveView.GetDataRow(rh);
                 if (r == null) continue;
                 anyRow = true;
                 if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) { anyUnticked = true; break; }
@@ -2912,9 +2951,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // editor (the Invoiced tab only shows invoiced rows, so it is read-only for free).
         private void GridViewMeter_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (GridViewMeter.FocusedColumn == null ||
-                GridViewMeter.FocusedColumn.FieldName != "CurrentReading") return;
-            DataRow r = GridViewMeter.GetDataRow(GridViewMeter.FocusedRowHandle);
+            if (V(sender).FocusedColumn == null ||
+                V(sender).FocusedColumn.FieldName != "CurrentReading") return;
+            DataRow r = V(sender).GetDataRow(V(sender).FocusedRowHandle);
             if (r == null || !IsInlineEditable(r)) e.Cancel = true;
         }
 
@@ -3184,7 +3223,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         return; }
                 }
             }
-            GridMeter.RefreshDataSource();
+            ActiveGrid.RefreshDataSource();
             UpdateTabCounts();
             ApplyTabFilter();
 
@@ -3215,7 +3254,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 foreach (DataRow r in parked)
                     if (r.RowState != DataRowState.Detached) r["Sel"] = true;
                 SyncSelCssi();
-                GridMeter.RefreshDataSource();
+                ActiveGrid.RefreshDataSource();
                 return;
             }
 
@@ -3227,18 +3266,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // One click on the Select checkbox posts immediately (fires CellValueChanged right away).
         private void SelCssiEditor_EditValueChanged(object sender, EventArgs e)
         {
-            GridViewMeter.PostEditor();
+            ActiveView.PostEditor();
         }
 
         // One left-click anywhere on the (merged) Select cell toggles the whole machine.
         private void GridViewMeter_MouseDown(object sender, System.Windows.Forms.MouseEventArgs e)
         {
             if (e.Button != System.Windows.Forms.MouseButtons.Left) return;
-            DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit = GridViewMeter.CalcHitInfo(e.Location);
+            DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit = V(sender).CalcHitInfo(e.Location);
             if (hit.RowHandle < 0 || hit.Column == null || hit.Column.FieldName != "SelCssi" || !hit.InRowCell) return;
-            object cur = GridViewMeter.GetRowCellValue(hit.RowHandle, "SelCssi");
+            object cur = V(sender).GetRowCellValue(hit.RowHandle, "SelCssi");
             bool v = !(cur != null && cur != DBNull.Value && Convert.ToBoolean(cur));
-            GridViewMeter.SetRowCellValue(hit.RowHandle, "SelCssi", v);
+            V(sender).SetRowCellValue(hit.RowHandle, "SelCssi", v);
             DevExpress.Utils.DXMouseEventArgs dx = DevExpress.Utils.DXMouseEventArgs.GetMouseArgs(e);
             if (dx != null) dx.Handled = true;
         }
@@ -3248,7 +3287,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column == null) return;
             if (e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
             {
-                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                DataRow r = V(sender).GetDataRow(e.RowHandle);
                 if (r != null)
                 {
                     Recalc(r);
@@ -3262,20 +3301,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column.FieldName == "SelCssi")
             {
                 // The per-CSSI checkbox drives the whole machine: tick/untick BOTH meter rows.
-                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                DataRow r = V(sender).GetDataRow(e.RowHandle);
                 if (r != null && _dtGrid != null)
                 {
                     bool v = r["SelCssi"] != DBNull.Value && Convert.ToBoolean(r["SelCssi"]);
                     long ik = D64(r["ItemKey"]);
                     foreach (DataRow x in _dtGrid.Rows)
                         if (D64(x["ItemKey"]) == ik) { x["Sel"] = v; x["SelCssi"] = v; }
-                    GridViewMeter.LayoutChanged();   // repaint merged cells; no full rebind mid-edit
+                    V(sender).LayoutChanged();   // repaint merged cells; no full rebind mid-edit
                 }
             }
             else if (e.Column.FieldName == "Sel")
             {
                 // Per-meter tick: mirror the CSSI checkbox = "all this machine's meters are ticked".
-                DataRow r = GridViewMeter.GetDataRow(e.RowHandle);
+                DataRow r = V(sender).GetDataRow(e.RowHandle);
                 if (r != null && _dtGrid != null)
                 {
                     long ik = D64(r["ItemKey"]);
@@ -3348,8 +3387,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void BtnGenerateInvoice_Click(object sender, EventArgs e)
         {
             if (_dbSetting == null || _dtGrid == null) return;
-            GridViewMeter.CloseEditor();
-            GridViewMeter.UpdateCurrentRow();
+            ActiveView.CloseEditor();
+            ActiveView.UpdateCurrentRow();
 
             // Group the selected meter lines: Group mode = one invoice per contract; Separate = per item.
             Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs =
