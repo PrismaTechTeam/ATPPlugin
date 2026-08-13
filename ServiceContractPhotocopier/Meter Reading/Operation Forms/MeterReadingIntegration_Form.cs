@@ -907,9 +907,67 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void TabView_SelectedPageChanged(object sender, TabPageChangedEventArgs e)
         {
             if (e.Page == null) return;
+            // The three tabs share ONE grid, so an arrangement made on one tab was being handed to
+            // the next one and then overwritten by that tab's factory columns — load a template on
+            // "Invoiced" and it came back as "Ready to Invoice". Each tab keeps its own arrangement:
+            // remember the one being left before the grid moves.
+            CaptureTabLayout(e.PrevPage);
             this.GridMeter.Parent = e.Page;
             this.GridMeter.Dock = DockStyle.Fill;
             ApplyTabFilter();
+        }
+
+        // ── per-tab grid layouts ──
+        // One GridView, three tabs, three arrangements. Kept per tab and per user, so "Load Layout"
+        // on the Invoiced tab stays on the Invoiced tab — and is still there tomorrow.
+
+        private readonly System.Collections.Generic.Dictionary<string, string> _tabLayouts =
+            new System.Collections.Generic.Dictionary<string, string>();
+
+        private static string TabKey(XtraTabPage page)
+        {
+            if (page == null) return "";
+            return string.IsNullOrEmpty(page.Name) ? page.Text : page.Name;
+        }
+
+        /// <summary>Remember how this tab is arranged right now.</summary>
+        private void CaptureTabLayout(XtraTabPage page)
+        {
+            string key = TabKey(page);
+            if (key.Length == 0 || GridViewMeter == null) return;
+            try
+            {
+                using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
+                {
+                    GridViewMeter.SaveLayoutToStream(ms);
+                    _tabLayouts[key] = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+                }
+            }
+            catch { }   // a layout we cannot capture simply falls back to the factory arrangement
+        }
+
+        /// <summary>
+        /// Put this tab's own arrangement back. Returns false when the tab has never been arranged,
+        /// so the caller applies the factory per-tab columns instead.
+        /// </summary>
+        private bool RestoreTabLayout(XtraTabPage page)
+        {
+            string key = TabKey(page);
+            string xml;
+            if (key.Length == 0 || !_tabLayouts.TryGetValue(key, out xml) || string.IsNullOrEmpty(xml))
+                return false;
+            try
+            {
+                byte[] raw = System.Text.Encoding.UTF8.GetBytes(xml);
+                using (System.IO.MemoryStream ms = new System.IO.MemoryStream(raw))
+                    GridViewMeter.RestoreLayoutFromStream(ms);
+                // The saved layout carries the grid's own filter with it. Tabs are driven by a
+                // DataView RowFilter, and the working agreement is that the filter row belongs to
+                // the operator and starts clean on every tab switch — so it does not come back here.
+                GridViewMeter.ActiveFilterString = "";
+                return true;
+            }
+            catch { return false; }
         }
 
         private void ApplyTabFilter()
@@ -956,7 +1014,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 GridViewMeter.ActiveFilterString = "";
                 GridViewMeter.ExpandAllGroups();   // customer groups start open on every tab switch
             }
-            ApplyTabColumnLayout();
+            // This tab's own arrangement wins. Only a tab that has never been arranged falls back to
+            // the factory columns — otherwise ApplyTabColumnLayout would undo the template the
+            // operator just loaded, which is precisely what "it restores back" described.
+            if (!RestoreTabLayout(_tabView.SelectedTabPage)) ApplyTabColumnLayout();
             UpdateSelectAllButton();   // caption follows the tab's selection state
         }
 
@@ -1661,7 +1722,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         s.AllowPrintGridContent = true;
                         return s;
                     });
-                ApplyTabColumnLayout();   // per-tab hidden columns win over the restored snapshot
+                LoadTabLayouts();         // this user's per-tab arrangements, if they have any
+                if (!RestoreTabLayout(_tabView != null ? _tabView.SelectedTabPage : null))
+                    ApplyTabColumnLayout();   // never arranged this tab -> factory columns
             }
             catch { }   // layout plumbing must never break the screen
         }
@@ -1669,10 +1732,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Silent per-user auto-save on close (#1a "no re-setting"): saved as a NAMED layout owned
         // by this user and assigned via dbo.LayoutUsers, so the ctor restores it next open. The
         // native Save Layout / templates / defaults keep working on top.
+        // Per-tab arrangements, per user. The native dbo.Layout holds ONE snapshot for the grid —
+        // it cannot hold three, because as far as AutoCount is concerned there is one grid. These
+        // live beside it rather than fighting it: the native layout still restores the grid, and
+        // each tab then puts its own arrangement on top.
+        private string TabLayoutKey(string tabKey)
+        {
+            string user = "";
+            try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
+            return "METER_TAB_LAYOUT_" + user + "_" + tabKey;
+        }
+
+        private void SaveTabLayouts()
+        {
+            if (_dbSetting == null || _tabView == null) return;
+            CaptureTabLayout(_tabView.SelectedTabPage);   // the tab still on screen has not been captured yet
+            foreach (System.Collections.Generic.KeyValuePair<string, string> kv in _tabLayouts)
+            {
+                try { ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting, TabLayoutKey(kv.Key), kv.Value); }
+                catch { }
+            }
+        }
+
+        private void LoadTabLayouts()
+        {
+            if (_dbSetting == null || _tabView == null) return;
+            foreach (XtraTabPage p in _tabView.TabPages)
+            {
+                string key = TabKey(p);
+                if (key.Length == 0) continue;
+                try
+                {
+                    string xml = ServiceContractPhotocopier.Data.PumsConfig.Get(_dbSetting, TabLayoutKey(key), "");
+                    if (!string.IsNullOrEmpty(xml)) _tabLayouts[key] = xml;
+                }
+                catch { }
+            }
+        }
+
         private void SaveGridLayoutForCurrentUser()
         {
             try
             {
+                SaveTabLayouts();
                 if (_gridLayout == null || _dbSetting == null) return;
                 string user = "";
                 try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
@@ -2186,6 +2288,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     _dbSetting.ExecuteNonQuery("DELETE FROM dbo.LayoutUsers WHERE Title = N'" + t + "'");
                     _dbSetting.ExecuteNonQuery("DELETE FROM dbo.Layout WHERE Title = N'" + t + "'");
                     _gridLayout = null;   // stop the FormClosed auto-save from resurrecting it this session
+                    // The per-tab arrangements go too, or "reset to factory" would leave the tabs
+                    // exactly as they were and the escape hatch would not be one.
+                    foreach (XtraTabPage p in _tabView.TabPages)
+                    {
+                        string k = TabKey(p);
+                        if (k.Length > 0)
+                            try { ServiceContractPhotocopier.Data.PumsConfig.Set(_dbSetting, TabLayoutKey(k), ""); }
+                            catch { }
+                    }
+                    _tabLayouts.Clear();
                     XtraMessageBox.Show("Your saved grid layout was cleared — reopen the module for the factory layout.",
                         "Reset", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
