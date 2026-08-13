@@ -628,7 +628,25 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // meter's own FOCQty when a ladder is in effect) — consistent with the contract grid.
             v.CustomColumnDisplayText +=
                 new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewMeter_CustomColumnDisplayText);
+            // "What the colours mean" lives in the column-header right-click menu, beside Column
+            // Chooser and the layout items. The toolbar is full and is not the place for a
+            // reference card — three rounds of shoving buttons into it made that plain.
+            v.PopupMenuShowing +=
+                new DevExpress.XtraGrid.Views.Grid.PopupMenuShowingEventHandler(GridViewMeter_PopupMenuShowing);
         }
+
+        private void GridViewMeter_PopupMenuShowing(object sender,
+            DevExpress.XtraGrid.Views.Grid.PopupMenuShowingEventArgs e)
+        {
+            if (e.MenuType != DevExpress.XtraGrid.Views.Grid.GridMenuType.Column || e.Menu == null) return;
+            DevExpress.Utils.Menu.DXMenuItem item =
+                new DevExpress.Utils.Menu.DXMenuItem("What the colours mean...",
+                    new EventHandler(ColourKeyMenu_Click));
+            item.BeginGroup = true;
+            e.Menu.Items.Add(item);
+        }
+
+        private void ColourKeyMenu_Click(object sender, EventArgs e) { ShowColourKey(); }
 
         private void SetupTabs()
         {
@@ -742,18 +760,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // hovering shows the per-day machine counts as a tooltip; clicking still opens the
             // message box for a copyable view.
             _btnMonthOverview = new SimpleButton();
-            // It had no label, so "how many machines do I bill this month?" was answered by an
-            // unmarked 26px icon that you had to already know about. The gap before Filter was
-            // sitting empty; the button now says what it is and nothing else moved.
-            _btnMonthOverview.Text = "This Month";
-            // Same frame, height and baseline as Filter and Reset beside it. PaintStyle.Light draws
-            // no border until you hover, which on a labelled button reads as text loose on the panel
-            // rather than something you can press.
-            _btnMonthOverview.Location = new Point(242, 87);
-            _btnMonthOverview.Size = new Size(100, 28);
+            _btnMonthOverview.Text = "";
+            _btnMonthOverview.Location = new Point(242, 88);
+            _btnMonthOverview.Size = new Size(26, 26);
+            _btnMonthOverview.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
             SetBtnSvgIcon(_btnMonthOverview, "svgimages/xaf/action_aboutinfo.svg");
-            _btnMonthOverview.ImageOptions.ImageToTextIndent = 4;
-            _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            _btnMonthOverview.ImageOptions.ImageToTextIndent = 0;
+            _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleCenter;
             _btnMonthOverview.ToolTipTitle = "This Month — machines to bill";
             _btnMonthOverview.ToolTip = "How many machines fall on each billing day this month, and how " +
                 "many are already invoiced. Hover for the summary, click for the full list.";
@@ -828,18 +841,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             _btnViewSetting = new SimpleButton();
             _btnViewSetting.Text = "View Setting";
-            // What every colour on the grid means, one click away and costing one button of space.
-            // Eight colours carry meaning here and the strip beside it can only explain two; the rest
-            // were knowledge you had to be told once and then remember.
-            _btnColourKey = new SimpleButton();
-            _btnColourKey.Text = "?";
-            _btnColourKey.Location = new Point(925, 94);
-            _btnColourKey.Size = new Size(28, 28);
-            _btnColourKey.ToolTip = "What the colours on this grid mean";
-            _btnColourKey.Click += new EventHandler(BtnColourKey_Click);
-            this.PanelFilter.Controls.Add(_btnColourKey);
-            _btnColourKey.BringToFront();
-
             _btnViewSetting.Location = new Point(958, 94);
             _btnViewSetting.Size = new Size(120, 28);
             _btnViewSetting.ToolTip = "Choose which columns this grid shows.";
@@ -1171,7 +1172,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void ChkInclude0Usage_CheckedChanged(object sender, EventArgs e) { ApplyTabFilter(); }
 
-        private SimpleButton _btnColourKey;
         private Form _colourKeyWin;
 
         /// <summary>
@@ -1182,7 +1182,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// pushed the whole screen out of place — the title clipped, the tabs cut off at the left.
         /// A reference card must not be able to move the thing it explains.
         /// </summary>
-        private void BtnColourKey_Click(object sender, EventArgs e)
+        private void ShowColourKey()
         {
             if (_colourKeyWin != null && !_colourKeyWin.IsDisposed)
             {
@@ -1191,9 +1191,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
             _colourKeyWin = BuildColourKeyWindow();
-            Point p = _btnColourKey.Parent.PointToScreen(
-                new Point(_btnColourKey.Left, _btnColourKey.Bottom + 2));
-            _colourKeyWin.Location = p;
+            _colourKeyWin.Location = Control.MousePosition;   // opens where you asked for it
             _colourKeyWin.Show(this);           // owned: it closes with the module
         }
 
