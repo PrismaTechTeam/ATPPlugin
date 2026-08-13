@@ -740,8 +740,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // 156px rhythm as the rest of the toolbar row (510/666/822/978/1134).
             _btnSetting = new SimpleButton();
             _btnSetting.Text = "Setting";
-            _btnSetting.Location = new Point(1134, 8);
-            _btnSetting.Size = new Size(150, 50);
+            // Last of the five action buttons. At 150 wide on a 156 pitch the run needed 774px but
+            // the band from x=510 to the panel's right margin is 762 — so this button hung 4px off
+            // the edge and was clipped. 146 wide on a 154 pitch lands exactly on 1272, giving the
+            // right an 8px margin to match the 8px the filter box has on the left.
+            _btnSetting.Location = new Point(1126, 8);
+            _btnSetting.Size = new Size(146, 50);
             _btnSetting.Click += new EventHandler(BtnSetting_Click);
             this.PanelFilter.Controls.Add(_btnSetting);
             _btnSetting.BringToFront();
@@ -807,42 +811,56 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // ── Demo 28/07 #2: working-comfort row under the action buttons ──────────────
             // Meters filter (d) + Current Reading colour legend (c) + View Setting (b).
+            // Laid out left to right with ONE gap constant, each control placed after the previous
+            // one's real width. Hand-picked x positions gave this row gaps of 7, 18, 5 and 5 — and
+            // any later addition had to guess at a slot, which is how a button ended up 15px on top
+            // of a legend chip.
+            const int ROW_Y = 94;          // row band top; tallest control is 28 high
+            const int ROW_GAP = 12;
+            int x = 510;
+
             LabelControl lblMeters = new LabelControl();
             lblMeters.Text = "Meters:";
+            lblMeters.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            lblMeters.Size = new Size(46, 16);
             lblMeters.Appearance.ForeColor = Color.FromArgb(80, 80, 80);
             lblMeters.Appearance.Options.UseForeColor = true;
-            lblMeters.Location = new Point(510, 100);
+            lblMeters.Location = new Point(x, ROW_Y + (28 - lblMeters.Height) / 2);
             this.PanelFilter.Controls.Add(lblMeters);
             lblMeters.BringToFront();
+            x += lblMeters.Width + ROW_GAP;
 
             _cmbMeterFilter = new ComboBoxEdit();
             _cmbMeterFilter.Properties.Items.AddRange(new object[] { "All", "BK only", "CL only", "BK + CL" });
             _cmbMeterFilter.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             _cmbMeterFilter.SelectedIndex = 0;
-            _cmbMeterFilter.Location = new Point(562, 96);
             _cmbMeterFilter.Size = new Size(110, 22);
+            _cmbMeterFilter.Location = new Point(x, ROW_Y + (28 - _cmbMeterFilter.Height) / 2);
             _cmbMeterFilter.ToolTip = "Show only black-and-white (BK) or colour (CL) meter rows.\r\n" +
                 "Remembered per user — set it to BK today and it is still BK tomorrow.";
             _cmbMeterFilter.SelectedIndexChanged += new EventHandler(CmbMeterFilter_SelectedIndexChanged);
             this.PanelFilter.Controls.Add(_cmbMeterFilter);
             _cmbMeterFilter.BringToFront();
+            x += _cmbMeterFilter.Width + ROW_GAP;
 
             _lblLegendMust = MakeLegend("  MUST key in  ", Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
                 "Current Reading cells in this colour still need a reading before you can invoice.");
-            _lblLegendMust.Location = new Point(690, 97);
+            _lblLegendMust.Location = new Point(x, ROW_Y + (28 - _lblLegendMust.Height) / 2);
             this.PanelFilter.Controls.Add(_lblLegendMust);
             _lblLegendMust.BringToFront();
+            x += _lblLegendMust.Width + ROW_GAP;
 
             _lblLegendNo = MakeLegend("  no key-in needed  ", Color.FromArgb(235, 235, 235), Color.DimGray, false,
                 "Rental / waive / commitment rows, frozen snapshots and already-invoiced rows — nothing to key in.");
-            _lblLegendNo.Location = new Point(800, 97);
+            _lblLegendNo.Location = new Point(x, ROW_Y + (28 - _lblLegendNo.Height) / 2);
             this.PanelFilter.Controls.Add(_lblLegendNo);
             _lblLegendNo.BringToFront();
+            x += _lblLegendNo.Width + ROW_GAP;
 
             _btnViewSetting = new SimpleButton();
             _btnViewSetting.Text = "View Setting";
-            _btnViewSetting.Location = new Point(958, 94);
             _btnViewSetting.Size = new Size(120, 28);
+            _btnViewSetting.Location = new Point(x, ROW_Y);
             _btnViewSetting.ToolTip = "Choose which columns this grid shows.";
             _btnViewSetting.Click += new EventHandler(BtnViewSetting_Click);
             this.PanelFilter.Controls.Add(_btnViewSetting);
@@ -1262,8 +1280,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LabelControl l = new LabelControl();
             l.Text = text;
             l.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            l.Size = new Size(text.Length * 7, 20);
-            l.Appearance.Font = new Font("Segoe UI", 8F, bold ? FontStyle.Bold : FontStyle.Regular);
+            Font f = new Font("Segoe UI", 8F, bold ? FontStyle.Bold : FontStyle.Regular);
+            // MEASURED, not text.Length * 7. Seven pixels a character is right for about half the
+            // alphabet: "no key-in needed" came out ~28px wider than its text, so the grey chip ran
+            // on past its own label and collided with whatever sat beside it.
+            l.Size = new Size(TextRenderer.MeasureText(text, f).Width + 10, 20);
+            l.Appearance.Font = f;
             l.Appearance.Options.UseFont = true;
             l.Appearance.BackColor = back;
             l.Appearance.Options.UseBackColor = true;

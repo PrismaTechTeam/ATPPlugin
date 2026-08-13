@@ -274,7 +274,7 @@
             this.BtnRefresh.Appearance.Options.UseFont = true;
             this.BtnRefresh.Location = new System.Drawing.Point(510, 8);
             this.BtnRefresh.Name = "BtnRefresh";
-            this.BtnRefresh.Size = new System.Drawing.Size(150, 50);
+            this.BtnRefresh.Size = new System.Drawing.Size(146, 50);
             this.BtnRefresh.TabIndex = 10;
             this.BtnRefresh.Text = "Refresh";
             this.BtnRefresh.Click += new System.EventHandler(this.BtnRefresh_Click);
@@ -284,9 +284,9 @@
             this.BtnFetch.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnFetch.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnFetch.Appearance.Options.UseFont = true;
-            this.BtnFetch.Location = new System.Drawing.Point(666, 8);
+            this.BtnFetch.Location = new System.Drawing.Point(664, 8);
             this.BtnFetch.Name = "BtnFetch";
-            this.BtnFetch.Size = new System.Drawing.Size(150, 50);
+            this.BtnFetch.Size = new System.Drawing.Size(146, 50);
             this.BtnFetch.TabIndex = 11;
             this.BtnFetch.Text = "Fetch";
             this.BtnFetch.Click += new System.EventHandler(this.BtnFetch_Click);
@@ -296,9 +296,9 @@
             this.BtnSelfManualKeyIn.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)));
             this.BtnSelfManualKeyIn.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.BtnSelfManualKeyIn.Appearance.Options.UseFont = true;
-            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(822, 8);
+            this.BtnSelfManualKeyIn.Location = new System.Drawing.Point(818, 8);
             this.BtnSelfManualKeyIn.Name = "BtnSelfManualKeyIn";
-            this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(150, 50);
+            this.BtnSelfManualKeyIn.Size = new System.Drawing.Size(146, 50);
             this.BtnSelfManualKeyIn.TabIndex = 12;
             this.BtnSelfManualKeyIn.Text = "Select All";
             this.BtnSelfManualKeyIn.Click += new System.EventHandler(this.BtnSelfManualKeyIn_Click);
@@ -310,9 +310,9 @@
             this.BtnGenerateInvoice.Appearance.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(198)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.BtnGenerateInvoice.Appearance.Options.UseFont = true;
             this.BtnGenerateInvoice.Appearance.Options.UseForeColor = true;
-            this.BtnGenerateInvoice.Location = new System.Drawing.Point(978, 8);
+            this.BtnGenerateInvoice.Location = new System.Drawing.Point(972, 8);
             this.BtnGenerateInvoice.Name = "BtnGenerateInvoice";
-            this.BtnGenerateInvoice.Size = new System.Drawing.Size(150, 50);
+            this.BtnGenerateInvoice.Size = new System.Drawing.Size(146, 50);
             this.BtnGenerateInvoice.TabIndex = 13;
             this.BtnGenerateInvoice.Text = "Generate Invoice";
             this.BtnGenerateInvoice.Click += new System.EventHandler(this.BtnGenerateInvoice_Click);
