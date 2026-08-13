@@ -374,7 +374,17 @@
             // ================================================================
             // MeterReadingIntegration_Form
             // ================================================================
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            // (6F,13F) is the MS Sans Serif 8.25pt template default and was never re-captured for the
+            // font this form actually runs in. Segoe UI 9pt measures (7F,15F), so every DESIGNER
+            // control was being auto-scaled by ~1.167x at load while every control positioned in code
+            // with a literal Point stayed exactly where it was put. Half the toolbar moved and half
+            // did not — which is why the hand-tuned coordinates never came out right on screen.
+            //
+            // Declaring the font and the dimensions it really measures makes the scale factor 1.0, so
+            // designer and runtime controls finally share one coordinate system. Same three lines the
+            // Stock Request Task form (which this layout was copied from) has always had.
+            this.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1280, 728);
             // Grid first (Fill), then PanelFilter (Top, lower), then PanelHeaderTop (Top, top).
