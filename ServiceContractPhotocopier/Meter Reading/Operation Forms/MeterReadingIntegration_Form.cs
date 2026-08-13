@@ -746,9 +746,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // unmarked 26px icon that you had to already know about. The gap before Filter was
             // sitting empty; the button now says what it is and nothing else moved.
             _btnMonthOverview.Text = "This Month";
-            _btnMonthOverview.Location = new Point(242, 88);
-            _btnMonthOverview.Size = new Size(100, 26);
-            _btnMonthOverview.PaintStyle = DevExpress.XtraEditors.Controls.PaintStyles.Light;
+            // Same frame, height and baseline as Filter and Reset beside it. PaintStyle.Light draws
+            // no border until you hover, which on a labelled button reads as text loose on the panel
+            // rather than something you can press.
+            _btnMonthOverview.Location = new Point(242, 87);
+            _btnMonthOverview.Size = new Size(100, 28);
             SetBtnSvgIcon(_btnMonthOverview, "svgimages/xaf/action_aboutinfo.svg");
             _btnMonthOverview.ImageOptions.ImageToTextIndent = 4;
             _btnMonthOverview.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
