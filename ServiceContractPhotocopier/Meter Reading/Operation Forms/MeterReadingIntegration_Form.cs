@@ -930,6 +930,34 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             return string.IsNullOrEmpty(page.Name) ? page.Text : page.Name;
         }
 
+        /// <summary>
+        /// Point the native layout menu at THIS tab's own set of saved layouts.
+        ///
+        /// CustomizeGridLayout reads its form name at call time for every operation that matters —
+        /// the Load Layout list, Save Layout, and the Layout Manager. Giving each tab its own name
+        /// means right-clicking on "Invoiced" offers the layouts saved for Invoiced, not the ones
+        /// saved for "Ready to Invoice".
+        ///
+        /// Done by setting the field rather than by building a second CustomizeGridLayout: its
+        /// constructor subscribes to the grid's PopupMenuShowing and Layout events and offers no way
+        /// to unsubscribe, so one instance per tab would stack three copies of the menu on one grid.
+        /// If the field ever moves, this quietly does nothing and every tab shares one list again —
+        /// the behaviour we had before, not a crash.
+        /// </summary>
+        private void SetLayoutScope(XtraTabPage page)
+        {
+            string key = TabKey(page);
+            if (_gridLayout == null || key.Length == 0) return;
+            try
+            {
+                System.Reflection.FieldInfo f = typeof(AutoCount.XtraUtils.CustomizeGridLayout)
+                    .GetField("myFormName", System.Reflection.BindingFlags.NonPublic |
+                                            System.Reflection.BindingFlags.Instance);
+                if (f != null) f.SetValue(_gridLayout, GRID_LAYOUT_KEY + "." + key);
+            }
+            catch { }
+        }
+
         /// <summary>Remember how this tab is arranged right now.</summary>
         private void CaptureTabLayout(XtraTabPage page)
         {
@@ -1014,6 +1042,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 GridViewMeter.ActiveFilterString = "";
                 GridViewMeter.ExpandAllGroups();   // customer groups start open on every tab switch
             }
+            // The layout menu follows the tab, so Save/Load/Manager act on this tab's own layouts.
+            SetLayoutScope(_tabView.SelectedTabPage);
             // This tab's own arrangement wins. Only a tab that has never been arranged falls back to
             // the factory columns — otherwise ApplyTabColumnLayout would undo the template the
             // operator just loaded, which is precisely what "it restores back" described.
@@ -1723,6 +1753,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         return s;
                     });
                 LoadTabLayouts();         // this user's per-tab arrangements, if they have any
+                SetLayoutScope(_tabView != null ? _tabView.SelectedTabPage : null);
                 if (!RestoreTabLayout(_tabView != null ? _tabView.SelectedTabPage : null))
                     ApplyTabColumnLayout();   // never arranged this tab -> factory columns
             }
@@ -1779,7 +1810,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 string user = "";
                 try { user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? ""; } catch { }
                 if (user.Length == 0) return;
-                string title = "SCP Meter - " + user;
+                // Per tab as well as per user: the auto-save now lands under this tab's layout scope,
+                // and one shared title across three scopes would have the tabs overwriting each
+                // other's saved arrangement.
+                string tab = _tabView != null ? TabKey(_tabView.SelectedTabPage) : "";
+                string title = "SCP Meter - " + user + (tab.Length > 0 ? " - " + tab : "");
                 if (title.Length > 60) title = title.Substring(0, 60);
                 if (!_gridLayout.SaveLayout(title, false)) return;   // title owned by another grid — skip
                 string tEsc = title.Replace("'", "''"), uEsc = user.Replace("'", "''");
@@ -2285,8 +2320,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     string u = (AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? "").Replace("'", "''");
                     string t = ("SCP Meter - " + u);
                     if (t.Length > 60) t = t.Substring(0, 60);
-                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.LayoutUsers WHERE Title = N'" + t + "'");
-                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.Layout WHERE Title = N'" + t + "'");
+                    // LIKE, because the auto-save is now per tab ("... - <user> - <tab>") and a reset
+                    // that cleared only one of the three would leave the others to spring back.
+                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.LayoutUsers WHERE Title LIKE N'" + t + "%'");
+                    _dbSetting.ExecuteNonQuery("DELETE FROM dbo.Layout WHERE Title LIKE N'" + t + "%'");
                     _gridLayout = null;   // stop the FormClosed auto-save from resurrecting it this session
                     // The per-tab arrangements go too, or "reset to factory" would leave the tabs
                     // exactly as they were and the escape hatch would not be one.
