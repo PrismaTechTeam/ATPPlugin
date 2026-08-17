@@ -216,7 +216,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             if (level == 0)
             {
-                e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+                e.Appearance.FontStyleDelta = System.Drawing.FontStyle.Bold;   // not new Font(): RowCellStyle fires per cell per paint
                 e.Appearance.BackColor = System.Drawing.Color.FromArgb(238, 242, 248);
             }
             else if (level == 2)
@@ -227,7 +227,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 e.Appearance.ForeColor = System.Drawing.Color.Firebrick;
                 if (level == 3)
-                    e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
+                    e.Appearance.FontStyleDelta = System.Drawing.FontStyle.Bold;   // not new Font(): RowCellStyle fires per cell per paint
             }
         }
 

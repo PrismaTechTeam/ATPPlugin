@@ -48,6 +48,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // LblHeader
             //
             this.LblHeader.Appearance.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this.LblHeader.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            this.LblHeader.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top
+                        | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.LblHeader.Appearance.TextOptions.Trimming = DevExpress.Utils.Trimming.EllipsisCharacter;
             this.LblHeader.Location = new System.Drawing.Point(14, 14);
             this.LblHeader.Name = "LblHeader";
             this.LblHeader.Size = new System.Drawing.Size(880, 20);
@@ -57,6 +62,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // LblNote
             //
             this.LblNote.Appearance.ForeColor = System.Drawing.Color.DimGray;
+            this.LblNote.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            this.LblNote.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top
+                        | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.LblNote.Appearance.TextOptions.Trimming = DevExpress.Utils.Trimming.EllipsisCharacter;
             this.LblNote.Location = new System.Drawing.Point(14, 38);
             this.LblNote.Name = "LblNote";
             this.LblNote.Size = new System.Drawing.Size(880, 18);
@@ -108,8 +118,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // MeterInvoicePreview_Form
             //
+            // Font FIRST, then the dimensions it measures, then the mode. Assigning Font after
+            // Controls.Add auto-scales using the font in force BEFORE the assignment -- DevExpress's
+            // Tahoma 8.25pt, measuring (6,13) -- against the declared (7,15), for a factor of
+            // 0.857 x 0.867 applied only to children still carrying the ambient font. Every
+            // DevExpress editor stamps its own, so a GridControl would move and nothing else would.
+            this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AcceptButton = this.BtnCreate;
             this.CancelButton = this.BtnClose;
             this.ClientSize = new System.Drawing.Size(908, 558);
             this.Controls.Add(this.LblHeader);
@@ -117,7 +134,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.Controls.Add(this.GridPreview);
             this.Controls.Add(this.BtnCreate);
             this.Controls.Add(this.BtnClose);
-            this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.MinimumSize = new System.Drawing.Size(720, 400);

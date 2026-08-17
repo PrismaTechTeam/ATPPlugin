@@ -16,12 +16,12 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     ///
     /// <para>Same shape as Meter Multi Pricing next door — green header, New / Edit / Copy to New /
     /// Save / Cancel / Delete / Refresh / Exit toolbar, list on top, detail below, no popup editor.
-    /// The bottom grid, where Multi Pricing has its rate ladder, is a sample invoice.</para>
+    /// Where Multi Pricing puts its rate ladder, this puts a sample invoice.</para>
     ///
-    /// <para>The sample is the reason the three questions get a screen rather than three combo boxes
-    /// on the contract: "rental per model" and "rental one line" are indistinguishable as words and
-    /// obvious as invoices. It redraws on every click, folded through <see cref="ScpInvoiceLayout"/>
-    /// — the same call the engine makes — so a preview cannot promise what Generate will not do.</para>
+    /// <para>The sample is why the three questions get a screen rather than three combo boxes on the
+    /// contract: "rental per model" and "rental one line" are indistinguishable as words and obvious
+    /// as invoices. It redraws on every click, folded through <see cref="ScpInvoiceLayout"/> — the
+    /// same call the engine makes — so it cannot promise what Generate will not do.</para>
     /// </summary>
     [AutoCount.PlugIn.MenuItem("Billing Format",
     ParentMenuCaption = "General Setup", MenuOrder = 135, ParentMenuOrder = 600,
@@ -37,6 +37,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private bool _isNew;
         private bool _editMode;
         private bool _loading;
+        private bool _dirty;
 
         public BillingFormatLst_Form() { InitializeComponent(); }
 
@@ -54,20 +55,71 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private void OnFormLoad(object sender, EventArgs e)
         {
+            ApplyButtonIcons();
+            if (_dbSetting == null) return;
             BuildColumns();
             GridViewFormats.FocusedRowChanged +=
                 new DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventHandler(OnFocusedRowChanged);
             RgInvoices.SelectedIndexChanged += new EventHandler(OnChoiceChanged);
             RgRental.SelectedIndexChanged += new EventHandler(OnChoiceChanged);
             RgMeter.SelectedIndexChanged += new EventHandler(OnChoiceChanged);
+            TxtName.EditValueChanged += new EventHandler(OnFieldEdited);
+            TxtRemark.EditValueChanged += new EventHandler(OnFieldEdited);
+            ChkInactive.CheckedChanged += new EventHandler(OnFieldEdited);
             this.KeyDown += new KeyEventHandler(OnFormKeyDown);
             LoadData("");
             SetEditMode(false);
         }
 
+        /// <summary>The native AutoCount toolbar glyphs, same call every sibling makes. Cosmetic, so
+        /// a failure here must never stop the form opening.
+        /// <para>The size argument is DPI, not AutoScaleDimensions — passing (7,15) by mistake asks
+        /// for icons about 1% of full size.</para></summary>
+        private void ApplyButtonIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                BtnNew.ImageOptions.Image = img.GetLargeImage_New();
+                BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
+                BtnCopyNew.ImageOptions.Image = img.GetLargeImage_CopyTo2();
+                BtnSave.ImageOptions.Image = img.GetLargeImage_Save();
+                BtnCancel.ImageOptions.Image = img.GetLargeImage_Cancel();
+                BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
+                BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
+                try
+                {
+                    System.Drawing.Image door =
+                        DevExpress.Images.ImageResourceCache.Default.GetImage("images/xaf/action_exit_32x32.png");
+                    BtnExit.ImageOptions.Image = door ?? img.GetLargeImage_Close();
+                }
+                catch { BtnExit.ImageOptions.Image = img.GetLargeImage_Close(); }
+            }
+            catch { }
+        }
+
         private void OnFormKeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.F2 && !_editMode) { this.Close(); e.Handled = true; }
+        }
+
+        private void OnFieldEdited(object sender, EventArgs e)
+        {
+            if (!_loading && _editMode) _dirty = true;
+        }
+
+        /// <summary>Never lose a half-typed format to the window's X — the same rule the contract and
+        /// service-item editors follow.</summary>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_editMode && _dirty &&
+                XtraMessageBox.Show(this, "You have unsaved changes. Discard them and close?",
+                    "Billing Format", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            { e.Cancel = true; return; }
+            base.OnFormClosing(e);
         }
 
         private void BuildColumns()
@@ -82,28 +134,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(GridViewFormats, "UsedBy", "Contracts", 80);
             AddCol(GridViewFormats, "Inactive", "Inactive", 70);
 
-            _dtPreview = new DataTable();
-            _dtPreview.Columns.Add("Level", typeof(int));
-            _dtPreview.Columns.Add("What", typeof(string));
-            _dtPreview.Columns.Add("Qty", typeof(decimal));
-            _dtPreview.Columns.Add("UnitPrice", typeof(decimal));
-            _dtPreview.Columns.Add("Amount", typeof(decimal));
-
-            GridViewPreview.OptionsBehavior.AutoPopulateColumns = false;
-            GridViewPreview.Columns.Clear();
-            AddCol(GridViewPreview, "What", "Line", 600);
-            DevExpress.XtraGrid.Columns.GridColumn cq = AddCol(GridViewPreview, "Qty", "Quantity", 110);
-            cq.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            cq.DisplayFormat.FormatString = "#,##0.####";
-            DevExpress.XtraGrid.Columns.GridColumn cp = AddCol(GridViewPreview, "UnitPrice", "Unit Price", 110);
-            cp.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            cp.DisplayFormat.FormatString = "#,##0.####";
-            DevExpress.XtraGrid.Columns.GridColumn ca = AddCol(GridViewPreview, "Amount", "Amount", 120);
-            ca.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            ca.DisplayFormat.FormatString = "#,##0.00";
-            GridViewPreview.RowCellStyle +=
-                new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(OnPreviewRowStyle);
-            GridPreview.DataSource = _dtPreview;
+            BuildPreviewColumns();
         }
 
         private static DevExpress.XtraGrid.Columns.GridColumn AddCol(
@@ -113,6 +144,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             c.Caption = caption;
             c.Width = width;
             return c;
+        }
+
+        private static void RightAlign(DevExpress.XtraGrid.Columns.GridColumn c)
+        {
+            c.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            c.AppearanceCell.Options.UseTextOptions = true;
+            c.AppearanceHeader.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
+            c.AppearanceHeader.Options.UseTextOptions = true;
         }
 
         // ===== list =====
@@ -168,6 +207,25 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             ShowFocusedRow();
         }
 
+        /// <summary>Put a stored code into a radio group, falling back when it matches no option.
+        /// <para>DevExpress compares item values with <c>Equals</c> — ordinal, case-sensitive, no
+        /// trim — so a stray <c>'one'</c> or a padded <c>nchar</c> selects nothing, leaves the group
+        /// blank, and would then be written straight back to the database on the next save.</para></summary>
+        private static void SetRadio(RadioGroup rg, string value, string fallback)
+        {
+            string v = (value ?? "").Trim().ToUpperInvariant();
+            if (rg.Properties.Items.GetItemIndexByValue(v) < 0) v = fallback;
+            rg.EditValue = v;
+        }
+
+        /// <summary>Read back from the selected ITEM, never from EditValue, so only one of the
+        /// offered values can ever reach the database.</summary>
+        private static string ReadRadio(RadioGroup rg, string fallback)
+        {
+            int i = rg.SelectedIndex;
+            return i < 0 ? fallback : Convert.ToString(rg.Properties.Items[i].Value);
+        }
+
         private void ShowFocusedRow()
         {
             int rh = GridViewFormats.FocusedRowHandle;
@@ -179,9 +237,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     _selectedCode = "";
                     TxtCode.Text = ""; TxtName.Text = ""; TxtRemark.Text = "";
                     ChkInactive.Checked = false;
-                    RgInvoices.EditValue = ScpBillingFormat.SPLIT_ONE;
-                    RgRental.EditValue = "A";
-                    RgMeter.EditValue = "S";
+                    SetRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE, ScpBillingFormat.SPLIT_ONE);
+                    SetRadio(RgRental, "A", "A");
+                    SetRadio(RgMeter, "S", "S");
                 }
                 else
                 {
@@ -190,35 +248,50 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     TxtName.Text = Convert.ToString(GridViewFormats.GetRowCellValue(rh, "FormatName"));
                     TxtRemark.Text = Convert.ToString(GridViewFormats.GetRowCellValue(rh, "Remark"));
                     ChkInactive.Checked = Convert.ToString(GridViewFormats.GetRowCellValue(rh, "Inactive")) == "Y";
-                    RgInvoices.EditValue = Convert.ToString(GridViewFormats.GetRowCellValue(rh, "InvoiceSplit")).Trim();
-                    RgRental.EditValue = FirstChar(GridViewFormats.GetRowCellValue(rh, "RentalLineMode"), 'A').ToString();
-                    RgMeter.EditValue = FirstChar(GridViewFormats.GetRowCellValue(rh, "MeterLineMode"), 'S').ToString();
+                    SetRadio(RgInvoices, Convert.ToString(GridViewFormats.GetRowCellValue(rh, "InvoiceSplit")),
+                             ScpBillingFormat.SPLIT_ONE);
+                    SetRadio(RgRental, FirstChar(GridViewFormats.GetRowCellValue(rh, "RentalLineMode"), 'A').ToString(), "A");
+                    SetRadio(RgMeter, FirstChar(GridViewFormats.GetRowCellValue(rh, "MeterLineMode"), 'S').ToString(), "S");
                 }
             }
             finally { _loading = false; }
             RefreshPreview();
         }
 
+        /// <summary>ReadOnly on a RadioGroup does block input, but its only visual cue is the default
+        /// grey background — which the transparent Appearance here overrides. Grey the text instead,
+        /// or the group looks live and silently swallows clicks.</summary>
+        private static void SetRadioReadOnly(RadioGroup rg, bool ro)
+        {
+            rg.Properties.ReadOnly = ro;
+            rg.Properties.Appearance.ForeColor = ro
+                ? System.Drawing.SystemColors.GrayText
+                : System.Drawing.Color.Empty;
+        }
+
         private void SetEditMode(bool on)
         {
             _editMode = on;
+            if (!on) _dirty = false;
             GridFormats.Enabled = !on;
             TxtCode.Properties.ReadOnly = !on || !_isNew;   // the code is what contracts point at
             TxtName.Properties.ReadOnly = !on;
             TxtRemark.Properties.ReadOnly = !on;
             ChkInactive.Properties.ReadOnly = !on;
-            RgInvoices.Properties.ReadOnly = !on;
-            RgRental.Properties.ReadOnly = !on;
-            RgMeter.Properties.ReadOnly = !on;
+            SetRadioReadOnly(RgInvoices, !on);
+            SetRadioReadOnly(RgRental, !on);
+            SetRadioReadOnly(RgMeter, !on);
             BtnNew.Enabled = !on;
             BtnEdit.Enabled = !on && _selectedCode.Length > 0;
             BtnCopyNew.Enabled = !on && _selectedCode.Length > 0;
             BtnDelete.Enabled = !on && _selectedCode.Length > 0;
             BtnRefresh.Enabled = !on;
+            BtnExit.Enabled = !on;
             BtnSave.Enabled = on;
             BtnCancel.Enabled = on;
             LblStatus.Text = on
-                ? (_isNew ? "New billing format — Save to keep it." : "Editing " + _selectedCode + " — Save to keep the change.")
+                ? (_isNew ? "New billing format — Save to keep it."
+                          : "Editing " + _selectedCode + " — Save to keep the change.")
                 : "Billing Format";
         }
 
@@ -233,9 +306,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 _selectedCode = "";
                 TxtCode.Text = ""; TxtName.Text = ""; TxtRemark.Text = "";
                 ChkInactive.Checked = false;
-                RgInvoices.EditValue = ScpBillingFormat.SPLIT_ONE;
-                RgRental.EditValue = "A";
-                RgMeter.EditValue = "S";
+                SetRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE, ScpBillingFormat.SPLIT_ONE);
+                SetRadio(RgRental, "A", "A");
+                SetRadio(RgMeter, "S", "S");
             }
             finally { _loading = false; }
             RefreshPreview();
@@ -379,70 +452,152 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
         private static string Q(string s) { return "N'" + (s ?? "").Replace("'", "''") + "'"; }
 
-        // ===== the format currently on screen =====
-
-        private string CurrentSplit()
-        {
-            string v = RgInvoices.EditValue == null ? "" : Convert.ToString(RgInvoices.EditValue);
-            return v.Length == 0 ? ScpBillingFormat.SPLIT_ONE : v;
-        }
-
-        private string CurrentRental()
-        {
-            string v = RgRental.EditValue == null ? "" : Convert.ToString(RgRental.EditValue);
-            return v.Length == 0 ? "A" : v;
-        }
-
-        private string CurrentMeter()
-        {
-            string v = RgMeter.EditValue == null ? "" : Convert.ToString(RgMeter.EditValue);
-            return v.Length == 0 ? "S" : v;
-        }
+        private string CurrentSplit() { return ReadRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE); }
+        private string CurrentRental() { return ReadRadio(RgRental, "A"); }
+        private string CurrentMeter() { return ReadRadio(RgMeter, "S"); }
 
         private void OnChoiceChanged(object sender, EventArgs e)
         {
             if (_loading) return;
+            _dirty = _editMode;
             RefreshPreview();
         }
 
         // ===== sample invoice =====
 
+        private void BuildPreviewColumns()
+        {
+            _dtPreview = new DataTable();
+            _dtPreview.Columns.Add("InvKey", typeof(int));
+            _dtPreview.Columns.Add("Invoice", typeof(string));
+            _dtPreview.Columns.Add("LineNo", typeof(int));
+            _dtPreview.Columns.Add("Code", typeof(string));
+            _dtPreview.Columns.Add("Descr", typeof(string));
+            _dtPreview.Columns.Add("Machines", typeof(string));
+            _dtPreview.Columns.Add("Qty", typeof(decimal));
+            _dtPreview.Columns.Add("UOM", typeof(string));
+            _dtPreview.Columns.Add("UnitPrice", typeof(decimal));
+            _dtPreview.Columns.Add("Amount", typeof(decimal));
+            _dtPreview.Columns.Add("IsFoc", typeof(bool));
+
+            GridViewPreview.OptionsBehavior.AutoPopulateColumns = false;
+            GridViewPreview.Columns.Clear();
+
+            // Grouped by invoice: DevExpress paints group rows in the skin's own style, gives the
+            // per-invoice total for free, and lets the PM / PMS layouts collapse to one row each —
+            // so the number of rows on screen IS the answer to "how many invoices?".
+            DevExpress.XtraGrid.Columns.GridColumn cInv = GridViewPreview.Columns.AddVisible("Invoice");
+            cInv.Visible = false;
+            cInv.GroupIndex = 0;
+            GridViewPreview.GroupFormat = "{1}";
+
+            DevExpress.XtraGrid.Columns.GridColumn cNo = AddCol(GridViewPreview, "LineNo", "", 34);
+            cNo.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            cNo.DisplayFormat.FormatString = "0'.'";
+            cNo.SortIndex = 1;
+            RightAlign(cNo);
+            AddCol(GridViewPreview, "Code", "Item", 74);
+            AddCol(GridViewPreview, "Descr", "Description", 330);
+            AddCol(GridViewPreview, "Machines", "Machines on this line", 250);
+            DevExpress.XtraGrid.Columns.GridColumn cQty = AddCol(GridViewPreview, "Qty", "Quantity", 92);
+            cQty.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            cQty.DisplayFormat.FormatString = "#,##0.####";
+            RightAlign(cQty);
+            AddCol(GridViewPreview, "UOM", "", 46);
+            DevExpress.XtraGrid.Columns.GridColumn cPr = AddCol(GridViewPreview, "UnitPrice", "Unit Price", 92);
+            cPr.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            cPr.DisplayFormat.FormatString = "#,##0.00##";
+            RightAlign(cPr);
+            DevExpress.XtraGrid.Columns.GridColumn cAmt = AddCol(GridViewPreview, "Amount", "Amount", 104);
+            cAmt.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            cAmt.DisplayFormat.FormatString = "#,##0.00";
+            RightAlign(cAmt);
+
+            // Which machines a line covers is supporting detail, so it is dimmed — derived from the
+            // skin's own row colours rather than a hardcoded grey that would be invisible on a dark one.
+            System.Drawing.Color fore = GridViewPreview.PaintAppearance.Row.ForeColor;
+            System.Drawing.Color back = GridViewPreview.PaintAppearance.Row.BackColor;
+            GridViewPreview.Columns["Machines"].AppearanceCell.ForeColor = System.Drawing.Color.FromArgb(
+                (fore.R + back.R) / 2, (fore.G + back.G) / 2, (fore.B + back.B) / 2);
+            GridViewPreview.Columns["Machines"].AppearanceCell.Options.UseForeColor = true;
+
+            // Per-invoice total, on the group row, under the Amount column.
+            DevExpress.XtraGrid.GridGroupSummaryItem gs = new DevExpress.XtraGrid.GridGroupSummaryItem();
+            gs.SummaryType = DevExpress.Data.SummaryItemType.Sum;
+            gs.FieldName = "Amount";
+            gs.DisplayFormat = "{0:n2}";
+            gs.ShowInGroupColumnFooter = cAmt;
+            GridViewPreview.GroupSummary.Add(gs);
+
+            // Grand total never scrolls away.
+            cAmt.Summary.Add(DevExpress.Data.SummaryItemType.Sum, "Amount", "{0:n2}");
+            cQty.Summary.Add(DevExpress.Data.SummaryItemType.Sum, "Qty", "{0:n0}");
+
+            GridViewPreview.CustomColumnDisplayText +=
+                new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(OnPreviewDisplayText);
+            GridPreview.DataSource = _dtPreview;
+        }
+
+        /// <summary>A rental worth nothing prints the word FOC, exactly as the customer's own invoice
+        /// does. A METER line that billed no copies is not FOC and still shows 0.00.</summary>
+        private void OnPreviewDisplayText(object sender,
+            DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "Amount") return;
+            if (e.ListSourceRowIndex < 0 || e.ListSourceRowIndex >= _dtPreview.Rows.Count) return;
+            DataRow r = _dtPreview.Rows[e.ListSourceRowIndex];
+            if (r["IsFoc"] != DBNull.Value && Convert.ToBoolean(r["IsFoc"])) e.DisplayText = "FOC";
+        }
+
         /// <summary>
-        /// The sample fleet, modelled on Pasir Gudang: four models, two black rates, colour on one
-        /// machine, and one machine with no rental meter. That is the smallest real fleet on which
-        /// all three choices produce visibly different invoices — with a simpler one, "per model"
-        /// and "one line" would draw the same thing and the preview would teach nothing.
+        /// The sample fleet: six machines, four models, two black rates, colour on two different
+        /// models, one machine with no rental and one rented free.
+        ///
+        /// <para>Every part of that is load-bearing. The 0.019 machine is what stops "one line for
+        /// all" being read as "always exactly one line" — it still yields two black lines because
+        /// the rates differ, which is Pasir Gudang's real invoice. The three identical 4545i are
+        /// what make "per model" different from "per machine". Colour on two models is what makes
+        /// the Black &amp; Colour question visible at all. The machine with no rental is what makes
+        /// the machine count differ from the invoice count, which is the whole point of the
+        /// per-machine layouts. And the free rental is what exercises FOC.</para>
+        ///
+        /// <para>Emitted rentals-first, then black, then colour: the fold preserves first-appearance
+        /// order, so interleaving them per machine would scatter the rental lines through the invoice
+        /// and make "rental per model" impossible to see.</para>
         /// </summary>
         private static List<MeterBillLine> SampleFleet()
         {
             List<MeterBillLine> lines = new List<MeterBillLine>();
-            AddSample(lines, "iR-ADV 8505", "SWD00508", "HEAVY DUTY", 500m, 0.019m, 534659m, 594908m, 0m, 0m);
-            AddSample(lines, "iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", 300m, 0.0285m, 326760m, 355403m, 41172m, 46865m);
-            AddSample(lines, "iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", 300m, 0.0285m, 58218m, 68258m, 0m, 0m);
-            AddSample(lines, "iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", 300m, 0.0285m, 38423m, 42472m, 0m, 0m);
-            AddSample(lines, "iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", 300m, 0.0285m, 72143m, 79314m, 0m, 0m);
-            AddSample(lines, "iR-ADV C4535i", "UNV01325", "MEDIUM DUTY", 0m, 0.0285m, 21947m, 24904m, 0m, 0m);
+            // rentals
+            lines.Add(Rent("iR-ADV 8505", "SWD00508", "HEAVY DUTY", 0m));        // free of charge
+            lines.Add(Rent("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", 300m));
+            lines.Add(Rent("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", 300m));
+            lines.Add(Rent("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", 300m));
+            lines.Add(Rent("iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", 300m));
+            // black — the 8505 on its own rate
+            lines.Add(Meter("iR-ADV 8505", "SWD00508", "HEAVY DUTY", "BK", "BK COPY + PRINT", 0.019m, 534659m, 594908m));
+            lines.Add(Meter("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 326760m, 355403m));
+            lines.Add(Meter("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 58218m, 68258m));
+            lines.Add(Meter("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 38423m, 42472m));
+            lines.Add(Meter("iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 72143m, 79314m));
+            lines.Add(Meter("iR-ADV C4535i", "UNV01325", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 21947m, 24904m));
+            // colour — on two different models, so it obeys the model rule visibly
+            lines.Add(Meter("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 41172m, 46865m));
+            lines.Add(Meter("iR-ADV C4535i", "UNV01325", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 12880m, 14000m));
             return lines;
         }
 
-        private static void AddSample(List<MeterBillLine> lines, string model, string serial, string label,
-            decimal rental, decimal bkRate, decimal bkPrev, decimal bkCur, decimal clPrev, decimal clCur)
+        private static MeterBillLine Rent(string model, string serial, string label, decimal amount)
         {
-            if (rental > 0m)
-            {
-                MeterBillLine r = NewSample(model, serial, label);
-                r.IsFlat = true; r.IsRental = true;
-                r.MeterTypeCode = "RENTAL"; r.MeterTypeName = "MONTHLY RENTAL"; r.ACItemCode = "RENTAL";
-                r.Charge = rental; r.EffUnitPrice = rental;
-                r.RentalMonths = 36; r.RentalStartDate = new DateTime(2025, 7, 1);
-                lines.Add(r);
-            }
-            lines.Add(SampleMeter(model, serial, label, "BK", "BK COPY + PRINT", bkRate, bkPrev, bkCur));
-            if (clCur > clPrev)
-                lines.Add(SampleMeter(model, serial, label, "CL", "COLOUR COPY + PRINT", 0.285m, clPrev, clCur));
+            MeterBillLine l = NewSample(model, serial, label);
+            l.IsFlat = true; l.IsRental = true;
+            l.MeterTypeCode = "RENTAL"; l.MeterTypeName = "MONTHLY RENTAL"; l.ACItemCode = "RENTAL";
+            l.Charge = amount; l.EffUnitPrice = amount;
+            l.RentalMonths = 36; l.RentalStartDate = new DateTime(2025, 7, 1);
+            return l;
         }
 
-        private static MeterBillLine SampleMeter(string model, string serial, string label, string role,
+        private static MeterBillLine Meter(string model, string serial, string label, string role,
             string name, decimal rate, decimal prev, decimal cur)
         {
             MeterBillLine m = NewSample(model, serial, label);
@@ -465,40 +620,92 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private void RefreshPreview()
         {
             if (_dtPreview == null) return;
-            _dtPreview.Rows.Clear();
             string split = CurrentSplit();
             char rentalMode = CurrentRental()[0];
             char meterMode = CurrentMeter()[0];
 
+            List<MeterBillLine> fleet = SampleFleet();
+            List<KeyValuePair<string, List<MeterBillLine>>> invoices = SplitIntoInvoices(fleet, split);
+            int pad = invoices.Count.ToString().Length;
+
             decimal grand = 0m;
-            List<KeyValuePair<string, List<MeterBillLine>>> invoices = SplitIntoInvoices(SampleFleet(), split);
-            foreach (KeyValuePair<string, List<MeterBillLine>> inv in invoices)
+            int rental = 0, black = 0, colour = 0;
+
+            GridViewPreview.BeginUpdate();
+            try
             {
-                List<ScpFoldedLine> rows = ScpInvoiceLayout.FoldWith(inv.Value, rentalMode, meterMode);
-                decimal total = 0m;
-                foreach (ScpFoldedLine row in rows) total += row.PrintAmount;
-                grand += total;
-
-                DataRow h = _dtPreview.NewRow();
-                h["Level"] = 0;
-                h["What"] = inv.Key + "   —   " + rows.Count + (rows.Count == 1 ? " line" : " lines");
-                h["Amount"] = total;
-                _dtPreview.Rows.Add(h);
-
-                foreach (ScpFoldedLine row in rows)
+                _dtPreview.BeginLoadData();
+                try
                 {
-                    DataRow l = _dtPreview.NewRow();
-                    l["Level"] = 1;
-                    l["What"] = "        " + DescribeRow(row);
-                    l["Qty"] = row.PrintQty;
-                    l["UnitPrice"] = row.PrintUnitPrice;
-                    l["Amount"] = row.PrintAmount;
-                    _dtPreview.Rows.Add(l);
+                    _dtPreview.Rows.Clear();
+                    for (int inv = 0; inv < invoices.Count; inv++)
+                    {
+                        List<ScpFoldedLine> rows =
+                            ScpInvoiceLayout.FoldWith(invoices[inv].Value, rentalMode, meterMode);
+                        // The ordinal is zero-padded because groups sort on the caption STRING —
+                        // "INVOICE 10" would otherwise come before "INVOICE 2".
+                        string caption = "INVOICE " + (inv + 1).ToString().PadLeft(pad, '0') +
+                                         " of " + invoices.Count + "   ·   " + invoices[inv].Key +
+                                         "   ·   " + rows.Count + (rows.Count == 1 ? " line" : " lines");
+                        int no = 0;
+                        foreach (ScpFoldedLine row in rows)
+                        {
+                            no++;
+                            grand += row.PrintAmount;
+                            if (row.Leader.IsRental) rental++;
+                            else if (row.Leader.ColorLabel == "CL") colour++;
+                            else black++;
+
+                            DataRow r = _dtPreview.NewRow();
+                            r["InvKey"] = inv;
+                            r["Invoice"] = caption;
+                            r["LineNo"] = no;
+                            r["Code"] = row.Leader.MeterTypeCode;
+                            r["Descr"] = Describe(row);
+                            r["Machines"] = Machines(row, fleet);
+                            r["Qty"] = row.PrintQty;
+                            r["UOM"] = row.Leader.IsFlat ? "UNIT" : "PCS";
+                            r["UnitPrice"] = row.PrintUnitPrice;
+                            r["Amount"] = row.PrintAmount;
+                            r["IsFoc"] = row.Leader.IsFlat && row.PrintAmount == 0m;
+                            _dtPreview.Rows.Add(r);
+                        }
+                    }
                 }
+                finally { _dtPreview.EndLoadData(); }
             }
-            LblPreviewNote.Text = "6 machines, 4 models, one with no rental meter   →   " +
-                invoices.Count + (invoices.Count == 1 ? " invoice" : " invoices") +
-                ", " + grand.ToString("#,##0.00") + " in total";
+            finally { GridViewPreview.EndUpdate(); }
+
+            // Two invoices or fewer read as a whole document; more, and the collapsed group rows ARE
+            // the answer, with the first opened as a worked example.
+            if (invoices.Count <= 2) GridViewPreview.ExpandAllGroups();
+            else { GridViewPreview.CollapseAllGroups(); GridViewPreview.SetRowExpanded(-1, true); }
+            GridViewPreview.TopRowIndex = 0;
+
+            LblPreviewNote.Text = SummaryLine(fleet, invoices.Count, rental, black, colour, grand);
+        }
+
+        /// <summary>What changes when a radio is clicked — line counts — not the fleet, which never
+        /// changes, and not the total, which is identical on every layout because folding is
+        /// presentation only. Saying so is the point: it is the thing a biller is anxious about.</summary>
+        private string SummaryLine(List<MeterBillLine> fleet, int invoices, int rental, int black,
+            int colour, decimal grand)
+        {
+            int machines = 0;
+            List<string> seen = new List<string>();
+            foreach (MeterBillLine l in fleet)
+                if (!seen.Contains(l.SerialNumber)) { seen.Add(l.SerialNumber); machines++; }
+            int lines = rental + black + colour;
+
+            string s = machines + " machines  →  " + invoices + (invoices == 1 ? " invoice" : " invoices") +
+                       ", " + lines + " lines  (" + rental + " rental · " + black + " black · " +
+                       colour + " colour)  ·  RM" + grand.ToString("#,##0.00") + ", the same on every layout";
+
+            // The one thing that surprises people: "one line for all" can still produce two, when the
+            // machines are not on the same rate.
+            if (CurrentMeter()[0] == ScpBillingFormat.LINE_ACROSS_MODEL && black > 1)
+                s += "  ·  " + black + " black lines, not 1 — the rates differ (0.019 / 0.0285)";
+            return s;
         }
 
         /// <summary>Which machines land on which invoice, for this split.</summary>
@@ -514,43 +721,64 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
             List<string> order = new List<string>();
             Dictionary<string, List<MeterBillLine>> buckets = new Dictionary<string, List<MeterBillLine>>();
-            foreach (MeterBillLine ln in fleet)
+            // Two passes when rental is apart, so all the rental invoices come out as one run and the
+            // meter invoices as another — which is how the real numbering runs.
+            for (int pass = 0; pass < (rentalApart ? 2 : 1); pass++)
             {
-                string key = perMachine ? "INVOICE  " + ln.SerialNumber : "INVOICE";
-                if (rentalApart) key += ln.IsRental ? "  (rental)" : "  (meter)";
-                if (!buckets.ContainsKey(key)) { buckets[key] = new List<MeterBillLine>(); order.Add(key); }
-                buckets[key].Add(ln);
+                foreach (MeterBillLine ln in fleet)
+                {
+                    if (rentalApart && (pass == 0) != ln.IsRental) continue;
+                    string key = perMachine
+                        ? ln.SerialNumber + "  " + ln.ModelCode
+                        : "everything on one invoice";
+                    if (rentalApart) key = (ln.IsRental ? "rental" : "meters") + (perMachine ? "  ·  " + key : "");
+                    if (!buckets.ContainsKey(key)) { buckets[key] = new List<MeterBillLine>(); order.Add(key); }
+                    buckets[key].Add(ln);
+                }
             }
             foreach (string k in order)
                 outp.Add(new KeyValuePair<string, List<MeterBillLine>>(k, buckets[k]));
             return outp;
         }
 
-        private static string DescribeRow(ScpFoldedLine row)
+        private static string Describe(ScpFoldedLine row)
         {
             MeterBillLine ln = row.Leader;
             string what = string.IsNullOrEmpty(ln.MeterTypeName) ? ln.MeterTypeCode : ln.MeterTypeName;
-            if (!string.IsNullOrEmpty(ln.LineGroupCode)) what += " — " + ln.LineGroupCode;
-            if (row.IsMerged) what += "   (" + row.Units + " machines: " + Models(row) + ")";
-            else what += "   " + ln.ModelCode + "  " + ln.SerialNumber;
+            if (!string.IsNullOrEmpty(ln.LineGroupCode)) what += "  —  " + ln.LineGroupCode;
             return what;
         }
 
-        private static string Models(ScpFoldedLine row)
+        /// <summary>
+        /// When the merge key IS the model, lead with the model. When the merge deliberately ignores
+        /// the model, lead with the count and list the models. That asymmetry is what lets someone
+        /// tell "across model" from "same model" even where both happen to yield the same row count.
+        /// </summary>
+        private static string Machines(ScpFoldedLine row, List<MeterBillLine> fleet)
         {
-            List<string> seen = new List<string>();
+            if (!row.IsMerged)
+            {
+                string s = row.Leader.ModelCode + "  ·  " + row.Leader.SerialNumber;
+                if (!HasRental(fleet, row.Leader.SerialNumber)) s += "   (no rental)";
+                return s;
+            }
+            List<string> models = new List<string>();
+            List<string> serials = new List<string>();
             foreach (MeterBillLine m in row.Members)
-                if (!seen.Contains(m.ModelCode)) seen.Add(m.ModelCode);
-            return string.Join(", ", seen.ToArray());
+            {
+                if (!models.Contains(m.ModelCode)) models.Add(m.ModelCode);
+                serials.Add(m.SerialNumber);
+            }
+            return models.Count == 1
+                ? models[0] + "  ·  " + row.Units + " machines: " + string.Join(", ", serials.ToArray())
+                : row.Units + " machines  ·  " + string.Join(", ", models.ToArray());
         }
 
-        private void OnPreviewRowStyle(object sender,
-            DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        private static bool HasRental(List<MeterBillLine> fleet, string serial)
         {
-            object lv = GridViewPreview.GetRowCellValue(e.RowHandle, "Level");
-            if (lv == null || lv == DBNull.Value || Convert.ToInt32(lv) != 0) return;
-            e.Appearance.Font = new System.Drawing.Font(e.Appearance.Font, System.Drawing.FontStyle.Bold);
-            e.Appearance.BackColor = System.Drawing.Color.FromArgb(238, 242, 248);
+            foreach (MeterBillLine l in fleet)
+                if (l.IsRental && l.SerialNumber == serial) return true;
+            return false;
         }
     }
 }
