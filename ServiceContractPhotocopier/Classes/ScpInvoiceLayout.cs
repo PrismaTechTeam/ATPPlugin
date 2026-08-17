@@ -204,11 +204,18 @@ namespace ServiceContractPhotocopier.Classes
                 // A rental line says "n of these, for month n of N, at this price". Everything in
                 // that sentence has to match, including the instalment counter -- a machine that
                 // joined the fleet later is on a different month and cannot share the row.
+                //
+                // The label is NOT part of this under "across model", for the same reason it is not
+                // part of the meter key there: "one line for all machines" has to mean it. Where a
+                // real invoice splits its rental by duty class it is the PRICE that splits it -- JPJ
+                // charges 1,287.25 / 655.50 / 476.90 for HEAVY / MEDIUM / LIGHT, and price is always
+                // in the key. Pasir Gudang's two MEDIUM DUTY rental lines are two different models.
+                // Neither needs the label to come out right.
                 string k = "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
                            (ln.ACItemCode ?? "") + "|" + ln.Charge.ToString("0.####") + "|" +
-                           ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "") + "|" +
-                           (ln.LineGroupCode ?? "");
-                if (lay.RentalMode == ScpBillingFormat.LINE_SAME_MODEL) k += "|" + (ln.ModelCode ?? "");
+                           ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "");
+                if (lay.RentalMode == ScpBillingFormat.LINE_SAME_MODEL)
+                    k += "|" + (ln.ModelCode ?? "") + "|" + (ln.LineGroupCode ?? "");
                 return k;
             }
 

@@ -568,8 +568,12 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private static List<MeterBillLine> SampleFleet()
         {
             List<MeterBillLine> lines = new List<MeterBillLine>();
-            // rentals
-            lines.Add(Rent("iR-ADV 8505", "SWD00508", "HEAVY DUTY", 0m));        // free of charge
+            // Rentals, all at the same price on purpose. A machine rented at a different price --
+            // or rented free -- cannot share a row with the others, because one row is one
+            // Qty x UnitPrice and two prices have no single answer. Giving the sample a rental that
+            // differed made "One line for all machines" produce two lines, which is arithmetically
+            // right and pedagogically useless: the option has to be seen doing what it says.
+            lines.Add(Rent("iR-ADV 8505", "SWD00508", "HEAVY DUTY", 300m));
             lines.Add(Rent("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", 300m));
             lines.Add(Rent("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", 300m));
             lines.Add(Rent("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", 300m));
@@ -741,11 +745,18 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             return outp;
         }
 
+        /// <summary>The label prints only when every machine on the row carries it — a row that
+        /// merged a HEAVY machine with MEDIUM ones is neither, and saying "HEAVY DUTY" because the
+        /// first member happened to be one would be a lie about what the row covers.</summary>
         private static string Describe(ScpFoldedLine row)
         {
             MeterBillLine ln = row.Leader;
             string what = string.IsNullOrEmpty(ln.MeterTypeName) ? ln.MeterTypeCode : ln.MeterTypeName;
-            if (!string.IsNullOrEmpty(ln.LineGroupCode)) what += "  —  " + ln.LineGroupCode;
+            string label = ln.LineGroupCode ?? "";
+            foreach (MeterBillLine m in row.Members)
+                if (!string.Equals(m.LineGroupCode ?? "", label, StringComparison.OrdinalIgnoreCase))
+                { label = ""; break; }
+            if (label.Length > 0) what += "  —  " + label;
             return what;
         }
 
