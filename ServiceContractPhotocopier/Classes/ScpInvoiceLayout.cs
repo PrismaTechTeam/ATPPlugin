@@ -214,8 +214,7 @@ namespace ServiceContractPhotocopier.Classes
                 string k = "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
                            (ln.ACItemCode ?? "") + "|" + ln.Charge.ToString("0.####") + "|" +
                            ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "");
-                if (lay.RentalMode == ScpBillingFormat.LINE_SAME_MODEL)
-                    k += "|" + (ln.ModelCode ?? "") + "|" + (ln.LineGroupCode ?? "");
+                if (lay.RentalMode == ScpBillingFormat.LINE_SAME_MODEL) k += "|" + (ln.ModelCode ?? "");
                 return k;
             }
 
@@ -226,16 +225,16 @@ namespace ServiceContractPhotocopier.Classes
             string m = "M|" + ln.ContractKey + "|" + (ln.ColorLabel ?? "") + "|" + (ln.MeterTypeCode ?? "") + "|" +
                        (ln.ACItemCode ?? "") + "|" + ln.EffUnitPrice.ToString("0.######") + "|" +
                        ln.RebatePct.ToString("0.##") + "|" + (ln.StrategyNote ?? "");
-            // Under "same model" the model AND the label both split, because either can differ while
-            // the other agrees: MBJB prints "MEDIUM HEAVY DUTY" on both its C5160 and C5150 rows, and
-            // Pasir Gudang prints "MEDIUM DUTY" on rentals that stay apart.
+            // The duty label is NEVER part of a key, in any mode. It is a description -- the word the
+            // line prints -- and nothing more. What actually separates rows is the price (always,
+            // because a row is one Qty x UnitPrice) and, under "same model", the model.
             //
-            // Under "across model" the label is deliberately NOT in the key. JPJ tags its twelve
-            // machines HEAVY / MEDIUM / LIGHT and prints three rental lines, but all twelve share a
-            // BK rate of 0.0285 and print as ONE line of 80,720; keying on the label here would split
-            // that into three and stop matching the issued invoice.
-            if (lay.MeterMode == ScpBillingFormat.LINE_SAME_MODEL)
-                m += "|" + (ln.ModelCode ?? "") + "|" + (ln.LineGroupCode ?? "");
+            // The real invoices confirm the label is never needed: JPJ tags twelve machines HEAVY /
+            // MEDIUM / LIGHT and prints ONE black line of 80,720 because they share a rate; its
+            // rental splits three ways on price. MBJB prints "MEDIUM HEAVY DUTY" on both its C5160
+            // and C5150 rows and they stay apart on model. Pasir Gudang's two MEDIUM DUTY rental
+            // lines are two different models.
+            if (lay.MeterMode == ScpBillingFormat.LINE_SAME_MODEL) m += "|" + (ln.ModelCode ?? "");
             return m;
         }
 

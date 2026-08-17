@@ -767,11 +767,19 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         /// merged a HEAVY machine with MEDIUM ones is neither, and saying "HEAVY DUTY" because the
         /// first member happened to be one would misdescribe what the row covers.</para>
         /// </summary>
-        private static string Describe(ScpFoldedLine row)
+        private string Describe(ScpFoldedLine row)
         {
             MeterBillLine ln = row.Leader;
             string what = string.IsNullOrEmpty(ln.MeterTypeName) ? ln.MeterTypeCode : ln.MeterTypeName;
-            string label = ln.LineGroupCode ?? "";
+
+            // The duty word is printed only where the row is homogeneous BY CONSTRUCTION -- one
+            // machine, or one model. Under "merge, ignoring model" the row is whatever shares a
+            // price, so printing HEAVY DUTY on one row and MEDIUM DUTY on the next reads as though
+            // the duty made the split. It did not, and it never does: it is a description.
+            bool rowIsHomogeneous = ln.IsRental
+                ? CurrentRental()[0] != ScpBillingFormat.LINE_ACROSS_MODEL
+                : CurrentMeter()[0] != ScpBillingFormat.LINE_ACROSS_MODEL;
+            string label = rowIsHomogeneous ? (ln.LineGroupCode ?? "") : "";
             foreach (MeterBillLine m in row.Members)
                 if (!string.Equals(m.LineGroupCode ?? "", label, StringComparison.OrdinalIgnoreCase))
                 { label = ""; break; }
