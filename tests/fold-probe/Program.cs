@@ -120,6 +120,7 @@ static class FoldProbe
         finally { DropContract(db, ck3); }
 
         MoneyChecks();
+        ApplyFormatChecks(db);
 
         // A contract with NO format must behave exactly as before: rentals fold on the old rule,
         // usage never folds.
@@ -137,6 +138,41 @@ static class FoldProbe
             Check("legacy BK rows (never folds)", Where(rows, false).Count, 3);
         }
         finally { DropContract(db, ck4); }
+    }
+
+    // Picking a format on a contract must land on the four columns the engine reads. This is the
+    // "create a new contract the new way" path, checked at the data level.
+    static void ApplyFormatChecks(AutoCount.Data.DBSetting db)
+    {
+        Console.WriteLine("\n=== APPLY FORMAT (what the contract screen writes) ===");
+        string[,] cases = {
+            // format          expected BillingMode / RentalSeparate / RentalLineMode / MeterLineMode
+            { "2INV-RMODEL",  "G", "Y", "M", "A" },   // Pasir Gudang, Rompin, IPG Afzan
+            { "1INV-BYMODEL", "G", "N", "M", "M" },   // MBJB
+            { "PERMACHINE",   "S", "Y", "S", "S" },   // Tangkak
+            { "2INV-EACH",    "G", "Y", "S", "S" },   // Kastam
+        };
+        for (int i = 0; i < cases.GetLength(0); i++)
+        {
+            string code = cases[i, 0];
+            long ck = NewContract(db, "ZZPROBE-APPLY", "");
+            try
+            {
+                var f = ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(db, code);
+                f.ApplyTo(db, ck);
+                var t = db.GetDataTable("SELECT BillingFormatCode, BillingMode, RentalSeparateInvoice, " +
+                                        "RentalLineMode, MeterLineMode FROM dbo.zSCP2_Contract " +
+                                        "WHERE ContractKey = " + ck, false);
+                var r = t.Rows[0];
+                Check(code + " code", Convert.ToString(r["BillingFormatCode"]), code);
+                Check(code + " BillingMode", Convert.ToString(r["BillingMode"]), cases[i, 1]);
+                Check(code + " RentalSeparate", Convert.ToString(r["RentalSeparateInvoice"]), cases[i, 2]);
+                Check(code + " RentalLineMode", Convert.ToString(r["RentalLineMode"]), cases[i, 3]);
+                Check(code + " MeterLineMode", Convert.ToString(r["MeterLineMode"]), cases[i, 4]);
+                Console.WriteLine("       \"" + f.Summary() + "\"");
+            }
+            finally { DropContract(db, ck); }
+        }
     }
 
     // ComputeCharge against the issued invoices. No DB needed — these are pure arithmetic.

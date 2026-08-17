@@ -744,6 +744,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             SpnRentalDay.Value = _loadedRentalDay;
             SpnRentalDay.Enabled = ChkRentalSeparate.Checked;
             ChkRentalSeparate.CheckedChanged += delegate { SpnRentalDay.Enabled = ChkRentalSeparate.Checked; };
+            BuildBillingFormatPicker();
             // #16: invoice DISPLAY dates follow the contract cycle instead of the actual reading dates.
             ChkPeriodByContract.ToolTip =
                 "Ticked: the invoice shows the CONTRACT cycle ending in the billed month as the billing period,\r\n" +
@@ -1282,6 +1283,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateInactiveInfoLabel();
             _loadedStrategyCode = r.Table.Columns.Contains("StrategyCode") ? AsStr(r["StrategyCode"]).Trim() : "";
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            LoadBillingFormat(r);
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
@@ -4541,15 +4543,186 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
                 _contractKey = Convert.ToInt64(cmd.ExecuteScalar());
             }
             _isNew = false;
+        }
+
+        // ===== Billing Format =====================================================================
+        // The named layout this contract bills under. The three tick boxes beside it still hold the
+        // truth the engine reads (BillingMode, RentalSeparateInvoice) — picking a format simply sets
+        // them, plus the two line modes that had no control of their own. A contract left on
+        // "(follow the tick boxes)" behaves exactly as it did before formats existed.
+
+        private string _billingFormatCode = "";
+        private char _rentalLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_ACROSS_MODEL;
+        private char _meterLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
+        private DataTable _formatLookup;
+        private bool _formatApplying;   // guard: applying a format ticks boxes, which must not re-enter
+
+        private void BuildBillingFormatPicker()
+        {
+            if (SluBillingFormat == null) return;
+            try
+            {
+                _formatLookup = _db.GetDataTable(
+                    "SELECT f.FormatCode, f.FormatName, f.InvoiceSplit, f.RentalLineMode, f.MeterLineMode, " +
+                    "ISNULL(f.Remark,'') AS Remark, " +
+                    "(SELECT COUNT(*) FROM dbo.zSCP2_Contract c WHERE c.BillingFormatCode = f.FormatCode) AS UsedBy " +
+                    "FROM dbo.zSCP2_BillingFormat f WHERE f.Inactive='N' ORDER BY f.FormatCode", false);
+            }
+            catch { _formatLookup = new DataTable(); return; }
+
+            // Say the three answers in words in the popup, so the code is never the thing being read.
+            _formatLookup.Columns.Add("Invoices", typeof(string));
+            _formatLookup.Columns.Add("Rental", typeof(string));
+            _formatLookup.Columns.Add("Meters", typeof(string));
+            foreach (DataRow fr in _formatLookup.Rows)
+            {
+                fr["Invoices"] = ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeSplit(
+                    Convert.ToString(fr["InvoiceSplit"]));
+                fr["Rental"] = ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(
+                    Convert.ToString(fr["RentalLineMode"])[0]);
+                fr["Meters"] = ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(
+                    Convert.ToString(fr["MeterLineMode"])[0]);
+            }
+
+            SluBillingFormat.Properties.DataSource = _formatLookup;
+            SluBillingFormat.Properties.ValueMember = "FormatCode";
+            SluBillingFormat.Properties.DisplayMember = "FormatName";
+            SluBillingFormatView.OptionsBehavior.AutoPopulateColumns = false;
+            SluBillingFormatView.Columns.Clear();
+            AddFormatCol("FormatName", "Format", 250);
+            AddFormatCol("Invoices", "Invoices", 130);
+            AddFormatCol("Rental", "Rental lines", 100);
+            AddFormatCol("Meters", "BK & CL lines", 100);
+            AddFormatCol("UsedBy", "Used by", 60);
+            AddFormatCol("Remark", "Seen on", 260);
+            SluBillingFormat.EditValueChanged += new EventHandler(SluBillingFormat_EditValueChanged);
+            ChkBillGroup.CheckedChanged += new EventHandler(BillingFlag_Changed);
+            ChkBillSeparate.CheckedChanged += new EventHandler(BillingFlag_Changed);
+            ChkRentalSeparate.CheckedChanged += new EventHandler(BillingFlag_Changed);
+            UpdateFormatSummary();
+        }
+
+        /// <summary>Restore a saved contract's format. The line modes come from the CONTRACT, not
+        /// from the format record — a preset edited since this contract was saved must not silently
+        /// change how it bills.</summary>
+        private void LoadBillingFormat(DataRow r)
+        {
+            _billingFormatCode = r.Table.Columns.Contains("BillingFormatCode") ? AsStr(r["BillingFormatCode"]).Trim() : "";
+            _rentalLineMode = ModeOf(r, "RentalLineMode", ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_ACROSS_MODEL);
+            _meterLineMode = ModeOf(r, "MeterLineMode", ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE);
+            if (SluBillingFormat != null)
+            {
+                _formatApplying = true;
+                try { SluBillingFormat.EditValue = _billingFormatCode.Length > 0 ? (object)_billingFormatCode : null; }
+                finally { _formatApplying = false; }
+            }
+            UpdateFormatSummary();
+        }
+
+        private char ModeOf(DataRow r, string column, char fallback)
+        {
+            if (!r.Table.Columns.Contains(column)) return fallback;
+            string s = AsStr(r[column]).Trim();
+            return s.Length == 0 ? fallback : char.ToUpperInvariant(s[0]);
+        }
+
+        private void AddFormatCol(string field, string caption, int width)
+        {
+            DevExpress.XtraGrid.Columns.GridColumn c = SluBillingFormatView.Columns.AddVisible(field);
+            c.Caption = caption;
+            c.Width = width;
+        }
+
+        /// <summary>Picking a format writes its answers into the controls the engine reads.</summary>
+        private void SluBillingFormat_EditValueChanged(object sender, EventArgs e)
+        {
+            string code = SluBillingFormat.EditValue == null ? "" : SluBillingFormat.EditValue.ToString().Trim();
+            _billingFormatCode = code;
+            if (code.Length == 0) { UpdateFormatSummary(); return; }
+
+            ServiceContractPhotocopier.Classes.ScpBillingFormat f =
+                ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, code);
+            if (f == null) { UpdateFormatSummary(); return; }
+
+            _formatApplying = true;
+            try
+            {
+                ChkBillGroup.Checked = f.BillingMode == 'G';
+                ChkBillSeparate.Checked = f.BillingMode == 'S';
+                ChkRentalSeparate.Checked = f.RentalSeparateInvoice;
+                _rentalLineMode = f.RentalLineMode;
+                _meterLineMode = f.MeterLineMode;
+            }
+            finally { _formatApplying = false; }
+            UpdateFormatSummary();
+        }
+
+        /// <summary>Ticking a box by hand takes the contract off its format rather than silently
+        /// disagreeing with it — the summary then says so.</summary>
+        private void BillingFlag_Changed(object sender, EventArgs e)
+        {
+            if (_formatApplying) return;
+            if (_billingFormatCode.Length > 0)
+            {
+                _billingFormatCode = "";
+                if (SluBillingFormat != null) SluBillingFormat.EditValue = null;
+            }
+            UpdateFormatSummary();
+        }
+
+        /// <summary>What this contract will actually produce, counted from its real machines.</summary>
+        private void UpdateFormatSummary()
+        {
+            if (LblFormatSummary == null) return;
+            if (_billingFormatCode.Length == 0)
+            {
+                LblFormatSummary.Text = "Billing as before — pick a format to use the new layout rules.";
+                return;
+            }
+            string words = (ChkBillSeparate.Checked ? "1 invoice per machine" : "1 invoice") +
+                           (ChkRentalSeparate.Checked ? " + rental invoice" : "") +
+                           " · rental " + ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(_rentalLineMode) +
+                           " · BK+CL " + ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(_meterLineMode);
+            int machines = _items == null ? 0 : _items.Count;
+            int noRental = CountMachinesWithoutRental();
+            if (machines > 0)
+            {
+                words += "   →  " + machines + " machine" + (machines == 1 ? "" : "s");
+                if (noRental > 0) words += ", " + noRental + " without a rental meter";
+            }
+            LblFormatSummary.Text = words;
+        }
+
+        /// <summary>Machines carrying no RENTAL meter — they bill no rent, which is right for some
+        /// (Pasir Gudang bills 5 rentals for 6 machines) and an oversight for others. Surfaced every
+        /// time rather than discovered on the invoice.</summary>
+        private int CountMachinesWithoutRental()
+        {
+            if (_items == null) return 0;
+            int n = 0;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                ItemEditData it = _items[i];
+                if (it == null || it.Meters == null) continue;
+                bool hasRental = false;
+                foreach (DataRow mr in it.Meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    string role = mr.Table.Columns.Contains("MeterRole") ? Convert.ToString(mr["MeterRole"]).Trim() : "";
+                    if (string.Equals(role, "RENTAL", StringComparison.OrdinalIgnoreCase)) { hasRental = true; break; }
+                }
+                if (!hasRental) n++;
+            }
+            return n;
         }
 
         private void UpdateContract(SqlConnection conn, SqlTransaction tx, string debtor)
@@ -4563,6 +4736,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
                 "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
+                "BillingFormatCode=@fmtcode, RentalLineMode=@rlmode, MeterLineMode=@mlmode, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
                 "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
@@ -4602,6 +4776,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@note", (object)(TxtNote.Text ?? ""));
             cmd.Parameters.AddWithValue("@strategy", _loadedStrategyCode ?? "");
             cmd.Parameters.AddWithValue("@rentsep", ChkRentalSeparate.Checked ? "Y" : "N");
+            // The Billing Format and the two line modes it resolved to. Stored on the contract so the
+            // engine reads one place and an invoice stays explainable by what the contract said then.
+            cmd.Parameters.AddWithValue("@fmtcode", _billingFormatCode ?? "");
+            cmd.Parameters.AddWithValue("@rlmode", _rentalLineMode.ToString());
+            cmd.Parameters.AddWithValue("@mlmode", _meterLineMode.ToString());
             cmd.Parameters.AddWithValue("@rentday", SpnRentalDay != null ? (object)(int)SpnRentalDay.Value : (object)_loadedRentalDay);
             cmd.Parameters.AddWithValue("@invrpt", TplVal(SluInvoiceTemplate, _loadedInvRpt));
             cmd.Parameters.AddWithValue("@gensoa", ChkGenerateSOA != null ? (ChkGenerateSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
@@ -5310,6 +5489,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SluProject.EditValue = r.Table.Columns.Contains("ProjNo") ? SetOrNull(AsStr(r["ProjNo"])) : null;
                 _loadedStrategyCode = r.Table.Columns.Contains("StrategyCode") ? AsStr(r["StrategyCode"]).Trim() : "";
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
+            LoadBillingFormat(r);
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;

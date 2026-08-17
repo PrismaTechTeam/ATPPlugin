@@ -71,6 +71,11 @@
         private DevExpress.XtraEditors.SpinEdit SpnBillingDay;
         private DevExpress.XtraEditors.CheckEdit ChkBillGroup;
         private DevExpress.XtraEditors.CheckEdit ChkBillSeparate;
+        private DevExpress.XtraEditors.SearchLookUpEdit SluBillingFormat;
+        private DevExpress.XtraGrid.Views.Grid.GridView SluBillingFormatView;
+        private DevExpress.XtraEditors.LabelControl LblFormatSummary;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem33;
+        private DevExpress.XtraLayout.LayoutControlItem layoutControlItem34;
         private DevExpress.XtraEditors.CheckEdit ChkInactive;
         private DevExpress.XtraEditors.TextEdit TxtRefNo;
         private DevExpress.XtraEditors.SearchLookUpEdit SluDept;
@@ -220,6 +225,11 @@
             this.SpnBillingDay = new DevExpress.XtraEditors.SpinEdit();
             this.ChkBillGroup = new DevExpress.XtraEditors.CheckEdit();
             this.ChkBillSeparate = new DevExpress.XtraEditors.CheckEdit();
+            this.SluBillingFormat = new DevExpress.XtraEditors.SearchLookUpEdit();
+            this.SluBillingFormatView = new DevExpress.XtraGrid.Views.Grid.GridView();
+            this.LblFormatSummary = new DevExpress.XtraEditors.LabelControl();
+            this.layoutControlItem33 = new DevExpress.XtraLayout.LayoutControlItem();
+            this.layoutControlItem34 = new DevExpress.XtraLayout.LayoutControlItem();
             this.ChkRentalSeparate = new DevExpress.XtraEditors.CheckEdit();
             this.LblMhCity = new DevExpress.XtraEditors.LabelControl();
             this.TxtMhCity = new DevExpress.XtraEditors.TextEdit();
@@ -408,6 +418,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillGroup.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluBillingFormat.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluBillingFormatView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem33)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem34)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkRentalSeparate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnRentalDay.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluInvoiceTemplate.Properties)).BeginInit();
@@ -906,7 +920,7 @@
             this.GrpBilling.Controls.Add(this.layoutControl2);
             this.GrpBilling.Location = new System.Drawing.Point(637, 12);
             this.GrpBilling.Name = "GrpBilling";
-            this.GrpBilling.Size = new System.Drawing.Size(700, 155);
+            this.GrpBilling.Size = new System.Drawing.Size(700, 185);
             this.GrpBilling.TabIndex = 45;
             this.GrpBilling.Text = "Billing";
             // 
@@ -933,9 +947,38 @@
             this.SpnBillingDay.Size = new System.Drawing.Size(50, 20);
             this.SpnBillingDay.StyleController = this.layoutControl2;
             this.SpnBillingDay.TabIndex = 28;
-            // 
+            //
+            // SluBillingFormat
+            //
+            this.SluBillingFormat.Location = new System.Drawing.Point(106, 180);
+            this.SluBillingFormat.Name = "SluBillingFormat";
+            this.SluBillingFormat.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.SluBillingFormat.Properties.NullText = "(follow the tick boxes)";
+            this.SluBillingFormat.Properties.PopupView = this.SluBillingFormatView;
+            this.SluBillingFormat.Size = new System.Drawing.Size(224, 20);
+            this.SluBillingFormat.StyleController = this.layoutControl2;
+            this.SluBillingFormat.TabIndex = 46;
+            //
+            // SluBillingFormatView
+            //
+            this.SluBillingFormatView.FocusRectStyle = DevExpress.XtraGrid.Views.Grid.DrawFocusRectStyle.RowFocus;
+            this.SluBillingFormatView.Name = "SluBillingFormatView";
+            this.SluBillingFormatView.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.SluBillingFormatView.OptionsView.ShowGroupPanel = false;
+            this.SluBillingFormatView.OptionsView.ShowAutoFilterRow = true;
+            //
+            // LblFormatSummary
+            //
+            this.LblFormatSummary.Location = new System.Drawing.Point(346, 180);
+            this.LblFormatSummary.Name = "LblFormatSummary";
+            this.LblFormatSummary.Size = new System.Drawing.Size(330, 20);
+            this.LblFormatSummary.StyleController = this.layoutControl2;
+            this.LblFormatSummary.TabIndex = 47;
+            this.LblFormatSummary.Text = "";
+            //
             // ChkBillGroup
-            // 
+            //
             this.ChkBillGroup.Location = new System.Drawing.Point(160, 12);
             this.ChkBillGroup.Name = "ChkBillGroup";
             this.ChkBillGroup.Properties.Caption = "Group Services into One Invoice";
@@ -2225,7 +2268,7 @@
             this.layoutControlItem19.Control = this.GrpBilling;
             this.layoutControlItem19.Location = new System.Drawing.Point(625, 0);
             this.layoutControlItem19.Name = "layoutControlItem19";
-            this.layoutControlItem19.Size = new System.Drawing.Size(704, 159);
+            this.layoutControlItem19.Size = new System.Drawing.Size(704, 189);
             this.layoutControlItem19.TextSize = new System.Drawing.Size(0, 0);
             this.layoutControlItem19.TextVisible = false;
             // 
@@ -2292,6 +2335,8 @@
             // 
             // layoutControl2
             // 
+            this.layoutControl2.Controls.Add(this.SluBillingFormat);
+            this.layoutControl2.Controls.Add(this.LblFormatSummary);
             this.layoutControl2.Controls.Add(this.SpnBillingDay);
             this.layoutControl2.Controls.Add(this.ChkBillGroup);
             this.layoutControl2.Controls.Add(this.ChkBillSeparate);
@@ -2308,7 +2353,7 @@
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
             this.layoutControl2.Name = "layoutControl2";
             this.layoutControl2.Root = this.layoutControlGroup1;
-            this.layoutControl2.Size = new System.Drawing.Size(696, 130);
+            this.layoutControl2.Size = new System.Drawing.Size(696, 160);
             this.layoutControl2.TabIndex = 0;
             this.layoutControl2.Text = "layoutControl2";
             // 
@@ -2328,9 +2373,11 @@
             this.layoutControlItem27,
             this.layoutControlItem31,
             this.layoutControlItem32,
-            this.layoutControlItem30});
+            this.layoutControlItem30,
+            this.layoutControlItem33,
+            this.layoutControlItem34});
             this.layoutControlGroup1.Name = "layoutControlGroup1";
-            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 202);
+            this.layoutControlGroup1.Size = new System.Drawing.Size(696, 232);
             this.layoutControlGroup1.TextVisible = false;
             // 
             // layoutControlItem21
@@ -2350,9 +2397,27 @@
             this.layoutControlItem29.Size = new System.Drawing.Size(342, 24);
             this.layoutControlItem29.TextSize = new System.Drawing.Size(0, 0);
             this.layoutControlItem29.TextVisible = false;
-            // 
+            //
+            // layoutControlItem33
+            //
+            this.layoutControlItem33.Control = this.SluBillingFormat;
+            this.layoutControlItem33.Location = new System.Drawing.Point(0, 154);
+            this.layoutControlItem33.Name = "layoutControlItem33";
+            this.layoutControlItem33.Size = new System.Drawing.Size(334, 24);
+            this.layoutControlItem33.Text = "Billing Format";
+            this.layoutControlItem33.TextSize = new System.Drawing.Size(82, 13);
+            //
+            // layoutControlItem34
+            //
+            this.layoutControlItem34.Control = this.LblFormatSummary;
+            this.layoutControlItem34.Location = new System.Drawing.Point(334, 154);
+            this.layoutControlItem34.Name = "layoutControlItem34";
+            this.layoutControlItem34.Size = new System.Drawing.Size(342, 24);
+            this.layoutControlItem34.TextSize = new System.Drawing.Size(0, 0);
+            this.layoutControlItem34.TextVisible = false;
+            //
             // layoutControlItem22
-            // 
+            //
             this.layoutControlItem22.Control = this.ChkBillGroup;
             this.layoutControlItem22.Location = new System.Drawing.Point(148, 0);
             this.layoutControlItem22.Name = "layoutControlItem22";
@@ -2501,6 +2566,10 @@
             ((System.ComponentModel.ISupportInitialize)(this.GrpBilling)).EndInit();
             this.GrpBilling.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.SpnBillingDay.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem34)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem33)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluBillingFormatView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.SluBillingFormat.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillGroup.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkBillSeparate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkRentalSeparate.Properties)).EndInit();
