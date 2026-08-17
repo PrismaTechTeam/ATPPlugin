@@ -223,6 +223,9 @@ namespace ServiceContractPhotocopier.Classes
                 // The 11 billing formats the customer's own invoices use. Insert-if-missing, so an
                 // edited format survives and a renamed one is not duplicated.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP2_BillingFormat.sql", asm));
+                // ...and the right to see the menu item, mirrored from Meter Type. Declaring a right
+                // does not grant it, so without this the screen is hidden from everyone.
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_AccessRight_BillingFormat.sql", asm));
             }
             catch (Exception ex)
             {
