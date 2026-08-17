@@ -375,9 +375,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.RgRental.Properties.ItemVertAlignment = DevExpress.XtraEditors.RadioItemVertAlignment.Top;
             this.RgRental.Properties.ItemHorzAlignment = DevExpress.XtraEditors.RadioItemHorzAlignment.Near;
             this.RgRental.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "One line for all machines"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "One line per model"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "One line per machine")});
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "Merge, ignoring model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "Merge by model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "No merge - one line per machine")});
             this.RgRental.TabIndex = 0;
             //
             // GrpMeter
@@ -398,9 +398,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.RgMeter.Properties.ItemVertAlignment = DevExpress.XtraEditors.RadioItemVertAlignment.Top;
             this.RgMeter.Properties.ItemHorzAlignment = DevExpress.XtraEditors.RadioItemHorzAlignment.Near;
             this.RgMeter.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "One BK + one CL for all machines"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "One BK + one CL per model"),
-            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "BK + CL per machine")});
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "Merge, ignoring model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "Merge by model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "No merge - one line per machine")});
             this.RgMeter.TabIndex = 0;
             //
             // SplitMain

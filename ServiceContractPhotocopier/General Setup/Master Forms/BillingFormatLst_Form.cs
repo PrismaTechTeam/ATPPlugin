@@ -578,13 +578,12 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             lines.Add(Rent("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", 300m));
             lines.Add(Rent("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", 300m));
             lines.Add(Rent("iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", 300m));
-            // Black, all at the same rate, for the same reason the rentals are: one row is one
-            // Qty x UnitPrice, so a machine on a different rate cannot join it. Giving the sample a
-            // machine at 0.019 made "One BK + one CL for all machines" draw two black lines --
-            // arithmetically right, and useless as a demonstration of an option whose job is to show
-            // one. A real fleet on mixed rates still splits, and the summary line above says so when
-            // it happens.
-            lines.Add(Meter("iR-ADV 8505", "SWD00508", "HEAVY DUTY", "BK", "BK COPY + PRINT", 0.0285m, 534659m, 594908m));
+            // The 8505 on its own rate, exactly as Pasir Gudang bills it. "Merge, ignoring model"
+            // still gives TWO black lines here -- 60,249 at 0.019 and 52,860 across five machines at
+            // 0.0285 -- because a row is one Qty x UnitPrice and two rates have no single answer.
+            // That is the rule the spec states ("出几行由资料决定") and the invoice the customer
+            // actually sends, so the sample shows it rather than hiding it behind a tidier fiction.
+            lines.Add(Meter("iR-ADV 8505", "SWD00508", "HEAVY DUTY", "BK", "BK COPY + PRINT", 0.019m, 534659m, 594908m));
             lines.Add(Meter("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 326760m, 355403m));
             lines.Add(Meter("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 58218m, 68258m));
             lines.Add(Meter("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 38423m, 42472m));
@@ -716,7 +715,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             // The one thing that surprises people: "one line for all" can still produce two, when the
             // machines are not on the same rate.
             if (CurrentMeter()[0] == ScpBillingFormat.LINE_ACROSS_MODEL && black > 1)
-                s += "  ·  " + black + " black lines, not 1 — these machines are not all on the same rate";
+                s += "  ·  " + black + " black lines: merging ignores the model, but never the rate — 0.019 and 0.0285 cannot share a row";
             return s;
         }
 
