@@ -1,0 +1,121 @@
+{
+  "invoices": [
+    {
+      "branch": "HOSPITAL PASIR GUDANG",
+      "date": "31/7/2026",
+      "debtor": "3000-A0200",
+      "docNo": "MR2607.1106",
+      "einvoiceUuid": "CMHQQ72EVWY8TR2B9VRT1MYK10",
+      "lines": [
+        {
+          "amount": 1144.73,
+          "current": 594908.0,
+          "description": "01.MR.BK. HOSPIT0A1.LMPRG.BK.HOSPITAL PASIR GUDANG",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 534659.0,
+          "qty": 60249.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.019,
+          "uom": "PCS",
+          "usage": 60249.0
+        },
+        {
+          "amount": 1506.51,
+          "current": 570351.0,
+          "description": "02.MR.BK. HOSPIT0A2.LMPRG.BK.UNIT HOSPITAL PASIR",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 517491.0,
+          "qty": 52860.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0285,
+          "uom": "PCS",
+          "usage": 52860.0
+        },
+        {
+          "amount": 1622.51,
+          "current": 46865.0,
+          "description": "03.MR.CL. HOSPIT0A3L.MPRG.CL.UNIT HOSPITAL PASIR GUDANG",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": 41172.0,
+          "qty": 5693.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.285,
+          "uom": "PCS",
+          "usage": 5693.0
+        }
+      ],
+      "netTotal": 4273.75,
+      "ref": "PUMS260724-071",
+      "tax": null,
+      "totalQty": 118802.0
+    },
+    {
+      "branch": "PENGURUSAN 1, ARAS 2,",
+      "date": "31/7/2026",
+      "debtor": "3000-A0200",
+      "docNo": "MR2607.1107",
+      "einvoiceUuid": "KB6BREP09AJY5BEBF8GV1MYK10",
+      "lines": [
+        {
+          "amount": 0.0,
+          "current": null,
+          "description": "01.RA-1 UNIT HOSRPAIT-1AUL NPGIT_HEBO2SBPITAL PASIR GUDANG",
+          "foc": true,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": null,
+          "uom": "UNIT",
+          "usage": null
+        },
+        {
+          "amount": 0.0,
+          "current": null,
+          "description": "02.RA-1 UNIT HOSRPAIT-1AUL NPGIT_HEBO2SBPITAL PASIR GUDANG",
+          "foc": true,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": null,
+          "uom": "UNIT",
+          "usage": null
+        },
+        {
+          "amount": 0.0,
+          "current": null,
+          "description": "03.RA-3 UNIT HOSRPAIT-3AUL NPGIT_HEBO2SBPITAL PASIR GUDANG",
+          "foc": true,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": null,
+          "uom": "UNIT",
+          "usage": null
+        }
+      ],
+      "netTotal": 0.0,
+      "ref": "RENTAL",
+      "tax": null,
+      "totalQty": 3.0
+    }
+  ],
+  "source": "HOSPITAL PASIR GUDANG.pdf"
+}

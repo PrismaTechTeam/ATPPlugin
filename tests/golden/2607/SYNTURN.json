@@ -1,0 +1,48 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "22/7/2026",
+      "debtor": "3000-S0033",
+      "docNo": "MR2607.0192",
+      "einvoiceUuid": "G933CRAMEM0YYH4W8FFWP9YK10",
+      "lines": [
+        {
+          "amount": 1142.65,
+          "current": 413579.0,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": 20000.0,
+          "no": 1,
+          "previous": 370726.0,
+          "qty": 22853.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.05,
+          "uom": "PCS",
+          "usage": 22853.0
+        },
+        {
+          "amount": 1399.0,
+          "current": null,
+          "description": "RA-60MTH MONTHLY RENTAL (49/60)",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 1399.0,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 2625.59,
+      "ref": "PUMS260720-29",
+      "tax": 83.94,
+      "totalQty": 22854.0
+    }
+  ],
+  "source": "SYNTURN.pdf"
+}

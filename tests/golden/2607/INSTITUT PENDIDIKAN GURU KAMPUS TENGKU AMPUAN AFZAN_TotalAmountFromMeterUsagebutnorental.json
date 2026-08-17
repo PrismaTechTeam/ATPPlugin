@@ -1,0 +1,78 @@
+{
+  "invoices": [
+    {
+      "branch": "UNIT MEDIA & CETAK BANGUNAN ILA , ARAS 1",
+      "date": "31/7/2026",
+      "debtor": "3000-A0199",
+      "docNo": "MR2607.1439",
+      "einvoiceUuid": "R4T7A58JG6EEAH3AVGWP65ZK10",
+      "lines": [
+        {
+          "amount": 237.5,
+          "current": null,
+          "description": "01.RA-1 UNIT IPG 0P1A.RHAA-N1GU_NEIBT2IBPG PAHANG HAEVY DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 237.5,
+          "uom": "UNIT",
+          "usage": null
+        },
+        {
+          "amount": 1330.0,
+          "current": null,
+          "description": "02.RA-5 UNIT IPG 0P2A.RHAA-N5GU_NEIBT2IBPG PAHANG HEAVY DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 5.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 266.0,
+          "uom": "UNIT",
+          "usage": null
+        },
+        {
+          "amount": 914.42,
+          "current": 338827.0,
+          "description": "03.MR.BK.IPG PAH0A3.NMGR.BK.IPG PAHANG MODEL :",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": 306742.0,
+          "qty": 32085.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0285,
+          "uom": "PCS",
+          "usage": 32085.0
+        },
+        {
+          "amount": 495.33,
+          "current": 13009.0,
+          "description": "04.MR.CL.IPG PAH0A4.NMGR.CL.IPG PAHANG MODEL :",
+          "foc": false,
+          "focQty": null,
+          "no": 4,
+          "previous": 11271.0,
+          "qty": 1738.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.285,
+          "uom": "PCS",
+          "usage": 1738.0
+        }
+      ],
+      "netTotal": 2977.25,
+      "ref": "PM2607.101",
+      "tax": null,
+      "totalQty": 33829.0
+    }
+  ],
+  "source": "INSTITUT PENDIDIKAN GURU KAMPUS TENGKU AMPUAN AFZAN_TotalAmountFromMeterUsagebutnorental.pdf"
+}

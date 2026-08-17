@@ -1,0 +1,78 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "31/7/2026",
+      "debtor": "3000-P0013",
+      "docNo": "AMR2607.0138",
+      "einvoiceUuid": null,
+      "lines": [
+        {
+          "amount": 555.54,
+          "current": null,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 18518.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": null
+        },
+        {
+          "amount": 276.6,
+          "current": null,
+          "description": "124-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 922.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.3,
+          "uom": "PCS",
+          "usage": null
+        },
+        {
+          "amount": 820.0,
+          "current": null,
+          "description": "RA - 1 UNIT PUSPEN MUAR MODEL:IRADVC5860I - 07",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 820.0,
+          "uom": "UNIT",
+          "usage": null
+        },
+        {
+          "amount": 850.0,
+          "current": null,
+          "description": "RA - 2 UNIT PUSPEN MUAR MODEL:IRADV4945I - 07",
+          "foc": false,
+          "focQty": null,
+          "no": 4,
+          "previous": null,
+          "qty": 2.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 425.0,
+          "uom": "UNIT",
+          "usage": null
+        }
+      ],
+      "netTotal": 2502.14,
+      "ref": null,
+      "tax": null,
+      "totalQty": 19443.0
+    }
+  ],
+  "source": "PUSAT PEMULIHAN PENAGIHAN NARKOTIK (PUSPEN MUAR).pdf"
+}

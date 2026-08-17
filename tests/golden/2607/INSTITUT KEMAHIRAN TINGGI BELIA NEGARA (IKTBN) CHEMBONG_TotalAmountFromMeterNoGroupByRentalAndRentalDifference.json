@@ -1,0 +1,78 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "31/7/2026",
+      "debtor": "3000-I0001",
+      "docNo": "AMR2607.0108",
+      "einvoiceUuid": null,
+      "lines": [
+        {
+          "amount": 654.0,
+          "current": null,
+          "description": "01.RA-1 UNIT IKTBN CHEMBONG",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 654.0,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 984.0,
+          "current": null,
+          "description": "02.RA-2 UNIT IKTBN CHEMBONG",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 984.0,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 1846.44,
+          "current": 452899.0,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": 391351.0,
+          "qty": 61548.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": 61548.0
+        },
+        {
+          "amount": 1595.1,
+          "current": 31150.0,
+          "description": "124-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 4,
+          "previous": 25833.0,
+          "qty": 5317.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.3,
+          "uom": "PCS",
+          "usage": 5317.0
+        }
+      ],
+      "netTotal": 5079.54,
+      "ref": null,
+      "tax": null,
+      "totalQty": 66867.0
+    }
+  ],
+  "source": "INSTITUT KEMAHIRAN TINGGI BELIA NEGARA (IKTBN) CHEMBONG_TotalAmountFromMeterNoGroupByRentalAndRentalDifference.pdf"
+}

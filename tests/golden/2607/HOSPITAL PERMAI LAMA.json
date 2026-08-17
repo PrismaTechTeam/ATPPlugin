@@ -1,0 +1,63 @@
+{
+  "invoices": [
+    {
+      "branch": "KLINIK KESIHATAN BATU PAHAT",
+      "date": "31/7/2026",
+      "debtor": "3000-A0074",
+      "docNo": "MR2607.1338",
+      "einvoiceUuid": "A5YN0768G84XC0ZR7JG9EVYK10",
+      "lines": [
+        {
+          "amount": 2340.8,
+          "current": null,
+          "description": "RA-7 UNIT_EB2B RENTAL - IRADVXC3930I - 07/2026",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 7.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 334.4,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 936.28,
+          "current": 1037684.0,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 1004832.0,
+          "qty": 32852.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0285,
+          "uom": "PCS",
+          "usage": 32852.0
+        },
+        {
+          "amount": 2026.16,
+          "current": 179043.0,
+          "description": "223-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": 172378.0,
+          "qty": 6665.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.304,
+          "uom": "PCS",
+          "usage": 6665.0
+        }
+      ],
+      "netTotal": 5303.24,
+      "ref": "MR-260707-244",
+      "tax": null,
+      "totalQty": 39524.0
+    }
+  ],
+  "source": "HOSPITAL PERMAI LAMA.pdf"
+}

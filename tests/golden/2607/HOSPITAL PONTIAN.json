@@ -1,0 +1,48 @@
+{
+  "invoices": [
+    {
+      "branch": "UNIT REKOD",
+      "date": "31/7/2026",
+      "debtor": "3000-A0090",
+      "docNo": "MR2607.0357",
+      "einvoiceUuid": "A5CGVZZHJZK9M523E6RX19YK10",
+      "lines": [
+        {
+          "amount": 2129.58,
+          "current": 2086590.0,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 2010346.0,
+          "qty": 74722.0,
+          "rebatePct": 2.0,
+          "rebateQty": 1522.0,
+          "unitPrice": 0.0285,
+          "uom": "PCS",
+          "usage": 74722.0
+        },
+        {
+          "amount": 3439.0,
+          "current": null,
+          "description": "RA-5 UINT_EB2B MONTHLY RENTAL ( 22/36)",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 5.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 687.8,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 5568.58,
+      "ref": "PUMS260723-052",
+      "tax": null,
+      "totalQty": 74727.0
+    }
+  ],
+  "source": "HOSPITAL PONTIAN.pdf"
+}

@@ -1,0 +1,61 @@
+{
+  "invoices": [
+    {
+      "branch": "HSA_UNIT PENTADBIRAN",
+      "date": "31/7/2026",
+      "debtor": "3000-A0102",
+      "docNo": "MR2607.1216",
+      "einvoiceUuid": "T132HJTR83GYF5DPQAJYGPYK10",
+      "lines": [
+        {
+          "amount": 1900.0,
+          "current": null,
+          "description": "RA-4UNIT 24MTH_MEOBN2BTHLY RENTAL - (07/2026)",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 4.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 475.0,
+          "uom": "UNIT",
+          "usage": null
+        }
+      ],
+      "netTotal": 1900.0,
+      "ref": "RENTAL",
+      "tax": null,
+      "totalQty": 4.0
+    },
+    {
+      "branch": "HSA_UNIT PENTADBIRAN",
+      "date": "31/7/2026",
+      "debtor": "3000-A0102",
+      "docNo": "MR2607.1340",
+      "einvoiceUuid": "3N8H2MPAADHECWN8KGHCEVYK10",
+      "lines": [
+        {
+          "amount": 165.15,
+          "current": null,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 8692.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.019,
+          "uom": "PCS",
+          "usage": null
+        }
+      ],
+      "netTotal": 165.15,
+      "ref": "PUMS260723-075",
+      "tax": null,
+      "totalQty": 8692.0
+    }
+  ],
+  "source": "HOSPITAL SULTANAH AMINAH.pdf"
+}

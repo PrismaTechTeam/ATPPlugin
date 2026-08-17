@@ -1,0 +1,63 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "28/7/2026",
+      "debtor": "3000-J0056",
+      "docNo": "MR2607.1134",
+      "einvoiceUuid": "N17VVQR8EHY6W9ZT1DTDRVYK10",
+      "lines": [
+        {
+          "amount": 125.61,
+          "current": 116283.0,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 112096.0,
+          "qty": 4187.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": 4187.0
+        },
+        {
+          "amount": 95.2,
+          "current": 12284.0,
+          "description": "223-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 12012.0,
+          "qty": 272.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.35,
+          "uom": "PCS",
+          "usage": 272.0
+        },
+        {
+          "amount": 808.0,
+          "current": null,
+          "description": "RA-34MTH_E MONTHLY RENTAL (31/34)",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 808.0,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 1028.81,
+      "ref": null,
+      "tax": null,
+      "totalQty": 4460.0
+    }
+  ],
+  "source": "Normal_3000-J0056 INV 2607.pdf"
+}

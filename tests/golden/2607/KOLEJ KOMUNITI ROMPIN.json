@@ -1,0 +1,119 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "31/7/2026",
+      "debtor": "3000-K0002",
+      "docNo": "AMR2607.0001",
+      "einvoiceUuid": null,
+      "lines": [
+        {
+          "amount": 500.0,
+          "current": null,
+          "description": "RA - 1 UNIT MONTHLY RENTAL - JULY'26",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 500.0,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 900.0,
+          "current": null,
+          "description": "RA - 3 UNIT MONTHLY RENTAL - JULY'26",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 3.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 300.0,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 1400.0,
+      "ref": null,
+      "tax": null,
+      "totalQty": 4.0
+    },
+    {
+      "branch": null,
+      "date": "31/7/2026",
+      "debtor": "3000-K0002",
+      "docNo": "AMR2607.0087",
+      "einvoiceUuid": null,
+      "lines": [
+        {
+          "amount": 795.27,
+          "current": 349707.0,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 323198.0,
+          "qty": 26509.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": 26509.0
+        },
+        {
+          "amount": null,
+          "current": 5834.0,
+          "description": "124-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 5920.0,
+          "qty": null,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.3,
+          "uom": "PCS",
+          "usage": 0.0
+        }
+      ],
+      "netTotal": 795.27,
+      "ref": null,
+      "tax": null,
+      "totalQty": 26509.0
+    },
+    {
+      "branch": null,
+      "date": "31/7/2026",
+      "debtor": "3000-K0002",
+      "docNo": "AMR2607.0088",
+      "einvoiceUuid": null,
+      "lines": [
+        {
+          "amount": 5.22,
+          "current": 583.0,
+          "description": "109-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 409.0,
+          "qty": 174.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": 174.0
+        }
+      ],
+      "netTotal": 5.22,
+      "ref": null,
+      "tax": null,
+      "totalQty": 174.0
+    }
+  ],
+  "source": "KOLEJ KOMUNITI ROMPIN.pdf"
+}

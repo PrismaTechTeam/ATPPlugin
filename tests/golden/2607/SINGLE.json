@@ -1,0 +1,63 @@
+{
+  "invoices": [
+    {
+      "branch": null,
+      "date": "30/7/2026",
+      "debtor": "3000-S0027",
+      "docNo": "MR2607.1250",
+      "einvoiceUuid": "YJMRH294DFT6ZEHTWPHRRVYK10",
+      "lines": [
+        {
+          "amount": null,
+          "current": 8697.0,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": 1000.0,
+          "no": 1,
+          "previous": 8140.0,
+          "qty": null,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.03,
+          "uom": "PCS",
+          "usage": 0.0
+        },
+        {
+          "amount": 44.0,
+          "current": 3208.0,
+          "description": "223-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 3098.0,
+          "qty": 110.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.4,
+          "uom": "PCS",
+          "usage": 110.0
+        },
+        {
+          "amount": 250.0,
+          "current": null,
+          "description": "RA-60MTH MONTHLY RENTAL (16/60)",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 250.0,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 309.0,
+      "ref": null,
+      "tax": 15.0,
+      "totalQty": 111.0
+    }
+  ],
+  "source": "SINGLE.pdf"
+}

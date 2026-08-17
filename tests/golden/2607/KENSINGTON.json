@@ -1,0 +1,63 @@
+{
+  "invoices": [
+    {
+      "branch": "WIA LV1",
+      "date": "21/7/2026",
+      "debtor": "3000-K0011",
+      "docNo": "MR2607.0186",
+      "einvoiceUuid": "3NGXRWTABT6AEPF2K9DWP9YK10",
+      "lines": [
+        {
+          "amount": 1126.0,
+          "current": 1199460.0,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": 1153501.0,
+          "qty": 45959.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0245,
+          "uom": "PCS",
+          "usage": 45959.0
+        },
+        {
+          "amount": 1110.56,
+          "current": 158369.0,
+          "description": "223-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": 154935.0,
+          "qty": 3434.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.3234,
+          "uom": "PCS",
+          "usage": 3434.0
+        },
+        {
+          "amount": null,
+          "current": null,
+          "description": "MIN 1764-12 MINIMUM RM 1764 OF COMMITTED",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": null,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": null,
+          "uom": "MTH",
+          "usage": null
+        }
+      ],
+      "netTotal": 2236.56,
+      "ref": "PUMS260720-33",
+      "tax": null,
+      "totalQty": 49393.0
+    }
+  ],
+  "source": "KENSINGTON.pdf"
+}

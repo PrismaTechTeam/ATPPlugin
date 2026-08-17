@@ -1,0 +1,93 @@
+{
+  "invoices": [
+    {
+      "branch": "UNIT BAHAGIAN PENGURUSAN",
+      "date": "22/7/2026",
+      "debtor": "3000-S0136",
+      "docNo": "MR2607.0227",
+      "einvoiceUuid": "3FEQ5KD8VC2NX8886ZACE4YK10",
+      "lines": [
+        {
+          "amount": 1287.25,
+          "current": null,
+          "description": "01.RA-1 UNIT_EB2HBEAVY DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 1287.25,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 3277.5,
+          "current": null,
+          "description": "02.RA-5 UNIT_EB2MBEDIUM DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 5.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 655.5,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 2861.4,
+          "current": null,
+          "description": "03.RA-6 UNIT_EB2LBIGHT DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": null,
+          "qty": 6.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 476.9,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 2300.52,
+          "current": null,
+          "description": "201-BK C+ P BK COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 4,
+          "previous": null,
+          "qty": 80720.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0285,
+          "uom": "PCS",
+          "usage": null
+        },
+        {
+          "amount": 3033.26,
+          "current": null,
+          "description": "223-COLOR C+ P COLOR COPY + PRINT A4&A3",
+          "foc": false,
+          "focQty": null,
+          "no": 5,
+          "previous": null,
+          "qty": 10643.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.285,
+          "uom": "PCS",
+          "usage": null
+        }
+      ],
+      "netTotal": 12759.93,
+      "ref": "MR-260706-166",
+      "tax": null,
+      "totalQty": 91375.0
+    }
+  ],
+  "source": "JPJ MELAKA_SUMTotalAmountFromBKCLbutNoRental.pdf"
+}

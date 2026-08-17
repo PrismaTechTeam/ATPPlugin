@@ -1,0 +1,78 @@
+{
+  "invoices": [
+    {
+      "branch": "PEJABAT PENTADBIRAN - LV 3 (1)",
+      "date": "31/7/2026",
+      "debtor": "3000-A0179",
+      "docNo": "MR2607.1347",
+      "einvoiceUuid": "427KVNDZS37T1E725ZQCQXYK10",
+      "lines": [
+        {
+          "amount": 5742.75,
+          "current": null,
+          "description": "01. RENTAL HSI_ERBE2NBTAL HSI - 13 UNIT MEDIUM DUTY -",
+          "foc": false,
+          "focQty": null,
+          "no": 1,
+          "previous": null,
+          "qty": 13.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 441.75,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 1377.5,
+          "current": null,
+          "description": "02. RENTAL HSI_ERBE2NBTAL HSI - 1 UNIT HIGH HEAVY DUTY",
+          "foc": false,
+          "focQty": null,
+          "no": 2,
+          "previous": null,
+          "qty": 1.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 1377.5,
+          "uom": "MTH",
+          "usage": null
+        },
+        {
+          "amount": 3048.36,
+          "current": 1462352.0,
+          "description": "03. METER CHARGMEEHTESIR CHARGE HSI - BK COPY + PRINT",
+          "foc": false,
+          "focQty": null,
+          "no": 3,
+          "previous": 1355392.0,
+          "qty": 106960.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.0285,
+          "uom": "MTH",
+          "usage": 106960.0
+        },
+        {
+          "amount": 4043.28,
+          "current": 2814283.0,
+          "description": "04. METER CHARGMEEHTESIR CHARGE HSI - BK COPY + PRINT",
+          "foc": false,
+          "focQty": null,
+          "no": 4,
+          "previous": 2601479.0,
+          "qty": 212804.0,
+          "rebatePct": null,
+          "rebateQty": null,
+          "unitPrice": 0.019,
+          "uom": "MTH",
+          "usage": 212804.0
+        }
+      ],
+      "netTotal": 14211.89,
+      "ref": "SV00152",
+      "tax": null,
+      "totalQty": 319778.0
+    }
+  ],
+  "source": "HOSPITAL SULTAN ISMAIL.pdf"
+}
