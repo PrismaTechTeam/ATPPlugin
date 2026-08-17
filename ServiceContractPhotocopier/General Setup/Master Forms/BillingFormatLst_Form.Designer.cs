@@ -1,25 +1,54 @@
+using System.Drawing;
+using System.Windows.Forms;
+using DevExpress.XtraEditors;
+using DevExpress.XtraGrid;
+using DevExpress.XtraGrid.Views.Grid;
+
 namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 {
     partial class BillingFormatLst_Form
     {
-        /// <summary>
-        /// Required designer variable.
-        /// </summary>
+        /// <summary> Required designer variable. </summary>
         private System.ComponentModel.IContainer components = null;
 
-        private DevExpress.XtraEditors.LabelControl LblHint;
-        private DevExpress.XtraGrid.GridControl GridFormats;
-        private DevExpress.XtraGrid.Views.Grid.GridView GridViewFormats;
-        private DevExpress.XtraEditors.SimpleButton BtnNew;
-        private DevExpress.XtraEditors.SimpleButton BtnEdit;
-        private DevExpress.XtraEditors.SimpleButton BtnCopy;
-        private DevExpress.XtraEditors.SimpleButton BtnDelete;
-        private DevExpress.XtraEditors.SimpleButton BtnRefresh;
-        private DevExpress.XtraEditors.SimpleButton BtnClose;
+        private AutoCount.Controls.PanelHeader PanelHeaderTop;
+        private PanelControl PanelToolbar;
+        private SimpleButton BtnNew;
+        private SimpleButton BtnEdit;
+        private SimpleButton BtnCopyNew;
+        private SimpleButton BtnSave;
+        private SimpleButton BtnCancel;
+        private SimpleButton BtnDelete;
+        private SimpleButton BtnRefresh;
+        private SimpleButton BtnExit;
 
-        /// <summary>
-        /// Clean up any resources being used.
-        /// </summary>
+        private GridControl GridFormats;
+        private GridView GridViewFormats;
+
+        private LabelControl LblCode;
+        private TextEdit TxtCode;
+        private LabelControl LblName;
+        private TextEdit TxtName;
+        private CheckEdit ChkInactive;
+        private LabelControl LblRemark;
+        private TextEdit TxtRemark;
+
+        private GroupControl GrpInvoices;
+        private RadioGroup RgInvoices;
+        private GroupControl GrpRental;
+        private RadioGroup RgRental;
+        private GroupControl GrpMeter;
+        private RadioGroup RgMeter;
+
+        private LabelControl LblPreview;
+        private LabelControl LblPreviewNote;
+        private GridControl GridPreview;
+        private GridView GridViewPreview;
+
+        private PanelControl PanelStatus;
+        private LabelControl LblStatus;
+
+        /// <summary> Clean up any resources being used. </summary>
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
@@ -38,40 +67,174 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         /// </summary>
         private void InitializeComponent()
         {
-            this.LblHint = new DevExpress.XtraEditors.LabelControl();
-            this.GridFormats = new DevExpress.XtraGrid.GridControl();
-            this.GridViewFormats = new DevExpress.XtraGrid.Views.Grid.GridView();
-            this.BtnNew = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnEdit = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnCopy = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnDelete = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnRefresh = new DevExpress.XtraEditors.SimpleButton();
-            this.BtnClose = new DevExpress.XtraEditors.SimpleButton();
+            this.PanelHeaderTop = new AutoCount.Controls.PanelHeader();
+            this.PanelToolbar = new PanelControl();
+            this.BtnNew = new SimpleButton();
+            this.BtnEdit = new SimpleButton();
+            this.BtnCopyNew = new SimpleButton();
+            this.BtnSave = new SimpleButton();
+            this.BtnCancel = new SimpleButton();
+            this.BtnDelete = new SimpleButton();
+            this.BtnRefresh = new SimpleButton();
+            this.BtnExit = new SimpleButton();
+            this.GridFormats = new GridControl();
+            this.GridViewFormats = new GridView();
+            this.LblCode = new LabelControl();
+            this.TxtCode = new TextEdit();
+            this.LblName = new LabelControl();
+            this.TxtName = new TextEdit();
+            this.ChkInactive = new CheckEdit();
+            this.LblRemark = new LabelControl();
+            this.TxtRemark = new TextEdit();
+            this.GrpInvoices = new GroupControl();
+            this.RgInvoices = new RadioGroup();
+            this.GrpRental = new GroupControl();
+            this.RgRental = new RadioGroup();
+            this.GrpMeter = new GroupControl();
+            this.RgMeter = new RadioGroup();
+            this.LblPreview = new LabelControl();
+            this.LblPreviewNote = new LabelControl();
+            this.GridPreview = new GridControl();
+            this.GridViewPreview = new GridView();
+            this.PanelStatus = new PanelControl();
+            this.LblStatus = new LabelControl();
+            ((System.ComponentModel.ISupportInitialize)(this.PanelToolbar)).BeginInit();
+            this.PanelToolbar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.GridFormats)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewFormats)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtCode.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtName.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtRemark.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpInvoices)).BeginInit();
+            this.GrpInvoices.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.RgInvoices.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpRental)).BeginInit();
+            this.GrpRental.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.RgRental.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpMeter)).BeginInit();
+            this.GrpMeter.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.RgMeter.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridPreview)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewPreview)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.PanelStatus)).BeginInit();
+            this.PanelStatus.SuspendLayout();
             this.SuspendLayout();
             //
-            // LblHint
+            // PanelHeaderTop
             //
-            this.LblHint.Appearance.ForeColor = System.Drawing.Color.DimGray;
-            this.LblHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            this.LblHint.Location = new System.Drawing.Point(14, 14);
-            this.LblHint.Name = "LblHint";
-            this.LblHint.Size = new System.Drawing.Size(930, 18);
-            this.LblHint.TabIndex = 0;
-            this.LblHint.Text = "A billing format decides how many invoices a contract produces and how its lines are grouped. " +
-                "Double-click one to edit it and see a sample invoice.";
+            this.PanelHeaderTop.Dock = DockStyle.Top;
+            this.PanelHeaderTop.Header = "Billing Format";
+            this.PanelHeaderTop.Hint = "";
+            this.PanelHeaderTop.Location = new Point(0, 0);
+            this.PanelHeaderTop.Name = "PanelHeaderTop";
+            this.PanelHeaderTop.Size = new Size(1050, 56);
+            this.PanelHeaderTop.TabIndex = 0;
+            //
+            // PanelToolbar
+            //
+            this.PanelToolbar.Dock = DockStyle.Top;
+            this.PanelToolbar.Location = new Point(0, 56);
+            this.PanelToolbar.Name = "PanelToolbar";
+            this.PanelToolbar.Size = new Size(1050, 62);
+            this.PanelToolbar.TabIndex = 1;
+            this.PanelToolbar.Controls.Add(this.BtnNew);
+            this.PanelToolbar.Controls.Add(this.BtnEdit);
+            this.PanelToolbar.Controls.Add(this.BtnCopyNew);
+            this.PanelToolbar.Controls.Add(this.BtnSave);
+            this.PanelToolbar.Controls.Add(this.BtnCancel);
+            this.PanelToolbar.Controls.Add(this.BtnDelete);
+            this.PanelToolbar.Controls.Add(this.BtnRefresh);
+            this.PanelToolbar.Controls.Add(this.BtnExit);
+            //
+            // BtnNew
+            //
+            this.BtnNew.Location = new Point(8, 6);
+            this.BtnNew.Name = "BtnNew";
+            this.BtnNew.Size = new Size(86, 50);
+            this.BtnNew.TabIndex = 0;
+            this.BtnNew.Text = "New";
+            this.BtnNew.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnNew.Click += new System.EventHandler(this.OnNew);
+            //
+            // BtnEdit
+            //
+            this.BtnEdit.Location = new Point(98, 6);
+            this.BtnEdit.Name = "BtnEdit";
+            this.BtnEdit.Size = new Size(86, 50);
+            this.BtnEdit.TabIndex = 1;
+            this.BtnEdit.Text = "Edit";
+            this.BtnEdit.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnEdit.Click += new System.EventHandler(this.OnEdit);
+            //
+            // BtnCopyNew
+            //
+            this.BtnCopyNew.Location = new Point(188, 6);
+            this.BtnCopyNew.Name = "BtnCopyNew";
+            this.BtnCopyNew.Size = new Size(120, 50);
+            this.BtnCopyNew.TabIndex = 2;
+            this.BtnCopyNew.Text = "Copy to New";
+            this.BtnCopyNew.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnCopyNew.Click += new System.EventHandler(this.OnCopyToNew);
+            //
+            // BtnSave
+            //
+            this.BtnSave.Location = new Point(312, 6);
+            this.BtnSave.Name = "BtnSave";
+            this.BtnSave.Size = new Size(86, 50);
+            this.BtnSave.TabIndex = 3;
+            this.BtnSave.Text = "Save";
+            this.BtnSave.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnSave.Click += new System.EventHandler(this.OnSave);
+            //
+            // BtnCancel
+            //
+            this.BtnCancel.Location = new Point(402, 6);
+            this.BtnCancel.Name = "BtnCancel";
+            this.BtnCancel.Size = new Size(86, 50);
+            this.BtnCancel.TabIndex = 4;
+            this.BtnCancel.Text = "Cancel";
+            this.BtnCancel.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnCancel.Click += new System.EventHandler(this.OnCancel);
+            //
+            // BtnDelete
+            //
+            this.BtnDelete.Location = new Point(492, 6);
+            this.BtnDelete.Name = "BtnDelete";
+            this.BtnDelete.Size = new Size(86, 50);
+            this.BtnDelete.TabIndex = 5;
+            this.BtnDelete.Text = "Delete";
+            this.BtnDelete.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnDelete.Click += new System.EventHandler(this.OnDelete);
+            //
+            // BtnRefresh
+            //
+            this.BtnRefresh.Location = new Point(588, 6);
+            this.BtnRefresh.Name = "BtnRefresh";
+            this.BtnRefresh.Size = new Size(92, 50);
+            this.BtnRefresh.TabIndex = 6;
+            this.BtnRefresh.Text = "Refresh";
+            this.BtnRefresh.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
+            //
+            // BtnExit
+            //
+            this.BtnExit.Location = new Point(684, 6);
+            this.BtnExit.Name = "BtnExit";
+            this.BtnExit.Size = new Size(92, 50);
+            this.BtnExit.TabIndex = 7;
+            this.BtnExit.Text = "Exit (F2)";
+            this.BtnExit.ImageOptions.Location = ImageLocation.MiddleLeft;
+            this.BtnExit.Click += new System.EventHandler(this.OnExit);
             //
             // GridFormats
             //
-            this.GridFormats.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-                        | System.Windows.Forms.AnchorStyles.Left)
-                        | System.Windows.Forms.AnchorStyles.Right)));
-            this.GridFormats.Location = new System.Drawing.Point(14, 38);
+            this.GridFormats.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
+            this.GridFormats.Location = new Point(14, 128);
             this.GridFormats.MainView = this.GridViewFormats;
             this.GridFormats.Name = "GridFormats";
-            this.GridFormats.Size = new System.Drawing.Size(930, 390);
-            this.GridFormats.TabIndex = 1;
+            this.GridFormats.Size = new Size(1020, 196);
+            this.GridFormats.TabIndex = 2;
             this.GridFormats.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewFormats});
             //
@@ -83,89 +246,242 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GridViewFormats.OptionsSelection.EnableAppearanceFocusedCell = false;
             this.GridViewFormats.OptionsView.ShowGroupPanel = false;
             //
-            // BtnNew
+            // LblCode
             //
-            this.BtnNew.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnNew.Location = new System.Drawing.Point(14, 440);
-            this.BtnNew.Name = "BtnNew";
-            this.BtnNew.Size = new System.Drawing.Size(90, 30);
-            this.BtnNew.TabIndex = 2;
-            this.BtnNew.Text = "New";
-            this.BtnNew.Click += new System.EventHandler(this.BtnNew_Click);
+            this.LblCode.Location = new Point(14, 341);
+            this.LblCode.Name = "LblCode";
+            this.LblCode.Size = new Size(100, 16);
+            this.LblCode.TabIndex = 3;
+            this.LblCode.Text = "Format Code :";
             //
-            // BtnEdit
+            // TxtCode
             //
-            this.BtnEdit.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnEdit.Location = new System.Drawing.Point(110, 440);
-            this.BtnEdit.Name = "BtnEdit";
-            this.BtnEdit.Size = new System.Drawing.Size(90, 30);
-            this.BtnEdit.TabIndex = 3;
-            this.BtnEdit.Text = "Edit";
-            this.BtnEdit.Click += new System.EventHandler(this.BtnEdit_Click);
+            this.TxtCode.Location = new Point(120, 338);
+            this.TxtCode.Name = "TxtCode";
+            this.TxtCode.Properties.MaxLength = 20;
+            this.TxtCode.Size = new Size(180, 22);
+            this.TxtCode.TabIndex = 4;
             //
-            // BtnCopy
+            // LblName
             //
-            this.BtnCopy.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnCopy.Location = new System.Drawing.Point(206, 440);
-            this.BtnCopy.Name = "BtnCopy";
-            this.BtnCopy.Size = new System.Drawing.Size(90, 30);
-            this.BtnCopy.TabIndex = 4;
-            this.BtnCopy.Text = "Copy";
-            this.BtnCopy.Click += new System.EventHandler(this.BtnCopy_Click);
+            this.LblName.Location = new Point(320, 341);
+            this.LblName.Name = "LblName";
+            this.LblName.Size = new Size(50, 16);
+            this.LblName.TabIndex = 5;
+            this.LblName.Text = "Name :";
             //
-            // BtnDelete
+            // TxtName
             //
-            this.BtnDelete.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnDelete.Location = new System.Drawing.Point(302, 440);
-            this.BtnDelete.Name = "BtnDelete";
-            this.BtnDelete.Size = new System.Drawing.Size(90, 30);
-            this.BtnDelete.TabIndex = 5;
-            this.BtnDelete.Text = "Delete";
-            this.BtnDelete.Click += new System.EventHandler(this.BtnDelete_Click);
+            this.TxtName.Location = new Point(392, 338);
+            this.TxtName.Name = "TxtName";
+            this.TxtName.Properties.MaxLength = 100;
+            this.TxtName.Size = new Size(480, 22);
+            this.TxtName.TabIndex = 6;
             //
-            // BtnRefresh
+            // ChkInactive
             //
-            this.BtnRefresh.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnRefresh.Location = new System.Drawing.Point(398, 440);
-            this.BtnRefresh.Name = "BtnRefresh";
-            this.BtnRefresh.Size = new System.Drawing.Size(90, 30);
-            this.BtnRefresh.TabIndex = 6;
-            this.BtnRefresh.Text = "Refresh";
-            this.BtnRefresh.Click += new System.EventHandler(this.BtnRefresh_Click);
+            this.ChkInactive.Location = new Point(892, 338);
+            this.ChkInactive.Name = "ChkInactive";
+            this.ChkInactive.Properties.Caption = "Inactive";
+            this.ChkInactive.Size = new Size(100, 22);
+            this.ChkInactive.TabIndex = 7;
             //
-            // BtnClose
+            // LblRemark
             //
-            this.BtnClose.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.BtnClose.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.BtnClose.Location = new System.Drawing.Point(854, 440);
-            this.BtnClose.Name = "BtnClose";
-            this.BtnClose.Size = new System.Drawing.Size(90, 30);
-            this.BtnClose.TabIndex = 7;
-            this.BtnClose.Text = "Close";
-            this.BtnClose.Click += new System.EventHandler(this.BtnClose_Click);
+            this.LblRemark.Location = new Point(14, 371);
+            this.LblRemark.Name = "LblRemark";
+            this.LblRemark.Size = new Size(100, 16);
+            this.LblRemark.TabIndex = 8;
+            this.LblRemark.Text = "Note :";
+            //
+            // TxtRemark
+            //
+            this.TxtRemark.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
+            this.TxtRemark.Location = new Point(120, 368);
+            this.TxtRemark.Name = "TxtRemark";
+            this.TxtRemark.Properties.MaxLength = 200;
+            this.TxtRemark.Size = new Size(914, 22);
+            this.TxtRemark.TabIndex = 9;
+            //
+            // GrpInvoices
+            //
+            this.GrpInvoices.Controls.Add(this.RgInvoices);
+            this.GrpInvoices.Location = new Point(14, 400);
+            this.GrpInvoices.Name = "GrpInvoices";
+            this.GrpInvoices.Size = new Size(330, 122);
+            this.GrpInvoices.TabIndex = 10;
+            this.GrpInvoices.Text = "How many invoices?";
+            //
+            // RgInvoices
+            //
+            this.RgInvoices.Dock = DockStyle.Fill;
+            this.RgInvoices.Location = new Point(2, 23);
+            this.RgInvoices.Name = "RgInvoices";
+            this.RgInvoices.Properties.Appearance.BackColor = Color.Transparent;
+            this.RgInvoices.Properties.Appearance.Options.UseBackColor = true;
+            this.RgInvoices.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            this.RgInvoices.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("ONE", "One invoice for everything"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("RS", "Rental on its own invoice"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("PM", "One invoice per machine"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("PMS", "Per machine, rental apart")});
+            this.RgInvoices.Size = new Size(326, 97);
+            this.RgInvoices.TabIndex = 0;
+            //
+            // GrpRental
+            //
+            this.GrpRental.Controls.Add(this.RgRental);
+            this.GrpRental.Location = new Point(354, 400);
+            this.GrpRental.Name = "GrpRental";
+            this.GrpRental.Size = new Size(330, 122);
+            this.GrpRental.TabIndex = 11;
+            this.GrpRental.Text = "Rental lines";
+            //
+            // RgRental
+            //
+            this.RgRental.Dock = DockStyle.Fill;
+            this.RgRental.Location = new Point(2, 23);
+            this.RgRental.Name = "RgRental";
+            this.RgRental.Properties.Appearance.BackColor = Color.Transparent;
+            this.RgRental.Properties.Appearance.Options.UseBackColor = true;
+            this.RgRental.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            this.RgRental.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "One line for all machines"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "One line per model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "One line per machine")});
+            this.RgRental.Size = new Size(326, 97);
+            this.RgRental.TabIndex = 0;
+            //
+            // GrpMeter
+            //
+            this.GrpMeter.Controls.Add(this.RgMeter);
+            this.GrpMeter.Location = new Point(694, 400);
+            this.GrpMeter.Name = "GrpMeter";
+            this.GrpMeter.Size = new Size(340, 122);
+            this.GrpMeter.TabIndex = 12;
+            this.GrpMeter.Text = "Black && Colour lines";
+            //
+            // RgMeter
+            //
+            this.RgMeter.Dock = DockStyle.Fill;
+            this.RgMeter.Location = new Point(2, 23);
+            this.RgMeter.Name = "RgMeter";
+            this.RgMeter.Properties.Appearance.BackColor = Color.Transparent;
+            this.RgMeter.Properties.Appearance.Options.UseBackColor = true;
+            this.RgMeter.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            this.RgMeter.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("A", "One BK + one CL for all machines"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "One BK + one CL per model"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("S", "BK + CL per machine")});
+            this.RgMeter.Size = new Size(336, 97);
+            this.RgMeter.TabIndex = 0;
+            //
+            // LblPreview
+            //
+            this.LblPreview.Location = new Point(14, 534);
+            this.LblPreview.Name = "LblPreview";
+            this.LblPreview.Size = new Size(160, 16);
+            this.LblPreview.TabIndex = 13;
+            this.LblPreview.Text = "Sample Invoice :";
+            //
+            // LblPreviewNote
+            //
+            this.LblPreviewNote.Anchor = ((AnchorStyles)(((AnchorStyles.Top | AnchorStyles.Left) | AnchorStyles.Right)));
+            this.LblPreviewNote.Appearance.ForeColor = Color.DimGray;
+            this.LblPreviewNote.AutoSizeMode = LabelAutoSizeMode.None;
+            this.LblPreviewNote.Location = new Point(180, 534);
+            this.LblPreviewNote.Name = "LblPreviewNote";
+            this.LblPreviewNote.Size = new Size(854, 16);
+            this.LblPreviewNote.TabIndex = 14;
+            this.LblPreviewNote.Text = "";
+            //
+            // GridPreview
+            //
+            this.GridPreview.Anchor = ((AnchorStyles)((((AnchorStyles.Top | AnchorStyles.Bottom) | AnchorStyles.Left) | AnchorStyles.Right)));
+            this.GridPreview.Location = new Point(14, 556);
+            this.GridPreview.MainView = this.GridViewPreview;
+            this.GridPreview.Name = "GridPreview";
+            this.GridPreview.Size = new Size(1020, 196);
+            this.GridPreview.TabIndex = 15;
+            this.GridPreview.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
+            this.GridViewPreview});
+            //
+            // GridViewPreview
+            //
+            this.GridViewPreview.GridControl = this.GridPreview;
+            this.GridViewPreview.Name = "GridViewPreview";
+            this.GridViewPreview.OptionsBehavior.Editable = false;
+            this.GridViewPreview.OptionsSelection.EnableAppearanceFocusedCell = false;
+            this.GridViewPreview.OptionsView.ShowGroupPanel = false;
+            this.GridViewPreview.OptionsView.ShowIndicator = false;
+            //
+            // PanelStatus
+            //
+            this.PanelStatus.Controls.Add(this.LblStatus);
+            this.PanelStatus.Dock = DockStyle.Bottom;
+            this.PanelStatus.Location = new Point(0, 764);
+            this.PanelStatus.Name = "PanelStatus";
+            this.PanelStatus.Size = new Size(1050, 26);
+            this.PanelStatus.TabIndex = 16;
+            //
+            // LblStatus
+            //
+            this.LblStatus.Location = new Point(10, 5);
+            this.LblStatus.Name = "LblStatus";
+            this.LblStatus.Size = new Size(600, 16);
+            this.LblStatus.TabIndex = 0;
+            this.LblStatus.Text = "Billing Format";
             //
             // BillingFormatLst_Form
             //
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.CancelButton = this.BtnClose;
-            this.ClientSize = new System.Drawing.Size(958, 484);
-            this.Controls.Add(this.LblHint);
+            this.AutoScaleDimensions = new SizeF(7F, 15F);
+            this.AutoScaleMode = AutoScaleMode.Font;
+            this.ClientSize = new Size(1050, 790);
             this.Controls.Add(this.GridFormats);
-            this.Controls.Add(this.BtnNew);
-            this.Controls.Add(this.BtnEdit);
-            this.Controls.Add(this.BtnCopy);
-            this.Controls.Add(this.BtnDelete);
-            this.Controls.Add(this.BtnRefresh);
-            this.Controls.Add(this.BtnClose);
-            this.Font = new System.Drawing.Font("Segoe UI", 9F);
-            this.MinimumSize = new System.Drawing.Size(760, 400);
+            this.Controls.Add(this.LblCode);
+            this.Controls.Add(this.TxtCode);
+            this.Controls.Add(this.LblName);
+            this.Controls.Add(this.TxtName);
+            this.Controls.Add(this.ChkInactive);
+            this.Controls.Add(this.LblRemark);
+            this.Controls.Add(this.TxtRemark);
+            this.Controls.Add(this.GrpInvoices);
+            this.Controls.Add(this.GrpRental);
+            this.Controls.Add(this.GrpMeter);
+            this.Controls.Add(this.LblPreview);
+            this.Controls.Add(this.LblPreviewNote);
+            this.Controls.Add(this.GridPreview);
+            this.Controls.Add(this.PanelStatus);
+            this.Controls.Add(this.PanelToolbar);
+            this.Controls.Add(this.PanelHeaderTop);
+            this.Font = new Font("Segoe UI", 9F);
+            this.KeyPreview = true;
+            this.MinimumSize = new Size(900, 640);
             this.Name = "BillingFormatLst_Form";
             this.ShowIcon = false;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.StartPosition = FormStartPosition.CenterParent;
             this.Text = "Billing Format";
+            ((System.ComponentModel.ISupportInitialize)(this.PanelStatus)).EndInit();
+            this.PanelStatus.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.GridViewPreview)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GridPreview)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RgMeter.Properties)).EndInit();
+            this.GrpMeter.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.GrpMeter)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RgRental.Properties)).EndInit();
+            this.GrpRental.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.GrpRental)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RgInvoices.Properties)).EndInit();
+            this.GrpInvoices.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.GrpInvoices)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtRemark.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkInactive.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtName.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtCode.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewFormats)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridFormats)).EndInit();
+            this.PanelToolbar.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.PanelToolbar)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
