@@ -58,6 +58,10 @@ namespace ServiceContractPhotocopier.Classes
                                            // distinct ids become the invoice Reference No
         public bool IsGroupItem;           // line belongs to the contract's GROUP "machine" — its
                                            // MIN/WAIVE sums span the WHOLE fleet, not one machine
+        public string ModelCode = "";      // the machine's stock item (zSCP2_Item.ItemCode) — the bucket
+                                           // when a contract groups lines by model
+        public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
+                                           // (zSCP2_Item.LineGroupCode); also the bucket under "same model"
         // --- Rental-Waive contra meter (master-style; the engine decides firing at Generate) ---
         public bool IsWaiveMeter;
         public int WaiveFirstNMonths;      // 0 = no window condition
@@ -107,55 +111,9 @@ namespace ServiceContractPhotocopier.Classes
         /// (a waived or committed-minimum rental explains ITSELF on the line) stays separate —
         /// merging those would throw the explanation away.
         /// </summary>
-        private static void GroupRentalLines(DBSetting db,
-            System.Collections.Generic.List<MeterBillLine> lines,
-            out System.Collections.Generic.Dictionary<MeterBillLine, decimal> groupQty,
-            out System.Collections.Generic.List<MeterBillLine> folded)
-        {
-            groupQty = new System.Collections.Generic.Dictionary<MeterBillLine, decimal>();
-            folded = new System.Collections.Generic.List<MeterBillLine>();
-            if (lines == null || lines.Count < 2) return;
-            bool on = true;
-            try
-            {
-                on = ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
-                    ServiceContractPhotocopier.Data.PumsConfig.KEY_GROUP_RENTAL_BY_METER,
-                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_GROUP_RENTAL_BY_METER);
-            }
-            catch { }
-            if (!on) return;
-
-            System.Collections.Generic.Dictionary<string, MeterBillLine> leaderByKey =
-                new System.Collections.Generic.Dictionary<string, MeterBillLine>(StringComparer.OrdinalIgnoreCase);
-            foreach (MeterBillLine ln in lines)
-            {
-                if (!IsGroupableRental(ln)) continue;
-                // Same meter type AND same per-unit money — a different rate is a different line, or
-                // Qty x UnitPrice would stop equalling what the machines actually cost.
-                string key = (ln.MeterTypeCode ?? "") + "|" + (ln.ACItemCode ?? "") + "|" +
-                             ln.Charge.ToString("0.####") + "|" + ln.ContractKey;
-                MeterBillLine leader;
-                if (leaderByKey.TryGetValue(key, out leader))
-                {
-                    groupQty[leader] = groupQty[leader] + 1m;
-                    folded.Add(ln);
-                }
-                else
-                {
-                    leaderByKey[key] = ln;
-                    groupQty[ln] = 1m;
-                }
-            }
-        }
-
-        /// <summary>A rental line that may be merged with identical ones. Committed-minimum top-ups
-        /// and rentals whose strategy wrote a per-machine note keep their own row.</summary>
-        private static bool IsGroupableRental(MeterBillLine ln)
-        {
-            return ln != null && ln.IsFlat && ln.IsRental && !ln.IsCommittedMin
-                   && string.IsNullOrEmpty(ln.StrategyNote) && ln.Charge > 0m;
-        }
-
+        /// Superseded by <see cref="ScpInvoiceLayout.Fold"/>, which folds meter lines as well as
+        /// rentals and takes its rules from the contract's Billing Format. The legacy predicate and
+        /// key live on there verbatim for contracts that have not been given a format.
         public static void ComputeCharge(MeterBillLine ln,
             System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<decimal[]>> ladders)
         {
@@ -319,17 +277,16 @@ namespace ServiceContractPhotocopier.Classes
                 }
             }
 
-            // Feedback #6 "Group Rental": one line PER METER TYPE, not per machine. A customer with
-            // 32 identical units wants "RA-32 UNIT ... 32 UNIT x 908.20 = 29,062.40", not 32 rows of
-            // qty 1. Merging happens on the INVOICE only — the meter stamps stay per machine, so the
-            // listing, the reading history and any later CN are unaffected.
-            System.Collections.Generic.Dictionary<MeterBillLine, decimal> rentalGroupQty;
-            System.Collections.Generic.List<MeterBillLine> rentalFolded;
-            GroupRentalLines(db, lines, out rentalGroupQty, out rentalFolded);
+            // How many rows this invoice prints. Each contract's RentalLineMode / MeterLineMode
+            // decides whether machines collapse together; a contract with no Billing Format keeps
+            // exactly the legacy behaviour (rentals fold on the old rule, usage never folds).
+            // Merging is presentation only — meter stamps, reading history and any later CN still
+            // see the individual machines.
+            System.Collections.Generic.List<ScpFoldedLine> rows = ScpInvoiceLayout.Fold(db, lines);
 
-            foreach (MeterBillLine ln in lines)
+            foreach (ScpFoldedLine row in rows)
             {
-                if (rentalFolded.Contains(ln)) continue;   // its unit is counted on the group's line
+                MeterBillLine ln = row.Leader;
 
                 string lineDept = "", lineProj = "";
                 string[] dp;
@@ -369,15 +326,17 @@ namespace ServiceContractPhotocopier.Classes
                     : ComposeLineDescription(ln);       // fallback / option OFF: meter type name
                 if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
                 {
-                    // Grouped rental: Qty = how many machines share this meter type, UnitPrice stays
-                    // the PER-UNIT rental, so the line reads "32 UNIT x 908.20" and totals correctly.
-                    decimal groupQty;
-                    dtl.Qty = rentalGroupQty.TryGetValue(ln, out groupQty) && groupQty > 1m ? groupQty : 1m;
+                    // Grouped rental: Qty = how many machines share this row, UnitPrice stays the
+                    // PER-UNIT rental, so the line reads "3 UNIT x 300.00" and totals correctly.
+                    dtl.Qty = row.Units > 1m ? row.Units : 1m;
                     dtl.UnitPrice = ln.Charge;
                 }
                 else
                 {
-                    dtl.Qty = ln.BillCopies;
+                    // Merged usage: Qty is the members' billable copies added up, priced once at the
+                    // rate they share. Rounding the row once is what the customer's own invoices do —
+                    // HSI prints 3,048.36 where the per-machine charges add to 3,048.37.
+                    dtl.Qty = row.IsMerged ? row.BillCopies : ln.BillCopies;
                     dtl.UnitPrice = ln.EffUnitPrice;
                     if (ln.RebatePct > 0m) dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
                 }
@@ -386,7 +345,7 @@ namespace ServiceContractPhotocopier.Classes
                 // Flat lines (rental / waive / MIN) have no copies to give free.
                 if (!ln.IsFlat)
                 {
-                    decimal focCol = ln.Usage - ln.BillCopies;
+                    decimal focCol = row.IsMerged ? row.FocApplied : (ln.Usage - ln.BillCopies);
                     if (focCol < 0m) focCol = 0m;
                     if (focCol > 0m) dtl.FOCQty = focCol;
                 }
@@ -416,28 +375,42 @@ namespace ServiceContractPhotocopier.Classes
                 if (periodMode)
                     AddTextRow(doc, "Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
                                     " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")", block);
-                DateTime curDate = ln.AuditDate ?? readingDate;
-                string curDateStr = curDate.ToString("dd/MM/yyyy");
-                string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "";
+                // A merged row shows the group's summed readings — no machine has these numbers, and
+                // that is exactly what the customer's invoices print (Rompin's AMR2607.0087 shows
+                // 349,707, its four machines added up). Where the members were read on different
+                // days the row prints the span rather than picking one machine's date and implying
+                // the others were read then too.
+                DateTime curDate = (row.IsMerged ? row.CurDate : ln.AuditDate) ?? readingDate;
+                string curDateStr = DateSpan(row, true, curDate);
+                string lastDateStr = DateSpan(row, false, ln.LastDate ?? DateTime.MinValue);
+                decimal showCurrent = row.IsMerged ? row.Current : ln.Current;
+                decimal showLast = row.IsMerged ? row.Last : ln.Last;
 
                 AddTextRow(doc, periodMode
-                    ? "Current Meter Reading : " + Num(ln.Current)
-                    : "Current Meter Reading (" + curDateStr + ") : " + Num(ln.Current), block);
+                    ? "Current Meter Reading : " + Num(showCurrent)
+                    : "Current Meter Reading (" + curDateStr + ") : " + Num(showCurrent), block);
 
                 AddTextRow(doc, periodMode
-                    ? "Previous Meter Reading : " + Num(ln.Last)
-                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(ln.Last), block);
+                    ? "Previous Meter Reading : " + Num(showLast)
+                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(showLast), block);
+
+                // Which machines are on this row. A single-machine row already says so on the charge
+                // line, so only a merged one needs the list — Pontian prints exactly this, all six
+                // serials against one BK line of 74,722.
+                if (row.IsMerged)
+                    AddTextRow(doc, "S/N : " + SerialList(row), block);
 
                 // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free
                 // band (usage − billed copies) — its FOCQty column is ignored by the engine, so printing
                 // the raw column here used to show a FOC that was never deducted. Flat (rental) lines
                 // keep the column value (= free months).
-                decimal focApplied = ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies);
+                decimal focApplied = row.IsMerged ? row.FocApplied
+                                                  : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies));
                 if (focApplied < 0m) focApplied = 0m;
                 if (focApplied > 0m)
                     AddTextRow(doc, "Meter FOC Qty : " + Num(focApplied), block);
 
-                AddTextRow(doc, "Meter Charges Usage : " + Num(ln.Usage), block);
+                AddTextRow(doc, "Meter Charges Usage : " + Num(row.IsMerged ? row.Usage : ln.Usage), block);
                 }   // end reading rows (skipped for committed-minimum meters)
 
                 // Blank separator between meters (the master prints one). Like every other text row it
@@ -464,6 +437,42 @@ namespace ServiceContractPhotocopier.Classes
         /// printed document byte-for-byte identical — these rows have no Qty or UnitPrice, so they
         /// contributed nothing to the subtotal in the first place.</para>
         /// </summary>
+        /// <summary>The reading date to print. One machine, or several read on the same day, gives a
+        /// single date; a merged row whose members were read over several days prints the span, so
+        /// the invoice never claims a reading was taken on a day it was not.</summary>
+        private static string DateSpan(ScpFoldedLine row, bool current, DateTime fallback)
+        {
+            if (!row.IsMerged)
+                return fallback == DateTime.MinValue ? "" : fallback.ToString("dd/MM/yyyy");
+
+            DateTime? lo = null, hi = null;
+            foreach (MeterBillLine m in row.Members)
+            {
+                DateTime? d = current ? m.AuditDate : m.LastDate;
+                if (!d.HasValue) continue;
+                if (!lo.HasValue || d.Value < lo.Value) lo = d;
+                if (!hi.HasValue || d.Value > hi.Value) hi = d;
+            }
+            if (!lo.HasValue) return fallback == DateTime.MinValue ? "" : fallback.ToString("dd/MM/yyyy");
+            return lo.Value.Date == hi.Value.Date
+                ? lo.Value.ToString("dd/MM/yyyy")
+                : lo.Value.ToString("dd/MM") + "-" + hi.Value.ToString("dd/MM/yyyy");
+        }
+
+        /// <summary>The serials on a merged row, in the order the machines were billed.</summary>
+        private static string SerialList(ScpFoldedLine row)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            foreach (MeterBillLine m in row.Members)
+            {
+                string s = (m.SerialNumber ?? "").Trim();
+                if (s.Length == 0) continue;
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append(s);
+            }
+            return sb.ToString();
+        }
+
         private static void AddTextRow(AutoCount.Invoicing.Sales.Invoice.Invoice doc,
             string description, string furtherDescription)
         {

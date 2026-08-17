@@ -164,6 +164,7 @@
     <Compile Include="Classes\ScpExtraDocs.cs" />
     <Compile Include="Classes\ScpBillingFormat.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
+    <Compile Include="Classes\ScpInvoiceLayout.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
     <Compile Include="Classes\ScpContractAudit.cs" />

@@ -1828,7 +1828,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
                     "ISNULL(i.IsGroupItem,'N') AS IsGroupItem, ISNULL(i.MachineMode,'') AS MachineMode, " +
-                    "ISNULL(i.BillGroupCode,'') AS BillGroupCode, " +
+                    // BillGroupCode picks the INVOICE; LineGroupCode picks the LINE and is the word
+                    // ("HEAVY DUTY") the line prints. ItemCode is the machine's model — the bucket
+                    // when a contract groups its lines by model (v11 / v14).
+                    "ISNULL(i.BillGroupCode,'') AS BillGroupCode, ISNULL(i.LineGroupCode,'') AS LineGroupCode, " +
+                    "ISNULL(i.ItemCode,'') AS ModelCode, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
                     // goes on the charge row); ACItemCode is an explicit override when set.
@@ -1955,6 +1959,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["IsGroupItem"] = S(r["IsGroupItem"]) == "Y";
                     g["MachineMode"] = S(r["MachineMode"]);
                     g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
+                    g["LineGroupCode"] = S(r["LineGroupCode"]);
+                    g["ModelCode"] = S(r["ModelCode"]);
                     g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
                     g["WaiveFirstNMonths"] = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     g["WaiveTargetAmount"] = Dec(r["WaiveTargetAmount"]);
@@ -2234,6 +2240,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("IsGroupItem", typeof(bool));       // the contract's GROUP machine (fleet-total deals)
             dt.Columns.Add("MachineMode", typeof(string));     // DEFINED online/offline ('' = use fetch status)
             dt.Columns.Add("BillGroupCode", typeof(string));   // #6 bill-group split ('' = none)
+            dt.Columns.Add("LineGroupCode", typeof(string));   // the word printed on the line ("HEAVY DUTY")
+            dt.Columns.Add("ModelCode", typeof(string));       // the machine's model — bucket when grouping by model
             dt.Columns.Add("WaiveFirstNMonths", typeof(int));
             dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
             dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
@@ -3895,6 +3903,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.MachineStatus = mmode.Length > 0 ? mmode : S(r["MachineStatus"]);
                 ln.TrackingId = S(r["TrackingId"]).Trim();
                 ln.IsGroupItem = r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"]);
+                // Which printed line this machine belongs on, when its contract folds lines together.
+                ln.ModelCode = S(r["ModelCode"]);
+                ln.LineGroupCode = S(r["LineGroupCode"]);
                 ln.IsWaiveMeter = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
                 // Scope is shared: waive meters use it for the target sum, MIN meters for the
                 // committed-minimum printed sum (BK only / CL only / both).
