@@ -354,6 +354,18 @@
     <Compile Include="Classes\CommonForms\StrategyRulesEditorControl.Designer.cs">
       <DependentUpon>StrategyRulesEditorControl.cs</DependentUpon>
     </Compile>
+    <Compile Include="General Setup\Master Forms\BillingFormatLst_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\BillingFormatLst_Form.Designer.cs">
+      <DependentUpon>BillingFormatLst_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\BillingFormat_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\BillingFormat_Form.Designer.cs">
+      <DependentUpon>BillingFormat_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="General Setup\Master Forms\MeterTypeLst_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1002,6 +1014,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\MeterTypeLst_Form.resx">
       <DependentUpon>MeterTypeLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\BillingFormatLst_Form.resx">
+      <DependentUpon>BillingFormatLst_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\BillingFormat_Form.resx">
+      <DependentUpon>BillingFormat_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\MeterType_Form.resx">
       <DependentUpon>MeterType_Form.cs</DependentUpon>

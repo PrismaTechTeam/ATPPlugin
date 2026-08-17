@@ -920,7 +920,7 @@
             this.GrpBilling.Controls.Add(this.layoutControl2);
             this.GrpBilling.Location = new System.Drawing.Point(637, 12);
             this.GrpBilling.Name = "GrpBilling";
-            this.GrpBilling.Size = new System.Drawing.Size(700, 185);
+            this.GrpBilling.Size = new System.Drawing.Size(700, 241);
             this.GrpBilling.TabIndex = 45;
             this.GrpBilling.Text = "Billing";
             // 
@@ -956,7 +956,9 @@
             new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.SluBillingFormat.Properties.NullText = "(follow the tick boxes)";
             this.SluBillingFormat.Properties.PopupView = this.SluBillingFormatView;
-            this.SluBillingFormat.Size = new System.Drawing.Size(224, 20);
+            // Without an explicit popup size the drop-down opens as wide as the screen.
+            this.SluBillingFormat.Properties.PopupFormSize = new System.Drawing.Size(860, 300);
+            this.SluBillingFormat.Size = new System.Drawing.Size(570, 20);
             this.SluBillingFormat.StyleController = this.layoutControl2;
             this.SluBillingFormat.TabIndex = 46;
             //
@@ -966,13 +968,18 @@
             this.SluBillingFormatView.Name = "SluBillingFormatView";
             this.SluBillingFormatView.OptionsSelection.EnableAppearanceFocusedCell = false;
             this.SluBillingFormatView.OptionsView.ShowGroupPanel = false;
-            this.SluBillingFormatView.OptionsView.ShowAutoFilterRow = true;
+            // Eleven rows do not need a filter row; it only added a band of empty boxes.
+            this.SluBillingFormatView.OptionsView.ShowAutoFilterRow = false;
             //
             // LblFormatSummary
             //
-            this.LblFormatSummary.Location = new System.Drawing.Point(346, 180);
+            // AutoSizeMode defaults to growing with the text. Left at the default this label
+            // expanded to fit a whole sentence and squeezed the lookup beside it to "2 invoic...".
+            this.LblFormatSummary.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
+            this.LblFormatSummary.Appearance.ForeColor = System.Drawing.Color.DimGray;
+            this.LblFormatSummary.Location = new System.Drawing.Point(106, 178);
             this.LblFormatSummary.Name = "LblFormatSummary";
-            this.LblFormatSummary.Size = new System.Drawing.Size(330, 20);
+            this.LblFormatSummary.Size = new System.Drawing.Size(570, 18);
             this.LblFormatSummary.StyleController = this.layoutControl2;
             this.LblFormatSummary.TabIndex = 47;
             this.LblFormatSummary.Text = "";
@@ -2239,7 +2246,7 @@
             // layoutControlItem16
             // 
             this.layoutControlItem16.Control = this.ChkInactive;
-            this.layoutControlItem16.Location = new System.Drawing.Point(635, 159);
+            this.layoutControlItem16.Location = new System.Drawing.Point(635, 245);
             this.layoutControlItem16.Name = "layoutControlItem16";
             this.layoutControlItem16.Size = new System.Drawing.Size(694, 24);
             this.layoutControlItem16.TextSize = new System.Drawing.Size(0, 0);
@@ -2268,7 +2275,7 @@
             this.layoutControlItem19.Control = this.GrpBilling;
             this.layoutControlItem19.Location = new System.Drawing.Point(625, 0);
             this.layoutControlItem19.Name = "layoutControlItem19";
-            this.layoutControlItem19.Size = new System.Drawing.Size(704, 189);
+            this.layoutControlItem19.Size = new System.Drawing.Size(704, 245);
             this.layoutControlItem19.TextSize = new System.Drawing.Size(0, 0);
             this.layoutControlItem19.TextVisible = false;
             // 
@@ -2353,7 +2360,10 @@
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
             this.layoutControl2.Name = "layoutControl2";
             this.layoutControl2.Root = this.layoutControlGroup1;
-            this.layoutControl2.Size = new System.Drawing.Size(696, 160);
+            // 190, not 160: the Billing Format row sits at y=154 and is 24 high, so the layout needs
+            // 178 plus padding. At 160 the row existed, was populated, and was drawn off the bottom
+            // edge where nobody could see it.
+            this.layoutControl2.Size = new System.Drawing.Size(696, 214);
             this.layoutControl2.TabIndex = 0;
             this.layoutControl2.Text = "layoutControl2";
             // 
@@ -2400,20 +2410,22 @@
             //
             // layoutControlItem33
             //
+            // Format and summary each get a full-width row of their own. Side by side, the summary
+            // is a sentence and the format name is a sentence, and neither fits in half the group.
             this.layoutControlItem33.Control = this.SluBillingFormat;
             this.layoutControlItem33.Location = new System.Drawing.Point(0, 154);
             this.layoutControlItem33.Name = "layoutControlItem33";
-            this.layoutControlItem33.Size = new System.Drawing.Size(334, 24);
+            this.layoutControlItem33.Size = new System.Drawing.Size(676, 24);
             this.layoutControlItem33.Text = "Billing Format";
             this.layoutControlItem33.TextSize = new System.Drawing.Size(82, 13);
             //
             // layoutControlItem34
             //
             this.layoutControlItem34.Control = this.LblFormatSummary;
-            this.layoutControlItem34.Location = new System.Drawing.Point(334, 154);
+            this.layoutControlItem34.Location = new System.Drawing.Point(0, 178);
             this.layoutControlItem34.Name = "layoutControlItem34";
-            this.layoutControlItem34.Size = new System.Drawing.Size(342, 24);
-            this.layoutControlItem34.TextSize = new System.Drawing.Size(0, 0);
+            this.layoutControlItem34.Size = new System.Drawing.Size(676, 22);
+            this.layoutControlItem34.TextSize = new System.Drawing.Size(82, 13);
             this.layoutControlItem34.TextVisible = false;
             //
             // layoutControlItem22

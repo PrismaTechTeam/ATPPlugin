@@ -90,6 +90,9 @@ namespace ServiceContractPhotocopier.Classes
         public const string CMD_OPEN_SCP_SETUP_METER_TYPE = nameof(CMD_OPEN_SCP_SETUP_METER_TYPE);
         public const string CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE = nameof(CMD_SHOW_SCP_SETUP_METER_MULTI_PRICE);
         public const string CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE = nameof(CMD_OPEN_SCP_SETUP_METER_MULTI_PRICE);
+        // Named invoice layouts (how many invoices a contract produces, how its lines group).
+        public const string CMD_SHOW_SCP_SETUP_BILLING_FORMAT = nameof(CMD_SHOW_SCP_SETUP_BILLING_FORMAT);
+        public const string CMD_OPEN_SCP_SETUP_BILLING_FORMAT = nameof(CMD_OPEN_SCP_SETUP_BILLING_FORMAT);
 
         // ---- General Setup — strategy ----
         public const string CMD_SHOW_SCP_SETUP_STRATEGY = nameof(CMD_SHOW_SCP_SETUP_STRATEGY);

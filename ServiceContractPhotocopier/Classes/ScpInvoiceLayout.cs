@@ -107,6 +107,35 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>
+        /// Fold with the modes given rather than looked up — for showing what a layout WOULD do to
+        /// a sample fleet, before any contract has been given it. Same code path as the real fold,
+        /// so a preview cannot promise something the engine will not produce.
+        /// </summary>
+        public static List<ScpFoldedLine> FoldWith(List<MeterBillLine> lines, char rentalMode, char meterMode)
+        {
+            List<ScpFoldedLine> result = new List<ScpFoldedLine>();
+            if (lines == null || lines.Count == 0) return result;
+            ContractLayout lay = new ContractLayout();
+            lay.HasFormat = true;
+            lay.RentalMode = rentalMode;
+            lay.MeterMode = meterMode;
+
+            Dictionary<string, ScpFoldedLine> byKey =
+                new Dictionary<string, ScpFoldedLine>(StringComparer.OrdinalIgnoreCase);
+            foreach (MeterBillLine ln in lines)
+            {
+                string key = FoldKey(ln, lay, true);
+                ScpFoldedLine grp;
+                if (key != null && byKey.TryGetValue(key, out grp)) { grp.Members.Add(ln); continue; }
+                grp = new ScpFoldedLine(ln);
+                if (key != null) byKey[key] = grp;
+                result.Add(grp);
+            }
+            foreach (ScpFoldedLine g in result) Aggregate(g);
+            return result;
+        }
+
+        /// <summary>
         /// Collapse the lines of ONE invoice into the rows it will print, in print order:
         /// rentals first, then black, then colour, then the explanatory lines (committed minimum,
         /// waive) that always speak for a single machine.

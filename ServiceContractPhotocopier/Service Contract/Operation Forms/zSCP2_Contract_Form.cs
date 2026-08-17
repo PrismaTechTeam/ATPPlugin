@@ -4699,6 +4699,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             AddFormatCol("Meters", "BK & CL lines", 100);
             AddFormatCol("UsedBy", "Used by", 60);
             AddFormatCol("Remark", "Seen on", 260);
+            // A second button beside the drop-down opens the maintenance screen, so a format can be
+            // created or renamed from the place it is being chosen rather than hunted for in a menu.
+            DevExpress.XtraEditors.Controls.EditorButton maintain =
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Ellipsis);
+            maintain.ToolTip = "Create, rename or edit billing formats";
+            SluBillingFormat.Properties.Buttons.Add(maintain);
+            SluBillingFormat.Properties.ButtonClick +=
+                new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(SluBillingFormat_ButtonClick);
             SluBillingFormat.EditValueChanged += new EventHandler(SluBillingFormat_EditValueChanged);
             ChkBillGroup.CheckedChanged += new EventHandler(BillingFlag_Changed);
             ChkBillSeparate.CheckedChanged += new EventHandler(BillingFlag_Changed);
@@ -4735,6 +4743,36 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DevExpress.XtraGrid.Columns.GridColumn c = SluBillingFormatView.Columns.AddVisible(field);
             c.Caption = caption;
             c.Width = width;
+        }
+
+        private void SluBillingFormat_ButtonClick(object sender,
+            DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button == null || e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Ellipsis) return;
+            try
+            {
+                using (ServiceContractPhotocopier.GeneralSetup.MasterForms.BillingFormatLst_Form f =
+                    new ServiceContractPhotocopier.GeneralSetup.MasterForms.BillingFormatLst_Form(_db))
+                {
+                    f.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+                    f.ShowDialog(this);
+                }
+                // A format may have been added or renamed while that was open.
+                string keep = _billingFormatCode;
+                BuildBillingFormatPicker();
+                if (keep.Length > 0)
+                {
+                    _formatApplying = true;
+                    try { SluBillingFormat.EditValue = keep; }
+                    finally { _formatApplying = false; }
+                }
+                UpdateFormatSummary();
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Open Billing Format maintenance failed:\r\n" + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         /// <summary>Picking a format writes its answers into the controls the engine reads.</summary>
