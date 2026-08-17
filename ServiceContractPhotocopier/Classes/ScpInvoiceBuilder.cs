@@ -400,12 +400,7 @@ namespace ServiceContractPhotocopier.Classes
                 // "PARTIAL WAIVE 90%: ...") — its own text row directly under the charge row, so the
                 // CUSTOMER sees why a rental is 0.00 or reduced (user transparency rule).
                 if (!string.IsNullOrEmpty(ln.StrategyNote))
-                {
-                    AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dNote = doc.AddDetail();
-                    dNote.Description = ln.StrategyNote;
-                    dNote.FurtherDescription = block;
-                    dNote.AccNo = null;
-                }
+                    AddTextRow(doc, ln.StrategyNote, block);
 
                 // Reading text rows — exactly the master's content: Current / Previous / (FOC when >0)
                 // / Usage, each carrying the same block, then a blank separator row. Dates dd/MM/yyyy,
@@ -419,32 +414,19 @@ namespace ServiceContractPhotocopier.Classes
                 // never see cross-month reading dates). Normal mode is unchanged.
                 bool periodMode = ln.PeriodStart.HasValue && ln.PeriodEnd.HasValue;
                 if (periodMode)
-                {
-                    AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dPer = doc.AddDetail();
-                    dPer.Description = "Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
-                                       " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")";
-                    dPer.FurtherDescription = block;
-                    dPer.AccNo = null;
-                }
+                    AddTextRow(doc, "Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
+                                    " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")", block);
                 DateTime curDate = ln.AuditDate ?? readingDate;
                 string curDateStr = curDate.ToString("dd/MM/yyyy");
                 string lastDateStr = ln.LastDate.HasValue ? ln.LastDate.Value.ToString("dd/MM/yyyy") : "";
 
-                // Text rows carry NO account (master: acccode empty on description-only rows) — AddDetail
-                // pre-fills the default sales account, so it is explicitly cleared here.
-                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dCur = doc.AddDetail();
-                dCur.Description = periodMode
+                AddTextRow(doc, periodMode
                     ? "Current Meter Reading : " + Num(ln.Current)
-                    : "Current Meter Reading (" + curDateStr + ") : " + Num(ln.Current);
-                dCur.FurtherDescription = block;
-                dCur.AccNo = null;
+                    : "Current Meter Reading (" + curDateStr + ") : " + Num(ln.Current), block);
 
-                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dPrev = doc.AddDetail();
-                dPrev.Description = periodMode
+                AddTextRow(doc, periodMode
                     ? "Previous Meter Reading : " + Num(ln.Last)
-                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(ln.Last);
-                dPrev.FurtherDescription = block;
-                dPrev.AccNo = null;
+                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(ln.Last), block);
 
                 // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free
                 // band (usage − billed copies) — its FOCQty column is ignored by the engine, so printing
@@ -453,24 +435,43 @@ namespace ServiceContractPhotocopier.Classes
                 decimal focApplied = ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies);
                 if (focApplied < 0m) focApplied = 0m;
                 if (focApplied > 0m)
-                {
-                    AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dFoc = doc.AddDetail();
-                    dFoc.Description = "Meter FOC Qty : " + Num(focApplied);
-                    dFoc.FurtherDescription = block;
-                    dFoc.AccNo = null;
-                }
+                    AddTextRow(doc, "Meter FOC Qty : " + Num(focApplied), block);
 
-                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dUse = doc.AddDetail();
-                dUse.Description = "Meter Charges Usage : " + Num(ln.Usage);
-                dUse.FurtherDescription = block;
-                dUse.AccNo = null;
+                AddTextRow(doc, "Meter Charges Usage : " + Num(ln.Usage), block);
                 }   // end reading rows (skipped for committed-minimum meters)
 
-                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dBlank = doc.AddDetail();
-                dBlank.Description = "";
-                dBlank.AccNo = null;
+                // Blank separator between meters (the master prints one). Like every other text row it
+                // is excluded from the subtotal, which is also what keeps its empty Description away
+                // from the e-Invoice payload — see AddTextRow.
+                AddTextRow(doc, "", "");
             }
             return doc;
+        }
+
+        /// <summary>
+        /// A description-only detail row: the reading breakdown, the strategy note, the blank separator
+        /// between meters. Carries no money and no account.
+        ///
+        /// <para><b>AddToSubTotal = false is what makes these rows legal for LHDN.</b>
+        /// AutoCount submits every detail row it finds with
+        /// <c>(DtlType = 'N' OR 'D' OR 'V') AND AddToSubTotal = 'T'</c>
+        /// (<c>JsonInvoiceHelper.cs:682</c>), then throws <c>DetailDescIsEmpty</c> on a blank description
+        /// (<c>:695</c>) and <c>DetailMissingClassification</c> on a row with no classification code
+        /// (<c>:712</c>). <c>AddDetail()</c> stamps every new row <c>DtlType='N'</c>,
+        /// <c>AddToSubTotal='T'</c> (<c>InvoicingDocument.cs:2289-2291</c>), so the blank separator alone
+        /// made EVERY meter invoice fail MyInvois validation, and the reading rows would have been
+        /// submitted as RM0 line items. Clearing the flag drops them from that query while leaving the
+        /// printed document byte-for-byte identical — these rows have no Qty or UnitPrice, so they
+        /// contributed nothing to the subtotal in the first place.</para>
+        /// </summary>
+        private static void AddTextRow(AutoCount.Invoicing.Sales.Invoice.Invoice doc,
+            string description, string furtherDescription)
+        {
+            AutoCount.Invoicing.Sales.Invoice.InvoiceDetail d = doc.AddDetail();
+            d.Description = description;
+            if (!string.IsNullOrEmpty(furtherDescription)) d.FurtherDescription = furtherDescription;
+            d.AccNo = null;
+            d.AddToSubTotal = false;
         }
 
         // Contract Department + Project for every distinct ContractKey referenced by the lines.
