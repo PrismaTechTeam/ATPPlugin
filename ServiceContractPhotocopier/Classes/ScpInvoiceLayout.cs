@@ -79,13 +79,29 @@ namespace ServiceContractPhotocopier.Classes
             }
         }
 
-        /// <summary>What the row comes to. Deliberately Qty x UnitPrice rather than a sum of the
-        /// members' charges, because that is what the invoice line itself computes — a merged row is
-        /// rounded once, which is why HSI prints 3,048.36 where the per-machine charges add to
-        /// 3,048.37. Preview and invoice therefore cannot disagree.</summary>
+        /// <summary>
+        /// What the row comes to.
+        ///
+        /// <para><b>Rental</b> is units times the per-unit price, because that is the deal: a group
+        /// of machines rented at one agreed monthly figure.</para>
+        ///
+        /// <para><b>Black and colour</b> are the sum of what the machines actually cost. Each meter
+        /// keeps its own rate and its own charge; merging decides how many LINES print, not what
+        /// anything costs. Summing is also the only way to be exact when the rates differ — 60,249
+        /// at 0.019 plus 52,860 at 0.0285 is 2,651.24, and no single rate on 113,109 copies lands
+        /// there. The rate the row displays is derived from this total, not the other way round.</para>
+        /// </summary>
         public decimal PrintAmount
         {
-            get { return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero); }
+            get
+            {
+                bool flat = Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m;
+                if (flat || !IsMerged)
+                    return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero);
+                decimal money = 0m;
+                foreach (MeterBillLine m in Members) money += m.Charge;
+                return Math.Round(money, 2, MidpointRounding.AwayFromZero);
+            }
         }
 
         /// <summary>A member whose meter read backwards — the reading went DOWN. Usually a replaced

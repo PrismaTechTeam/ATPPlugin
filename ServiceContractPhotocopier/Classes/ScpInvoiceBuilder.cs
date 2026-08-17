@@ -379,11 +379,17 @@ namespace ServiceContractPhotocopier.Classes
                     // rate they share. Rounding the row once is what the customer's own invoices do —
                     // HSI prints 3,048.36 where the per-machine charges add to 3,048.37.
                     dtl.Qty = row.IsMerged ? row.BillCopies : ln.BillCopies;
-                    dtl.UnitPrice = ln.EffUnitPrice;
+                    dtl.UnitPrice = row.IsMerged ? row.PrintUnitPrice : ln.EffUnitPrice;
                     // Under the new rules the rebate is already out of BillCopies as copies, so a
                     // line discount here would take it a second time.
                     if (ln.RebatePct > 0m && !ln.NewMoneyRules)
                         dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
+                    // Each meter keeps its own rate, so a merged usage line is worth what its
+                    // machines are worth -- stated, not recomputed from a rate that cannot represent
+                    // several. Qty x UnitPrice would round to 2,651.27 where the machines cost
+                    // 2,651.24.  NOTE: needs confirming against a generated invoice that AutoCount
+                    // keeps this and does not recompute it from Qty x UnitPrice on save.
+                    if (row.IsMerged) dtl.SubTotal = row.PrintAmount;
                 }
                 // AutoCount's native FOC Qty column carries the free copies actually APPLIED to this
                 // bill (user request): the ladder's free band or the meter's Free Qty allowance.

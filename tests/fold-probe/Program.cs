@@ -90,11 +90,12 @@ static class FoldProbe
             // simply quantity x that rate and nothing has drifted.
             decimal bkMoney = 0m;
             foreach (var m in meters[0].Members) bkMoney += m.Charge;
-            decimal rowMoney = Math.Round(meters[0].PrintQty * meters[0].PrintUnitPrice, 2);
             Console.WriteLine(string.Format(
-                "       merged BK: {0:n0} copies at {1} = {2:n2}; the machines cost {3:n2} (drift {4:n2})",
-                meters[0].PrintQty, meters[0].PrintUnitPrice, rowMoney, bkMoney, rowMoney - bkMoney));
-            Check("BK money within a few cents", Math.Abs(rowMoney - bkMoney) <= 0.05m, true);
+                "       merged BK: {0:n0} copies, machines cost {1:n2}, row states {2:n2}   " +
+                "(rate x qty would give {3:n2})",
+                meters[0].PrintQty, bkMoney, meters[0].PrintAmount,
+                Math.Round(meters[0].PrintQty * meters[0].PrintUnitPrice, 2)));
+            Check("BK money is exactly what the machines cost", meters[0].PrintAmount, Math.Round(bkMoney, 2));
         }
         finally { DropContract(db, ck); }
 
