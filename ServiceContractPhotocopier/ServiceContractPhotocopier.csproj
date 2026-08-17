@@ -922,6 +922,10 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v8_GroupItem.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v10_BillGroup.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v11_LineGroup.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v14_LineModes.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BillingFormat.sql" />
+    <EmbeddedResource Include="SQL\04_Seed_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v4_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql" />

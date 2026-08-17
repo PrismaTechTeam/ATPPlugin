@@ -171,6 +171,13 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v11_PeriodMode.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v12_MeterListing.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v13_EmailTemplate.sql", asm);
+            // v14: how the lines INSIDE an invoice group (rental / meter: across model, same model,
+            // per machine) + which named Billing Format those values came from. Backfills the
+            // retiring global GROUP_RENTAL_BY_METER so an existing book bills exactly as before.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v14_LineModes.sql", asm);
+            // The named presets themselves — a contract points at one instead of carrying its own
+            // copy of the same three answers.
+            RunIfTableMissing(dbsetting, "zSCP2_BillingFormat", "02_CreateTable_zSCP2_BillingFormat.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_EmailJob", "02_CreateTable_zSCP2_EmailJob.sql", asm);
             RunDDL(dbsetting, "02_UpdateTable_zSCP2_EmailJobItem_v1.1.0.sql", asm);
             RunDDL(dbsetting, "02_UpdateTable_zSCP2_EmailJobItem_v1.2.0.sql", asm);
@@ -193,6 +200,9 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v9_MachineMode.sql", asm);
             // Demo 28/07 #6: Bill Group split billing (same contract + same code = one invoice).
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v10_BillGroup.sql", asm);
+            // v11: the word printed on a machine's line + the bucket it merges into ("Line label").
+            // Distinct from v10's BillGroupCode, which picks the INVOICE rather than the line.
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v11_LineGroup.sql", asm);
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // v3: Demo 28/07 #10 - CN reading-correction linkage (CNDocKey/CNDocNo + filtered index).
@@ -210,6 +220,9 @@ namespace ServiceContractPhotocopier.Classes
                 string seedDDL = ReadEmbeddedSql("04_Seed_zSCP_LK_Defaults.sql", asm);
                 var dbu = DBUtils.Create(dbsetting);
                 dbu.ExecuteDDLText(seedDDL);
+                // The 11 billing formats the customer's own invoices use. Insert-if-missing, so an
+                // edited format survives and a renamed one is not duplicated.
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP2_BillingFormat.sql", asm));
             }
             catch (Exception ex)
             {
