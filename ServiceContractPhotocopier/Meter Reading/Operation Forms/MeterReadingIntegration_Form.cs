@@ -1832,7 +1832,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // ("HEAVY DUTY") the line prints. ItemCode is the machine's model — the bucket
                     // when a contract groups its lines by model (v11 / v14).
                     "ISNULL(i.BillGroupCode,'') AS BillGroupCode, ISNULL(i.LineGroupCode,'') AS LineGroupCode, " +
-                    "ISNULL(i.ItemCode,'') AS ModelCode, " +
+                    "ISNULL(i.ItemCode,'') AS ModelCode, ISNULL(c.BillingFormatCode,'') AS BillingFormatCode, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
                     // goes on the charge row); ACItemCode is an explicit override when set.
@@ -1961,6 +1961,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
                     g["LineGroupCode"] = S(r["LineGroupCode"]);
                     g["ModelCode"] = S(r["ModelCode"]);
+                    g["NewMoneyRules"] = S(r["BillingFormatCode"]).Length > 0;
                     g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
                     g["WaiveFirstNMonths"] = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
                     g["WaiveTargetAmount"] = Dec(r["WaiveTargetAmount"]);
@@ -2242,6 +2243,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("BillGroupCode", typeof(string));   // #6 bill-group split ('' = none)
             dt.Columns.Add("LineGroupCode", typeof(string));   // the word printed on the line ("HEAVY DUTY")
             dt.Columns.Add("ModelCode", typeof(string));       // the machine's model — bucket when grouping by model
+            dt.Columns.Add("NewMoneyRules", typeof(bool));     // contract has a Billing Format -> bills like the
+                                                              // customer's own invoices (rebate as copies, etc.)
             dt.Columns.Add("WaiveFirstNMonths", typeof(int));
             dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
             dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
@@ -3895,6 +3898,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.IsFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
                 // Charge via the SAME engine the grid used, so the invoice matches the preview exactly
                 // (NET: FOC copies + rebate deducted, multi-price tier, min floor). Sets BillCopies / EffUnitPrice.
+                // Must be set BEFORE ComputeCharge — it decides how the rebate is taken and how the
+                // cents are rounded.
+                ln.NewMoneyRules = r["NewMoneyRules"] != DBNull.Value && Convert.ToBoolean(r["NewMoneyRules"]);
                 ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
                 if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
                 ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));

@@ -28,6 +28,10 @@ namespace ServiceContractPhotocopier.Classes
         /// invoices print (Rompin's AMR2607.0087 shows 349,707, the four machines added up).</summary>
         public decimal Current, Last;
         public decimal FocApplied, Usage;
+        /// <summary>Copies the rebate removed, floored per machine then added up — which is how the
+        /// customer's own merged lines read (Pontian prints 1,522, where 2% of the merged 76,244
+        /// would have been 1,524).</summary>
+        public decimal RebateQty;
         /// <summary>Newest and oldest reading dates in the group. Equal on an unmerged line; a merged
         /// line prints the range rather than inventing a single date the readings never shared.</summary>
         public DateTime? CurDate, PrevDate;
@@ -178,14 +182,17 @@ namespace ServiceContractPhotocopier.Classes
         private static void Aggregate(ScpFoldedLine g)
         {
             g.BillCopies = 0m; g.Current = 0m; g.Last = 0m; g.FocApplied = 0m; g.Usage = 0m;
-            g.CurDate = null; g.PrevDate = null;
+            g.RebateQty = 0m; g.CurDate = null; g.PrevDate = null;
             foreach (MeterBillLine m in g.Members)
             {
                 g.BillCopies += m.BillCopies;
+                g.RebateQty += m.RebateQty;
                 g.Current += m.Current;
                 g.Last += m.Last;
                 g.Usage += m.Usage;
-                decimal foc = m.IsFlat ? m.Foc : (m.Usage - m.BillCopies);
+                // Copies the ALLOWANCE took, which is not everything missing from BillCopies — the
+                // rebate took its own share and is reported on its own row.
+                decimal foc = m.IsFlat ? m.Foc : (m.Usage - m.BillCopies - m.RebateQty);
                 if (foc < 0m) foc = 0m;
                 g.FocApplied += foc;
 

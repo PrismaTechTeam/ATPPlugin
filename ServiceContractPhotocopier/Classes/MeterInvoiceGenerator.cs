@@ -82,6 +82,12 @@ namespace ServiceContractPhotocopier.Classes
                     // Zero-charge meters (amount 0 after the minimum floor) never appear on the
                     // invoice — their reading still rolls forward and the period is marked NO CHARGE.
                     // A job where EVERY meter is zero produces NO invoice at all.
+                    //
+                    // ...unless the contract is on a Billing Format, because the customer's own book
+                    // does the opposite. Tangkak's MR2607.1413, 1414 and 1415 are RM0.00 invoices,
+                    // e-Invoiced and sent: usage fell under the 5,000 FOC allowance, and the hospital
+                    // still wants the reading and the allowance on record. Pasir Gudang's rental
+                    // invoice MR2607.1107 is three FOC lines totalling 0.00 for the same reason.
                     List<MeterBillLine> billable = new List<MeterBillLine>();
                     List<MeterBillLine> zero = new List<MeterBillLine>();
                     foreach (MeterBillLine ln in j.Lines)
@@ -89,7 +95,8 @@ namespace ServiceContractPhotocopier.Classes
                         // meter SHOWS): committed-minimum top-ups, and any rental a strategy freed or
                         // waived (its StrategyNote explains the 0.00). Everything else zero-charge goes
                         // the NO-CHARGE stamp route.
-                        ((ln.Charge > 0m || ln.AlwaysBill || (ln.IsRental && !string.IsNullOrEmpty(ln.StrategyNote)))
+                        ((ln.Charge > 0m || ln.AlwaysBill || ln.NewMoneyRules
+                          || (ln.IsRental && !string.IsNullOrEmpty(ln.StrategyNote)))
                             ? billable : zero).Add(ln);
 
                     if (billable.Count > 0)

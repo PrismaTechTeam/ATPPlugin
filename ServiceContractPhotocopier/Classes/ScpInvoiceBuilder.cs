@@ -62,6 +62,13 @@ namespace ServiceContractPhotocopier.Classes
                                            // when a contract groups lines by model
         public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
                                            // (zSCP2_Item.LineGroupCode); also the bucket under "same model"
+        /// <summary>The contract has a Billing Format, so it bills the way the customer's own
+        /// invoices do: rebate deducted as copies, cents rounded half away from zero, and a line
+        /// worth 0.00 still printed. Off = the engine as it behaved before, so an existing contract's
+        /// money does not move until someone picks a format for it.</summary>
+        public bool NewMoneyRules;
+        /// <summary>Copies removed by the rebate (new rules only) — printed as "Meter Rebate Qty (3%)".</summary>
+        public decimal RebateQty;
         // --- Rental-Waive contra meter (master-style; the engine decides firing at Generate) ---
         public bool IsWaiveMeter;
         public int WaiveFirstNMonths;      // 0 = no window condition
@@ -156,15 +163,46 @@ namespace ServiceContractPhotocopier.Classes
                 if (billed < 0m) billed = 0m;
                 effUnit = ln.Rate;
             }
+            // Rebate. The customer's invoices deduct it as COPIES, not as a discount on the amount:
+            // Kastam's 4WE04767 goes 5,232 gross, less 500 FOC = 4,732, less floor(4,732 x 3%) = 141,
+            // and bills qty 4,591. Tangkak's MR2607.1416 bills qty 1,882 at 53.64 where the amount
+            // form gives 1,940 at 53.63. Pontian proves the flooring happens per machine and is then
+            // summed -- its merged line prints 1,522, where 2% of the merged 76,244 would be 1,524.
+            //
+            // Only contracts on the new engine get this; everything else keeps the amount form.
+            decimal charge;
+            if (ln.RebatePct > 0m && ln.NewMoneyRules)
+            {
+                ln.RebateQty = Math.Floor(billed * ln.RebatePct / 100m);
+                if (ln.RebateQty < 0m) ln.RebateQty = 0m;
+                billed -= ln.RebateQty;
+                if (billed < 0m) billed = 0m;
+                charge = Round2(billed * effUnit, ln.NewMoneyRules);
+            }
+            else
+            {
+                ln.RebateQty = 0m;
+                decimal sub = Round2(billed * effUnit, ln.NewMoneyRules);
+                charge = ln.RebatePct > 0m ? Round2(sub * (1m - ln.RebatePct / 100m), ln.NewMoneyRules) : sub;
+            }
             ln.BillCopies = billed;
             ln.EffUnitPrice = effUnit;
-
-            decimal sub = Math.Round(billed * effUnit, 2);
-            decimal charge = ln.RebatePct > 0m ? Math.Round(sub * (1m - ln.RebatePct / 100m), 2) : sub;
 
             // Minimum-charge floor. A committed minimum still bills even when the allowance covers all usage.
             if (charge < ln.MinCharges) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
             else { ln.Charge = charge; ln.UseMin = false; }
+        }
+
+        /// <summary>
+        /// Round to cents. AutoCount rounds half away from zero unless the book asks for banker's
+        /// rounding (DecimalSetting), and the customer's invoices agree with it: Pasir Gudang's
+        /// colour line is 5,693 x 0.285 = 1,622.505 and prints 1,622.51, where .NET's default
+        /// ToEven gives 1,622.50. Kept opt-in so an existing contract's cents do not move underneath
+        /// anyone mid-month.
+        /// </summary>
+        private static decimal Round2(decimal v, bool newMoneyRules)
+        {
+            return newMoneyRules ? Math.Round(v, 2, MidpointRounding.AwayFromZero) : Math.Round(v, 2);
         }
 
         /// <summary>
@@ -338,14 +376,18 @@ namespace ServiceContractPhotocopier.Classes
                     // HSI prints 3,048.36 where the per-machine charges add to 3,048.37.
                     dtl.Qty = row.IsMerged ? row.BillCopies : ln.BillCopies;
                     dtl.UnitPrice = ln.EffUnitPrice;
-                    if (ln.RebatePct > 0m) dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
+                    // Under the new rules the rebate is already out of BillCopies as copies, so a
+                    // line discount here would take it a second time.
+                    if (ln.RebatePct > 0m && !ln.NewMoneyRules)
+                        dtl.Discount = ln.RebatePct.ToString("0.##") + "%";
                 }
                 // AutoCount's native FOC Qty column carries the free copies actually APPLIED to this
                 // bill (user request): the ladder's free band or the meter's Free Qty allowance.
                 // Flat lines (rental / waive / MIN) have no copies to give free.
                 if (!ln.IsFlat)
                 {
-                    decimal focCol = row.IsMerged ? row.FocApplied : (ln.Usage - ln.BillCopies);
+                    decimal focCol = row.IsMerged ? row.FocApplied
+                                                  : (ln.Usage - ln.BillCopies - ln.RebateQty);
                     if (focCol < 0m) focCol = 0m;
                     if (focCol > 0m) dtl.FOCQty = focCol;
                 }
@@ -405,12 +447,18 @@ namespace ServiceContractPhotocopier.Classes
                 // the raw column here used to show a FOC that was never deducted. Flat (rental) lines
                 // keep the column value (= free months).
                 decimal focApplied = row.IsMerged ? row.FocApplied
-                                                  : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies));
+                                                  : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies - ln.RebateQty));
                 if (focApplied < 0m) focApplied = 0m;
                 if (focApplied > 0m)
                     AddTextRow(doc, "Meter FOC Qty : " + Num(focApplied), block);
 
-                AddTextRow(doc, "Meter Charges Usage : " + Num(row.IsMerged ? row.Usage : ln.Usage), block);
+                // The copies the rebate removed, shown the way Kastam and Tangkak show them
+                // ("Meter Rebate Qty (3%) : 141") so the arithmetic on the line is followable.
+                decimal rebQty = row.IsMerged ? row.RebateQty : ln.RebateQty;
+                if (rebQty > 0m)
+                    AddTextRow(doc, "Meter Rebate Qty (" + ln.RebatePct.ToString("0.##") + "%) : " + Num(rebQty), block);
+
+                AddTextRow(doc, "Meter Charges Usage : " + Num(row.IsMerged ? row.BillCopies : ln.BillCopies), block);
                 }   // end reading rows (skipped for committed-minimum meters)
 
                 // Blank separator between meters (the master prints one). Like every other text row it

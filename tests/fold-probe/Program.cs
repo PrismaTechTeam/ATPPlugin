@@ -119,6 +119,8 @@ static class FoldProbe
         }
         finally { DropContract(db, ck3); }
 
+        MoneyChecks();
+
         // A contract with NO format must behave exactly as before: rentals fold on the old rule,
         // usage never folds.
         long ck4 = NewContract(db, "ZZPROBE-LEGACY", "");
@@ -135,6 +137,65 @@ static class FoldProbe
             Check("legacy BK rows (never folds)", Where(rows, false).Count, 3);
         }
         finally { DropContract(db, ck4); }
+    }
+
+    // ComputeCharge against the issued invoices. No DB needed — these are pure arithmetic.
+    static void MoneyChecks()
+    {
+        Console.WriteLine("\n=== MONEY (ComputeCharge vs the issued invoices) ===");
+
+        // Tangkak MR2607.1417 line 2, machine 4WE00869: BK 111,651 - 101,028 = 10,623 gross,
+        // FOC 5,000 -> 5,623, rebate floor(5,623 x 3%) = 168 -> bills qty 5,455 at 0.0285 = 155.47.
+        var bk = Usage(10623m, 0.0285m, foc: 5000m, rebate: 3m, newRules: true);
+        Check("Tangkak 4WE00869 rebate qty", bk.RebateQty, 168m);
+        Check("Tangkak 4WE00869 billed qty", bk.BillCopies, 5455m);
+        Check("Tangkak 4WE00869 charge", bk.Charge, 155.47m);
+
+        // Same line, colour: 11,794 - 10,136 = 1,658 gross, FOC 500 -> 1,158,
+        // rebate floor(1,158 x 3%) = 34 -> 1,124 at 0.285 = 320.34.
+        var cl = Usage(1658m, 0.285m, foc: 500m, rebate: 3m, newRules: true);
+        Check("Tangkak 4WE00869 CL rebate qty", cl.RebateQty, 34m);
+        Check("Tangkak 4WE00869 CL billed qty", cl.BillCopies, 1124m);
+        Check("Tangkak 4WE00869 CL charge", cl.Charge, 320.34m);
+
+        // Tangkak MR2607.1416, machine 2GS03078: 32,220 - 30,280 = 1,940, no FOC,
+        // rebate floor(1,940 x 3%) = 58 -> 1,882 at 0.0285 = 53.64.
+        var t16 = Usage(1940m, 0.0285m, foc: 0m, rebate: 3m, newRules: true);
+        Check("Tangkak 2GS03078 rebate qty", t16.RebateQty, 58m);
+        Check("Tangkak 2GS03078 billed qty", t16.BillCopies, 1882m);
+        Check("Tangkak 2GS03078 charge", t16.Charge, 53.64m);
+
+        // The same meter under the OLD rules is what the engine bills today: qty 1,940 and 53.63.
+        var t16old = Usage(1940m, 0.0285m, foc: 0m, rebate: 3m, newRules: false);
+        Check("Tangkak 2GS03078 OLD billed qty", t16old.BillCopies, 1940m);
+        Check("Tangkak 2GS03078 OLD charge (today)", t16old.Charge, 53.63m);
+
+        // Pasir Gudang MR2607.1106 colour: 5,693 x 0.285 = 1,622.505, printed 1,622.51.
+        // Banker's rounding gives 1,622.50.
+        var pg = Usage(5693m, 0.285m, foc: 0m, rebate: 0m, newRules: true);
+        Check("Pasir Gudang CL charge (away from zero)", pg.Charge, 1622.51m);
+        var pgOld = Usage(5693m, 0.285m, foc: 0m, rebate: 0m, newRules: false);
+        Check("Pasir Gudang CL charge OLD (to even)", pgOld.Charge, 1622.50m);
+
+        // Rompin: colour read backwards (5,834 now, 5,920 before). Clamp to 0, still a line.
+        var neg = Usage(-86m, 0.30m, foc: 0m, rebate: 0m, newRules: true);
+        Check("Rompin CL negative usage clamped", neg.Usage, 0m);
+        Check("Rompin CL negative charge", neg.Charge, 0m);
+
+        // Tangkak MR2607.1413: 18,331 - 14,829 = 3,502, all inside the 5,000 FOC -> 0.00 invoice.
+        var z = Usage(3502m, 0.029m, foc: 5000m, rebate: 0m, newRules: true);
+        Check("Tangkak FOC-covered billed qty", z.BillCopies, 0m);
+        Check("Tangkak FOC-covered charge", z.Charge, 0m);
+    }
+
+    static ServiceContractPhotocopier.Classes.MeterBillLine Usage(
+        decimal usage, decimal rate, decimal foc, decimal rebate, bool newRules)
+    {
+        var l = new ServiceContractPhotocopier.Classes.MeterBillLine();
+        l.Last = 0m; l.Current = usage; l.Rate = rate; l.Foc = foc; l.RebatePct = rebate;
+        l.NewMoneyRules = newRules; l.FocResetCount = 1;
+        ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(l, null);
+        return l;
     }
 
     // ----- helpers -----
@@ -181,7 +242,10 @@ static class FoldProbe
 
     static void Check(string what, object got, object want)
     {
-        bool ok = got.ToString() == want.ToString();
+        // Compare decimals by value — 0 and 0.00 are the same amount, and scale is not the point here.
+        bool ok = got is decimal && want is decimal
+            ? (decimal)got == (decimal)want
+            : got.ToString() == want.ToString();
         if (!ok) _fail++;
         Console.WriteLine((ok ? "  ok   " : "  FAIL ") + what + " = " + got + (ok ? "" : "  (expected " + want + ")"));
     }
