@@ -855,6 +855,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GrpMeters.Controls.Add(mMaint);
             mMaint.BringToFront();
 
+            // A rented machine always carries a rental meter, so asking for the meter is asking the
+            // same question twice. Tick this and the row appears already typed, roled and described
+            // -- the only thing left is how much a month.
+            _chkNeedRental = new DevExpress.XtraEditors.CheckEdit();
+            _chkNeedRental.Text = "Need rental";
+            _chkNeedRental.ToolTip = "This machine is rented -- adds the RENTAL meter, you just fill in the monthly amount";
+            _chkNeedRental.Location = new System.Drawing.Point(584, 27);
+            _chkNeedRental.Size = new System.Drawing.Size(120, 20);
+            GrpMeters.Controls.Add(_chkNeedRental);
+            _chkNeedRental.BringToFront();
+            _suppressRentalEvt = true;
+            _chkNeedRental.Checked = FindRentalMeterRow() != null;
+            _suppressRentalEvt = false;
+            _chkNeedRental.CheckedChanged += new EventHandler(ChkNeedRental_CheckedChanged);
+            // Adding or deleting a rental by hand must move the tick too, or it would state the
+            // opposite of what the grid shows.
+            _meters.RowChanged += new DataRowChangeEventHandler(Meters_RentalWatch);
+            _meters.RowDeleted += new DataRowChangeEventHandler(Meters_RentalWatch);
+
             // READ-ONLY: the machine assignment is decided when the meter is ADDED (focused Item
             // Provided row -> + Add Meter). To reassign, delete the meter and re-add it on the right
             // unit — in-grid editing of the assignment is deliberately not allowed.
@@ -1050,6 +1069,118 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     return;
             }
             GridViewMeters.DeleteRow(rh);
+        }
+
+        // ---- Need rental ----
+        // The machine's own RENTAL meter, or null. A WAIVE is not one: it is the contra that takes
+        // the rent away again, and it needs a real rental sitting next to it.
+        private DataRow FindRentalMeterRow()
+        {
+            if (_meters == null) return null;
+            foreach (DataRow r in _meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+                if (t.Length == 0 || IsWaiveType(t)) continue;
+                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) return r;
+            }
+            return null;
+        }
+
+        // Add or delete a rental in the grid and the tick follows — it must never claim the opposite
+        // of what the rows show.
+        private void Meters_RentalWatch(object sender, DataRowChangeEventArgs e)
+        {
+            if (_chkNeedRental == null || _suppressRentalEvt) return;
+            bool has = FindRentalMeterRow() != null;
+            if (_chkNeedRental.Checked == has) return;
+            _suppressRentalEvt = true;
+            _chkNeedRental.Checked = has;
+            _suppressRentalEvt = false;
+        }
+
+        private void ChkNeedRental_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_suppressRentalEvt) return;
+            if (_chkNeedRental.Checked) AddStandardRentalMeter();
+            else RemoveRentalMeter();
+        }
+
+        // Ticked: drop in the RENTAL meter, already typed, roled and described, and put the cursor on
+        // the amount. Everything else about a rental is the same every time — only the money differs.
+        private void AddStandardRentalMeter()
+        {
+            if (FindRentalMeterRow() != null) return;   // already has one; the tick just caught up
+
+            DataRow[] std = _meterTypeLookup == null ? new DataRow[0]
+                : _meterTypeLookup.Select("MeterTypeCode='" +
+                    ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL.Replace("'", "''") + "'");
+
+            _suppressRentalEvt = true;
+            DataRow r = _meters.NewRow();
+            r["MeterRole"] = "RENTAL";
+            r["MeterTypeCode"] = std.Length > 0 ? Convert.ToString(std[0]["MeterTypeCode"]) : "";
+            r["Description"] = std.Length > 0 && std[0].Table.Columns.Contains("Description")
+                ? Convert.ToString(std[0]["Description"]) : "";
+            r["MachineSerialNo"] = "";
+            r["MinimumCharges"] = 0m;
+            r["ChargesRate"] = 0m;          // the amount the user is about to type
+            r["MeterMultiPriceCode"] = "";
+            r["RebateQtyInPercent"] = 0m;
+            r["FOCQty"] = 0m;
+            r["InitialReading"] = 0m;
+            r["CustomTiers"] = "";
+            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m;
+            r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
+            _meters.Rows.Add(r);
+            _suppressRentalEvt = false;
+            _dirty = true;
+
+            if (std.Length == 0)
+                XtraMessageBox.Show("The standard '" + ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL +
+                    "' meter type is not in this book, so the row is waiting for a type.\r\n\r\n" +
+                    "Pick a rental type in the row, or create the standard one in Meter Types...",
+                    "Need rental");
+
+            // Land on the money: the amount is the only thing this row still needs.
+            GridViewMeters.RefreshData();
+            int rh = GridViewMeters.GetRowHandle(_meters.Rows.IndexOf(r));
+            if (rh < 0) return;
+            GridViewMeters.FocusedRowHandle = rh;
+            GridViewMeters.FocusedColumn = std.Length > 0 ? ColMtRate : ColMtCode;
+            GridMeters.Focus();
+            GridViewMeters.ShowEditor();
+        }
+
+        // Unticked: take the rental away — through the same two gates the Delete button uses, because
+        // this is the same deletion. A waive left with nothing to waive is refused; a saved rental
+        // takes its whole reading history with it and says so first.
+        private void RemoveRentalMeter()
+        {
+            DataRow r = FindRentalMeterRow();
+            if (r == null) return;
+            string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+
+            if (DeleteWouldOrphanWaiveI(r))
+            {
+                XtraMessageBox.Show("This machine still has a RENTAL WAIVE meter — remove the waive line first " +
+                    "(or keep the rental). A waive needs a rent to waive.", "Need rental");
+                _suppressRentalEvt = true; _chkNeedRental.Checked = true; _suppressRentalEvt = false;
+                return;
+            }
+            if (_data != null && _data.ItemKey > 0 && r.RowState != DataRowState.Added && t.Length > 0 &&
+                XtraMessageBox.Show("Remove the rental meter '" + t + "'?\r\n\r\nWhen you save, this meter AND its " +
+                    "reading history (all readings + billing log for this counter) are permanently deleted.",
+                    "Need rental", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                _suppressRentalEvt = true; _chkNeedRental.Checked = true; _suppressRentalEvt = false;
+                return;
+            }
+            _suppressRentalEvt = true;
+            r.Delete();
+            _suppressRentalEvt = false;
+            _dirty = true;
+            GridViewMeters.RefreshData();
         }
 
         // "Meter Types..." — open the Meter Type maintenance module; when it closes, reload the
@@ -1564,6 +1695,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn _colMachineSerial;
         private DevExpress.XtraGrid.Columns.GridColumn _colMachineItemCode;
         private bool _suppressMultiEvt;
+        // --- need rental ---
+        private DevExpress.XtraEditors.CheckEdit _chkNeedRental;
+        private bool _suppressRentalEvt;
         // --- ownership ---
         private DevExpress.XtraEditors.TextEdit _txtParentContractRO;   // read-only Contract No display
         private DevExpress.XtraEditors.TextEdit _txtCustomerRO;         // read-only Customer display

@@ -226,6 +226,9 @@ namespace ServiceContractPhotocopier.Classes
                 // ...and the right to see the menu item, mirrored from Meter Type. Declaring a right
                 // does not grant it, so without this the screen is hidden from everyone.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_AccessRight_BillingFormat.sql", asm));
+                // The three meter types the new way needs -- RENTAL / BK / CL. The machine form's
+                // "Need rental" tick picks RENTAL by code, so this seed is what makes it work.
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard.sql", asm));
             }
             catch (Exception ex)
             {

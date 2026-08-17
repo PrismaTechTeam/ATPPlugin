@@ -941,6 +941,7 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\04_Seed_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\04_Seed_AccessRight_BillingFormat.sql" />
+    <EmbeddedResource Include="SQL\04_Seed_zSCP_MeterType_Standard.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v4_Rental.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v4_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v5_SourceInvoice.sql" />
