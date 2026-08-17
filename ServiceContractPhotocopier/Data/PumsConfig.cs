@@ -119,6 +119,43 @@ namespace ServiceContractPhotocopier.Data
         /// ticked or keyed — the incomplete-group protection prompts. Default ON.</summary>
         public const string KEY_METER_GROUP_GUARD = "METER_GROUP_GUARD";
         public const bool DEFAULT_METER_GROUP_GUARD = true;
+
+        // ===== Billing Format (contract RentalLineMode / MeterLineMode) company defaults =====
+
+        /// <summary>What a MERGED BK/CL line prints beneath itself, when a contract's MeterLineMode
+        /// folds several machines into one row. Only consulted for merged lines — a per-machine line
+        /// always shows that machine's own readings.
+        /// <para>SUM (default) = summed Current/Previous plus the serial list, which is what every
+        /// issued invoice does today: Pontian's MR2607.0357 prints 2,086,590 / 2,010,346 across six
+        /// machines and lists all six serials in the header. ROWS = one line per machine instead.
+        /// Both render inside the charge row's FurtherDescription, so LHDN still sees ONE item.</para></summary>
+        public const string KEY_MERGED_READING_TEXT = "MERGED_READING_TEXT";
+        public const string MERGED_READING_SUM = "SUM";
+        public const string MERGED_READING_ROWS = "ROWS";
+        public const string DEFAULT_MERGED_READING_TEXT = MERGED_READING_SUM;
+
+        /// <summary>Whether an invoice whose lines all come to zero is still issued.
+        /// <para>OFF (default) is today's behaviour — MeterInvoiceGenerator drops zero lines and skips
+        /// a job with nothing left. The customer's own book does the opposite: Tangkak's MR2607.1413,
+        /// 1414 and 1415 are RM0.00 invoices, e-Invoiced, because usage fell under the 5,000 FOC
+        /// allowance and the hospital still wants the reading on record. Turned on per book once the
+        /// reconciliation harness confirms the rest of the layout matches.</para></summary>
+        public const string KEY_ZERO_LINES = "ZERO_LINES";
+        public const bool DEFAULT_ZERO_LINES = false;
+
+        /// <summary>How the rebate percentage is applied. **Changes money — leave on PCT until the
+        /// customer signs off.**
+        /// <para>PCT (default) is today's engine: bill the gross copies and put the percentage in the
+        /// line's Discount. QTY is what the customer's invoices actually do — deduct
+        /// floor((usage − FOC) × pct) COPIES per machine, then bill the remainder, printing
+        /// "Meter Rebate Qty (3%) : 58". The two disagree in cents and in the printed quantity:
+        /// Tangkak MR2607.1416 bills qty 1,882 at 53.64, where PCT mode gives qty 1,940 at 53.63.
+        /// Pontian proves the flooring is per machine and then summed — its merged line prints 1,522,
+        /// where 2% of the merged 76,244 would be 1,524.</para></summary>
+        public const string KEY_REBATE_MODE = "REBATE_MODE";
+        public const string REBATE_MODE_PCT = "PCT";
+        public const string REBATE_MODE_QTY = "QTY";
+        public const string DEFAULT_REBATE_MODE = REBATE_MODE_PCT;
         // Show meters of INACTIVE contracts/items on the Meter Reading list (off by default) — used
         // to review, and if needed bill, the leftover un-invoiced readings of a stopped contract.
         public const string KEY_INCLUDE_INACTIVE = "INCLUDE_INACTIVE";
