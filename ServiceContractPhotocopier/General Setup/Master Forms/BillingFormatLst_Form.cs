@@ -589,8 +589,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             lines.Add(Meter("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 38423m, 42472m));
             lines.Add(Meter("iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 72143m, 79314m));
             lines.Add(Meter("iR-ADV C4535i", "UNV01325", "MEDIUM DUTY", "BK", "BK COPY + PRINT", 0.0285m, 21947m, 24904m));
-            // colour — on two different models, so it obeys the model rule visibly
+            // Colour on every machine, all at one rate. Black already carries the awkward case (two
+            // rates, so "merge ignoring model" still splits); colour carries the plain one, and with
+            // every machine metered the colour answer is visible on every row instead of on two.
+            lines.Add(Meter("iR-ADV 8505", "SWD00508", "HEAVY DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 8420m, 9180m));
             lines.Add(Meter("iR-ADV C5550i", "2JD01705", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 41172m, 46865m));
+            lines.Add(Meter("iR-ADV 4545i", "YAJ01479", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 3150m, 3606m));
+            lines.Add(Meter("iR-ADV 4545i", "UMV05259", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 2088m, 2395m));
+            lines.Add(Meter("iR-ADV 4545i", "UPB00820", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 5412m, 6020m));
             lines.Add(Meter("iR-ADV C4535i", "UNV01325", "MEDIUM DUTY", "CL", "COLOUR COPY + PRINT", 0.285m, 12880m, 14000m));
             return lines;
         }
@@ -780,16 +786,20 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         /// the model, lead with the count and list the models. That asymmetry is what lets someone
         /// tell "across model" from "same model" even where both happen to yield the same row count.
         /// </summary>
+        /// <summary>Every serial the row bills for — never blank, because an empty cell in a column
+        /// headed "Serial numbers" reads as missing data rather than as "the same one line 1 named".</summary>
         private static string Machines(ScpFoldedLine row, List<MeterBillLine> fleet)
         {
-            // An unmerged row names its own machine in the description now, so repeating it here
-            // would be noise. Only the "no rental" fact is worth adding.
-            if (!row.IsMerged)
-                return HasRental(fleet, row.Leader.SerialNumber) ? "" : "(this machine has no rental)";
-
             List<string> serials = new List<string>();
-            foreach (MeterBillLine m in row.Members) serials.Add(m.SerialNumber);
-            return string.Join(", ", serials.ToArray());
+            foreach (MeterBillLine m in row.Members)
+            {
+                string s = (m.SerialNumber ?? "").Trim();
+                if (s.Length > 0 && !serials.Contains(s)) serials.Add(s);
+            }
+            string text = string.Join(", ", serials.ToArray());
+            if (!row.IsMerged && !HasRental(fleet, row.Leader.SerialNumber))
+                text += "   (no rental)";
+            return text;
         }
 
         private static bool HasRental(List<MeterBillLine> fleet, string serial)
