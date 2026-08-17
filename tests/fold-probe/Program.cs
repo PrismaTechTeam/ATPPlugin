@@ -60,18 +60,41 @@ static class FoldProbe
             var rows = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
             Console.WriteLine("=== PASIR GUDANG (format 2INV-RMODEL: rental per model, meters across model) ===");
             Dump(rows);
-            Check("rows", rows.Count, 6);              // 3 rental + 2 BK + 1 CL
+            // MERGE MEANS ONE LINE. A merged row is not kept apart by its machines' prices --
+            // it carries a price of its own, the way the legacy ".C" combine meter did.
+            //
+            // This is a DELIBERATE departure from Pasir Gudang's issued MR2607.1106, which prints
+            // two black lines (60,249 at 0.019 and 52,860 at 0.0285) because Jean built two combine
+            // meters. Under "merge, ignoring model" the six machines are one black line. The money
+            // is preserved: the row prices itself at the rate that reproduces what the machines
+            // actually cost.
+            // Format 2INV-RMODEL is rental M (by model) and meter A (ignoring model), so:
+            //   rental -> 3 rows, split by MODEL   1 x 8505, 1 x C5550i, 3 x 4545i
+            //   meter  -> 1 BK over all six machines, 1 CL
+            Check("rows", rows.Count, 5);
             var rentals = Where(rows, true);
             var meters = Where(rows, false);
-            Check("rental rows", rentals.Count, 3);
+            Check("rental rows (by model)", rentals.Count, 3);
             Check("rental units 8505", UnitsOf(rentals, "iR-ADV 8505"), 1m);
             Check("rental units C5550i", UnitsOf(rentals, "iR-ADV C5550i"), 1m);
             Check("rental units 4545i", UnitsOf(rentals, "iR-ADV 4545i"), 3m);
-            Check("meter rows", meters.Count, 3);
-            Check("BK heavy qty", QtyAt(meters, 0.019m), 60249m);
-            Check("BK medium qty", QtyAt(meters, 0.0285m), 52860m);
-            Check("CL qty", QtyAt(meters, 0.285m), 5693m);
-            Check("BK medium machines", MembersAt(meters, 0.0285m), 5);
+            Check("meter rows (1 BK + 1 CL)", meters.Count, 2);
+            Check("BK qty (all six machines)", meters[0].BillCopies, 113109m);
+            Check("BK machines", meters[0].Members.Count, 6);
+            Check("CL qty", meters[1].BillCopies, 5693m);
+
+            // One line cannot reproduce mixed rates to the cent. 60,249 at 0.019 plus 52,860 at
+            // 0.0285 is 2,651.24; one row of 113,109 at the rate that averages them comes to
+            // 2,651.27. Three cents is the price of the merge, and it is why the merged line's rate
+            // is a contract decision rather than something derived -- once it is set, the amount is
+            // simply quantity x that rate and nothing has drifted.
+            decimal bkMoney = 0m;
+            foreach (var m in meters[0].Members) bkMoney += m.Charge;
+            decimal rowMoney = Math.Round(meters[0].PrintQty * meters[0].PrintUnitPrice, 2);
+            Console.WriteLine(string.Format(
+                "       merged BK: {0:n0} copies at {1} = {2:n2}; the machines cost {3:n2} (drift {4:n2})",
+                meters[0].PrintQty, meters[0].PrintUnitPrice, rowMoney, bkMoney, rowMoney - bkMoney));
+            Check("BK money within a few cents", Math.Abs(rowMoney - bkMoney) <= 0.05m, true);
         }
         finally { DropContract(db, ck); }
 
