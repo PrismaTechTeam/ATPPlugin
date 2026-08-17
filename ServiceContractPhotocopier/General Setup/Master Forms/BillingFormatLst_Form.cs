@@ -497,8 +497,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             cNo.SortIndex = 1;
             RightAlign(cNo);
             AddCol(GridViewPreview, "Code", "Item", 74);
-            AddCol(GridViewPreview, "Descr", "Description", 330);
-            AddCol(GridViewPreview, "Machines", "Machines on this line", 250);
+            AddCol(GridViewPreview, "Descr", "Description", 430);
+            AddCol(GridViewPreview, "Machines", "Serial numbers", 230);
             DevExpress.XtraGrid.Columns.GridColumn cQty = AddCol(GridViewPreview, "Qty", "Quantity", 92);
             cQty.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
             cQty.DisplayFormat.FormatString = "#,##0.####";
@@ -618,6 +618,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             MeterBillLine l = new MeterBillLine();
             l.ModelCode = model; l.SerialNumber = serial; l.LineGroupCode = label;
             l.AuditDate = new DateTime(2026, 7, 24); l.LastDate = new DateTime(2026, 6, 24);
+            // The sample is a contract that HAS a format — that is the whole subject of this screen —
+            // so it must be described the way such a contract's invoice is described.
+            l.NewMoneyRules = true;
             return l;
         }
 
@@ -745,9 +748,15 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             return outp;
         }
 
-        /// <summary>The label prints only when every machine on the row carries it — a row that
+        /// <summary>
+        /// The description the invoice will carry, composed by the engine's own
+        /// <see cref="ScpInvoiceBuilder.ComposeFoldedDescription"/> so the preview cannot word a line
+        /// differently from the document.
+        ///
+        /// <para>The duty label prints only when every machine on the row carries it — a row that
         /// merged a HEAVY machine with MEDIUM ones is neither, and saying "HEAVY DUTY" because the
-        /// first member happened to be one would be a lie about what the row covers.</summary>
+        /// first member happened to be one would misdescribe what the row covers.</para>
+        /// </summary>
         private static string Describe(ScpFoldedLine row)
         {
             MeterBillLine ln = row.Leader;
@@ -757,7 +766,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 if (!string.Equals(m.LineGroupCode ?? "", label, StringComparison.OrdinalIgnoreCase))
                 { label = ""; break; }
             if (label.Length > 0) what += "  —  " + label;
-            return what;
+            // One grid row per invoice line, so the second line of the description follows the first
+            // rather than doubling the row height.
+            return ScpInvoiceBuilder.ComposeFoldedDescription(row, what).Replace("\r\n", "   ");
         }
 
         /// <summary>
@@ -767,22 +778,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         /// </summary>
         private static string Machines(ScpFoldedLine row, List<MeterBillLine> fleet)
         {
+            // An unmerged row names its own machine in the description now, so repeating it here
+            // would be noise. Only the "no rental" fact is worth adding.
             if (!row.IsMerged)
-            {
-                string s = row.Leader.ModelCode + "  ·  " + row.Leader.SerialNumber;
-                if (!HasRental(fleet, row.Leader.SerialNumber)) s += "   (no rental)";
-                return s;
-            }
-            List<string> models = new List<string>();
+                return HasRental(fleet, row.Leader.SerialNumber) ? "" : "(this machine has no rental)";
+
             List<string> serials = new List<string>();
-            foreach (MeterBillLine m in row.Members)
-            {
-                if (!models.Contains(m.ModelCode)) models.Add(m.ModelCode);
-                serials.Add(m.SerialNumber);
-            }
-            return models.Count == 1
-                ? models[0] + "  ·  " + row.Units + " machines: " + string.Join(", ", serials.ToArray())
-                : row.Units + " machines  ·  " + string.Join(", ", models.ToArray());
+            foreach (MeterBillLine m in row.Members) serials.Add(m.SerialNumber);
+            return string.Join(", ", serials.ToArray());
         }
 
         private static bool HasRental(List<MeterBillLine> fleet, string serial)

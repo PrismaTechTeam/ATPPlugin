@@ -239,8 +239,9 @@ namespace ServiceContractPhotocopier.Classes
             return m;
         }
 
-        /// <summary>Which instalment this rental is in — part of a rental row's identity.</summary>
-        private static int RentalMonthNo(MeterBillLine ln)
+        /// <summary>Which instalment this rental is in — part of a rental row's identity, and the
+        /// "(11/36)" the line prints.</summary>
+        public static int RentalMonthNo(MeterBillLine ln)
         {
             if (!ln.RentalStartDate.HasValue || ln.RentalMonths <= 0) return 0;
             DateTime s = ln.RentalStartDate.Value;

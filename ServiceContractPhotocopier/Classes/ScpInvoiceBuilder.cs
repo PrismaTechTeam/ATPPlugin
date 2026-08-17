@@ -357,11 +357,15 @@ namespace ServiceContractPhotocopier.Classes
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
                 if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
                 string itemMasterDesc;
-                dtl.Description = descFromItem && !string.IsNullOrEmpty(ln.ACItemCode)
+                // The meter's own wording, then which machines the line covers — see
+                // ComposeFoldedDescription. Without the second part a per-machine layout prints
+                // several identical lines and the customer cannot tell them apart.
+                dtl.Description = ComposeFoldedDescription(row,
+                    descFromItem && !string.IsNullOrEmpty(ln.ACItemCode)
                         && itemDescByCode.TryGetValue(ln.ACItemCode, out itemMasterDesc)
                         && itemMasterDesc.Length > 0
                     ? itemMasterDesc                    // master convention: the stock item's description
-                    : ComposeLineDescription(ln);       // fallback / option OFF: meter type name
+                    : ComposeLineDescription(ln));      // fallback / option OFF: meter type name
                 if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
                 {
                     // Grouped rental: Qty = how many machines share this row, UnitPrice stays the
@@ -565,6 +569,64 @@ namespace ServiceContractPhotocopier.Classes
             if (!string.IsNullOrEmpty(ln.MeterTypeName)) return ln.MeterTypeName.Trim();
             if (!string.IsNullOrEmpty(ln.MeterTypeCode)) return ln.MeterTypeCode.Trim();
             return ln.ItemName;
+        }
+
+        /// <summary>
+        /// What a line says about the machines it covers — the customer's own proposal, and what
+        /// their invoices already print:
+        /// <code>
+        ///   MONTHLY RENTAL (11/36)              BK COPY + PRINT A4&amp;A3
+        ///   MODEL:iR-ADV 4545i  S/N:YAJ01479    MODEL:iR-ADV 4545i  3 UNIT
+        /// </code>
+        ///
+        /// <para>This is what makes a per-machine layout readable. Without it, three machines of the
+        /// same model on the same duty produce three lines reading "MONTHLY RENTAL — MEDIUM DUTY",
+        /// and nothing on the invoice says which machine each one is for.</para>
+        ///
+        /// <para>The three shapes are deliberately different. One machine names it. A row merged by
+        /// model names the model and counts the units, because that is what the merge key was. A row
+        /// merged ACROSS models lists the models, because the count alone would hide that they are
+        /// not all the same thing.</para>
+        ///
+        /// <para>Opt-in with the rest: a contract with no Billing Format keeps the bare meter-type
+        /// description it has always had.</para>
+        /// </summary>
+        public static string ComposeFoldedDescription(ScpFoldedLine row, string baseText)
+        {
+            if (row == null || row.Leader == null) return baseText;
+            MeterBillLine ln = row.Leader;
+            if (!ln.NewMoneyRules) return baseText;
+
+            string head = (baseText ?? "").Trim();
+            // The instalment counter belongs to the rental sentence, not to the machine list.
+            if (ln.IsRental && ln.RentalMonths > 0)
+                head += " (" + ScpInvoiceLayout.RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
+
+            System.Text.StringBuilder tail = new System.Text.StringBuilder();
+            List<string> models = new List<string>();
+            foreach (MeterBillLine m in row.Members)
+            {
+                string mc = (m.ModelCode ?? "").Trim();
+                if (mc.Length > 0 && !models.Contains(mc)) models.Add(mc);
+            }
+            if (models.Count > 0)
+                tail.Append("MODEL:").Append(string.Join(", ", models.ToArray()));
+
+            if (!row.IsMerged)
+            {
+                string sn = (ln.SerialNumber ?? "").Trim();
+                if (sn.Length > 0)
+                {
+                    if (tail.Length > 0) tail.Append("  ");
+                    tail.Append("S/N:").Append(sn);
+                }
+            }
+            else
+            {
+                if (tail.Length > 0) tail.Append("  ");
+                tail.Append(row.Units).Append(" UNIT");
+            }
+            return tail.Length == 0 ? head : head + "\r\n" + tail;
         }
 
         // The legacy 16-line More Description block (legend + 15 values), copied verbatim from the
