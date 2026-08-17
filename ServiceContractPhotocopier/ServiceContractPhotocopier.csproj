@@ -810,6 +810,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterReadingSetting_Form.Designer.cs">
       <DependentUpon>MeterReadingSetting_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterInvoicePreview_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\MeterInvoicePreview_Form.Designer.cs">
+      <DependentUpon>MeterInvoicePreview_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Meter Reading\Operation Forms\MeterInvoiceGenerateProgress_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1260,6 +1266,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingSetting_Form.resx">
       <DependentUpon>MeterReadingSetting_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\MeterInvoicePreview_Form.resx">
+      <DependentUpon>MeterInvoicePreview_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterInvoiceGenerateProgress_Form.resx">
       <DependentUpon>MeterInvoiceGenerateProgress_Form.cs</DependentUpon>

@@ -36,6 +36,46 @@ namespace ServiceContractPhotocopier.Classes
         /// line prints the range rather than inventing a single date the readings never shared.</summary>
         public DateTime? CurDate, PrevDate;
 
+        /// <summary>The quantity this row prints — machines for a rental, copies for usage.</summary>
+        public decimal PrintQty
+        {
+            get
+            {
+                if (Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m)
+                    return Units > 1m ? Units : 1m;
+                return IsMerged ? BillCopies : Leader.BillCopies;
+            }
+        }
+
+        /// <summary>The per-unit price this row prints.</summary>
+        public decimal PrintUnitPrice
+        {
+            get
+            {
+                return Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m
+                    ? Leader.Charge : Leader.EffUnitPrice;
+            }
+        }
+
+        /// <summary>What the row comes to. Deliberately Qty x UnitPrice rather than a sum of the
+        /// members' charges, because that is what the invoice line itself computes — a merged row is
+        /// rounded once, which is why HSI prints 3,048.36 where the per-machine charges add to
+        /// 3,048.37. Preview and invoice therefore cannot disagree.</summary>
+        public decimal PrintAmount
+        {
+            get { return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero); }
+        }
+
+        /// <summary>A member whose meter read backwards — the reading went DOWN. Usually a replaced
+        /// or reset meter, but after a migration it is the signature of a machine that inherited a
+        /// summed reading, and billing it would silently produce a zero invoice.</summary>
+        public MeterBillLine BackwardsMember()
+        {
+            foreach (MeterBillLine m in Members)
+                if (!m.IsFlat && m.Current < m.Last) return m;
+            return null;
+        }
+
         public ScpFoldedLine(MeterBillLine leader)
         {
             Leader = leader;

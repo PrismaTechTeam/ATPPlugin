@@ -1351,6 +1351,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             d.MachineMode = r.Table.Columns.Contains("MachineMode") ? AsStr(r["MachineMode"]).Trim().ToUpperInvariant() : "";
             d.BillGroupCode = r.Table.Columns.Contains("BillGroupCode")
                 ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(AsStr(r["BillGroupCode"])) : "";
+            d.LineGroupCode = r.Table.Columns.Contains("LineGroupCode") ? AsStr(r["LineGroupCode"]).Trim() : "";
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
@@ -1539,6 +1540,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("Inactive", typeof(string));
             _dtItemsView.Columns.Add("MachineMode", typeof(string));
             _dtItemsView.Columns.Add("BillGroupCode", typeof(string));
+            _dtItemsView.Columns.Add("LineGroupCode", typeof(string));
+            _dtItemsView.Columns.Add("OwnInvoice", typeof(bool));
+            _dtItemsView.Columns.Add("HasRental", typeof(bool));
             _dtItemsView.Columns.Add("Expiry", typeof(DateTime));
 
             int n = 0;
@@ -1566,6 +1570,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["Inactive"] = d.Inactive ? "Y" : "N";
                 r["MachineMode"] = d.MachineMode ?? "";
                 r["BillGroupCode"] = d.BillGroupCode ?? "";
+                r["LineGroupCode"] = d.LineGroupCode ?? "";
+                // "Own invoice" is a view over BillGroupCode: a code nothing else in the contract
+                // shares means this machine bills alone. One idea, one column to store it.
+                r["OwnInvoice"] = IsSoloBillGroup(d);
+                r["HasRental"] = MachineHasRental(d);
                 r["Expiry"] = (object)d.ServiceExpiryDate ?? DBNull.Value;
                 _dtItemsView.Rows.Add(r);
             }
@@ -2488,6 +2497,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineGradeRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineSerialRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineBillGroupRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineLineGroupRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineOwnInvoiceRepo;
         private DataTable _inlineItemLookup;
         private DataTable _inlineGradeLookup;
         private DataTable _inlineSerialLookup;
@@ -2619,6 +2630,42 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colBillGrp.ColumnEdit = _inlineBillGroupRepo;
             colBillGrp.ToolTip = "Machines with the same group name are billed together as ONE invoice at Generate. " +
                 "Empty = normal billing. Use the \"Bill Group...\" button above for bulk assign.";
+            colBillGrp.Visible = false;   // the "Own invoice" tick below says the same thing in words;
+                                          // the raw code stays available in the column chooser
+
+            // "Own invoice": the readable form of a Bill Group nothing else shares. Ticking writes a
+            // code unique to this machine, unticking clears it.
+            _inlineOwnInvoiceRepo = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            GridItems.RepositoryItems.Add(_inlineOwnInvoiceRepo);
+            DevExpress.XtraGrid.Columns.GridColumn colOwnInv = GridViewItems.Columns.AddVisible("OwnInvoice");
+            colOwnInv.Caption = "Own invoice";
+            colOwnInv.Width = 70;
+            colOwnInv.OptionsColumn.AllowEdit = true;
+            colOwnInv.ColumnEdit = _inlineOwnInvoiceRepo;
+            colOwnInv.ToolTip = "This machine bills on an invoice of its own, apart from the rest of the contract.";
+
+            // "Line label": the word this machine's line carries on the invoice -- HEAVY DUTY,
+            // MEDIUM DUTY, whatever the contract calls it. Free text on purpose; it is a description,
+            // and only becomes a grouping key when the contract groups its lines by model.
+            _inlineLineGroupRepo = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
+            _inlineLineGroupRepo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
+            GridItems.RepositoryItems.Add(_inlineLineGroupRepo);
+            DevExpress.XtraGrid.Columns.GridColumn colLineGrp = GridViewItems.Columns.AddVisible("LineGroupCode");
+            colLineGrp.Caption = "Line label";
+            colLineGrp.Width = 100;
+            colLineGrp.OptionsColumn.AllowEdit = true;
+            colLineGrp.ColumnEdit = _inlineLineGroupRepo;
+            colLineGrp.ToolTip = "The word printed on this machine's invoice line (e.g. HEAVY DUTY). " +
+                "Machines sharing a label also share a line when the contract groups by model.";
+
+            // Whether this machine has a RENTAL meter at all. Read-only, but visible every time the
+            // contract is opened -- Pasir Gudang bills five rentals for six machines and that is only
+            // discoverable today by reading an invoice.
+            DevExpress.XtraGrid.Columns.GridColumn colHasRent = GridViewItems.Columns.AddVisible("HasRental");
+            colHasRent.Caption = "Rental";
+            colHasRent.Width = 50;
+            colHasRent.OptionsColumn.AllowEdit = false;
+            colHasRent.ToolTip = "Ticked when the machine has a RENTAL meter. Unticked machines bill no rent.";
 
             SetItemColEditable("ItemCode", null);          // editor supplied at edit time (lookup)
             // Machine Serial: bind the designer column DIRECTLY (a hidden duplicate FieldName once
@@ -2676,14 +2723,30 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // user can pick an existing group or type a new one.
         private void GridViewItems_ShownEditorBillGroup(object sender, EventArgs e)
         {
-            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "BillGroupCode") return;
+            if (GridViewItems.FocusedColumn == null) return;
             DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;
             if (ed == null) return;
-            ed.Properties.Items.Clear();
-            SortedSet<string> codes = new SortedSet<string>();
-            foreach (ItemEditData d in _items)
-                if (!d.IsGroupItem && !string.IsNullOrEmpty(d.BillGroupCode)) codes.Add(d.BillGroupCode);
-            foreach (string c in codes) ed.Properties.Items.Add(c);
+            string field = GridViewItems.FocusedColumn.FieldName;
+            if (field == "BillGroupCode")
+            {
+                ed.Properties.Items.Clear();
+                SortedSet<string> codes = new SortedSet<string>();
+                foreach (ItemEditData d in _items)
+                    if (!d.IsGroupItem && !string.IsNullOrEmpty(d.BillGroupCode)) codes.Add(d.BillGroupCode);
+                foreach (string c in codes) ed.Properties.Items.Add(c);
+                return;
+            }
+            // Line label: offer the labels already in use here, so a fleet stays spelled one way --
+            // "MEDIUM DUTY" and "Medium Duty" would otherwise print as two different lines under
+            // "same model" grouping.
+            if (field == "LineGroupCode")
+            {
+                ed.Properties.Items.Clear();
+                SortedSet<string> labels = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (ItemEditData d in _items)
+                    if (!string.IsNullOrEmpty(d.LineGroupCode)) labels.Add(d.LineGroupCode);
+                foreach (string l in labels) ed.Properties.Items.Add(l);
+            }
         }
 
         private void SetItemColEditable(string field, DevExpress.XtraEditors.Repository.RepositoryItem edit)
@@ -2785,6 +2848,38 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         BeginInvoke(new MethodInvoker(delegate
                         { GridViewItems.SetRowCellValue(rh, "BillGroupCode", bg); }));
                     }
+                    break;
+                }
+                case "LineGroupCode":
+                {
+                    // A description, so it is kept as typed apart from trimming and a length cap.
+                    // Unlike BillGroupCode it never becomes part of a job key, so it has nothing to
+                    // forge and nothing to normalise away.
+                    string lg = (s ?? "").Trim();
+                    if (lg.Length > 20) lg = lg.Substring(0, 20);
+                    d.LineGroupCode = lg;
+                    if (lg != s)
+                    {
+                        int rh = e.RowHandle;
+                        BeginInvoke(new MethodInvoker(delegate
+                        { GridViewItems.SetRowCellValue(rh, "LineGroupCode", lg); }));
+                    }
+                    break;
+                }
+                case "OwnInvoice":
+                {
+                    // Ticked -> a Bill Group only this machine can be in; unticked -> back to the
+                    // contract's normal grouping. Written through BillGroupCode so there is still
+                    // exactly one column deciding which invoice a machine lands on.
+                    bool own = s != null && (s == "True" || s == "true" || s == "1");
+                    d.BillGroupCode = own
+                        ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(
+                              "SOLO-" + (d.ServiceItemNo ?? d.ItemKey.ToString()))
+                        : "";
+                    int rhOwn = e.RowHandle;
+                    BeginInvoke(new MethodInvoker(delegate
+                    { GridViewItems.SetRowCellValue(rhOwn, "BillGroupCode", d.BillGroupCode); }));
+                    UpdateFormatSummary();
                     break;
                 }
                 case "BillingDay":
@@ -4702,6 +4797,33 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LblFormatSummary.Text = words;
         }
 
+        /// <summary>True when this machine's Bill Group is one nothing else in the contract shares —
+        /// which is what "Own invoice" means.</summary>
+        private bool IsSoloBillGroup(ItemEditData d)
+        {
+            if (d == null || string.IsNullOrEmpty(d.BillGroupCode)) return false;
+            for (int i = 0; i < _items.Count; i++)
+            {
+                ItemEditData o = _items[i];
+                if (o == null || ReferenceEquals(o, d)) continue;
+                if (string.Equals(o.BillGroupCode, d.BillGroupCode, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
+        private bool MachineHasRental(ItemEditData d)
+        {
+            if (d == null || d.Meters == null) return false;
+            foreach (DataRow mr in d.Meters.Rows)
+            {
+                if (mr.RowState == DataRowState.Deleted) continue;
+                string role = mr.Table.Columns.Contains("MeterRole") ? Convert.ToString(mr["MeterRole"]).Trim() : "";
+                if (string.Equals(role, "RENTAL", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
         /// <summary>Machines carrying no RENTAL meter — they bill no rent, which is right for some
         /// (Pasir Gudang bills 5 rentals for 6 machines) and an oversight for others. Surfaced every
         /// time rather than discovered on the invoice.</summary>
@@ -4804,8 +4926,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "INSERT INTO [dbo].[zSCP2_Item] " +
                 "(ContractKey, ServiceItemNo, SerialNumber, Description, BillingDayOverride, " +
-                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LastModified) " +
-                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,GETDATE()); " +
+                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LineGroupCode, LastModified) " +
+                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,@lgrp,GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -4822,6 +4944,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@isgrp", d.IsGroupItem ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -4835,7 +4958,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // stale direct-owner would mis-resolve the COALESCE if the contract's debtor were blank.
                 "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', ServiceItemNo=@no, SerialNumber=@serial, " +
                 "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
-                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
+                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LineGroupCode=@lgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 cmd.Parameters.AddWithValue("@ck", _contractKey);
@@ -4851,6 +4974,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@isgrp", d.IsGroupItem ? "Y" : "N");
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@ik", d.ItemKey);
                 cmd.ExecuteNonQuery();
             }

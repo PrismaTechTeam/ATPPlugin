@@ -30,6 +30,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public string MachineMode = "";   // DEFINED ONLINE/OFFLINE ('' = undefined) — drives the
                                           // advanced invoice number format (fetch status = fallback)
         public string BillGroupCode = ""; // #6 Bill Group split billing ('' = not grouped)
+        // Which printed LINE this machine belongs on, and the word that line carries ("HEAVY DUTY").
+        // Not to be confused with BillGroupCode above, which picks the INVOICE.
+        public string LineGroupCode = "";
 
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";

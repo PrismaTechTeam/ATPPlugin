@@ -4109,11 +4109,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ? "\r\n\r\n⚠  " + expiredTicked + " ticked row(s) belong to EXPIRED machines (past their expiry month) — " +
                   "continuing bills them anyway."
                 : "";
-            if (XtraMessageBox.Show(this,
-                    "Generate " + jobList.Count + " invoice(s) for " + monthName + " now?\r\nThey are saved automatically — no clicking through each one." + skippedNote + expiredNote,
-                    "Generate Invoice", MessageBoxButtons.YesNo,
-                    expiredTicked > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question) != DialogResult.Yes)
-                return;
+            // Show what will be created, not just how many. Since a contract's format can fold
+            // several machines onto one line, "3 invoices" no longer says whether the machines meant
+            // to share a line actually did — the preview lists every invoice, its lines and the
+            // machines behind each line, computed by the same fold the builder uses.
+            using (MeterInvoicePreview_Form pv = new MeterInvoicePreview_Form(
+                       _dbSetting, jobList, monthName,
+                       ("They are saved automatically — no clicking through each one." + skippedNote + expiredNote)
+                           .Replace("\r\n", "  ")))
+            {
+                if (pv.ShowDialog(this) != DialogResult.OK) return;
+                jobList = pv.Approved;      // blocked customers are skipped, the rest still generate
+            }
+            if (jobList.Count == 0) return;
 
             // Run the generation on a worker task behind a progress dialog (invoices saved headlessly).
             using (MeterInvoiceGenerateProgress_Form dlg =
