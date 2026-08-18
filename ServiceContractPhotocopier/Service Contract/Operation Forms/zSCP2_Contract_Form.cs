@@ -4611,6 +4611,49 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 }
             }
 
+            // Every meter has to be sayable before ANYTHING is written. The role check used to live
+            // inside the save transaction, so one meter row with a blank Role -- which the "+" button
+            // creates on purpose, since the user must choose -- threw mid-way and rolled back the
+            // whole contract: the header edit, every other machine, and every meter that had already
+            // gone in. The screen then said "Save failed" over a raw exception and the operator was
+            // left thinking meters do not save at all.
+            //
+            // A meter with no TYPE was worse: both save routines skip it silently, so the contract
+            // saved, said so, and the meter simply was not there.
+            foreach (ItemEditData itv in _items)
+            {
+                if (itv.Meters == null) continue;
+                string who = string.IsNullOrEmpty(itv.ServiceItemNo) ? "<NEW>" : itv.ServiceItemNo;
+                foreach (DataRow mrow in itv.Meters.Rows)
+                {
+                    if (mrow.RowState == DataRowState.Deleted) continue;
+                    string mtype = Convert.ToString(mrow["MeterTypeCode"]).Trim();
+                    string mrole = zSCP2_Item_Form.NormalizeMeterRole(mrow["MeterRole"]);
+                    if (mtype.Length == 0)
+                    {
+                        XtraMessageBox.Show(
+                            "Machine " + who + " has a meter with no Meter Type." + Environment.NewLine +
+                            Environment.NewLine +
+                            "Pick a type on that row, or remove the row — a meter with no type cannot be saved " +
+                            "and would disappear without a word.",
+                            "Meter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        FocusItemRow(itv);
+                        return;
+                    }
+                    if (mrole.Length == 0)
+                    {
+                        XtraMessageBox.Show(
+                            "Machine " + who + ", meter '" + mtype + "' has no Role." + Environment.NewLine +
+                            Environment.NewLine +
+                            "Pick RENTAL, BK, CL, NA, WAIVE or COMMIT on that row. The role is what tells " +
+                            "billing which counter this is.",
+                            "Meter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        FocusItemRow(itv);
+                        return;
+                    }
+                }
+            }
+
             // Deactivation guard — turning Inactive ON silently stops ALL billing + auto-fetch for the
             // whole contract, so: (1) confirm with an impact summary, (2) surface any staged readings
             // that are not invoiced yet (they would never be billed), (3) steer "the contract simply
@@ -4646,7 +4689,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         return;
                     string reason = XtraInputBox.Show("Reason for deactivating (optional, shown beside the checkbox):",
                         "Deactivate Contract", _inactiveReason ?? "");
-                    if (reason == null) return;   // Cancel at the reason prompt backs out of the whole save
+                    if (reason == null)
+                    {
+                        // Cancel here used to end the save with no message at all -- the operator
+                        // pressed Save, nothing happened, and nothing said why.
+                        XtraMessageBox.Show("Nothing was saved — you cancelled the deactivation reason." +
+                            Environment.NewLine + Environment.NewLine +
+                            "Press Save again and give a reason, or untick Inactive first.",
+                            "Save", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
                     _inactiveReason = reason.Trim();
                 }
                 _inactiveDate = DateTime.Today;
@@ -5142,16 +5194,33 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return true;
         }
 
+        /// <summary>Does this machine have a rental meter? One answer, shared with the machine
+        /// dialog — the grid's tick and the code that adds the meter must never disagree, or ticking
+        /// a machine that already reads as rented adds a second rental row.</summary>
+        /// <summary>Put the cursor on a machine so a validation message points at something the
+        /// operator can see, instead of naming a row they then have to hunt for.</summary>
+        private void FocusItemRow(ItemEditData d)
+        {
+            if (d == null || _items == null) return;
+            int idx = _items.IndexOf(d);
+            if (idx < 0) return;
+            for (int rh = 0; rh < GridViewItems.RowCount; rh++)
+            {
+                DataRowView drv = GridViewItems.GetRow(rh) as DataRowView;
+                if (drv == null) continue;
+                int no;
+                if (!int.TryParse(Convert.ToString(drv.Row["No"]), out no)) continue;
+                if (no - 1 != idx) continue;
+                GridViewItems.FocusedRowHandle = rh;
+                GridItems.Focus();
+                BindItemMeterPanel();
+                return;
+            }
+        }
+
         private bool MachineHasRental(ItemEditData d)
         {
-            if (d == null || d.Meters == null) return false;
-            foreach (DataRow mr in d.Meters.Rows)
-            {
-                if (mr.RowState == DataRowState.Deleted) continue;
-                string role = mr.Table.Columns.Contains("MeterRole") ? Convert.ToString(mr["MeterRole"]).Trim() : "";
-                if (string.Equals(role, "RENTAL", StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
+            return d != null && zSCP2_Item_Form.FindMeterByRole(d.Meters, "RENTAL") != null;
         }
 
         /// <summary>Machines carrying no RENTAL meter — they bill no rent, which is right for some

@@ -2660,7 +2660,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // BK / CL / NA pass through; empty or unknown returns "" so the save VALIDATION rejects it.
         // (The old version silently defaulted unknown to "NA" — a forgotten role then quietly broke
         // Black/Colour billing and the API fetch. The user must pick the role consciously.)
-        private static string NormalizeMeterRole(object roleValue)
+        internal static string NormalizeMeterRole(object roleValue)
         {
             string role = (roleValue == null || roleValue == DBNull.Value) ? "" : roleValue.ToString().Trim().ToUpperInvariant();
             return (role == "BK" || role == "CL" || role == "NA"
