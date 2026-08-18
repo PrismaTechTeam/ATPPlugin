@@ -1505,6 +1505,35 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (!_loading) _dirty = true;
         }
 
+        /// <summary>Meters... - the fleet's counters in one pass.</summary>
+        /// <remarks>
+        /// The grid's own Rental/BK/CL ticks handle one machine. Thirty machines is thirty clicks
+        /// and one of them missed, and selecting rows first cannot help because clicking a tick
+        /// collapses the selection to the row clicked. Here the ticking and the doing are separate
+        /// steps, so a fleet is two clicks however large it is.
+        /// </remarks>
+        private void BtnItemMeters_Click(object sender, EventArgs e)
+        {
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            bool any = false;
+            foreach (ItemEditData d in _items) if (!d.IsGroupItem) { any = true; break; }
+            if (!any)
+            {
+                XtraMessageBox.Show("Add machines to the contract first (Quick Add Row / Attach).",
+                    "Meters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (MachineMeters_Form f = new MachineMeters_Form(_db, _items))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+            }
+            RebuildItemsView();
+            BindItemMeterPanel();
+            UpdateFormatSummary();
+            if (!_loading) _dirty = true;
+        }
+
         private void BtnItemDetach_Click(object sender, EventArgs e)
         {
             int rh = GridViewItems.FocusedRowHandle;
@@ -2775,6 +2804,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 chk.EditValueChanged -= new EventHandler(InlineCheck_EditValueChanged);
                 chk.EditValueChanged += new EventHandler(InlineCheck_EditValueChanged);
+                // ...and once on the queue as well: DevExpress may toggle the box while showing the
+                // editor, which is BEFORE the line above ran, and that toggle would otherwise sit
+                // unposted until the next click.
+                BeginInvoke(new MethodInvoker(delegate
+                {
+                    if (GridViewItems.ActiveEditor == chk) GridViewItems.PostEditor();
+                }));
                 return;
             }
             DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;

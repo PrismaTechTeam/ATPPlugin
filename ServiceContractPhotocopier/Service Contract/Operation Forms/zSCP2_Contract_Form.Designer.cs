@@ -148,6 +148,7 @@
         private DevExpress.XtraEditors.SimpleButton BtnItemQuickAdd;
         private DevExpress.XtraEditors.SimpleButton BtnItemAttach;
         private DevExpress.XtraEditors.SimpleButton BtnItemBillGroup;
+        private DevExpress.XtraEditors.SimpleButton BtnItemMeters;
         private DevExpress.XtraEditors.SimpleButton BtnItemDetach;
         private DevExpress.XtraEditors.LabelControl LblItemsHint;
         private DevExpress.XtraTab.XtraTabPage PageSpareParts;
@@ -376,6 +377,7 @@
             this.BtnItemAttach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemDetach = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemBillGroup = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnItemMeters = new DevExpress.XtraEditors.SimpleButton();
             this.BtnItemQuickAdd = new DevExpress.XtraEditors.SimpleButton();
             this.PageSpareParts = new DevExpress.XtraTab.XtraTabPage();
             this.GridSpareParts = new DevExpress.XtraGrid.GridControl();
@@ -2368,6 +2370,7 @@
             this.PnlItemBar.Controls.Add(this.BtnItemAttach);
             this.PnlItemBar.Controls.Add(this.BtnItemDetach);
             this.PnlItemBar.Controls.Add(this.BtnItemBillGroup);
+            this.PnlItemBar.Controls.Add(this.BtnItemMeters);
             this.PnlItemBar.Controls.Add(this.BtnItemQuickAdd);
             this.PnlItemBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.PnlItemBar.Location = new System.Drawing.Point(0, 0);
@@ -2425,6 +2428,18 @@
             this.BtnItemBillGroup.ToolTip = "Split this contract into multiple invoices: tick machines and give them a group n" +
     "ame - each group is billed as ONE invoice at Generate.";
             this.BtnItemBillGroup.Click += new System.EventHandler(this.BtnItemBillGroup_Click);
+            //
+            // BtnItemMeters
+            //
+            this.BtnItemMeters.ImageOptions.ImageUri.Uri = "Tag;Size16x16";
+            this.BtnItemMeters.Location = new System.Drawing.Point(816, 5);
+            this.BtnItemMeters.Name = "BtnItemMeters";
+            this.BtnItemMeters.Size = new System.Drawing.Size(110, 24);
+            this.BtnItemMeters.TabIndex = 7;
+            this.BtnItemMeters.Text = "Meters...";
+            this.BtnItemMeters.ToolTip = "Give the whole fleet its counters at once: tick machines, then add or remove Rent" +
+    "al / Black / Colour.";
+            this.BtnItemMeters.Click += new System.EventHandler(this.BtnItemMeters_Click);
             // 
             // BtnItemQuickAdd
             // 
