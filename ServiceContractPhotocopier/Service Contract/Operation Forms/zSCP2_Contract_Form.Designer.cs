@@ -29,6 +29,7 @@
         private DevExpress.XtraBars.BarButtonItem barDelItem;
         private DevExpress.XtraBars.BarButtonItem barCopyFrom;
         private DevExpress.XtraBars.BarButtonItem barRentalPrice;
+        private DevExpress.XtraBars.BarButtonItem barSampleInvoice;
         private DevExpress.XtraBars.BarButtonItem barCopyToNew;
         private DevExpress.XtraBars.BarButtonItem barCopyWhole;
         private DevExpress.XtraBars.BarButtonItem barCopySelected;
@@ -201,6 +202,7 @@
             this.barPasteItems = new DevExpress.XtraBars.BarButtonItem();
             this.barDemoFill = new DevExpress.XtraBars.BarButtonItem();
             this.barRentalPrice = new DevExpress.XtraBars.BarButtonItem();
+            this.barSampleInvoice = new DevExpress.XtraBars.BarButtonItem();
             this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
             this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
@@ -566,9 +568,10 @@
             this.barPasteWhole,
             this.barPasteItems,
             this.barDemoFill,
-            this.barRentalPrice});
+            this.barRentalPrice,
+            this.barSampleInvoice});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 15;
+            this.RibbonCtl.MaxItemId = 16;
             this.RibbonCtl.Name = "RibbonCtl";
             this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
             this.ribbonPageHome});
@@ -699,6 +702,15 @@
             this.barRentalPrice.Name = "barRentalPrice";
             this.barRentalPrice.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barRentalPrice.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barRentalPrice_ItemClick);
+            //
+            // barSampleInvoice
+            //
+            this.barSampleInvoice.Caption = "Sample Invoice";
+            this.barSampleInvoice.Id = 15;
+            this.barSampleInvoice.ImageOptions.ImageUri.Uri = "Preview;Size32x32";
+            this.barSampleInvoice.Name = "barSampleInvoice";
+            this.barSampleInvoice.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barSampleInvoice.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barSampleInvoice_ItemClick);
             // 
             // ribbonPageHome
             // 
@@ -729,6 +741,7 @@
             // grpBillingTools
             // 
             this.grpBillingTools.ItemLinks.Add(this.barRentalPrice);
+            this.grpBillingTools.ItemLinks.Add(this.barSampleInvoice);
             this.grpBillingTools.Name = "grpBillingTools";
             this.grpBillingTools.Text = "Billing";
             // 

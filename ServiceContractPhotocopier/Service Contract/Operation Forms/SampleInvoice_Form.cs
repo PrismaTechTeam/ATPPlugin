@@ -1,0 +1,315 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Windows.Forms;
+using DevExpress.XtraEditors;
+using ServiceContractPhotocopier.Classes;
+using ServiceContractPhotocopier.ServiceContract.OperationForms;
+
+namespace ServiceContractPhotocopier
+{
+    /// <summary>
+    /// What this contract's invoice will look like — before a single reading exists.
+    ///
+    /// <para>The settings that decide an invoice's shape are spread over three screens and none of
+    /// them shows the result: the Billing Format says how lines merge, the machines carry the prices,
+    /// and Lines &amp; Price can override the rental. Whether that adds up to one line or seven is
+    /// only discoverable today by generating a real invoice, which needs a month of readings first.
+    /// This answers the question at the moment the contract is being set up, which is when it is
+    /// actually being asked.</para>
+    ///
+    /// <para><b>It is the same engine.</b> The lines are real <see cref="MeterBillLine"/>s put through
+    /// <see cref="ScpInvoiceLayout.FoldWith"/>, <see cref="ScpInvoiceBuilder.ComputeCharge"/> and
+    /// <see cref="ScpInvoiceBuilder.ComposeFoldedDescription"/> — the same three the billing run uses.
+    /// A preview that computed its own answer would eventually promise something Generate does not
+    /// produce, and would be worse than no preview at all.</para>
+    ///
+    /// <para>Only the READINGS are invented: every machine is given a month of usage, so the copies
+    /// and the money are illustrative while the SHAPE — how many invoices, how many lines, what each
+    /// line says and which machines it covers — is exactly what will come out.</para>
+    /// </summary>
+    public partial class SampleInvoice_Form : XtraForm
+    {
+        private readonly AutoCount.Data.DBSetting _db;
+        private readonly List<ItemEditData> _items;
+        private readonly string _contractNo;
+        private readonly string _debtor;
+        private readonly char _rentalMode;
+        private readonly char _meterMode;
+        private readonly bool _hasFormat;
+        private readonly string _formatName;
+        private readonly bool _rentalSeparate;
+        private readonly bool _perMachine;
+        private readonly Dictionary<string, decimal> _groupPrices;
+        private DataTable _dt;
+
+        public SampleInvoice_Form()
+        {
+            InitializeComponent();
+        }
+
+        public SampleInvoice_Form(AutoCount.Data.DBSetting db, List<ItemEditData> items,
+            string contractNo, string debtor, string formatName, bool hasFormat,
+            char rentalMode, char meterMode, bool rentalSeparate, bool perMachine,
+            Dictionary<string, decimal> groupPrices) : this()
+        {
+            _db = db;
+            _items = items ?? new List<ItemEditData>();
+            _contractNo = contractNo ?? "";
+            _debtor = debtor ?? "";
+            _formatName = formatName ?? "";
+            _hasFormat = hasFormat;
+            _rentalMode = rentalMode;
+            _meterMode = meterMode;
+            _rentalSeparate = rentalSeparate;
+            _perMachine = perMachine;
+            _groupPrices = groupPrices ?? new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void OnFormLoad(object sender, EventArgs e)
+        {
+            _dt = new DataTable();
+            _dt.Columns.Add("Invoice", typeof(string));
+            _dt.Columns.Add("Line", typeof(int));
+            _dt.Columns.Add("Description", typeof(string));
+            _dt.Columns.Add("Covers", typeof(string));
+            _dt.Columns.Add("Qty", typeof(decimal));
+            _dt.Columns.Add("UnitPrice", typeof(decimal));
+            _dt.Columns.Add("Amount", typeof(decimal));
+
+            Build();
+            GridLines.DataSource = _dt;
+            GridViewLines.ExpandAllGroups();
+        }
+
+        // ---------- the sample fleet ----------
+
+        /// <summary>Turns the contract's machines into the bill lines a month would produce. The
+        /// prices are the contract's own; only the meter readings are invented.</summary>
+        private List<MeterBillLine> BuildLines()
+        {
+            List<MeterBillLine> lines = new List<MeterBillLine>();
+            DateTime period = DateTime.Today;
+            int seed = 0;
+
+            foreach (ItemEditData d in _items)
+            {
+                if (d == null || d.IsGroupItem || d.Inactive || d.Meters == null) continue;
+                seed++;
+                foreach (DataRow mr in d.Meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    string type = Str(mr, "MeterTypeCode").Trim();
+                    if (type.Length == 0) continue;
+                    string role = Str(mr, "MeterRole").Trim().ToUpperInvariant();
+
+                    MeterBillLine l = new MeterBillLine();
+                    l.ContractKey = 1;
+                    l.ContractNo = _contractNo;
+                    l.ItemKey = seed;
+                    l.ItemName = string.IsNullOrEmpty(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
+                    l.SerialNumber = d.SerialNumber ?? "";
+                    l.ModelCode = d.ItemCode ?? "";
+                    l.MergeGroupCode = d.MergeGroupCode ?? "";
+                    l.LineGroupCode = d.LineGroupCode ?? "";
+                    l.MeterTypeCode = type;
+                    l.MeterTypeName = Str(mr, "Description");
+                    l.ACItemCode = type;
+                    l.NewMoneyRules = _hasFormat;
+                    l.AuditDate = period;
+                    l.LastDate = period.AddMonths(-1);
+                    l.PeriodEnd = period;
+                    l.MinCharges = Dec(mr, "MinimumCharges");
+                    l.Rate = Dec(mr, "ChargesRate");
+                    l.Foc = Dec(mr, "FOCQty");
+                    l.RebatePct = Dec(mr, "RebateQtyInPercent");
+                    l.MultiPriceCode = Str(mr, "MeterMultiPriceCode");
+                    l.WaiveScope = Str(mr, "WaiveScope");
+                    l.CommitScope = Str(mr, "CommitScope");
+
+                    bool isWaive = ScpStrategy.IsWaiveRole(role, false);
+                    bool isCommit = ScpStrategy.IsCommittedMinRole(role, type, l.MinCharges);
+                    bool isRental = !isWaive && !isCommit && ScpStrategy.IsRentalRole(role, type);
+
+                    if (isRental || isWaive || isCommit)
+                    {
+                        l.IsFlat = true;
+                        l.IsRental = isRental;
+                        l.IsWaiveMeter = isWaive;
+                        l.RentalMonths = 36;
+                        l.RentalStartDate = period.AddMonths(-12);
+                        if (isCommit)
+                        {
+                            // A committed minimum bills the shortfall, and the shortfall is not known
+                            // until the copies are in. The line is shown for its shape, priced 0.
+                            l.IsCommittedMin = true;
+                            l.CommittedAmount = l.MinCharges;
+                            l.AlwaysBill = true;
+                            l.Charge = 0m;
+                            l.StrategyNote = "COMMITTED MIN " + l.MinCharges.ToString("n2") +
+                                             " — bills the shortfall, worked out at Generate";
+                        }
+                        else if (isWaive)
+                        {
+                            l.Charge = -Math.Abs(l.MinCharges != 0m ? l.MinCharges : l.Rate);
+                            l.StrategyNote = "RENTAL WAIVE — fires on its own terms at Generate";
+                        }
+                        else
+                        {
+                            ScpInvoiceBuilder.ComputeCharge(l, null);
+                        }
+                    }
+                    else
+                    {
+                        // A month of copies. Varied per machine so a merged line visibly sums them.
+                        decimal usage = role == "CL" ? 900 + seed * 137 : 4200 + seed * 613;
+                        l.ColorLabel = role == "CL" ? "Colour" : (role == "BK" ? "Black" : "Usage");
+                        l.Last = 100000 + seed * 1000;
+                        l.Current = l.Last + usage;
+                        ScpInvoiceBuilder.ComputeCharge(l, null);
+                    }
+                    lines.Add(l);
+                }
+            }
+            ApplyGroupPrices(lines);
+            return lines;
+        }
+
+        /// <summary>The contract's agreed rental price, stamped onto every member of its group before
+        /// anything is folded — the same order the billing run uses, and what makes a priced group
+        /// merge into one line at all.</summary>
+        private void ApplyGroupPrices(List<MeterBillLine> lines)
+        {
+            if (_groupPrices.Count == 0 || _rentalMode == ScpBillingFormat.LINE_PER_MACHINE) return;
+            foreach (MeterBillLine l in lines)
+            {
+                if (!l.IsRental) continue;
+                string key = ScpRentalGroupPrice.GroupKeyFor(_rentalMode, l.ModelCode, l.MergeGroupCode);
+                decimal price;
+                if (!_groupPrices.TryGetValue(key, out price) || price <= 0m) continue;
+                l.Rate = price;
+                l.MinCharges = 0m;
+                ScpInvoiceBuilder.ComputeCharge(l, null);
+            }
+        }
+
+        // ---------- the invoices ----------
+
+        /// <summary>Which invoice a line lands on. The two split flags are the contract's own, so a
+        /// preview shows the same number of invoices Generate will create.</summary>
+        private string InvoiceOf(MeterBillLine l)
+        {
+            string who = _perMachine ? l.ItemName : "this contract";
+            string what = _rentalSeparate && (l.IsRental || l.IsWaiveMeter) ? "rental" : "";
+            if (!_perMachine && what.Length == 0) return "Invoice 1 — " + _debtor;
+            if (!_perMachine) return "Invoice — rental";
+            return what.Length > 0 ? "Invoice — " + who + " (rental)" : "Invoice — " + who;
+        }
+
+        private void Build()
+        {
+            List<MeterBillLine> lines = BuildLines();
+            if (lines.Count == 0)
+            {
+                LblHeader.Text = "This contract has no machines with meters yet — nothing to bill.";
+                return;
+            }
+
+            // Group into invoices first, then fold each one on its own, exactly as the billing run
+            // does: folding across an invoice split would merge lines that never meet on paper.
+            List<string> order = new List<string>();
+            Dictionary<string, List<MeterBillLine>> byInvoice =
+                new Dictionary<string, List<MeterBillLine>>(StringComparer.OrdinalIgnoreCase);
+            foreach (MeterBillLine l in lines)
+            {
+                string inv = InvoiceOf(l);
+                if (!byInvoice.ContainsKey(inv)) { order.Add(inv); byInvoice[inv] = new List<MeterBillLine>(); }
+                byInvoice[inv].Add(l);
+            }
+
+            decimal grand = 0m;
+            int totalLines = 0;
+            foreach (string inv in order)
+            {
+                List<ScpFoldedLine> rows = _hasFormat
+                    ? ScpInvoiceLayout.FoldWith(byInvoice[inv], _rentalMode, _meterMode)
+                    : Unfolded(byInvoice[inv]);
+                int n = 0;
+                foreach (ScpFoldedLine row in rows)
+                {
+                    n++; totalLines++;
+                    DataRow r = _dt.NewRow();
+                    r["Invoice"] = inv;
+                    r["Line"] = n;
+                    r["Description"] = ScpInvoiceBuilder.ComposeFoldedDescription(
+                        row, DescriptionOf(row.Leader)).Replace("\r\n", "  ·  ");
+                    r["Covers"] = Covers(row);
+                    r["Qty"] = row.PrintQty;
+                    r["UnitPrice"] = row.PrintUnitPrice;
+                    r["Amount"] = row.PrintAmount;
+                    grand += row.PrintAmount;
+                    _dt.Rows.Add(r);
+                }
+            }
+
+            LblHeader.Text =
+                (_hasFormat ? "Format:  " + _formatName : "No Billing Format — billing the legacy way") +
+                "        " + order.Count + (order.Count == 1 ? " invoice" : " invoices") +
+                ",  " + totalLines + (totalLines == 1 ? " line" : " lines") +
+                ",  " + grand.ToString("n2") + " a month";
+            LblFoot.Text =
+                "The SHAPE is real — how many invoices, how many lines, what each line says and which " +
+                "machines it covers all come from this contract's own settings, through the same engine " +
+                "Generate uses. Only the meter READINGS are invented, so the copies and the money are " +
+                "illustrative. A committed minimum shows as 0.00 because its charge is the shortfall, " +
+                "which cannot be known until the copies are in.";
+        }
+
+        /// <summary>The legacy path: nothing merges, so every meter is its own line.</summary>
+        private static List<ScpFoldedLine> Unfolded(List<MeterBillLine> lines)
+        {
+            List<ScpFoldedLine> rows = new List<ScpFoldedLine>();
+            foreach (MeterBillLine l in lines) rows.Add(new ScpFoldedLine(l));
+            return rows;
+        }
+
+        private static string DescriptionOf(MeterBillLine l)
+        {
+            string t = (l.MeterTypeName ?? "").Trim();
+            if (t.Length > 0) return t;
+            if (l.IsRental) return "MONTHLY RENTAL";
+            if (l.IsCommittedMin) return "MINIMUM COMMITTED PRINT CHARGES";
+            if (l.IsWaiveMeter) return "RENTAL WAIVE";
+            return (l.ColorLabel ?? "").Length > 0 ? l.ColorLabel.ToUpperInvariant() + " COPIES" : l.MeterTypeCode;
+        }
+
+        /// <summary>Which machines a printed line actually covers — the question the shape is being
+        /// checked for.</summary>
+        private static string Covers(ScpFoldedLine row)
+        {
+            if (!row.IsMerged) return row.Leader.ItemName + "  " + row.Leader.SerialNumber;
+            List<string> names = new List<string>();
+            foreach (MeterBillLine m in row.Members)
+            {
+                string s = (m.SerialNumber ?? "").Trim();
+                names.Add(s.Length > 0 ? s : m.ItemName);
+            }
+            return row.Members.Count + " machines:  " + string.Join(", ", names.ToArray());
+        }
+
+        private static string Str(DataRow r, string col)
+        {
+            return r.Table.Columns.Contains(col) && r[col] != DBNull.Value ? Convert.ToString(r[col]) : "";
+        }
+
+        private static decimal Dec(DataRow r, string col)
+        {
+            return r.Table.Columns.Contains(col) && r[col] != DBNull.Value ? Convert.ToDecimal(r[col]) : 0m;
+        }
+
+        private void BtnClose_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+    }
+}

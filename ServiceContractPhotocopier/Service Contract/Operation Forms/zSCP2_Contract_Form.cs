@@ -5121,6 +5121,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateFormatSummary();
         }
 
+        /// <summary>Sample Invoice — what this contract will print, before any reading exists.</summary>
+        /// <remarks>
+        /// The settings that decide an invoice are spread over three screens and none of them shows
+        /// the result: the Billing Format says how lines merge, the machines carry the prices, and
+        /// Lines &amp; Price can override the rental. Whether that comes out as one line or seven was
+        /// only discoverable by generating a real invoice, which needs a month of readings first.
+        /// This answers it while the contract is being set up, which is when it is being asked.
+        /// </remarks>
+        private void barSampleInvoice_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            bool any = false;
+            foreach (ItemEditData d in _items) if (!d.IsGroupItem) { any = true; break; }
+            if (!any)
+            {
+                XtraMessageBox.Show("Add the machines first — an invoice is made of them.",
+                    "Sample Invoice", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            string formatName = SluBillingFormat != null && SluBillingFormat.EditValue != null
+                ? Convert.ToString(SluBillingFormat.Text) : "";
+            using (SampleInvoice_Form f = new SampleInvoice_Form(
+                _db, _items, TxtContractNo.Text.Trim(),
+                LkDebtorCode == null || LkDebtorCode.EditValue == null ? "" : Convert.ToString(LkDebtorCode.EditValue),
+                formatName, _billingFormatCode.Length > 0,
+                _rentalLineMode, _meterLineMode,
+                ChkRentalSeparate.Checked, ChkBillSeparate.Checked,
+                _rentalGroupPrices))
+            {
+                f.ShowDialog(this);
+            }
+        }
+
         /// <summary>Replace-all inside the contract save transaction, and only after a real edit.</summary>
         private void SaveRentalGroupPrices(SqlConnection conn, SqlTransaction tx)
         {
