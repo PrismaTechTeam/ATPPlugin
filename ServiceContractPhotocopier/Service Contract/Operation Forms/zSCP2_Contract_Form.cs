@@ -2768,6 +2768,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void GridViewItems_ShownEditorBillGroup(object sender, EventArgs e)
         {
             if (GridViewItems.FocusedColumn == null) return;
+            // A grid CheckEdit only posts its value when the editor closes, so clicking Rental and
+            // then BK applied the RENTAL change -- every tick landed one click late. Post on the spot.
+            DevExpress.XtraEditors.CheckEdit chk = GridViewItems.ActiveEditor as DevExpress.XtraEditors.CheckEdit;
+            if (chk != null)
+            {
+                chk.EditValueChanged -= new EventHandler(InlineCheck_EditValueChanged);
+                chk.EditValueChanged += new EventHandler(InlineCheck_EditValueChanged);
+                return;
+            }
             DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;
             if (ed == null) return;
             string field = GridViewItems.FocusedColumn.FieldName;
@@ -2814,28 +2823,47 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             string role = field == "HasBK" ? "BK" : (field == "HasCL" ? "CL" : "RENTAL");
             string word = role == "RENTAL" ? "rental" : (role == "BK" ? "black" : "colour");
-            if (d.Meters == null) d.Meters = zSCP2_Item_Form.CreateMetersTable();
-            DataRow meter = zSCP2_Item_Form.FindMeterByRole(d.Meters, role);
 
-            if (want && meter == null)
+            // One tick, every SELECTED machine. A fleet of thirty is thirty identical decisions, and
+            // asking for thirty clicks is asking for one of them to be missed. Selecting nothing in
+            // particular still works -- the clicked row is its own selection of one.
+            List<ItemEditData> targets = new List<ItemEditData>();
+            int[] sel = GridViewItems.GetSelectedRows();
+            bool clickedIsSelected = false;
+            for (int i = 0; i < sel.Length; i++) if (sel[i] == rowHandle) clickedIsSelected = true;
+            if (clickedIsSelected && sel.Length > 1)
             {
-                if (!zSCP2_Item_Form.AddStandardMeter(_db, d.Meters, role))
-                    XtraMessageBox.Show(
-                        "This book has no standard '" + role + "' meter type, so the meter is waiting " +
-                        "for one." + Environment.NewLine + Environment.NewLine +
-                        "Open the machine and pick a meter type on its new meter row.",
-                        "Meter", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                _dirty = true;
+                for (int i = 0; i < sel.Length; i++)
+                {
+                    ItemEditData t = ItemDataAt(sel[i]);
+                    if (t != null && !t.IsGroupItem && !targets.Contains(t)) targets.Add(t);
+                }
             }
-            else if (!want && meter != null)
+            if (targets.Count == 0 && d != null) targets.Add(d);
+            if (targets.Count == 0) return;
+
+            // Count what the change really touches before doing any of it: a machine already the way
+            // it is asked to be is not changed, and the removal warning must state a true number.
+            List<ItemEditData> todo = new List<ItemEditData>();
+            int losingHistory = 0;
+            foreach (ItemEditData t in targets)
             {
-                if (d.ItemKey > 0 && meter.RowState != DataRowState.Added &&
-                    XtraMessageBox.Show(
-                        "Remove the " + word + " meter from " +
-                        (string.IsNullOrEmpty(d.ServiceItemNo) ? "this machine" : d.ServiceItemNo) + "?" +
+                if (t.Meters == null) t.Meters = zSCP2_Item_Form.CreateMetersTable();
+                DataRow m = zSCP2_Item_Form.FindMeterByRole(t.Meters, role);
+                if (want == (m != null)) continue;
+                todo.Add(t);
+                if (!want && t.ItemKey > 0 && m.RowState != DataRowState.Added) losingHistory++;
+            }
+            if (todo.Count == 0) { BindItemMeterPanel(); UpdateFormatSummary(); return; }
+
+            if (losingHistory > 0)
+            {
+                string who = losingHistory == 1 ? "1 machine" : losingHistory + " machines";
+                if (XtraMessageBox.Show(
+                        "Remove the " + word + " meter from " + who + "?" +
                         Environment.NewLine + Environment.NewLine +
-                        "When you save, this meter AND its reading history (all readings + billing log " +
-                        "for this counter) are permanently deleted.",
+                        "When you save, each meter AND its reading history (all readings + billing log " +
+                        "for that counter) are permanently deleted.",
                         "Meter", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 {
                     int rh = rowHandle;
@@ -2844,12 +2872,52 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     { GridViewItems.SetRowCellValue(rh, f, true); }));
                     return;
                 }
-                meter.Delete();
-                _dirty = true;
             }
-            // The meter panel under the grid is showing this machine's meters — it has just changed.
-            BindItemMeterPanel();
+
+            bool typeMissing = false;
+            foreach (ItemEditData t in todo)
+            {
+                if (want)
+                {
+                    if (!zSCP2_Item_Form.AddStandardMeter(_db, t.Meters, role)) typeMissing = true;
+                }
+                else
+                {
+                    DataRow m = zSCP2_Item_Form.FindMeterByRole(t.Meters, role);
+                    if (m != null) m.Delete();
+                }
+            }
+            _dirty = true;
+
+            if (typeMissing)
+                XtraMessageBox.Show(
+                    "This book has no standard '" + role + "' meter type, so the new meters are waiting " +
+                    "for one." + Environment.NewLine + Environment.NewLine +
+                    "Open a machine and pick a meter type on its new meter row.",
+                    "Meter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            // Every touched row has to show its new state, not just the one that was clicked.
+            if (todo.Count > 1) BeginInvoke(new MethodInvoker(RebuildItemsView));
+            else BindItemMeterPanel();
             UpdateFormatSummary();
+        }
+
+        /// <summary>The machine behind a grid row handle. The view carries the item's 1-based
+        /// position in "No", which is how the focused-row helper finds it too.</summary>
+        private ItemEditData ItemDataAt(int rowHandle)
+        {
+            if (rowHandle < 0) return null;
+            DataRowView drv = GridViewItems.GetRow(rowHandle) as DataRowView;
+            if (drv == null) return null;
+            int no;
+            if (!int.TryParse(Convert.ToString(drv.Row["No"]), out no)) return null;
+            int idx = no - 1;
+            return (idx >= 0 && idx < _items.Count) ? _items[idx] : null;
+        }
+
+        private void InlineCheck_EditValueChanged(object sender, EventArgs e)
+        {
+            GridViewItems.PostEditor();
         }
 
         private void SetItemColEditable(string field, DevExpress.XtraEditors.Repository.RepositoryItem edit)
