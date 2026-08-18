@@ -1548,6 +1548,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("LineGroupCode", typeof(string));
             _dtItemsView.Columns.Add("OwnInvoice", typeof(bool));
             _dtItemsView.Columns.Add("HasRental", typeof(bool));
+            _dtItemsView.Columns.Add("HasBK", typeof(bool));
+            _dtItemsView.Columns.Add("HasCL", typeof(bool));
             _dtItemsView.Columns.Add("Expiry", typeof(DateTime));
 
             int n = 0;
@@ -1580,6 +1582,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // shares means this machine bills alone. One idea, one column to store it.
                 r["OwnInvoice"] = IsSoloBillGroup(d);
                 r["HasRental"] = MachineHasRental(d);
+                // Which counters this machine actually has. Not every machine has both, and some
+                // have neither -- a machine nobody reads still bills its rent.
+                r["HasBK"] = zSCP2_Item_Form.FindMeterByRole(d.Meters, "BK") != null;
+                r["HasCL"] = zSCP2_Item_Form.FindMeterByRole(d.Meters, "CL") != null;
                 r["Expiry"] = (object)d.ServiceExpiryDate ?? DBNull.Value;
                 _dtItemsView.Rows.Add(r);
             }
@@ -2504,6 +2510,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineBillGroupRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineLineGroupRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineOwnInvoiceRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasRentalRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasBKRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasCLRepo;
         private DataTable _inlineItemLookup;
         private DataTable _inlineGradeLookup;
         private DataTable _inlineSerialLookup;
@@ -2663,14 +2672,44 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colLineGrp.ToolTip = "The word printed on this machine's invoice line (e.g. HEAVY DUTY). " +
                 "Machines sharing a label also share a line when the contract groups by model.";
 
-            // Whether this machine has a RENTAL meter at all. Read-only, but visible every time the
-            // contract is opened -- Pasir Gudang bills five rentals for six machines and that is only
-            // discoverable today by reading an invoice.
+            // Whether this machine has a RENTAL meter -- and the switch that gives it one. It reads
+            // as a tick box, so it behaves as one: ticking drops the standard RENTAL meter on the
+            // machine with the price left at 0, which is the same thing the machine dialog's "Need
+            // rental" does. Pasir Gudang bills five rentals for six machines and until this column
+            // existed that was only discoverable by reading an invoice.
+            _inlineHasRentalRepo = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            GridItems.RepositoryItems.Add(_inlineHasRentalRepo);
             DevExpress.XtraGrid.Columns.GridColumn colHasRent = GridViewItems.Columns.AddVisible("HasRental");
             colHasRent.Caption = "Rental";
             colHasRent.Width = 50;
-            colHasRent.OptionsColumn.AllowEdit = false;
-            colHasRent.ToolTip = "Ticked when the machine has a RENTAL meter. Unticked machines bill no rent.";
+            colHasRent.OptionsColumn.AllowEdit = true;
+            colHasRent.ColumnEdit = _inlineHasRentalRepo;
+            colHasRent.ToolTip = "This machine is rented. Tick it and the RENTAL meter is added with the " +
+                "price left at 0 — set the amount on the machine, or price the whole line in Lines & Price.";
+
+            // Black and Colour, the same way. Three ticks now say everything a machine's meters used
+            // to need 446 meter types to say: what it is rented for, and which counters get read.
+            // Some machines are black only, some colour only, some both, and a machine nobody reads
+            // has neither and still bills its rent.
+            _inlineHasBKRepo = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            GridItems.RepositoryItems.Add(_inlineHasBKRepo);
+            DevExpress.XtraGrid.Columns.GridColumn colHasBK = GridViewItems.Columns.AddVisible("HasBK");
+            colHasBK.Caption = "BK";
+            colHasBK.Width = 40;
+            colHasBK.OptionsColumn.AllowEdit = true;
+            colHasBK.ColumnEdit = _inlineHasBKRepo;
+            colHasBK.ToolTip = "This machine's BLACK copies are read and billed. Tick it and the BK meter " +
+                "is added — put the per-copy rate on the machine's meter row.";
+
+            _inlineHasCLRepo = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
+            GridItems.RepositoryItems.Add(_inlineHasCLRepo);
+            DevExpress.XtraGrid.Columns.GridColumn colHasCL = GridViewItems.Columns.AddVisible("HasCL");
+            colHasCL.Caption = "CL";
+            colHasCL.Width = 40;
+            colHasCL.OptionsColumn.AllowEdit = true;
+            colHasCL.ColumnEdit = _inlineHasCLRepo;
+            colHasCL.ToolTip = "This machine's COLOUR copies are read and billed. Tick it and the CL meter " +
+                "is added — put the per-copy rate on the machine's meter row.";
 
             SetItemColEditable("ItemCode", null);          // editor supplied at edit time (lookup)
             // Machine Serial: bind the designer column DIRECTLY (a hidden duplicate FieldName once
@@ -2750,8 +2789,67 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 SortedSet<string> labels = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (ItemEditData d in _items)
                     if (!string.IsNullOrEmpty(d.LineGroupCode)) labels.Add(d.LineGroupCode);
+                // A contract nobody has labelled yet would open an empty list, which reads as broken
+                // rather than as "type your own". Seed it with the three words the customer's own
+                // invoices use; anything else can still be typed straight over them.
+                if (labels.Count == 0)
+                {
+                    labels.Add("HEAVY DUTY"); labels.Add("MEDIUM DUTY"); labels.Add("LIGHT DUTY");
+                }
                 foreach (string l in labels) ed.Properties.Items.Add(l);
             }
+        }
+
+        /// <summary>One of the machine grid's three meter ticks changed — Rental, BK or CL.</summary>
+        /// <remarks>
+        /// Ticked, the machine gets that standard meter with the price left at 0, ready for a rate
+        /// (or, for rental, for the contract's group price to answer instead). Unticked, the meter
+        /// comes off through the same guard the machine dialog uses: a saved meter takes its whole
+        /// reading history with it and must say so before it goes.
+        ///
+        /// <para>The three are independent on purpose. Black only, colour only, both, or neither are
+        /// all real machines, and a machine nobody reads still bills its rent.</para>
+        /// </remarks>
+        private void ToggleStandardMeter(ItemEditData d, int rowHandle, string field, bool want)
+        {
+            string role = field == "HasBK" ? "BK" : (field == "HasCL" ? "CL" : "RENTAL");
+            string word = role == "RENTAL" ? "rental" : (role == "BK" ? "black" : "colour");
+            if (d.Meters == null) d.Meters = zSCP2_Item_Form.CreateMetersTable();
+            DataRow meter = zSCP2_Item_Form.FindMeterByRole(d.Meters, role);
+
+            if (want && meter == null)
+            {
+                if (!zSCP2_Item_Form.AddStandardMeter(_db, d.Meters, role))
+                    XtraMessageBox.Show(
+                        "This book has no standard '" + role + "' meter type, so the meter is waiting " +
+                        "for one." + Environment.NewLine + Environment.NewLine +
+                        "Open the machine and pick a meter type on its new meter row.",
+                        "Meter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                _dirty = true;
+            }
+            else if (!want && meter != null)
+            {
+                if (d.ItemKey > 0 && meter.RowState != DataRowState.Added &&
+                    XtraMessageBox.Show(
+                        "Remove the " + word + " meter from " +
+                        (string.IsNullOrEmpty(d.ServiceItemNo) ? "this machine" : d.ServiceItemNo) + "?" +
+                        Environment.NewLine + Environment.NewLine +
+                        "When you save, this meter AND its reading history (all readings + billing log " +
+                        "for this counter) are permanently deleted.",
+                        "Meter", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                {
+                    int rh = rowHandle;
+                    string f = field;
+                    BeginInvoke(new MethodInvoker(delegate
+                    { GridViewItems.SetRowCellValue(rh, f, true); }));
+                    return;
+                }
+                meter.Delete();
+                _dirty = true;
+            }
+            // The meter panel under the grid is showing this machine's meters — it has just changed.
+            BindItemMeterPanel();
+            UpdateFormatSummary();
         }
 
         private void SetItemColEditable(string field, DevExpress.XtraEditors.Repository.RepositoryItem edit)
@@ -2871,6 +2969,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                     break;
                 }
+                case "HasRental":
+                case "HasBK":
+                case "HasCL":
+                    ToggleStandardMeter(d, e.RowHandle, e.Column.FieldName,
+                        s != null && (s == "True" || s == "true" || s == "1"));
+                    break;
                 case "OwnInvoice":
                 {
                     // Ticked -> a Bill Group only this machine can be in; unticked -> back to the

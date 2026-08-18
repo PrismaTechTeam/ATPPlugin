@@ -868,10 +868,34 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _chkNeedRental.Size = new System.Drawing.Size(120, 20);
             GrpMeters.Controls.Add(_chkNeedRental);
             _chkNeedRental.BringToFront();
+            // Black and colour, the same question asked the same way. A machine is black only,
+            // colour only, both, or -- when nobody reads it -- neither, and it still bills its rent.
+            _chkNeedBK = new DevExpress.XtraEditors.CheckEdit();
+            _chkNeedBK.Text = "Black (BK)";
+            _chkNeedBK.ToolTip = "This machine's black copies are read and billed -- adds the BK meter, " +
+                "you fill in the per-copy rate";
+            _chkNeedBK.Location = new System.Drawing.Point(710, 27);
+            _chkNeedBK.Size = new System.Drawing.Size(110, 20);
+            GrpMeters.Controls.Add(_chkNeedBK);
+            _chkNeedBK.BringToFront();
+
+            _chkNeedCL = new DevExpress.XtraEditors.CheckEdit();
+            _chkNeedCL.Text = "Colour (CL)";
+            _chkNeedCL.ToolTip = "This machine's colour copies are read and billed -- adds the CL meter, " +
+                "you fill in the per-copy rate";
+            _chkNeedCL.Location = new System.Drawing.Point(826, 27);
+            _chkNeedCL.Size = new System.Drawing.Size(110, 20);
+            GrpMeters.Controls.Add(_chkNeedCL);
+            _chkNeedCL.BringToFront();
+
             _suppressRentalEvt = true;
             _chkNeedRental.Checked = FindRentalMeterRow() != null;
+            _chkNeedBK.Checked = FindMeterByRole(_meters, "BK") != null;
+            _chkNeedCL.Checked = FindMeterByRole(_meters, "CL") != null;
             _suppressRentalEvt = false;
             _chkNeedRental.CheckedChanged += new EventHandler(ChkNeedRental_CheckedChanged);
+            _chkNeedBK.CheckedChanged += new EventHandler(ChkNeedMeter_CheckedChanged);
+            _chkNeedCL.CheckedChanged += new EventHandler(ChkNeedMeter_CheckedChanged);
             // Adding or deleting a rental by hand must move the tick too, or it would state the
             // opposite of what the grid shows.
             _meters.RowChanged += new DataRowChangeEventHandler(Meters_RentalWatch);
@@ -1077,17 +1101,98 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // ---- Need rental ----
         // The machine's own RENTAL meter, or null. A WAIVE is not one: it is the contra that takes
         // the rent away again, and it needs a real rental sitting next to it.
-        private DataRow FindRentalMeterRow()
+        //
+        // Static so the contract's machine grid can ask the same question and get the same answer --
+        // its "Rental" tick and this dialog's "Need rental" tick are the same switch seen twice, and
+        // two implementations would eventually disagree.
+        public static DataRow FindRentalMeter(DataTable meters)
         {
-            if (_meters == null) return null;
-            foreach (DataRow r in _meters.Rows)
+            return FindMeterByRole(meters, "RENTAL");
+        }
+
+        /// <summary>The machine's meter for one counter -- RENTAL, BK or CL -- or null.</summary>
+        /// <remarks>
+        /// Matched on the meter's ROLE, not on its code, because the old book named a meter type per
+        /// customer per machine (01.MR.BK.2KF02297, 01.RA-4 APM, and 444 more). A machine already
+        /// carrying one of those is already black, and must not be handed a second black meter just
+        /// because its type is not called "BK". Rental additionally honours the code convention, for
+        /// rows old enough to predate the role column.
+        ///
+        /// <para>A WAIVE is never one of these: it is the contra that takes the rent away again, and
+        /// it needs a real rental sitting next to it.</para>
+        /// </remarks>
+        public static DataRow FindMeterByRole(DataTable meters, string role)
+        {
+            if (meters == null) return null;
+            string want = (role ?? "").Trim().ToUpperInvariant();
+            foreach (DataRow r in meters.Rows)
             {
                 if (r.RowState == DataRowState.Deleted) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
-                if (t.Length == 0 || IsWaiveType(t)) continue;
-                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) return r;
+                if (t.Length == 0) continue;
+                string rr = meters.Columns.Contains("MeterRole")
+                    ? Convert.ToString(r["MeterRole"]).Trim().ToUpperInvariant() : "";
+                if (rr == "WAIVE") continue;
+                if (rr == want) return r;
+                if (want == "RENTAL" && rr.Length == 0 &&
+                    ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) return r;
             }
             return null;
+        }
+
+        /// <summary>Drops one standard meter onto a machine -- RENTAL, BK or CL -- already typed,
+        /// roled and described, with the price left at 0 for someone to fill in (or for the
+        /// contract's group price to answer). False when the book has no such standard type.</summary>
+        /// <remarks>
+        /// This is the answer to 446 meter types. The old book could only vary a charge by inventing
+        /// a type, so every customer ended up with their own BK and their own CL; here the rate lives
+        /// on the machine's meter and the type only says WHICH counter this is, so three types serve
+        /// every contract. A machine takes whichever it actually has: black only, colour only, both,
+        /// or -- for a machine nobody reads -- neither.
+        /// </remarks>
+        public static bool AddStandardMeter(AutoCount.Data.DBSetting db, DataTable meters, string role)
+        {
+            string want = (role ?? "").Trim().ToUpperInvariant();
+            if (meters == null || FindMeterByRole(meters, want) != null) return true;
+            string code = want == "BK" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_BK
+                        : want == "CL" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_CL
+                        : ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL;
+            string desc = "";
+            bool found = false;
+            try
+            {
+                DataTable t = db.GetDataTable(
+                    "SELECT MeterTypeCode, ISNULL([Description],'') AS [Description] FROM dbo.zSCP_MeterType " +
+                    "WHERE MeterTypeCode = N'" + code.Replace("'", "''") + "' AND Inactive='N'", false);
+                if (t.Rows.Count > 0)
+                {
+                    found = true;
+                    desc = Convert.ToString(t.Rows[0]["Description"]);
+                }
+            }
+            catch { }
+
+            DataRow r = meters.NewRow();
+            r["MeterRole"] = want;
+            r["MeterTypeCode"] = found ? code : "";
+            r["Description"] = desc;
+            if (meters.Columns.Contains("MachineSerialNo")) r["MachineSerialNo"] = "";
+            r["MinimumCharges"] = 0m;
+            r["ChargesRate"] = 0m;
+            r["MeterMultiPriceCode"] = "";
+            r["RebateQtyInPercent"] = 0m;
+            r["FOCQty"] = 0m;
+            r["InitialReading"] = 0m;
+            r["CustomTiers"] = "";
+            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m;
+            r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
+            meters.Rows.Add(r);
+            return found;
+        }
+
+        private DataRow FindRentalMeterRow()
+        {
+            return FindRentalMeter(_meters);
         }
 
         // Add or delete a rental in the grid and the tick follows — it must never claim the opposite
@@ -1096,10 +1201,67 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             if (_chkNeedRental == null || _suppressRentalEvt) return;
             bool has = FindRentalMeterRow() != null;
-            if (_chkNeedRental.Checked == has) return;
+            bool bk = FindMeterByRole(_meters, "BK") != null;
+            bool cl = FindMeterByRole(_meters, "CL") != null;
+            if (_chkNeedRental.Checked == has && _chkNeedBK.Checked == bk && _chkNeedCL.Checked == cl) return;
             _suppressRentalEvt = true;
             _chkNeedRental.Checked = has;
+            _chkNeedBK.Checked = bk;
+            _chkNeedCL.Checked = cl;
             _suppressRentalEvt = false;
+        }
+
+        // Black / colour: same switch as the rental one, minus the instalment story -- a usage meter
+        // has nothing to waive and no group price waiting for it, so it just goes on or comes off.
+        private void ChkNeedMeter_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_suppressRentalEvt) return;
+            DevExpress.XtraEditors.CheckEdit box = sender as DevExpress.XtraEditors.CheckEdit;
+            if (box == null) return;
+            string role = ReferenceEquals(box, _chkNeedBK) ? "BK" : "CL";
+            string word = role == "BK" ? "black" : "colour";
+            DataRow meter = FindMeterByRole(_meters, role);
+
+            if (box.Checked)
+            {
+                if (meter != null) return;   // already there; the tick just caught up
+                _suppressRentalEvt = true;
+                bool haveType = AddStandardMeter(_db, _meters, role);
+                _suppressRentalEvt = false;
+                _dirty = true;
+                DataRow r = FindMeterByRole(_meters, role);
+                if (r == null) return;
+                if (!haveType)
+                    XtraMessageBox.Show("This book has no standard '" + role + "' meter type, so the row is " +
+                        "waiting for one." + Environment.NewLine + Environment.NewLine + "Pick a type in the row, or create the standard one in " +
+                        "Meter Types...", "Need " + word);
+                // Land on the rate: a usage meter's price is the only thing left to say.
+                GridViewMeters.RefreshData();
+                int rh = GridViewMeters.GetRowHandle(_meters.Rows.IndexOf(r));
+                if (rh < 0) return;
+                GridViewMeters.FocusedRowHandle = rh;
+                GridViewMeters.FocusedColumn = haveType ? ColMtRate : ColMtCode;
+                GridMeters.Focus();
+                GridViewMeters.ShowEditor();
+                return;
+            }
+
+            if (meter == null) return;
+            string t = Convert.ToString(meter["MeterTypeCode"]).Trim();
+            if (_data != null && _data.ItemKey > 0 && meter.RowState != DataRowState.Added && t.Length > 0 &&
+                XtraMessageBox.Show("Remove the " + word + " meter '" + t + "'?" + Environment.NewLine + Environment.NewLine + "When you save, this " +
+                    "meter AND its reading history (all readings + billing log for this counter) are " +
+                    "permanently deleted.", "Need " + word, MessageBoxButtons.YesNo, MessageBoxIcon.Warning)
+                != DialogResult.Yes)
+            {
+                _suppressRentalEvt = true; box.Checked = true; _suppressRentalEvt = false;
+                return;
+            }
+            _suppressRentalEvt = true;
+            meter.Delete();
+            _suppressRentalEvt = false;
+            _dirty = true;
+            GridViewMeters.RefreshData();
         }
 
         private void ChkNeedRental_CheckedChanged(object sender, EventArgs e)
@@ -1115,31 +1277,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             if (FindRentalMeterRow() != null) return;   // already has one; the tick just caught up
 
-            DataRow[] std = _meterTypeLookup == null ? new DataRow[0]
-                : _meterTypeLookup.Select("MeterTypeCode='" +
-                    ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL.Replace("'", "''") + "'");
-
             _suppressRentalEvt = true;
-            DataRow r = _meters.NewRow();
-            r["MeterRole"] = "RENTAL";
-            r["MeterTypeCode"] = std.Length > 0 ? Convert.ToString(std[0]["MeterTypeCode"]) : "";
-            r["Description"] = std.Length > 0 && std[0].Table.Columns.Contains("Description")
-                ? Convert.ToString(std[0]["Description"]) : "";
-            r["MachineSerialNo"] = "";
-            r["MinimumCharges"] = 0m;
-            r["ChargesRate"] = 0m;          // the amount the user is about to type
-            r["MeterMultiPriceCode"] = "";
-            r["RebateQtyInPercent"] = 0m;
-            r["FOCQty"] = 0m;
-            r["InitialReading"] = 0m;
-            r["CustomTiers"] = "";
-            r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m;
-            r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
-            _meters.Rows.Add(r);
+            bool haveType = AddStandardMeter(_db, _meters, "RENTAL");
             _suppressRentalEvt = false;
             _dirty = true;
+            DataRow r = FindRentalMeterRow();
+            if (r == null) return;
 
-            if (std.Length == 0)
+            if (!haveType)
                 XtraMessageBox.Show("The standard '" + ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL +
                     "' meter type is not in this book, so the row is waiting for a type.\r\n\r\n" +
                     "Pick a rental type in the row, or create the standard one in Meter Types...",
@@ -1150,7 +1295,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             int rh = GridViewMeters.GetRowHandle(_meters.Rows.IndexOf(r));
             if (rh < 0) return;
             GridViewMeters.FocusedRowHandle = rh;
-            GridViewMeters.FocusedColumn = std.Length > 0 ? ColMtRate : ColMtCode;
+            GridViewMeters.FocusedColumn = haveType ? ColMtRate : ColMtCode;
             GridMeters.Focus();
             GridViewMeters.ShowEditor();
         }
@@ -1700,6 +1845,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private bool _suppressMultiEvt;
         // --- need rental ---
         private DevExpress.XtraEditors.CheckEdit _chkNeedRental;
+        private DevExpress.XtraEditors.CheckEdit _chkNeedBK;
+        private DevExpress.XtraEditors.CheckEdit _chkNeedCL;
         private bool _suppressRentalEvt;
         // --- ownership ---
         private DevExpress.XtraEditors.TextEdit _txtParentContractRO;   // read-only Contract No display
