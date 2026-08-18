@@ -1144,6 +1144,28 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return null;
         }
 
+        /// <summary>The machine's rental-waive meter, or null.</summary>
+        /// <remarks>
+        /// A waive is recognised by its ROLE, and also by the legacy flag on its meter type — the old
+        /// book marked the whole "(W)" family that way and those machines must keep working. It is
+        /// deliberately NOT found by FindMeterByRole("WAIVE") alone for that reason.
+        /// </remarks>
+        public static DataRow FindWaiveMeter(DataTable meters)
+        {
+            if (meters == null) return null;
+            DataRow byRole = null;
+            foreach (DataRow r in meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                string t = Convert.ToString(r["MeterTypeCode"]).Trim();
+                if (t.Length == 0) continue;
+                string rr = meters.Columns.Contains("MeterRole")
+                    ? Convert.ToString(r["MeterRole"]).Trim().ToUpperInvariant() : "";
+                if (rr == "WAIVE") { byRole = r; break; }
+            }
+            return byRole;
+        }
+
         /// <summary>Drops one standard meter onto a machine -- RENTAL, BK or CL -- already typed,
         /// roled and described, with the price left at 0 for someone to fill in (or for the
         /// contract's group price to answer). False when the book has no such standard type.</summary>

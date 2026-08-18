@@ -41,6 +41,14 @@ namespace ServiceContractPhotocopier
             this.ColBKRate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColCL = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColCLRate = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColBKLadder = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColCLLadder = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMin = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMinAmount = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColMinScope = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColWaive = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColWaiveDeal = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.RepoScope = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
             this.RepoSel = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             this.RepoState = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             this.RepoMoney = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
@@ -59,6 +67,19 @@ namespace ServiceContractPhotocopier
             this.BtnRateRental = new DevExpress.XtraEditors.SimpleButton();
             this.BtnRateBK = new DevExpress.XtraEditors.SimpleButton();
             this.BtnRateCL = new DevExpress.XtraEditors.SimpleButton();
+            this.LblMin = new DevExpress.XtraEditors.LabelControl();
+            this.TxtMinAmount = new DevExpress.XtraEditors.SpinEdit();
+            this.CmbMinScope = new DevExpress.XtraEditors.ComboBoxEdit();
+            this.BtnAddMin = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnDelMin = new DevExpress.XtraEditors.SimpleButton();
+            this.LblWaive = new DevExpress.XtraEditors.LabelControl();
+            this.BtnSetWaive = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnDelWaive = new DevExpress.XtraEditors.SimpleButton();
+            this.LblLadder = new DevExpress.XtraEditors.LabelControl();
+            this.CmbLadder = new DevExpress.XtraEditors.ComboBoxEdit();
+            this.BtnLadderBK = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnLadderCL = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnLadderClear = new DevExpress.XtraEditors.SimpleButton();
             this.LblSummary = new DevExpress.XtraEditors.LabelControl();
             this.PanelBottom = new DevExpress.XtraEditors.PanelControl();
             this.BtnSelectAll = new DevExpress.XtraEditors.SimpleButton();
@@ -71,9 +92,13 @@ namespace ServiceContractPhotocopier
             ((System.ComponentModel.ISupportInitialize)(this.RepoState)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMoney)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoRate)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoScope)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelActions)).BeginInit();
             this.PanelActions.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMinAmount.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbMinScope.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbLadder.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelBottom)).BeginInit();
             this.PanelBottom.SuspendLayout();
             this.SuspendLayout();
@@ -87,7 +112,7 @@ namespace ServiceContractPhotocopier
             this.LblHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblHint.Location = new System.Drawing.Point(12, 9);
             this.LblHint.Name = "LblHint";
-            this.LblHint.Size = new System.Drawing.Size(880, 58);
+            this.LblHint.Size = new System.Drawing.Size(1080, 58);
             this.LblHint.TabIndex = 0;
             this.LblHint.Text = "Tick the machines, then press what they need. Rent, black and colour are independent — " +
     "a machine can have all three, one, or none at all, and a machine nobody reads still bills its rent.\r\n" +
@@ -106,8 +131,9 @@ namespace ServiceContractPhotocopier
             this.RepoSel,
             this.RepoState,
             this.RepoMoney,
-            this.RepoRate});
-            this.GridMachines.Size = new System.Drawing.Size(880, 320);
+            this.RepoRate,
+            this.RepoScope});
+            this.GridMachines.Size = new System.Drawing.Size(1080, 300);
             this.GridMachines.TabIndex = 1;
             this.GridMachines.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewMachines});
@@ -124,7 +150,14 @@ namespace ServiceContractPhotocopier
             this.ColBK,
             this.ColBKRate,
             this.ColCL,
-            this.ColCLRate});
+            this.ColCLRate,
+            this.ColBKLadder,
+            this.ColCLLadder,
+            this.ColMin,
+            this.ColMinAmount,
+            this.ColMinScope,
+            this.ColWaive,
+            this.ColWaiveDeal});
             this.GridViewMachines.GridControl = this.GridMachines;
             this.GridViewMachines.Name = "GridViewMachines";
             this.GridViewMachines.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
@@ -244,6 +277,91 @@ namespace ServiceContractPhotocopier
             this.ColCLRate.VisibleIndex = 9;
             this.ColCLRate.Width = 85;
             //
+            // ColBKLadder
+            //
+            this.ColBKLadder.Caption = "BK tiers";
+            this.ColBKLadder.FieldName = "BKLadder";
+            this.ColBKLadder.Name = "ColBKLadder";
+            this.ColBKLadder.OptionsColumn.AllowEdit = false;
+            this.ColBKLadder.Visible = true;
+            this.ColBKLadder.VisibleIndex = 8;
+            this.ColBKLadder.Width = 110;
+            //
+            // ColCLLadder
+            //
+            this.ColCLLadder.Caption = "CL tiers";
+            this.ColCLLadder.FieldName = "CLLadder";
+            this.ColCLLadder.Name = "ColCLLadder";
+            this.ColCLLadder.OptionsColumn.AllowEdit = false;
+            this.ColCLLadder.Visible = true;
+            this.ColCLLadder.VisibleIndex = 11;
+            this.ColCLLadder.Width = 110;
+            //
+            // ColMin
+            //
+            this.ColMin.Caption = "MIN";
+            this.ColMin.ColumnEdit = this.RepoState;
+            this.ColMin.FieldName = "HasMin";
+            this.ColMin.MaxWidth = 45;
+            this.ColMin.Name = "ColMin";
+            this.ColMin.ToolTip = "A committed minimum: bills the shortfall when the print charges fall below it";
+            this.ColMin.Visible = true;
+            this.ColMin.VisibleIndex = 12;
+            this.ColMin.Width = 45;
+            //
+            // ColMinAmount
+            //
+            this.ColMinAmount.Caption = "committed";
+            this.ColMinAmount.ColumnEdit = this.RepoMoney;
+            this.ColMinAmount.DisplayFormat.FormatString = "n2";
+            this.ColMinAmount.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.ColMinAmount.FieldName = "MinAmount";
+            this.ColMinAmount.MaxWidth = 90;
+            this.ColMinAmount.Name = "ColMinAmount";
+            this.ColMinAmount.Visible = true;
+            this.ColMinAmount.VisibleIndex = 13;
+            this.ColMinAmount.Width = 90;
+            //
+            // ColMinScope
+            //
+            this.ColMinScope.Caption = "measured over";
+            this.ColMinScope.ColumnEdit = this.RepoScope;
+            this.ColMinScope.FieldName = "MinScope";
+            this.ColMinScope.MaxWidth = 120;
+            this.ColMinScope.Name = "ColMinScope";
+            this.ColMinScope.ToolTip = "Whose print charges the minimum is measured against";
+            this.ColMinScope.Visible = true;
+            this.ColMinScope.VisibleIndex = 14;
+            this.ColMinScope.Width = 120;
+            //
+            // ColWaive
+            //
+            this.ColWaive.Caption = "Waive";
+            this.ColWaive.ColumnEdit = this.RepoState;
+            this.ColWaive.FieldName = "HasWaive";
+            this.ColWaive.MaxWidth = 55;
+            this.ColWaive.Name = "ColWaive";
+            this.ColWaive.ToolTip = "The contra line that gives the rent back";
+            this.ColWaive.Visible = true;
+            this.ColWaive.VisibleIndex = 15;
+            this.ColWaive.Width = 55;
+            //
+            // ColWaiveDeal
+            //
+            this.ColWaiveDeal.Caption = "waive deal";
+            this.ColWaiveDeal.FieldName = "WaiveDeal";
+            this.ColWaiveDeal.Name = "ColWaiveDeal";
+            this.ColWaiveDeal.OptionsColumn.AllowEdit = false;
+            this.ColWaiveDeal.Visible = true;
+            this.ColWaiveDeal.VisibleIndex = 16;
+            this.ColWaiveDeal.Width = 200;
+            //
+            // RepoScope
+            //
+            this.RepoScope.AutoHeight = false;
+            this.RepoScope.Name = "RepoScope";
+            this.RepoScope.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            //
             // RepoSel
             //
             this.RepoSel.AutoHeight = false;
@@ -287,9 +405,22 @@ namespace ServiceContractPhotocopier
             this.PanelActions.Controls.Add(this.BtnRateRental);
             this.PanelActions.Controls.Add(this.BtnRateBK);
             this.PanelActions.Controls.Add(this.BtnRateCL);
-            this.PanelActions.Location = new System.Drawing.Point(12, 399);
+            this.PanelActions.Controls.Add(this.LblMin);
+            this.PanelActions.Controls.Add(this.TxtMinAmount);
+            this.PanelActions.Controls.Add(this.CmbMinScope);
+            this.PanelActions.Controls.Add(this.BtnAddMin);
+            this.PanelActions.Controls.Add(this.BtnDelMin);
+            this.PanelActions.Controls.Add(this.LblWaive);
+            this.PanelActions.Controls.Add(this.BtnSetWaive);
+            this.PanelActions.Controls.Add(this.BtnDelWaive);
+            this.PanelActions.Controls.Add(this.LblLadder);
+            this.PanelActions.Controls.Add(this.CmbLadder);
+            this.PanelActions.Controls.Add(this.BtnLadderBK);
+            this.PanelActions.Controls.Add(this.BtnLadderCL);
+            this.PanelActions.Controls.Add(this.BtnLadderClear);
+            this.PanelActions.Location = new System.Drawing.Point(12, 379);
             this.PanelActions.Name = "PanelActions";
-            this.PanelActions.Size = new System.Drawing.Size(880, 112);
+            this.PanelActions.Size = new System.Drawing.Size(1080, 214);
             this.PanelActions.TabIndex = 2;
             //
             // LblGive
@@ -418,15 +549,137 @@ namespace ServiceContractPhotocopier
             this.BtnRateCL.ToolTip = "Give every ticked machine this per-copy colour rate";
             this.BtnRateCL.Click += new System.EventHandler(this.BtnRateCL_Click);
             //
+            // LblMin
+            //
+            this.LblMin.Location = new System.Drawing.Point(12, 110);
+            this.LblMin.Name = "LblMin";
+            this.LblMin.Size = new System.Drawing.Size(130, 13);
+            this.LblMin.TabIndex = 13;
+            this.LblMin.Text = "...or commit to a minimum:";
+            //
+            // TxtMinAmount
+            //
+            this.TxtMinAmount.EditValue = new decimal(new int[] {0, 0, 0, 0});
+            this.TxtMinAmount.Location = new System.Drawing.Point(160, 106);
+            this.TxtMinAmount.Name = "TxtMinAmount";
+            this.TxtMinAmount.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.TxtMinAmount.Properties.DisplayFormat.FormatString = "n2";
+            this.TxtMinAmount.Properties.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.TxtMinAmount.Properties.MaxValue = new decimal(new int[] {99999999, 0, 0, 0});
+            this.TxtMinAmount.Properties.MinValue = new decimal(new int[] {0, 0, 0, 0});
+            this.TxtMinAmount.Size = new System.Drawing.Size(110, 20);
+            this.TxtMinAmount.TabIndex = 14;
+            this.TxtMinAmount.ToolTip = "The committed amount a month";
+            //
+            // CmbMinScope
+            //
+            this.CmbMinScope.Location = new System.Drawing.Point(278, 106);
+            this.CmbMinScope.Name = "CmbMinScope";
+            this.CmbMinScope.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.CmbMinScope.Size = new System.Drawing.Size(130, 20);
+            this.CmbMinScope.TabIndex = 15;
+            this.CmbMinScope.ToolTip = "Whose print charges it is measured against. A minimum shared by a group belongs on ONE machine of it.";
+            //
+            // BtnAddMin
+            //
+            this.BtnAddMin.Location = new System.Drawing.Point(416, 105);
+            this.BtnAddMin.Name = "BtnAddMin";
+            this.BtnAddMin.Size = new System.Drawing.Size(110, 24);
+            this.BtnAddMin.TabIndex = 16;
+            this.BtnAddMin.Text = "+ MIN";
+            this.BtnAddMin.Click += new System.EventHandler(this.BtnAddMin_Click);
+            //
+            // BtnDelMin
+            //
+            this.BtnDelMin.Location = new System.Drawing.Point(534, 105);
+            this.BtnDelMin.Name = "BtnDelMin";
+            this.BtnDelMin.Size = new System.Drawing.Size(110, 24);
+            this.BtnDelMin.TabIndex = 17;
+            this.BtnDelMin.Text = "- MIN";
+            this.BtnDelMin.Click += new System.EventHandler(this.BtnDelMin_Click);
+            //
+            // LblWaive
+            //
+            this.LblWaive.Location = new System.Drawing.Point(12, 144);
+            this.LblWaive.Name = "LblWaive";
+            this.LblWaive.Size = new System.Drawing.Size(130, 13);
+            this.LblWaive.TabIndex = 18;
+            this.LblWaive.Text = "...or a rental waive:";
+            //
+            // BtnSetWaive
+            //
+            this.BtnSetWaive.Location = new System.Drawing.Point(160, 139);
+            this.BtnSetWaive.Name = "BtnSetWaive";
+            this.BtnSetWaive.Size = new System.Drawing.Size(248, 24);
+            this.BtnSetWaive.TabIndex = 19;
+            this.BtnSetWaive.Text = "Set waive deal...";
+            this.BtnSetWaive.ToolTip = "One deal, given to every ticked machine that has a rental to waive";
+            this.BtnSetWaive.Click += new System.EventHandler(this.BtnSetWaive_Click);
+            //
+            // BtnDelWaive
+            //
+            this.BtnDelWaive.Location = new System.Drawing.Point(416, 139);
+            this.BtnDelWaive.Name = "BtnDelWaive";
+            this.BtnDelWaive.Size = new System.Drawing.Size(110, 24);
+            this.BtnDelWaive.TabIndex = 20;
+            this.BtnDelWaive.Text = "- Waive";
+            this.BtnDelWaive.Click += new System.EventHandler(this.BtnDelWaive_Click);
+            //
+            // LblLadder
+            //
+            this.LblLadder.Location = new System.Drawing.Point(12, 178);
+            this.LblLadder.Name = "LblLadder";
+            this.LblLadder.Size = new System.Drawing.Size(130, 13);
+            this.LblLadder.TabIndex = 21;
+            this.LblLadder.Text = "...or tiered pricing:";
+            //
+            // CmbLadder
+            //
+            this.CmbLadder.Location = new System.Drawing.Point(160, 174);
+            this.CmbLadder.Name = "CmbLadder";
+            this.CmbLadder.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.CmbLadder.Size = new System.Drawing.Size(248, 20);
+            this.CmbLadder.TabIndex = 22;
+            this.CmbLadder.ToolTip = "A Meter Multi Pricing scheme — free band plus per-copy bands";
+            //
+            // BtnLadderBK
+            //
+            this.BtnLadderBK.Location = new System.Drawing.Point(416, 173);
+            this.BtnLadderBK.Name = "BtnLadderBK";
+            this.BtnLadderBK.Size = new System.Drawing.Size(110, 24);
+            this.BtnLadderBK.TabIndex = 23;
+            this.BtnLadderBK.Text = "set BK tiers";
+            this.BtnLadderBK.Click += new System.EventHandler(this.BtnLadderBK_Click);
+            //
+            // BtnLadderCL
+            //
+            this.BtnLadderCL.Location = new System.Drawing.Point(534, 173);
+            this.BtnLadderCL.Name = "BtnLadderCL";
+            this.BtnLadderCL.Size = new System.Drawing.Size(110, 24);
+            this.BtnLadderCL.TabIndex = 24;
+            this.BtnLadderCL.Text = "set CL tiers";
+            this.BtnLadderCL.Click += new System.EventHandler(this.BtnLadderCL_Click);
+            //
+            // BtnLadderClear
+            //
+            this.BtnLadderClear.Location = new System.Drawing.Point(652, 173);
+            this.BtnLadderClear.Name = "BtnLadderClear";
+            this.BtnLadderClear.Size = new System.Drawing.Size(150, 24);
+            this.BtnLadderClear.TabIndex = 25;
+            this.BtnLadderClear.Text = "back to a flat rate";
+            this.BtnLadderClear.ToolTip = "Take the tiers off — the per-copy rate applies again";
+            this.BtnLadderClear.Click += new System.EventHandler(this.BtnLadderClear_Click);
+            //
             // LblSummary
             //
             this.LblSummary.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.LblSummary.Appearance.ForeColor = System.Drawing.Color.DimGray;
             this.LblSummary.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            this.LblSummary.Location = new System.Drawing.Point(12, 519);
+            this.LblSummary.Location = new System.Drawing.Point(12, 601);
             this.LblSummary.Name = "LblSummary";
-            this.LblSummary.Size = new System.Drawing.Size(880, 18);
+            this.LblSummary.Size = new System.Drawing.Size(1080, 18);
             this.LblSummary.TabIndex = 3;
             this.LblSummary.Text = "";
             //
@@ -438,9 +691,9 @@ namespace ServiceContractPhotocopier
             this.PanelBottom.Controls.Add(this.BtnSameModel);
             this.PanelBottom.Controls.Add(this.BtnOK);
             this.PanelBottom.Controls.Add(this.BtnCancel);
-            this.PanelBottom.Location = new System.Drawing.Point(12, 543);
+            this.PanelBottom.Location = new System.Drawing.Point(12, 625);
             this.PanelBottom.Name = "PanelBottom";
-            this.PanelBottom.Size = new System.Drawing.Size(880, 44);
+            this.PanelBottom.Size = new System.Drawing.Size(1080, 44);
             this.PanelBottom.TabIndex = 4;
             //
             // BtnSelectAll
@@ -466,7 +719,7 @@ namespace ServiceContractPhotocopier
             //
             this.BtnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.BtnOK.ImageOptions.ImageUri.Uri = "Save;Size16x16";
-            this.BtnOK.Location = new System.Drawing.Point(694, 9);
+            this.BtnOK.Location = new System.Drawing.Point(894, 9);
             this.BtnOK.Name = "BtnOK";
             this.BtnOK.Size = new System.Drawing.Size(85, 24);
             this.BtnOK.TabIndex = 2;
@@ -477,7 +730,7 @@ namespace ServiceContractPhotocopier
             //
             this.BtnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.BtnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.BtnCancel.Location = new System.Drawing.Point(785, 9);
+            this.BtnCancel.Location = new System.Drawing.Point(985, 9);
             this.BtnCancel.Name = "BtnCancel";
             this.BtnCancel.Size = new System.Drawing.Size(85, 24);
             this.BtnCancel.TabIndex = 3;
@@ -488,24 +741,28 @@ namespace ServiceContractPhotocopier
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.BtnCancel;
-            this.ClientSize = new System.Drawing.Size(904, 599);
+            this.ClientSize = new System.Drawing.Size(1104, 681);
             this.Controls.Add(this.LblHint);
             this.Controls.Add(this.GridMachines);
             this.Controls.Add(this.PanelActions);
             this.Controls.Add(this.LblSummary);
             this.Controls.Add(this.PanelBottom);
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(820, 540);
+            this.MinimumSize = new System.Drawing.Size(1000, 640);
             this.Name = "MachineMeters_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Meters — which machines have rent, black and colour, and what they charge";
             this.Load += new System.EventHandler(this.OnFormLoad);
             this.PanelBottom.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.PanelBottom)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbLadder.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbMinScope.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtMinAmount.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.TxtRate.Properties)).EndInit();
             this.PanelActions.ResumeLayout(false);
             this.PanelActions.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelActions)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoScope)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoRate)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoMoney)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoState)).EndInit();
@@ -531,6 +788,14 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraGrid.Columns.GridColumn ColBKRate;
         private DevExpress.XtraGrid.Columns.GridColumn ColCL;
         private DevExpress.XtraGrid.Columns.GridColumn ColCLRate;
+        private DevExpress.XtraGrid.Columns.GridColumn ColBKLadder;
+        private DevExpress.XtraGrid.Columns.GridColumn ColCLLadder;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMin;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMinAmount;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMinScope;
+        private DevExpress.XtraGrid.Columns.GridColumn ColWaive;
+        private DevExpress.XtraGrid.Columns.GridColumn ColWaiveDeal;
+        private DevExpress.XtraEditors.Repository.RepositoryItemComboBox RepoScope;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit RepoSel;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit RepoState;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoMoney;
@@ -549,6 +814,19 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraEditors.SimpleButton BtnRateRental;
         private DevExpress.XtraEditors.SimpleButton BtnRateBK;
         private DevExpress.XtraEditors.SimpleButton BtnRateCL;
+        private DevExpress.XtraEditors.LabelControl LblMin;
+        private DevExpress.XtraEditors.SpinEdit TxtMinAmount;
+        private DevExpress.XtraEditors.ComboBoxEdit CmbMinScope;
+        private DevExpress.XtraEditors.SimpleButton BtnAddMin;
+        private DevExpress.XtraEditors.SimpleButton BtnDelMin;
+        private DevExpress.XtraEditors.LabelControl LblWaive;
+        private DevExpress.XtraEditors.SimpleButton BtnSetWaive;
+        private DevExpress.XtraEditors.SimpleButton BtnDelWaive;
+        private DevExpress.XtraEditors.LabelControl LblLadder;
+        private DevExpress.XtraEditors.ComboBoxEdit CmbLadder;
+        private DevExpress.XtraEditors.SimpleButton BtnLadderBK;
+        private DevExpress.XtraEditors.SimpleButton BtnLadderCL;
+        private DevExpress.XtraEditors.SimpleButton BtnLadderClear;
         private DevExpress.XtraEditors.LabelControl LblSummary;
         private DevExpress.XtraEditors.PanelControl PanelBottom;
         private DevExpress.XtraEditors.SimpleButton BtnSelectAll;

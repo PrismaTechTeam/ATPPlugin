@@ -1458,6 +1458,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
+        /// <summary>Is this grid row a committed minimum? The same test the billing engine makes —
+        /// role first, the legacy "MIN..." type name as the OR that keeps old machines working.</summary>
+        private static bool IsCommitRow(DataRow r)
+        {
+            if (r.Table.Columns.Contains("Role") &&
+                S(r["Role"]).Trim().ToUpperInvariant() == "COMMIT") return true;
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(S(r["MeterType"]));
+        }
+
         private void AutoFillFlatMeters()
         {
             if (_dtGrid == null) return;
@@ -1486,6 +1495,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // Generate (per the countdown model), then normal rental resumes at FOC = 0.
                     charge = 0m;
                     r["EntrySource"] = "RENTAL FREE";
+                }
+                else if (IsCommitRow(r))
+                {
+                    // A committed minimum bills the SHORTFALL, not the committed amount -- and what
+                    // the shortfall is cannot be known until the print charges are in, at Generate.
+                    // Previewing the full amount was the screen saying 300.00 where the invoice said
+                    // 80.00, which reads as the software being wrong about the money.
+                    charge = 0m;
+                    r["EntrySource"] = "MIN-AUTO";
                 }
                 else
                 {
@@ -1992,7 +2010,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["CurrentReading"] = 0m;
                     g["MeterUsage"] = 0m;
                     g["TotalCharges"] = 0m;
-                    g["UseMin"] = (Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m);
+                    // "Use Min" means "this flat meter bills its minimum". A committed minimum does
+                    // NOT -- it bills the shortfall, worked out at Generate -- so it must not claim to.
+                    g["UseMin"] = Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m &&
+                                  S(r["MeterRole"]).Trim().ToUpperInvariant() != "COMMIT" &&
+                                  !ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(S(r["MeterTypeCode"]));
                     g["LastInvNo"] = S(r["LastInvNo"]);
                     if (r["LastInvAt"] != DBNull.Value) g["LastInvDate"] = Convert.ToDateTime(r["LastInvAt"]);
                     g["InvTotal"] = Dec(r["LastInvTotal"]);
