@@ -161,10 +161,22 @@ namespace ServiceContractPhotocopier.Classes
         /// </summary>
         public static List<ScpFoldedLine> FoldWith(List<MeterBillLine> lines, char rentalMode, char meterMode)
         {
+            return FoldWith(lines, rentalMode, meterMode, true, false);
+        }
+
+        /// <summary>
+        /// As above, but able to ask for the LEGACY shape as well — a contract with no Billing Format
+        /// does not simply stop merging, it merges rentals on the old predicate and never merges
+        /// usage. A preview that showed "nothing merges" for such a contract would be describing an
+        /// invoice the engine does not produce, which is the one thing a preview must never do.
+        /// </summary>
+        public static List<ScpFoldedLine> FoldWith(List<MeterBillLine> lines, char rentalMode,
+            char meterMode, bool hasFormat, bool legacyRentalFold)
+        {
             List<ScpFoldedLine> result = new List<ScpFoldedLine>();
             if (lines == null || lines.Count == 0) return result;
             ContractLayout lay = new ContractLayout();
-            lay.HasFormat = true;
+            lay.HasFormat = hasFormat;
             lay.RentalMode = rentalMode;
             lay.MeterMode = meterMode;
 
@@ -172,7 +184,7 @@ namespace ServiceContractPhotocopier.Classes
                 new Dictionary<string, ScpFoldedLine>(StringComparer.OrdinalIgnoreCase);
             foreach (MeterBillLine ln in lines)
             {
-                string key = FoldKey(ln, lay, true);
+                string key = FoldKey(ln, lay, legacyRentalFold);
                 ScpFoldedLine grp;
                 if (key != null && byKey.TryGetValue(key, out grp)) { grp.Members.Add(ln); continue; }
                 grp = new ScpFoldedLine(ln);
@@ -435,6 +447,14 @@ namespace ServiceContractPhotocopier.Classes
 
         /// <summary>The global that RentalLineMode replaces. Still honoured for contracts that have
         /// not been given a format, so nothing changes underneath a book mid-migration.</summary>
+        /// <summary>Does this book still fold rentals the old way? The switch a contract with no
+        /// Billing Format is billed under — public so a preview can ask the same question the run
+        /// asks, instead of guessing.</summary>
+        public static bool LegacyRentalFold(DBSetting db)
+        {
+            return LegacyRentalFoldEnabled(db);
+        }
+
         private static bool LegacyRentalFoldEnabled(DBSetting db)
         {
             try

@@ -41,6 +41,9 @@ namespace ServiceContractPhotocopier
         private readonly bool _rentalSeparate;
         private readonly bool _perMachine;
         private readonly Dictionary<string, decimal> _groupPrices;
+        /// <summary>Whether this book still folds rentals the old way — what a contract with no
+        /// Billing Format is actually billed under.</summary>
+        private bool _legacyRentalFold;
         private DataTable _dt;
 
         public SampleInvoice_Form()
@@ -77,6 +80,7 @@ namespace ServiceContractPhotocopier
             _dt.Columns.Add("UnitPrice", typeof(decimal));
             _dt.Columns.Add("Amount", typeof(decimal));
 
+            _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
             Build();
             GridLines.DataSource = _dt;
             GridViewLines.ExpandAllGroups();
@@ -231,9 +235,8 @@ namespace ServiceContractPhotocopier
             int totalLines = 0;
             foreach (string inv in order)
             {
-                List<ScpFoldedLine> rows = _hasFormat
-                    ? ScpInvoiceLayout.FoldWith(byInvoice[inv], _rentalMode, _meterMode)
-                    : Unfolded(byInvoice[inv]);
+                List<ScpFoldedLine> rows = ScpInvoiceLayout.FoldWith(
+                    byInvoice[inv], _rentalMode, _meterMode, _hasFormat, _legacyRentalFold);
                 int n = 0;
                 foreach (ScpFoldedLine row in rows)
                 {
@@ -263,14 +266,6 @@ namespace ServiceContractPhotocopier
                 "Generate uses. Only the meter READINGS are invented, so the copies and the money are " +
                 "illustrative. A committed minimum shows as 0.00 because its charge is the shortfall, " +
                 "which cannot be known until the copies are in.";
-        }
-
-        /// <summary>The legacy path: nothing merges, so every meter is its own line.</summary>
-        private static List<ScpFoldedLine> Unfolded(List<MeterBillLine> lines)
-        {
-            List<ScpFoldedLine> rows = new List<ScpFoldedLine>();
-            foreach (MeterBillLine l in lines) rows.Add(new ScpFoldedLine(l));
-            return rows;
         }
 
         private static string DescriptionOf(MeterBillLine l)
