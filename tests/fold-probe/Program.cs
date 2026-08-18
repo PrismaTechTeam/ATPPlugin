@@ -60,42 +60,47 @@ static class FoldProbe
             var rows = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
             Console.WriteLine("=== PASIR GUDANG (format 2INV-RMODEL: rental per model, meters across model) ===");
             Dump(rows);
-            // MERGE MEANS ONE LINE. A merged row is not kept apart by its machines' prices --
-            // it carries a price of its own, the way the legacy ".C" combine meter did.
+            // PRICE SPLITS THE LINE. Pasir Gudang's issued MR2607.1106 prints TWO black lines --
+            // 60,249 at 0.019 and 52,860 at 0.0285 -- and that is not an artefact of how Jean built
+            // her combine meters. A printed line is one Qty x UnitPrice; two rates cannot share one
+            // without the arithmetic on the invoice ceasing to be true. So "merge, ignoring model"
+            // merges everything that AGREES on price, and the 8505 keeps its own line because it is
+            // on its own rate.
             //
-            // This is a DELIBERATE departure from Pasir Gudang's issued MR2607.1106, which prints
-            // two black lines (60,249 at 0.019 and 52,860 at 0.0285) because Jean built two combine
-            // meters. Under "merge, ignoring model" the six machines are one black line. The money
-            // is preserved: the row prices itself at the rate that reproduces what the machines
-            // actually cost.
             // Format 2INV-RMODEL is rental M (by model) and meter A (ignoring model), so:
             //   rental -> 3 rows, split by MODEL   1 x 8505, 1 x C5550i, 3 x 4545i
-            //   meter  -> 1 BK over all six machines, 1 CL
-            Check("rows", rows.Count, 5);
+            //   meter  -> 2 BK (one per rate) + 1 CL
+            Check("rows", rows.Count, 6);
             var rentals = Where(rows, true);
             var meters = Where(rows, false);
             Check("rental rows (by model)", rentals.Count, 3);
             Check("rental units 8505", UnitsOf(rentals, "iR-ADV 8505"), 1m);
             Check("rental units C5550i", UnitsOf(rentals, "iR-ADV C5550i"), 1m);
             Check("rental units 4545i", UnitsOf(rentals, "iR-ADV 4545i"), 3m);
-            Check("meter rows (1 BK + 1 CL)", meters.Count, 2);
-            Check("BK qty (all six machines)", meters[0].BillCopies, 113109m);
-            Check("BK machines", meters[0].Members.Count, 6);
-            Check("CL qty", meters[1].BillCopies, 5693m);
+            Check("meter rows (2 BK on two rates + 1 CL)", meters.Count, 3);
+            Check("BK at 0.019 is the 8505 alone", meters[0].Members.Count, 1);
+            Check("BK at 0.019 qty", meters[0].BillCopies, 60249m);
+            Check("BK at 0.0285 covers the other five", meters[1].Members.Count, 5);
+            Check("BK at 0.0285 qty", meters[1].BillCopies, 52860m);
+            Check("CL qty", meters[2].BillCopies, 5693m);
 
-            // One line cannot reproduce mixed rates to the cent. 60,249 at 0.019 plus 52,860 at
-            // 0.0285 is 2,651.24; one row of 113,109 at the rate that averages them comes to
-            // 2,651.27. Three cents is the price of the merge, and it is why the merged line's rate
-            // is a contract decision rather than something derived -- once it is set, the amount is
-            // simply quantity x that rate and nothing has drifted.
-            decimal bkMoney = 0m;
-            foreach (var m in meters[0].Members) bkMoney += m.Charge;
-            Console.WriteLine(string.Format(
-                "       merged BK: {0:n0} copies, machines cost {1:n2}, row states {2:n2}   " +
-                "(rate x qty would give {3:n2})",
-                meters[0].PrintQty, bkMoney, meters[0].PrintAmount,
-                Math.Round(meters[0].PrintQty * meters[0].PrintUnitPrice, 2)));
-            Check("BK money is exactly what the machines cost", meters[0].PrintAmount, Math.Round(bkMoney, 2));
+            // ...and because a merged line is now always one rate, the money a reader can check by
+            // hand is the money that prints. No drift, on either line.
+            foreach (var row in meters)
+            {
+                decimal money = 0m;
+                foreach (var mm in row.Members) money += mm.Charge;
+                Console.WriteLine(string.Format(
+                    "       {0,-6} {1,3} machine(s)  {2,9:n0} copies at {3}  = {4:n2}   (machines cost {5:n2})",
+                    row.Leader.ColorLabel, row.Members.Count, row.PrintQty, row.PrintUnitPrice,
+                    row.PrintAmount, money));
+                Check("  the line is worth what its machines were charged",
+                    row.PrintAmount, Math.Round(money, 2));
+                // ...and a reader multiplying the printed rate lands on the same money, give or take
+                // the half-cent that per-machine rounding cannot avoid.
+                Check("  and qty x rate agrees to the cent",
+                    Math.Abs(Math.Round(row.PrintQty * row.PrintUnitPrice, 2) - row.PrintAmount) <= 0.01m, true);
+            }
         }
         finally { DropContract(db, ck); }
 
@@ -245,6 +250,35 @@ static class FoldProbe
             Check("without the group it is one line per model again", Where(plain, true).Count, 3);
         }
         finally { DropContract(db, ck6); }
+
+        // ---- price splits, and a shared ladder does not ----
+        long ck7 = NewContract(db, "ZZPROBE-PRICE", "1INV-ALL");   // rental A, meter A: merge everything
+        try
+        {
+            var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+            // Three machines at one rate and two at another. Five machines, TWO black lines.
+            for (int i = 0; i < 3; i++) lines.Add(Bk(ck7, "MODEL A", "S" + i, "", 0.0285m, 0m, 10000m));
+            for (int i = 3; i < 5; i++) lines.Add(Bk(ck7, "MODEL A", "S" + i, "", 0.019m, 0m, 10000m));
+            // Two more on the SAME multi-price scheme: one deal, one line, each computing its own
+            // charge through the ladder. A third on a DIFFERENT scheme keeps its own line.
+            var l1 = Bk(ck7, "MODEL B", "L1", "", 0m, 0m, 8000m); l1.MultiPriceCode = "TIER-A";
+            var l2 = Bk(ck7, "MODEL B", "L2", "", 0m, 0m, 3000m); l2.MultiPriceCode = "TIER-A";
+            var l3 = Bk(ck7, "MODEL B", "L3", "", 0m, 0m, 5000m); l3.MultiPriceCode = "TIER-B";
+            lines.Add(l1); lines.Add(l2); lines.Add(l3);
+
+            var prows = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
+            Console.WriteLine(Environment.NewLine + "=== PRICE SPLITS THE LINE (merge everything, mixed rates) ===");
+            Dump(prows);
+            var pm = Where(prows, false);
+            Check("black lines (0.0285 / 0.019 / TIER-A / TIER-B)", pm.Count, 4);
+            Check("the 0.0285 line has three machines", pm[0].Members.Count, 3);
+            Check("the 0.019 line has two", pm[1].Members.Count, 2);
+            Check("one ladder, one line, two machines", pm[2].Members.Count, 2);
+            Check("a different ladder is a different line", pm[3].Members.Count, 1);
+            Check("the shared-ladder line adds its machines up",
+                pm[2].BillCopies, pm[2].Members[0].BillCopies + pm[2].Members[1].BillCopies);
+        }
+        finally { DropContract(db, ck7); }
     }
 
     // Picking a format on a contract must land on the four columns the engine reads. This is the

@@ -91,12 +91,22 @@ namespace ServiceContractPhotocopier.Classes
         /// at 0.019 plus 52,860 at 0.0285 is 2,651.24, and no single rate on 113,109 copies lands
         /// there. The rate the row displays is derived from this total, not the other way round.</para>
         /// </summary>
+        /// <summary>What the line is worth: the sum of what its machines were charged.</summary>
+        /// <remarks>
+        /// Never recomputed from the printed rate, even for a line of one. A charge is worked out per
+        /// machine -- ladder, free copies, rebate, minimum, then rounded -- and stored in the reading
+        /// log that way, so recomputing here would let the invoice and the log disagree by a cent on
+        /// a half. 5,693 colour copies at 0.285 is 1,622.505: the machine was charged 1,622.50 and
+        /// that is the number that must print.
+        ///
+        /// <para>Since a merged line is now always one rate, its sum equals qty x rate anyway, bar
+        /// that same rounding half. The reader's arithmetic checks out and the books still hold.</para>
+        /// </remarks>
         public decimal PrintAmount
         {
             get
             {
-                bool flat = Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m;
-                if (flat || !IsMerged)
+                if (Members == null || Members.Count == 0)
                     return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero);
                 decimal money = 0m;
                 foreach (MeterBillLine m in Members) money += m.Charge;
@@ -214,17 +224,24 @@ namespace ServiceContractPhotocopier.Classes
         /// The identity of a printed row. Two lines share a row when this matches; null means the
         /// line never merges and always prints alone.
         ///
-        /// <para>The unit price is always part of the key. Two machines at different money can never
-        /// share a Qty x UnitPrice row without the arithmetic on the invoice ceasing to be true.</para>
+        /// <para><b>Price is part of it.</b> A printed line is one Qty x UnitPrice, so two machines at
+        /// different money cannot share one without the arithmetic on the invoice ceasing to be true.
+        /// Pasir Gudang prints TWO black lines -- 60,249 at 0.019 and 52,860 at 0.0285 -- and that is
+        /// not a quirk of how the meters were built, it is the only honest way to print them. JPJ
+        /// splits its twelve rentals into three lines the same way, on price, while its twelve black
+        /// meters share one rate and print as a single line of 80,720.</para>
+        ///
+        /// <para>Rental gets one extra move: a contract can state the price of a group, and that
+        /// price is written onto every member before anything is computed, so the members arrive here
+        /// already agreeing. Setting the group price IS how rentals at different money are made into
+        /// one line -- by agreeing what the line costs, not by averaging what it cost.</para>
         /// </summary>
         private static string FoldKey(MeterBillLine ln, ContractLayout lay, bool legacyRentalFold)
         {
             if (ln == null) return null;
             // A committed minimum or a waive explains ONE machine on its own line; merging would
-            // throw the explanation away. Ladder lines carry a blended per-copy price that only
-            // means anything for the machine it was computed from.
-            if (ln.IsCommittedMin || ln.IsWaiveMeter || !string.IsNullOrEmpty(ln.MultiPriceCode))
-                return null;
+            // throw the explanation away.
+            if (ln.IsCommittedMin || ln.IsWaiveMeter) return null;
 
             if (ln.IsRental || ln.IsFlat)
             {
@@ -239,21 +256,20 @@ namespace ServiceContractPhotocopier.Classes
                 }
                 if (lay.RentalMode == ScpBillingFormat.LINE_PER_MACHINE) return null;
 
-                // A merged row is ONE line. Merge means merge: the machines' individual prices do
-                // not keep it apart, because the merged line carries a price of its own -- the same
-                // idea the legacy ".C" combine meter had, one meter with one rate standing for the
-                // whole group. Where the members' prices differ the row prices itself at the rate
-                // that reproduces their total (see ScpFoldedLine.PrintUnitPrice), until a contract
-                // sets one explicitly.
+                // Money splits the line. Three machines at 250, 300 and 475 are three deals, and
+                // "3 UNIT at ..." can only name one figure. Agreeing a group price is what turns
+                // them into one line: ApplyRentalGroupPrices stamps that figure onto every member
+                // before anything is computed, so a priced group arrives here already agreeing and
+                // folds on its own. JPJ's twelve rentals printing as three lines is this rule.
                 //
-                // The instalment counter stays in: "3 UNIT ... (13/36)" is a claim about all three
-                // machines, and a machine that joined later is genuinely on a different month.
-                // The bucket: a hand-made group when the machine has one, otherwise the model
-                // under "merge by model" and everything together under "merge, ignoring model".
-                // This is the ONE place a contract can say "these two models on one line, that one
-                // apart" -- no mode can express it.
+                // The instalment counter stays in too: "3 UNIT ... (13/36)" is a claim about all
+                // three machines, and one that joined later is genuinely on a different month.
+                //
+                // The bucket: a hand-made group when the machine has one, otherwise the model under
+                // "merge by model" and everything together under "merge, ignoring model". That is
+                // the one place a contract can say "these two models on one line, that one apart".
                 return "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
-                       (ln.ACItemCode ?? "") + "|" +
+                       (ln.ACItemCode ?? "") + "|" + PriceKey(ln) + "|" +
                        ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "") + "|" +
                        ScpRentalGroupPrice.GroupKeyFor(lay.RentalMode, ln.ModelCode, ln.MergeGroupCode);
             }
@@ -262,13 +278,14 @@ namespace ServiceContractPhotocopier.Classes
             if (!lay.HasFormat) return null;                                  // legacy never merged usage
             if (lay.MeterMode == ScpBillingFormat.LINE_PER_MACHINE) return null;
 
-            // Neither the price nor the rebate splits a merged row. Merge means one line: the row
-            // sums its members' copies and prices itself at the rate that reproduces their money.
+            // Price splits the line; nothing else about the money does. Machines at one rate sum to
+            // exactly qty x that rate, so the row a reader can check by hand is the row that prints.
+            // Free copies and rebates come out of the QUANTITY, not the rate, so they never split it.
             string m = "M|" + ln.ContractKey + "|" + (ln.ColorLabel ?? "") + "|" + (ln.MeterTypeCode ?? "") + "|" +
-                       (ln.ACItemCode ?? "") + "|" + (ln.StrategyNote ?? "");
+                       (ln.ACItemCode ?? "") + "|" + PriceKey(ln) + "|" + (ln.StrategyNote ?? "");
             // The duty label is NEVER part of a key, in any mode. It is a description -- the word the
-            // line prints -- and nothing more. What actually separates rows is the price (always,
-            // because a row is one Qty x UnitPrice) and, under "same model", the model.
+            // line prints -- and nothing more. What separates rows is the price and, under "same
+            // model", the model.
             //
             // The real invoices confirm the label is never needed: JPJ tags twelve machines HEAVY /
             // MEDIUM / LIGHT and prints ONE black line of 80,720 because they share a rate; its
@@ -280,6 +297,25 @@ namespace ServiceContractPhotocopier.Classes
             // together, and that answer does not change between the rental line and the black one.
             m += "|" + ScpRentalGroupPrice.GroupKeyFor(lay.MeterMode, ln.ModelCode, ln.MergeGroupCode);
             return m;
+        }
+
+        /// <summary>What "the same price" means for merging.</summary>
+        /// <remarks>
+        /// A flat rate is the rate itself. A multi-price ladder is the SCHEME: two machines on the
+        /// same ladder are on the same deal even though their blended per-copy prices differ, because
+        /// the blend is only an artefact of how much each one printed. Each still computes its own
+        /// charge through the ladder and the merged line is worth their sum -- the same rule every
+        /// merged usage line follows.
+        ///
+        /// <para>A per-meter tier override is keyed '#&lt;ItemMeterKey&gt;', which is unique to one
+        /// machine, so an overridden machine keeps its own line. That is right: an override IS the
+        /// statement that this machine is priced unlike the others.</para>
+        /// </remarks>
+        private static string PriceKey(MeterBillLine ln)
+        {
+            string ladder = (ln.MultiPriceCode ?? "").Trim();
+            if (ladder.Length > 0) return "L:" + ladder.ToUpperInvariant();
+            return "P:" + ln.Rate.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>Which instalment this rental is in — part of a rental row's identity, and the
