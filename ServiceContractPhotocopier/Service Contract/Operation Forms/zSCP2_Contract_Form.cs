@@ -1284,6 +1284,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loadedStrategyCode = r.Table.Columns.Contains("StrategyCode") ? AsStr(r["StrategyCode"]).Trim() : "";
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             LoadBillingFormat(r);
+            // The prices of this contract's merged rental lines, if anyone has set them.
+            _rentalGroupPrices = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContract(_db, _contractKey);
+            _rentalPricesDirty = false;
+            UpdateFormatSummary();   // now that the prices are in, the summary can mention them
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
@@ -4561,6 +4565,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         SaveSpareParts(conn, tx);
                         SaveMoreHeader(conn, tx);
                         SaveContractStrategyRules(conn, tx);   // this contract's own strategy rules copy
+                        SaveRentalGroupPrices(conn, tx);       // one price per merged rental line
 
                         // Change History: diff old vs new contract row (both UPDATEs included); new
                         // contracts get a single CREATED marker. Never blocks the save.
@@ -4658,6 +4663,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private string _billingFormatCode = "";
         private char _rentalLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_ACROSS_MODEL;
         private char _meterLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
+        /// <summary>One price per merged rental line, keyed by ModelCode ('' = the whole
+        /// contract). Empty means nobody has priced the groups and every machine still prices its
+        /// own rental.</summary>
+        private System.Collections.Generic.Dictionary<string, decimal> _rentalGroupPrices =
+            new System.Collections.Generic.Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Only a save that follows an actual edit rewrites the price table -- otherwise a
+        /// book whose table failed to load would have its prices deleted by an ordinary save.</summary>
+        private bool _rentalPricesDirty;
         private DataTable _formatLookup;
         private bool _formatApplying;   // guard: applying a format ticks boxes, which must not re-enter
 
@@ -4799,6 +4812,61 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateFormatSummary();
         }
 
+        /// <summary>Rental Price — one price for each merged rental line.</summary>
+        /// <remarks>
+        /// A merged rental line is a deal: "3 UNIT ... MONTHLY RENTAL (1/36)" is one agreed figure for
+        /// a group of machines, so the group owns the price and every rental meter in it bills at that
+        /// figure. Left on the machines, the printed rate is only whatever they happen to agree on and
+        /// the next machine added arrives with a number of its own.
+        ///
+        /// <para>Rental only. Black and colour are not a deal — each meter keeps its own rate and the
+        /// merged usage line is worth the sum of its machines.</para>
+        /// </remarks>
+        private void barRentalPrice_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            if (_rentalLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
+            {
+                XtraMessageBox.Show(
+                    "This contract prints one rental line per machine, so there is no group to price — " +
+                    "each machine's rental meter is its own price." + Environment.NewLine + Environment.NewLine +
+                    "Pick a format that merges rental lines to price them as a group.",
+                    "Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (_items == null || _items.Count == 0)
+            {
+                XtraMessageBox.Show("Add the machines first — the groups are counted off them.",
+                    "Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
+                new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _rentalLineMode, _rentalGroupPrices))
+            {
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                _rentalGroupPrices = f.Result;
+                _rentalPricesDirty = true;
+                _dirty = true;
+            }
+            UpdateFormatSummary();
+        }
+
+        /// <summary>Replace-all inside the contract save transaction, and only after a real edit.</summary>
+        private void SaveRentalGroupPrices(SqlConnection conn, SqlTransaction tx)
+        {
+            if (!_rentalPricesDirty || _contractKey <= 0) return;
+            ExecNonQuery(conn, tx, "DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey=@ck",
+                P("@ck", _contractKey));
+            if (_rentalGroupPrices == null) return;
+            foreach (System.Collections.Generic.KeyValuePair<string, decimal> kv in _rentalGroupPrices)
+            {
+                if (kv.Value <= 0m) continue;   // not priced -- the machines keep their own rates
+                ExecNonQuery(conn, tx,
+                    "INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, ModelCode, UnitPrice, LastModified) " +
+                    "VALUES (@ck,@mc,@up,GETDATE())",
+                    P("@ck", _contractKey), P("@mc", kv.Key ?? ""), P("@up", kv.Value));
+            }
+        }
+
         /// <summary>Ticking a box by hand takes the contract off its format rather than silently
         /// disagreeing with it — the summary then says so.</summary>
         private void BillingFlag_Changed(object sender, EventArgs e)
@@ -4815,6 +4883,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>What this contract will actually produce, counted from its real machines.</summary>
         private void UpdateFormatSummary()
         {
+            // Pricing a group only means anything once the rental lines merge.
+            if (barRentalPrice != null)
+                barRentalPrice.Enabled =
+                    _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
             if (LblFormatSummary == null) return;
             if (_billingFormatCode.Length == 0)
             {
@@ -4832,6 +4904,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 words += "   →  " + machines + " machine" + (machines == 1 ? "" : "s");
                 if (noRental > 0) words += ", " + noRental + " without a rental meter";
             }
+            // A priced group overrides its machines' own rental rates, which is worth saying out loud.
+            int pricedGroups = 0;
+            if (_rentalGroupPrices != null &&
+                _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
+                foreach (System.Collections.Generic.KeyValuePair<string, decimal> kv in _rentalGroupPrices)
+                    if (kv.Value > 0m) pricedGroups++;
+            if (pricedGroups > 0)
+                words += ", rental priced by the " + (pricedGroups == 1 ? "group" : pricedGroups + " groups");
             LblFormatSummary.Text = words;
         }
 

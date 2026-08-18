@@ -162,6 +162,53 @@ static class FoldProbe
             Check("legacy BK rows (never folds)", Where(rows, false).Count, 3);
         }
         finally { DropContract(db, ck4); }
+
+        // ---- the group owns the rental price ----
+        // Three machines the salesman priced one at a time -- 250, 300, 475 -- on a contract that
+        // merges all rental into ONE line. Until someone prices the group, the merged line can only
+        // average them. Once the contract states 350, the machines bill at 350 and the line is
+        // exactly 3 x 350, with nothing to reconcile.
+        long ck5 = NewContract(db, "ZZPROBE-RGP", "2INV-ALL");   // rental A: merge, ignoring model
+        try
+        {
+            db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + ck5);
+            db.ExecuteNonQuery("INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, ModelCode, UnitPrice) " +
+                               "VALUES (" + ck5 + ", N'', 350)");
+
+            var prices = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContracts(
+                db, new List<long> { ck5 });
+            var modes = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.LoadRentalModes(
+                db, new List<long> { ck5 });
+            Console.WriteLine(Environment.NewLine + "=== RENTAL GROUP PRICE (merge ignoring model, contract says 350) ===");
+            Check("mode read back", modes[ck5].ToString(), "A");
+            decimal? p = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
+                prices, ck5, 'A', "iR-ADV 4545i");
+            Check("price for any model under mode A", p.HasValue ? p.Value : -1m, 350m);
+            decimal? pm = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
+                prices, ck5, 'M', "iR-ADV 4545i");
+            Check("mode M looks up BY MODEL, so this row does not answer", pm.HasValue, false);
+            decimal? ps = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
+                prices, ck5, 'S', "");
+            Check("no merge means no group price", ps.HasValue, false);
+
+            // What the engine does with it: every rental meter in the group bills at the group price.
+            var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+            lines.Add(RentalPaid(ck5, "iR-ADV 4545i", "G1", 350m));
+            lines.Add(RentalPaid(ck5, "iR-ADV C5550i", "G2", 350m));
+            lines.Add(RentalPaid(ck5, "iR-ADV 8505", "G3", 350m));
+            var rgrows = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
+            Dump(rgrows);
+            var rg = Where(rgrows, true);
+            Check("one rental line for the group", rg.Count, 1);
+            Check("units", rg[0].PrintQty, 3m);
+            Check("the group price is the printed price", rg[0].PrintUnitPrice, 350m);
+            Check("amount is units x the group price, exactly", rg[0].PrintAmount, 1050m);
+        }
+        finally
+        {
+            db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + ck5);
+            DropContract(db, ck5);
+        }
     }
 
     // Picking a format on a contract must land on the four columns the engine reads. This is the

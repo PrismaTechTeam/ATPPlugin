@@ -1409,6 +1409,55 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // rental amount) every period. Reading is forced to LastReading+1 so usage = 1; the invoice
         // builder also forces usage 1 for flat lines (see ScpInvoiceBuilder.ComputeCharge). Already-
         // invoiced periods and manual overrides are left untouched.
+        /// <summary>Where a contract owns the price of a merged rental line, that price wins over
+        /// whatever each machine's own meter says.</summary>
+        /// <remarks>
+        /// Applied once, here, before anything computes money -- so the grid, the charge engine, the
+        /// reading log and the invoice all see the same number and there is no second place where a
+        /// rental gets priced. A machine added to a priced group next month is billed at the group's
+        /// price without anyone opening its meter.
+        ///
+        /// <para>Nothing is touched unless the contract has a Billing Format, merges its rental lines,
+        /// and someone has actually typed a price for that group. Rental only: black and colour keep
+        /// their own per-meter rates.</para>
+        /// </remarks>
+        private void ApplyRentalGroupPrices()
+        {
+            if (_dtGrid == null || _dtGrid.Rows.Count == 0) return;
+            System.Collections.Generic.List<long> keys = new System.Collections.Generic.List<long>();
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+                if (ck > 0 && !keys.Contains(ck)) keys.Add(ck);
+            }
+            if (keys.Count == 0) return;
+
+            System.Collections.Generic.Dictionary<long, System.Collections.Generic.Dictionary<string, decimal>> prices =
+                ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContracts(_dbSetting, keys);
+            if (prices.Count == 0) return;
+            System.Collections.Generic.Dictionary<long, char> modes =
+                ServiceContractPhotocopier.Classes.ScpInvoiceLayout.LoadRentalModes(_dbSetting, keys);
+
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                if (r["IsFlat"] == DBNull.Value || !Convert.ToBoolean(r["IsFlat"])) continue;
+                if (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"])) continue;
+                if (r["NewMoneyRules"] == DBNull.Value || !Convert.ToBoolean(r["NewMoneyRules"])) continue;
+                if (!ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]))) continue;
+                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+                char mode;
+                if (!modes.TryGetValue(ck, out mode)) continue;
+                decimal? p = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
+                    prices, ck, mode, S(r["ModelCode"]));
+                if (!p.HasValue) continue;
+                r["UnitPrice"] = p.Value;
+                // The group price IS the rental. A minimum left on the meter would outrank it
+                // (a flat charge is the greater of the two) and quietly bill the old number.
+                r["MinCharges"] = 0m;
+                r["UseMin"] = false;
+            }
+        }
+
         private void AutoFillFlatMeters()
         {
             if (_dtGrid == null) return;
@@ -1985,6 +2034,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
 
                 PrefillFromStaging(SelectedMonth(), SelectedYear());
+                ApplyRentalGroupPrices();   // the contract's own price for a merged rental line, if set
                 AutoFillFlatMeters();
                 RecomputeNeedManual();
 

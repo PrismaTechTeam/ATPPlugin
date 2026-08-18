@@ -17,6 +17,7 @@
         private DevExpress.XtraBars.Ribbon.RibbonPage ribbonPageHome;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpSave;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpItem;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpBillingTools;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpCopy;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpClipboard;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpDemo;
@@ -27,6 +28,7 @@
         private DevExpress.XtraBars.BarButtonItem barEditItem;
         private DevExpress.XtraBars.BarButtonItem barDelItem;
         private DevExpress.XtraBars.BarButtonItem barCopyFrom;
+        private DevExpress.XtraBars.BarButtonItem barRentalPrice;
         private DevExpress.XtraBars.BarButtonItem barCopyToNew;
         private DevExpress.XtraBars.BarButtonItem barCopyWhole;
         private DevExpress.XtraBars.BarButtonItem barCopySelected;
@@ -187,6 +189,7 @@
             this.barSave = new DevExpress.XtraBars.BarButtonItem();
             this.barClose = new DevExpress.XtraBars.BarButtonItem();
             this.barAddItem = new DevExpress.XtraBars.BarButtonItem();
+            this.barRentalPrice = new DevExpress.XtraBars.BarButtonItem();
             this.barEditItem = new DevExpress.XtraBars.BarButtonItem();
             this.barDelItem = new DevExpress.XtraBars.BarButtonItem();
             this.barCopyFrom = new DevExpress.XtraBars.BarButtonItem();
@@ -200,6 +203,7 @@
             this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
             this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpBillingTools = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpCopy = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpClipboard = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpDemo = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
@@ -555,9 +559,10 @@
             this.barPasteWhole,
             this.barPasteItems,
             this.barDemoFill,
+            this.barRentalPrice,
             this.RibbonCtl.SearchEditItem});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 14;
+            this.RibbonCtl.MaxItemId = 15;
             this.RibbonCtl.Name = "RibbonCtl";
             this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
             this.ribbonPageHome});
@@ -585,6 +590,15 @@
             this.barClose.Name = "barClose";
             this.barClose.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barClose.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barClose_ItemClick);
+            // 
+            // barRentalPrice
+            // 
+            this.barRentalPrice.Caption = "Rental Price";
+            this.barRentalPrice.Id = 14;
+            this.barRentalPrice.ImageOptions.ImageUri.Uri = "Currency;Size32x32";
+            this.barRentalPrice.Name = "barRentalPrice";
+            this.barRentalPrice.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barRentalPrice.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barRentalPrice_ItemClick);
             // 
             // barAddItem
             // 
@@ -685,6 +699,7 @@
             this.ribbonPageHome.Groups.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPageGroup[] {
             this.grpSave,
             this.grpItem,
+            this.grpBillingTools,
             this.grpCopy,
             this.grpClipboard,
             this.grpDemo});
@@ -704,6 +719,12 @@
             this.grpItem.ItemLinks.Add(this.barDelItem);
             this.grpItem.Name = "grpItem";
             this.grpItem.Text = "Service Item";
+            // 
+            // grpBillingTools
+            // 
+            this.grpBillingTools.ItemLinks.Add(this.barRentalPrice);
+            this.grpBillingTools.Name = "grpBillingTools";
+            this.grpBillingTools.Text = "Billing";
             // 
             // grpCopy
             // 

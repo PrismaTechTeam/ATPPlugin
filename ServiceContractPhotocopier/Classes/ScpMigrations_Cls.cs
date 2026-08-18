@@ -112,6 +112,7 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_StrategyRule",          "02_CreateTable_zSCP2_StrategyRule.sql", asm);
             // Per-contract COPY of strategy rules (template->instance; edited on the contract, FK to contract).
             RunIfTableMissing(dbsetting, "zSCP2_ContractStrategyRule",  "02_CreateTable_zSCP2_ContractStrategyRule.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_ContractRentalPrice",  "02_CreateTable_zSCP2_ContractRentalPrice.sql", asm);
             // Field-level contract/item change audit (append-only, no FKs).
             RunIfTableMissing(dbsetting, "zSCP2_ContractAudit",         "02_CreateTable_zSCP2_ContractAudit.sql", asm);
             // Legacy usage meters tagged NA get BK/CL inferred from their type names (guards inside).

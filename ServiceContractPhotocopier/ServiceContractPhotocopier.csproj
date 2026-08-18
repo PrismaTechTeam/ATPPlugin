@@ -168,6 +168,7 @@
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
     <Compile Include="Classes\ScpMeterReadingLog.cs" />
     <Compile Include="Classes\ScpContractAudit.cs" />
+    <Compile Include="Classes\ScpRentalGroupPrice.cs" />
     <Compile Include="Classes\ScpStrategy.cs" />
     <Compile Include="Classes\ScpMultiPrice.cs" />
     <Compile Include="Classes\ScpBillingHistory.cs" />
@@ -286,6 +287,12 @@
     </Compile>
     <Compile Include="Service Contract\Operation Forms\BillGroupAssign_Form.Designer.cs">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalGroupPrice_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\RentalGroupPrice_Form.Designer.cs">
+      <DependentUpon>RentalGroupPrice_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Meter Reading\Operation Forms\MeterCN_Form.cs">
       <SubType>Form</SubType>
@@ -912,6 +919,7 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_StrategyRule.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractStrategyRule.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractRentalPrice.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractAudit.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v5_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v6_FOCReset.sql" />
@@ -1148,6 +1156,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\BillGroupAssign_Form.resx">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\RentalGroupPrice_Form.resx">
+      <DependentUpon>RentalGroupPrice_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterCN_Form.resx">
       <DependentUpon>MeterCN_Form.cs</DependentUpon>

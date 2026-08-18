@@ -352,6 +352,40 @@ namespace ServiceContractPhotocopier.Classes
             return map;
         }
 
+        /// <summary>Each contract's rental line mode, for callers that only need to know whether a
+        /// contract HAS rental groups (and which). A contract with no Billing Format reports
+        /// 'S' -- no merge, no group -- so nothing that has not been moved onto the new rules can be
+        /// treated as having a group price.</summary>
+        public static Dictionary<long, char> LoadRentalModes(DBSetting db, IEnumerable<long> contractKeys)
+        {
+            Dictionary<long, char> map = new Dictionary<long, char>();
+            if (db == null || contractKeys == null) return map;
+            System.Text.StringBuilder inList = new System.Text.StringBuilder();
+            List<long> seen = new List<long>();
+            foreach (long k in contractKeys)
+            {
+                if (k <= 0 || seen.Contains(k)) continue;
+                seen.Add(k);
+                if (inList.Length > 0) inList.Append(",");
+                inList.Append(k);
+            }
+            if (inList.Length == 0) return map;
+            try
+            {
+                DataTable t = db.GetDataTable(
+                    "SELECT ContractKey, ISNULL(BillingFormatCode,'') AS BillingFormatCode, " +
+                    "ISNULL(RentalLineMode,'A') AS RentalLineMode " +
+                    "FROM dbo.zSCP2_Contract WHERE ContractKey IN (" + inList + ")", false);
+                foreach (DataRow r in t.Rows)
+                    map[Convert.ToInt64(r["ContractKey"])] =
+                        Convert.ToString(r["BillingFormatCode"]).Trim().Length == 0
+                            ? ScpBillingFormat.LINE_PER_MACHINE
+                            : FirstChar(r["RentalLineMode"], ScpBillingFormat.LINE_ACROSS_MODEL);
+            }
+            catch { }   // older book without the v14 columns -> no contract has groups
+            return map;
+        }
+
         /// <summary>The global that RentalLineMode replaces. Still honoured for contracts that have
         /// not been given a format, so nothing changes underneath a book mid-migration.</summary>
         private static bool LegacyRentalFoldEnabled(DBSetting db)
