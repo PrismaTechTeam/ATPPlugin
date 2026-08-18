@@ -27,6 +27,11 @@ namespace ServiceContractPhotocopier
     /// <para>Only the READINGS are invented: every machine is given a month of usage, so the copies
     /// and the money are illustrative while the SHAPE — how many invoices, how many lines, what each
     /// line says and which machines it covers — is exactly what will come out.</para>
+    ///
+    /// <para>It renders as a printed document rather than a grid of rows, because a grid answers
+    /// "how many lines" and the question actually being asked is "does this read like an invoice" —
+    /// whether the wording, the units and the money on the page make sense to the person paying it.
+    /// One sheet per invoice, and the printing system brings zoom, print and PDF export with it.</para>
     /// </summary>
     public partial class SampleInvoice_Form : XtraForm
     {
@@ -44,7 +49,7 @@ namespace ServiceContractPhotocopier
         /// <summary>Whether this book still folds rentals the old way — what a contract with no
         /// Billing Format is actually billed under.</summary>
         private bool _legacyRentalFold;
-        private DataTable _dt;
+        private string _footer = "";
 
         public SampleInvoice_Form()
         {
@@ -71,19 +76,11 @@ namespace ServiceContractPhotocopier
 
         private void OnFormLoad(object sender, EventArgs e)
         {
-            _dt = new DataTable();
-            _dt.Columns.Add("Invoice", typeof(string));
-            _dt.Columns.Add("Line", typeof(int));
-            _dt.Columns.Add("Description", typeof(string));
-            _dt.Columns.Add("Covers", typeof(string));
-            _dt.Columns.Add("Qty", typeof(decimal));
-            _dt.Columns.Add("UnitPrice", typeof(decimal));
-            _dt.Columns.Add("Amount", typeof(decimal));
-
             _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
-            Build();
-            GridLines.DataSource = _dt;
-            GridViewLines.ExpandAllGroups();
+            List<SampleInvoiceDoc> docs = Build();
+            ScpSampleInvoiceReport rpt = ScpSampleInvoiceReport.Create(docs, _footer);
+            rpt.CreateDocument();
+            PrintPreview.PrintingSystem = rpt.PrintingSystem;
         }
 
         // ---------- the sample fleet ----------
@@ -210,13 +207,14 @@ namespace ServiceContractPhotocopier
             return what.Length > 0 ? "Invoice — " + who + " (rental)" : "Invoice — " + who;
         }
 
-        private void Build()
+        private List<SampleInvoiceDoc> Build()
         {
+            List<SampleInvoiceDoc> docs = new List<SampleInvoiceDoc>();
             List<MeterBillLine> lines = BuildLines();
             if (lines.Count == 0)
             {
                 LblHeader.Text = "This contract has no machines with meters yet — nothing to bill.";
-                return;
+                return docs;
             }
 
             // Group into invoices first, then fold each one on its own, exactly as the billing run
@@ -237,21 +235,37 @@ namespace ServiceContractPhotocopier
             {
                 List<ScpFoldedLine> rows = ScpInvoiceLayout.FoldWith(
                     byInvoice[inv], _rentalMode, _meterMode, _hasFormat, _legacyRentalFold);
-                int n = 0;
+
+                SampleInvoiceDoc doc = new SampleInvoiceDoc();
+                doc.Title = "TAX INVOICE";
+                doc.DebtorCode = _debtor;
+                doc.ContractNo = _contractNo;
+                doc.Note = inv;
+                docs.Add(doc);
+
                 foreach (ScpFoldedLine row in rows)
                 {
-                    n++; totalLines++;
-                    DataRow r = _dt.NewRow();
-                    r["Invoice"] = inv;
-                    r["Line"] = n;
-                    r["Description"] = ScpInvoiceBuilder.ComposeFoldedDescription(
-                        row, DescriptionOf(row.Leader)).Replace("\r\n", "  ·  ");
-                    r["Covers"] = Covers(row);
-                    r["Qty"] = row.PrintQty;
-                    r["UnitPrice"] = row.PrintUnitPrice;
-                    r["Amount"] = row.PrintAmount;
+                    totalLines++;
+                    // The description is composed by the SAME method the invoice builder uses, so the
+                    // MODEL: / S/N: / n UNIT block and the (n/N) counter read exactly as they will
+                    // print. Its second line is the sub-description on paper.
+                    string composed = ScpInvoiceBuilder.ComposeFoldedDescription(row, DescriptionOf(row.Leader));
+                    string head = composed, sub = "";
+                    int br = composed.IndexOf("\r\n", StringComparison.Ordinal);
+                    if (br >= 0) { head = composed.Substring(0, br); sub = composed.Substring(br + 2); }
+
+                    SampleInvoiceLine sl = new SampleInvoiceLine();
+                    sl.Description = head;
+                    sl.SubDescription = sub;
+                    sl.Covers = Covers(row);
+                    sl.Note = row.Leader.StrategyNote ?? "";
+                    sl.Qty = row.PrintQty;
+                    sl.UnitPrice = row.PrintUnitPrice;
+                    sl.Amount = row.PrintAmount;
+                    // A rental, a waive and a committed minimum have no copies to print.
+                    sl.ShowQty = !(row.Leader.IsFlat || row.Leader.IsCommittedMin || row.Leader.IsWaiveMeter);
+                    doc.Lines.Add(sl);
                     grand += row.PrintAmount;
-                    _dt.Rows.Add(r);
                 }
             }
 
@@ -260,12 +274,13 @@ namespace ServiceContractPhotocopier
                 "        " + order.Count + (order.Count == 1 ? " invoice" : " invoices") +
                 ",  " + totalLines + (totalLines == 1 ? " line" : " lines") +
                 ",  " + grand.ToString("n2") + " a month";
-            LblFoot.Text =
+            _footer =
                 "The SHAPE is real — how many invoices, how many lines, what each line says and which " +
                 "machines it covers all come from this contract's own settings, through the same engine " +
                 "Generate uses. Only the meter READINGS are invented, so the copies and the money are " +
-                "illustrative. A committed minimum shows as 0.00 because its charge is the shortfall, " +
+                "illustrative. A committed minimum prints 0.00 because its charge is the shortfall, " +
                 "which cannot be known until the copies are in.";
+            return docs;
         }
 
         private static string DescriptionOf(MeterBillLine l)
