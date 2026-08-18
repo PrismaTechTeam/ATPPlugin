@@ -268,8 +268,13 @@ namespace ServiceContractPhotocopier.Classes
                 // The bucket: a hand-made group when the machine has one, otherwise the model under
                 // "merge by model" and everything together under "merge, ignoring model". That is
                 // the one place a contract can say "these two models on one line, that one apart".
+                // A flat line is keyed on the money it SETTLED at, not on its rate: the old book puts
+                // a rental's amount in MinimumCharges as often as in ChargesRate, so keying the rate
+                // would read 0 for both and merge two rentals at different money onto one line. The
+                // legacy key has always used the charge for exactly this reason.
                 return "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
-                       (ln.ACItemCode ?? "") + "|" + PriceKey(ln) + "|" +
+                       (ln.ACItemCode ?? "") + "|P:" +
+                       ln.Charge.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + "|" +
                        ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "") + "|" +
                        ScpRentalGroupPrice.GroupKeyFor(lay.RentalMode, ln.ModelCode, ln.MergeGroupCode);
             }

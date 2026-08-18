@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -1381,6 +1381,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 nr["WaivePartialThreshold"] = mr.Table.Columns.Contains("WaivePartialThreshold") ? AsDec(mr["WaivePartialThreshold"]) : 0m;
                 nr["WaivePartialAmount"] = mr.Table.Columns.Contains("WaivePartialAmount") ? AsDec(mr["WaivePartialAmount"]) : 0m;
                 nr["WaiveScope"] = mr.Table.Columns.Contains("WaiveScope") && AsStr(mr["WaiveScope"]).Trim().Length > 0 ? AsStr(mr["WaiveScope"]) : "BKCL";
+                // Not reading it meant every save wrote 'S' back over it: a minimum pooled across a
+                // group or a whole contract quietly became six per-machine minimums.
+                string csRead = mr.Table.Columns.Contains("CommitScope") ? AsStr(mr["CommitScope"]).Trim().ToUpperInvariant() : "";
+                nr["CommitScope"] = csRead == "G" || csRead == "C" ? csRead : "S";
                 d.Meters.Rows.Add(nr);
             }
             d.Meters.AcceptChanges();
@@ -2097,7 +2101,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (r.RowState == DataRowState.Deleted) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
                 if (t.Length == 0) continue;
-                if (IsWaiveType(t)) hasWaive = true;
+                if (IsWaiveRow(r)) hasWaive = true;
                 else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) hasRent = true;
             }
             return hasWaive && !hasRent;
@@ -2113,7 +2117,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (r.RowState == DataRowState.Deleted || ReferenceEquals(r, removing)) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
                 if (t.Length == 0) continue;
-                if (IsWaiveType(t)) hasWaive = true;
+                if (IsWaiveRow(r)) hasWaive = true;
                 else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) otherRent = true;
             }
             return hasWaive && !otherRent;
@@ -2147,7 +2151,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (r.RowState == DataRowState.Deleted) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
                 if (t.Length == 0) continue;
-                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t) && !IsWaiveType(t)) return true;
+                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
+                        r.Table.Columns.Contains("MeterRole") ? Convert.ToString(r["MeterRole"]) : "", t)
+                    && !IsWaiveRow(r)) return true;
             }
             return false;
         }
@@ -4599,8 +4605,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     if (mrow.RowState == DataRowState.Deleted) continue;
                     string t = Convert.ToString(mrow["MeterTypeCode"]).Trim();
                     if (t.Length == 0) continue;
-                    if (IsWaiveType(t)) hasWaive = true;
-                    else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) hasRent = true;
+                    if (IsWaiveRow(mrow)) hasWaive = true;
+                    else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
+                                 mrow.Table.Columns.Contains("MeterRole") ? Convert.ToString(mrow["MeterRole"]) : "", t))
+                        hasRent = true;
                 }
                 if (hasWaive && !hasRent)
                 {
@@ -5124,7 +5132,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 if (kv.Value <= 0m) continue;   // not priced -- the machines keep their own rates
                 ExecNonQuery(conn, tx,
-                    "INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, ModelCode, UnitPrice, LastModified) " +
+                    "INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, GroupCode, UnitPrice, LastModified) " +
                     "VALUES (@ck,@mc,@up,GETDATE())",
                     P("@ck", _contractKey), P("@mc", kv.Key ?? ""), P("@up", kv.Value));
             }
@@ -5216,6 +5224,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 BindItemMeterPanel();
                 return;
             }
+        }
+
+        /// <summary>Is this meter ROW a waive? Role first, the type flag second — the same
+        /// question the billing engine asks. Asking only the TYPE let a role-WAIVE row on an
+        /// ordinary meter type slip past every guard and bill a contra against no rental at all,
+        /// every month.</summary>
+        private bool IsWaiveRow(DataRow r)
+        {
+            if (r == null) return false;
+            string role = r.Table.Columns.Contains("MeterRole") ? Convert.ToString(r["MeterRole"]) : "";
+            string type = Convert.ToString(r["MeterTypeCode"]).Trim();
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsWaiveRole(role, IsWaiveType(type));
         }
 
         private bool MachineHasRental(ItemEditData d)
@@ -5441,7 +5461,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     cmd.Parameters.AddWithValue("@wpt", r.Table.Columns.Contains("WaivePartialThreshold") ? AsDec(r["WaivePartialThreshold"]) : 0m);
                     cmd.Parameters.AddWithValue("@wpa", r.Table.Columns.Contains("WaivePartialAmount") ? AsDec(r["WaivePartialAmount"]) : 0m);
                     string wsv = r.Table.Columns.Contains("WaiveScope") ? AsStr(r["WaiveScope"]).Trim() : "";
-                    cmd.Parameters.AddWithValue("@ws", wsv.Length > 0 ? wsv : "BKCL");
+                    cmd.Parameters.AddWithValue("@ws", wsv.Length > 0 ? (object)wsv : (object)"BKCL");
+                // Named in the VALUES list, so leaving it unbound made every brand-new machine with a
+                // meter throw and roll the whole contract save back.
+                string csv2 = r.Table.Columns.Contains("CommitScope") && r["CommitScope"] != DBNull.Value
+                    ? Convert.ToString(r["CommitScope"]).Trim().ToUpperInvariant() : "";
+                cmd.Parameters.AddWithValue("@cs", csv2 == "G" || csv2 == "C" ? (object)csv2 : (object)"S");
                     long newMeterKey = Convert.ToInt64(cmd.ExecuteScalar());
                     string tiersCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
                         ? Convert.ToString(r["CustomTiers"]) : "";

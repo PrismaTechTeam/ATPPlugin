@@ -216,6 +216,42 @@ namespace ServiceContractPhotocopier.Classes
 
         private static decimal AsDec(object v) { return v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v); }
 
+        /// <summary>Is this meter a RENTAL? The role answers it; the code convention is the fallback
+        /// for rows old enough to predate the role column.</summary>
+        /// <remarks>
+        /// Asked in one place because it used to be asked in several and they disagreed. The engine
+        /// tested the CODE alone, so a flat type whose code is not rental-shaped but whose role IS
+        /// RENTAL — the customer's own book has one, `~RA-SV-R6` — was priced as a rental by every
+        /// screen and then skipped by the group price, the free-rental countdown, the waive target,
+        /// the rental-separate invoice and the (n/N) counter.
+        ///
+        /// <para>The code half is gated on an unset role so a row explicitly marked COMMIT or WAIVE is
+        /// never mistaken for rent just because its type happens to be typed "RENTAL".</para>
+        /// </remarks>
+        public static bool IsRentalRole(string meterRole, string meterTypeCode)
+        {
+            string r = (meterRole ?? "").Trim().ToUpperInvariant();
+            if (r == "RENTAL") return true;
+            if (r.Length > 0 && r != "NA") return false;
+            return IsRentalMeterCode(meterTypeCode);
+        }
+
+        /// <summary>Is this meter a rental WAIVE — the contra that gives the rent back? Role first,
+        /// the meter type's own flag as the OR that keeps the legacy "(W)" family working.</summary>
+        public static bool IsWaiveRole(string meterRole, bool typeIsRentalWaive)
+        {
+            return (meterRole ?? "").Trim().ToUpperInvariant() == "WAIVE" || typeIsRentalWaive;
+        }
+
+        /// <summary>Is this meter a committed minimum? Role first, the legacy "MIN..." type name as
+        /// the fallback — and it needs an amount, because a minimum of nothing is not one.</summary>
+        public static bool IsCommittedMinRole(string meterRole, string meterTypeCode, decimal minimumCharges)
+        {
+            if (minimumCharges <= 0m) return false;
+            if ((meterRole ?? "").Trim().ToUpperInvariant() == "COMMIT") return true;
+            return IsCommittedMinMeterCode(meterTypeCode);
+        }
+
         /// <summary>True if a (flat) meter type code is a RENTAL — not just codes that START with "RA"
         /// but the real-world convention where the rental code is prefixed, e.g. "01.RA.2JC10897",
         /// "01.RA-1 UNIT", "01.1 UNIT RENTAL". Mirrors the v1.5.0 flat-mark pattern. Callers should also

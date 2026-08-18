@@ -1443,7 +1443,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (r["IsFlat"] == DBNull.Value || !Convert.ToBoolean(r["IsFlat"])) continue;
                 if (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"])) continue;
                 if (r["NewMoneyRules"] == DBNull.Value || !Convert.ToBoolean(r["NewMoneyRules"])) continue;
-                if (!ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]))) continue;
+                if (!ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(S(r["Role"]), S(r["MeterType"]))) continue;
                 long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
                 char mode;
                 if (!modes.TryGetValue(ck, out mode)) continue;
@@ -1462,9 +1462,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// role first, the legacy "MIN..." type name as the OR that keeps old machines working.</summary>
         private static bool IsCommitRow(DataRow r)
         {
-            if (r.Table.Columns.Contains("Role") &&
-                S(r["Role"]).Trim().ToUpperInvariant() == "COMMIT") return true;
-            return ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(S(r["MeterType"]));
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
+                r.Table.Columns.Contains("Role") ? S(r["Role"]) : "",
+                S(r["MeterType"]),
+                r.Table.Columns.Contains("MinCharges") ? Dec(r["MinCharges"]) : 0m);
         }
 
         private void AutoFillFlatMeters()
@@ -2013,8 +2014,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // "Use Min" means "this flat meter bills its minimum". A committed minimum does
                     // NOT -- it bills the shortfall, worked out at Generate -- so it must not claim to.
                     g["UseMin"] = Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m &&
-                                  S(r["MeterRole"]).Trim().ToUpperInvariant() != "COMMIT" &&
-                                  !ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(S(r["MeterTypeCode"]));
+                                  !ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
+                                      S(r["MeterRole"]), S(r["MeterTypeCode"]), Dec(r["MinCharges"]));
                     g["LastInvNo"] = S(r["LastInvNo"]);
                     if (r["LastInvAt"] != DBNull.Value) g["LastInvDate"] = Convert.ToDateTime(r["LastInvAt"]);
                     g["InvTotal"] = Dec(r["LastInvTotal"]);
@@ -2033,8 +2034,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // A waive meter is flat BY DEFINITION (it has no reading) even if the type's
                     // rental flag was left unticked in the master. Recognised by ROLE first, with the
                     // type's own flag as the OR that keeps the legacy (W) family working untouched.
-                    g["IsWaive"] = S(r["MeterRole"]).Trim().ToUpperInvariant() == "WAIVE" ||
-                                   S(r["IsRentalWaive"]) == "Y";
+                    g["IsWaive"] = ServiceContractPhotocopier.Classes.ScpStrategy.IsWaiveRole(
+                        S(r["MeterRole"]), S(r["IsRentalWaive"]) == "Y");
                     g["IsGroupItem"] = S(r["IsGroupItem"]) == "Y";
                     g["MachineMode"] = S(r["MachineMode"]);
                     g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
@@ -3987,7 +3988,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.NewMoneyRules = r["NewMoneyRules"] != DBNull.Value && Convert.ToBoolean(r["NewMoneyRules"]);
                 ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
                 if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
-                ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));
+                ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
+                    S(r["Role"]), S(r["MeterType"]));
                 // The machine's DEFINED mode beats the live fetch status (deterministic numbering).
                 string mmode = S(r["MachineMode"]).Trim().ToUpperInvariant();
                 ln.MachineStatus = mmode.Length > 0 ? mmode : S(r["MachineStatus"]);
@@ -4018,9 +4020,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // The code prefix stays as an OR so every existing machine keeps billing exactly as
                 // it did; without it, a type called COMMIT would have shown the committed-minimum UI
                 // and then quietly billed the whole minimum every month as an ordinary flat meter.
-                if (ln.IsFlat && ln.MinCharges > 0m &&
-                    (S(r["Role"]).Trim().ToUpperInvariant() == "COMMIT" ||
-                     ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(ln.MeterTypeCode)))
+                if (ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
+                        S(r["Role"]), ln.MeterTypeCode, ln.MinCharges))
                 {
                     ln.IsCommittedMin = true;
                     ln.CommittedAmount = ln.MinCharges;

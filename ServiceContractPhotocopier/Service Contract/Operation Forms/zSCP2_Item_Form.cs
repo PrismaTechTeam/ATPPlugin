@@ -485,6 +485,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return f.Length > 0 && Convert.ToString(f[0]["IsRentalWaive"]) == "Y";
         }
 
+        /// <summary>Is this meter ROW a waive? The engine decides by role first and the type's flag
+        /// second, so every guard that protects a waive has to ask the same way — asking only the
+        /// type let a role-WAIVE row on an ordinary type slip past all of them and bill a contra
+        /// against nothing, every month.</summary>
+        private bool IsWaiveRowI(DataRow r)
+        {
+            if (r == null) return false;
+            string role = r.Table.Columns.Contains("MeterRole") ? Convert.ToString(r["MeterRole"]) : "";
+            string type = Convert.ToString(r["MeterTypeCode"]).Trim();
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsWaiveRole(role, IsWaiveType(type));
+        }
+
         // Committed-minimum (MIN) meter type — by code convention or the type's Default Role.
         private bool IsCommitTypeLk(string meterTypeCode)
         {
@@ -513,8 +525,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (r.RowState == DataRowState.Deleted) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
                 if (t.Length == 0) continue;
-                if (IsWaiveType(t)) hasWaive = true;
-                else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t)) hasRent = true;
+                if (IsWaiveRowI(r)) hasWaive = true;
+                else if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
+                             r.Table.Columns.Contains("MeterRole") ? Convert.ToString(r["MeterRole"]) : "", t)) hasRent = true;
             }
             return hasWaive && !hasRent;
         }
@@ -553,7 +566,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (r.RowState == DataRowState.Deleted) continue;
                 string t = Convert.ToString(r["MeterTypeCode"]).Trim();
                 if (t.Length == 0) continue;
-                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(t) && !IsWaiveType(t)) return true;
+                if (ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
+                        r.Table.Columns.Contains("MeterRole") ? Convert.ToString(r["MeterRole"]) : "", t)
+                    && !IsWaiveRowI(r)) return true;
             }
             return false;
         }
@@ -1077,8 +1092,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataRowView drvDel = GridViewMeters.GetRow(rh) as DataRowView;
             string delType = drvDel == null || drvDel.Row["MeterTypeCode"] == DBNull.Value ? "" : drvDel.Row["MeterTypeCode"].ToString().Trim();
             // Deleting the machine's only RENTAL while a WAIVE stays would break the waive rule.
-            if (delType.Length > 0 && !IsWaiveType(delType)
-                && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(delType)
+            string delRole = drvDel == null || !drvDel.Row.Table.Columns.Contains("MeterRole")
+                ? "" : Convert.ToString(drvDel.Row["MeterRole"]);
+            if (delType.Length > 0 && !IsWaiveRowI(drvDel == null ? null : drvDel.Row)
+                && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(delRole, delType)
                 && DeleteWouldOrphanWaiveI(drvDel.Row))
             {
                 XtraMessageBox.Show("This machine still has a RENTAL WAIVE meter — remove the waive line first " +
@@ -1153,7 +1170,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public static DataRow FindWaiveMeter(DataTable meters)
         {
             if (meters == null) return null;
-            DataRow byRole = null;
             foreach (DataRow r in meters.Rows)
             {
                 if (r.RowState == DataRowState.Deleted) continue;
@@ -1161,9 +1177,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (t.Length == 0) continue;
                 string rr = meters.Columns.Contains("MeterRole")
                     ? Convert.ToString(r["MeterRole"]).Trim().ToUpperInvariant() : "";
-                if (rr == "WAIVE") { byRole = r; break; }
+                if (rr == "WAIVE") return r;
             }
-            return byRole;
+            return null;
         }
 
         /// <summary>Drops one standard meter onto a machine -- RENTAL, BK or CL -- already typed,
@@ -1182,6 +1198,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (meters == null || FindMeterByRole(meters, want) != null) return true;
             string code = want == "BK" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_BK
                         : want == "CL" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_CL
+                        : want == "COMMIT" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_COMMIT
+                        : want == "WAIVE" ? ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_WAIVE
                         : ServiceContractPhotocopier.Classes.ScpStrategy.METER_TYPE_RENTAL;
             string desc = "";
             bool found = false;
