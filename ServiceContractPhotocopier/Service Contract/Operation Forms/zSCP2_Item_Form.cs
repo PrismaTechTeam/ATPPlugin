@@ -33,6 +33,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // Which printed LINE this machine belongs on, and the word that line carries ("HEAVY DUTY").
         // Not to be confused with BillGroupCode above, which picks the INVOICE.
         public string LineGroupCode = "";
+        /// <summary>Which printed LINE this machine merges onto ("" = follow the contract's line
+        /// mode). Set from the Rental Price screen, not typed on the machine.</summary>
+        public string MergeGroupCode = "";
 
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";

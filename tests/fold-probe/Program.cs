@@ -172,7 +172,7 @@ static class FoldProbe
         try
         {
             db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + ck5);
-            db.ExecuteNonQuery("INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, ModelCode, UnitPrice) " +
+            db.ExecuteNonQuery("INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, GroupCode, UnitPrice) " +
                                "VALUES (" + ck5 + ", N'', 350)");
 
             var prices = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContracts(
@@ -182,13 +182,13 @@ static class FoldProbe
             Console.WriteLine(Environment.NewLine + "=== RENTAL GROUP PRICE (merge ignoring model, contract says 350) ===");
             Check("mode read back", modes[ck5].ToString(), "A");
             decimal? p = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
-                prices, ck5, 'A', "iR-ADV 4545i");
+                prices, ck5, 'A', "iR-ADV 4545i", "");
             Check("price for any model under mode A", p.HasValue ? p.Value : -1m, 350m);
             decimal? pm = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
-                prices, ck5, 'M', "iR-ADV 4545i");
+                prices, ck5, 'M', "iR-ADV 4545i", "");
             Check("mode M looks up BY MODEL, so this row does not answer", pm.HasValue, false);
             decimal? ps = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
-                prices, ck5, 'S', "");
+                prices, ck5, 'S', "", "");
             Check("no merge means no group price", ps.HasValue, false);
 
             // What the engine does with it: every rental meter in the group bills at the group price.
@@ -209,6 +209,42 @@ static class FoldProbe
             db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + ck5);
             DropContract(db, ck5);
         }
+
+        // ---- "these two models together, that one apart" ----
+        // The shape no line mode can express: a C5335 and a C5665 on ONE rental line of 2 UNIT, and
+        // four C1234 on a line of their own. "Merge by model" would give three lines; "merge,
+        // ignoring model" would give one. Grouping the two says exactly what is meant.
+        long ck6 = NewContract(db, "ZZPROBE-MIX", "1INV-BYMODEL");   // rental M, meter M
+        try
+        {
+            var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+            var a1 = RentalPaid(ck6, "MODEL C5335", "M1", 300m); a1.MergeGroupCode = "PAIR";
+            var a2 = RentalPaid(ck6, "MODEL C5665", "M2", 300m); a2.MergeGroupCode = "PAIR";
+            lines.Add(a1); lines.Add(a2);
+            for (int i = 0; i < 4; i++) lines.Add(RentalPaid(ck6, "MODEL C1234", "N" + i, 250m));
+            // ...and their black meters follow the same grouping, at their own rates.
+            var b1 = Bk(ck6, "MODEL C5335", "M1", "", 0.03m, 0m, 1000m); b1.MergeGroupCode = "PAIR";
+            var b2 = Bk(ck6, "MODEL C5665", "M2", "", 0.03m, 0m, 2000m); b2.MergeGroupCode = "PAIR";
+            lines.Add(b1); lines.Add(b2);
+            for (int i = 0; i < 4; i++) lines.Add(Bk(ck6, "MODEL C1234", "N" + i, "", 0.03m, 0m, 500m));
+
+            var mixrows = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
+            Console.WriteLine(Environment.NewLine + "=== MERGE TWO MODELS, KEEP THE THIRD APART (mode M) ===");
+            Dump(mixrows);
+            var mr = Where(mixrows, true);
+            var mm = Where(mixrows, false);
+            Check("rental lines (grouped pair + the C1234s)", mr.Count, 2);
+            Check("the pair is 2 UNIT across two models", UnitsOf(mr, "MODEL C5335"), 2m);
+            Check("the C1234s stay their own line of 4", UnitsOf(mr, "MODEL C1234"), 4m);
+            Check("black follows the same grouping", mm.Count, 2);
+            Check("the pair's black line covers both", mm[0].Members.Count + mm[1].Members.Count, 6);
+
+            // Ungrouped, the same fleet is three lines -- one per model. The group is doing the work.
+            a1.MergeGroupCode = ""; a2.MergeGroupCode = ""; b1.MergeGroupCode = ""; b2.MergeGroupCode = "";
+            var plain = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
+            Check("without the group it is one line per model again", Where(plain, true).Count, 3);
+        }
+        finally { DropContract(db, ck6); }
     }
 
     // Picking a format on a contract must land on the four columns the engine reads. This is the

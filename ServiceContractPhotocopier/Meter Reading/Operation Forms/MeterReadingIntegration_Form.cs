@@ -1448,7 +1448,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 char mode;
                 if (!modes.TryGetValue(ck, out mode)) continue;
                 decimal? p = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
-                    prices, ck, mode, S(r["ModelCode"]));
+                    prices, ck, mode, S(r["ModelCode"]), S(r["MergeGroupCode"]));
                 if (!p.HasValue) continue;
                 r["UnitPrice"] = p.Value;
                 // The group price IS the rental. A minimum left on the meter would outrank it
@@ -1881,6 +1881,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // ("HEAVY DUTY") the line prints. ItemCode is the machine's model — the bucket
                     // when a contract groups its lines by model (v11 / v14).
                     "ISNULL(i.BillGroupCode,'') AS BillGroupCode, ISNULL(i.LineGroupCode,'') AS LineGroupCode, " +
+                    // MergeGroupCode says which LINE this machine prints on when the contract merges
+                    // -- a hand-made group beats the line mode's own bucket (v12).
+                    "ISNULL(i.MergeGroupCode,'') AS MergeGroupCode, " +
                     "ISNULL(i.ItemCode,'') AS ModelCode, ISNULL(c.BillingFormatCode,'') AS BillingFormatCode, " +
                     "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
                     // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
@@ -2009,6 +2012,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["MachineMode"] = S(r["MachineMode"]);
                     g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
                     g["LineGroupCode"] = S(r["LineGroupCode"]);
+                    g["MergeGroupCode"] = S(r["MergeGroupCode"]);
                     g["ModelCode"] = S(r["ModelCode"]);
                     g["NewMoneyRules"] = S(r["BillingFormatCode"]).Length > 0;
                     g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
@@ -2292,6 +2296,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("MachineMode", typeof(string));     // DEFINED online/offline ('' = use fetch status)
             dt.Columns.Add("BillGroupCode", typeof(string));   // #6 bill-group split ('' = none)
             dt.Columns.Add("LineGroupCode", typeof(string));   // the word printed on the line ("HEAVY DUTY")
+            dt.Columns.Add("MergeGroupCode", typeof(string));  // which LINE it merges onto ('' = follow the mode)
             dt.Columns.Add("ModelCode", typeof(string));       // the machine's model — bucket when grouping by model
             dt.Columns.Add("NewMoneyRules", typeof(bool));     // contract has a Billing Format -> bills like the
                                                               // customer's own invoices (rebate as copies, etc.)
@@ -3962,6 +3967,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // Which printed line this machine belongs on, when its contract folds lines together.
                 ln.ModelCode = S(r["ModelCode"]);
                 ln.LineGroupCode = S(r["LineGroupCode"]);
+                ln.MergeGroupCode = S(r["MergeGroupCode"]);
                 ln.IsWaiveMeter = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
                 // Scope is shared: waive meters use it for the target sum, MIN meters for the
                 // committed-minimum printed sum (BK only / CL only / both).

@@ -1356,6 +1356,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             d.BillGroupCode = r.Table.Columns.Contains("BillGroupCode")
                 ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(AsStr(r["BillGroupCode"])) : "";
             d.LineGroupCode = r.Table.Columns.Contains("LineGroupCode") ? AsStr(r["LineGroupCode"]).Trim() : "";
+            d.MergeGroupCode = r.Table.Columns.Contains("MergeGroupCode") ? AsStr(r["MergeGroupCode"]).Trim() : "";
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
@@ -4812,7 +4813,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             UpdateFormatSummary();
         }
 
-        /// <summary>Rental Price — one price for each merged rental line.</summary>
+        /// <summary>Lines &amp; Rental Price — which machines print as one line, and what it costs.</summary>
         /// <remarks>
         /// A merged rental line is a deal: "3 UNIT ... MONTHLY RENTAL (1/36)" is one agreed figure for
         /// a group of machines, so the group owns the price and every rental meter in it bills at that
@@ -4824,23 +4825,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// </remarks>
         private void barRentalPrice_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            if (_rentalLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
+            if (_rentalLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE &&
+                _meterLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
             {
                 XtraMessageBox.Show(
-                    "This contract prints one rental line per machine, so there is no group to price — " +
-                    "each machine's rental meter is its own price." + Environment.NewLine + Environment.NewLine +
-                    "Pick a format that merges rental lines to price them as a group.",
-                    "Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "This contract prints one line per machine — nothing merges, so there is no line to " +
+                    "group and no group to price." + Environment.NewLine + Environment.NewLine +
+                    "Pick a format that merges lines first.",
+                    "Lines & Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             if (_items == null || _items.Count == 0)
             {
-                XtraMessageBox.Show("Add the machines first — the groups are counted off them.",
-                    "Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Add the machines first — the lines are counted off them.",
+                    "Lines & Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
-                new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _rentalLineMode, _rentalGroupPrices))
+                new ServiceContractPhotocopier.RentalGroupPrice_Form(
+                    _items, _rentalLineMode, _meterLineMode, _rentalGroupPrices))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
                 _rentalGroupPrices = f.Result;
@@ -4886,7 +4889,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Pricing a group only means anything once the rental lines merge.
             if (barRentalPrice != null)
                 barRentalPrice.Enabled =
-                    _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
+                    _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE ||
+                    _meterLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
             if (LblFormatSummary == null) return;
             if (_billingFormatCode.Length == 0)
             {
@@ -5044,8 +5048,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "INSERT INTO [dbo].[zSCP2_Item] " +
                 "(ContractKey, ServiceItemNo, SerialNumber, Description, BillingDayOverride, " +
-                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LineGroupCode, LastModified) " +
-                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,@lgrp,GETDATE()); " +
+                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LineGroupCode, MergeGroupCode, LastModified) " +
+                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,@lgrp,@mgrp,GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -5063,6 +5067,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@mgrp", d.MergeGroupCode ?? "");
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -5076,7 +5081,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // stale direct-owner would mis-resolve the COALESCE if the contract's debtor were blank.
                 "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', ServiceItemNo=@no, SerialNumber=@serial, " +
                 "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
-                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LineGroupCode=@lgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
+                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LineGroupCode=@lgrp, MergeGroupCode=@mgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 cmd.Parameters.AddWithValue("@ck", _contractKey);
@@ -5093,6 +5098,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@mmode", d.MachineMode ?? "");
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@mgrp", d.MergeGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@ik", d.ItemKey);
                 cmd.ExecuteNonQuery();
             }

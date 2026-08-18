@@ -22,16 +22,35 @@ namespace ServiceContractPhotocopier.Classes
     /// </summary>
     public static class ScpRentalGroupPrice
     {
-        /// <summary>Which group a machine's rental falls in, under the contract's rental line mode.
-        /// "Merge by model" gives every model its own price; a merge that ignores model has one
-        /// price for the whole contract, so the key is ''.</summary>
-        public static string GroupKeyFor(char rentalMode, string modelCode)
+        /// <summary>Which line a machine falls on, under a merging line mode.</summary>
+        /// <remarks>
+        /// A hand-made group wins over the mode's own bucket, which is what lets a contract say
+        /// "these two models together, that one apart" -- something no mode can express. Under
+        /// "merge by model" the group MERGES models; under "merge, ignoring model" it SPLITS a set
+        /// off the single line. Same rule, both readings.
+        ///
+        /// <para>The '#' is not decoration: without it a group named "C5335" and the model C5335
+        /// would be the same bucket.</para>
+        /// </remarks>
+        public static string GroupKeyFor(char mode, string modelCode, string mergeGroupCode)
         {
-            if (rentalMode == ScpBillingFormat.LINE_SAME_MODEL) return (modelCode ?? "").Trim();
+            string g = (mergeGroupCode ?? "").Trim();
+            if (g.Length > 0) return "#" + g.ToUpperInvariant();
+            if (mode == ScpBillingFormat.LINE_SAME_MODEL) return (modelCode ?? "").Trim();
             return "";
         }
 
-        /// <summary>Prices for one contract, keyed by ModelCode ('' = the whole contract).
+        /// <summary>Normalises a group name the user typed: trimmed, upper case, at most 40 chars.
+        /// Case is not a distinction -- "office" and "OFFICE" are one group, and anything else would
+        /// silently print two lines.</summary>
+        public static string Sanitize(string raw)
+        {
+            if (raw == null) return "";
+            string s = raw.Trim().ToUpperInvariant();
+            return s.Length > 40 ? s.Substring(0, 40) : s;
+        }
+
+        /// <summary>Prices for one contract, keyed by GroupCode ('' = the whole contract).
         /// Never throws: an older book without the table simply has no overrides.</summary>
         public static Dictionary<string, decimal> LoadForContract(DBSetting db, long contractKey)
         {
@@ -40,10 +59,10 @@ namespace ServiceContractPhotocopier.Classes
             try
             {
                 DataTable t = db.GetDataTable(
-                    "SELECT ModelCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
+                    "SELECT GroupCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
                     "WHERE ContractKey = " + contractKey, false);
                 foreach (DataRow r in t.Rows)
-                    map[Convert.ToString(r["ModelCode"]).Trim()] =
+                    map[Convert.ToString(r["GroupCode"]).Trim()] =
                         r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
             }
             catch { }
@@ -51,7 +70,7 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>Prices for many contracts in one query -- the billing run's form.
-        /// Outer key = ContractKey, inner = ModelCode ('' = the whole contract).</summary>
+        /// Outer key = ContractKey, inner = GroupCode ('' = the whole contract).</summary>
         public static Dictionary<long, Dictionary<string, decimal>> LoadForContracts(
             DBSetting db, IEnumerable<long> contractKeys)
         {
@@ -72,7 +91,7 @@ namespace ServiceContractPhotocopier.Classes
             try
             {
                 DataTable t = db.GetDataTable(
-                    "SELECT ContractKey, ModelCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
+                    "SELECT ContractKey, GroupCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
                     "WHERE ContractKey IN (" + inList + ")", false);
                 foreach (DataRow r in t.Rows)
                 {
@@ -83,7 +102,7 @@ namespace ServiceContractPhotocopier.Classes
                         inner = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
                         map[ck] = inner;
                     }
-                    inner[Convert.ToString(r["ModelCode"]).Trim()] =
+                    inner[Convert.ToString(r["GroupCode"]).Trim()] =
                         r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
                 }
             }
@@ -95,14 +114,14 @@ namespace ServiceContractPhotocopier.Classes
         /// been priced. A zero price is NOT an override -- a group priced at nothing is a group
         /// nobody has filled in yet, and the machines keep their own rates.</summary>
         public static decimal? PriceFor(Dictionary<long, Dictionary<string, decimal>> map,
-            long contractKey, char rentalMode, string modelCode)
+            long contractKey, char rentalMode, string modelCode, string mergeGroupCode)
         {
             if (map == null) return null;
             if (rentalMode == ScpBillingFormat.LINE_PER_MACHINE) return null;   // no group, no group price
             Dictionary<string, decimal> inner;
             if (!map.TryGetValue(contractKey, out inner)) return null;
             decimal p;
-            if (!inner.TryGetValue(GroupKeyFor(rentalMode, modelCode), out p)) return null;
+            if (!inner.TryGetValue(GroupKeyFor(rentalMode, modelCode, mergeGroupCode), out p)) return null;
             return p > 0m ? (decimal?)p : null;
         }
     }

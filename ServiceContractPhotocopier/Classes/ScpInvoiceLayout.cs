@@ -248,11 +248,14 @@ namespace ServiceContractPhotocopier.Classes
                 //
                 // The instalment counter stays in: "3 UNIT ... (13/36)" is a claim about all three
                 // machines, and a machine that joined later is genuinely on a different month.
-                string k = "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
-                           (ln.ACItemCode ?? "") + "|" +
-                           ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "");
-                if (lay.RentalMode == ScpBillingFormat.LINE_SAME_MODEL) k += "|" + (ln.ModelCode ?? "");
-                return k;
+                // The bucket: a hand-made group when the machine has one, otherwise the model
+                // under "merge by model" and everything together under "merge, ignoring model".
+                // This is the ONE place a contract can say "these two models on one line, that one
+                // apart" -- no mode can express it.
+                return "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
+                       (ln.ACItemCode ?? "") + "|" +
+                       ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "") + "|" +
+                       ScpRentalGroupPrice.GroupKeyFor(lay.RentalMode, ln.ModelCode, ln.MergeGroupCode);
             }
 
             // ----- BK / CL -----
@@ -272,7 +275,10 @@ namespace ServiceContractPhotocopier.Classes
             // rental splits three ways on price. MBJB prints "MEDIUM HEAVY DUTY" on both its C5160
             // and C5150 rows and they stay apart on model. Pasir Gudang's two MEDIUM DUTY rental
             // lines are two different models.
-            if (lay.MeterMode == ScpBillingFormat.LINE_SAME_MODEL) m += "|" + (ln.ModelCode ?? "");
+            // Same bucket rule as the rental line: a machine put in a group prints with its group,
+            // whatever the mode would otherwise have done. Grouping is about which machines belong
+            // together, and that answer does not change between the rental line and the black one.
+            m += "|" + ScpRentalGroupPrice.GroupKeyFor(lay.MeterMode, ln.ModelCode, ln.MergeGroupCode);
             return m;
         }
 

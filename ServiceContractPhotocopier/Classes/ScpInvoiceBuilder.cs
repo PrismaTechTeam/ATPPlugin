@@ -61,7 +61,9 @@ namespace ServiceContractPhotocopier.Classes
         public string ModelCode = "";      // the machine's stock item (zSCP2_Item.ItemCode) — the bucket
                                            // when a contract groups lines by model
         public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
-                                           // (zSCP2_Item.LineGroupCode); also the bucket under "same model"
+                                           // (zSCP2_Item.LineGroupCode) -- a description, never a split
+        public string MergeGroupCode = ""; // which LINE this machine prints on when the contract merges
+                                           // (zSCP2_Item.MergeGroupCode); '' = follow the line mode
         /// <summary>The contract has a Billing Format, so it bills the way the customer's own
         /// invoices do: rebate deducted as copies, cents rounded half away from zero, and a line
         /// worth 0.00 still printed. Off = the engine as it behaved before, so an existing contract's

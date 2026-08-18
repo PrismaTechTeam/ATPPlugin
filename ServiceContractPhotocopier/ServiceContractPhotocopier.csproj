@@ -920,6 +920,7 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_StrategyRule.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractStrategyRule.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractRentalPrice.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ContractRentalPrice_v2_GroupCode.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractAudit.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v5_Strategy.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v6_FOCReset.sql" />
@@ -945,6 +946,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v9_MachineMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v10_BillGroup.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v11_LineGroup.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v12_MergeGroup.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v14_LineModes.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\04_Seed_zSCP2_BillingFormat.sql" />

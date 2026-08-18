@@ -593,7 +593,7 @@
             // 
             // barRentalPrice
             // 
-            this.barRentalPrice.Caption = "Rental Price";
+            this.barRentalPrice.Caption = "Lines && Price";
             this.barRentalPrice.Id = 14;
             this.barRentalPrice.ImageOptions.ImageUri.Uri = "Currency;Size32x32";
             this.barRentalPrice.Name = "barRentalPrice";

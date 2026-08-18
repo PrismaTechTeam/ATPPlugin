@@ -113,6 +113,7 @@ namespace ServiceContractPhotocopier.Classes
             // Per-contract COPY of strategy rules (template->instance; edited on the contract, FK to contract).
             RunIfTableMissing(dbsetting, "zSCP2_ContractStrategyRule",  "02_CreateTable_zSCP2_ContractStrategyRule.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ContractRentalPrice",  "02_CreateTable_zSCP2_ContractRentalPrice.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_ContractRentalPrice_v2_GroupCode.sql", asm);   // ModelCode -> GroupCode
             // Field-level contract/item change audit (append-only, no FKs).
             RunIfTableMissing(dbsetting, "zSCP2_ContractAudit",         "02_CreateTable_zSCP2_ContractAudit.sql", asm);
             // Legacy usage meters tagged NA get BK/CL inferred from their type names (guards inside).
@@ -204,6 +205,7 @@ namespace ServiceContractPhotocopier.Classes
             // v11: the word printed on a machine's line + the bucket it merges into ("Line label").
             // Distinct from v10's BillGroupCode, which picks the INVOICE rather than the line.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v11_LineGroup.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_Item_v12_MergeGroup.sql", asm);   // which machines print as ONE line
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // v3: Demo 28/07 #10 - CN reading-correction linkage (CNDocKey/CNDocNo + filtered index).
