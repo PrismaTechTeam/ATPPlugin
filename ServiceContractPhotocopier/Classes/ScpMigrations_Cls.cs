@@ -196,6 +196,7 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v6_WideRole.sql", asm);
             // v7: partial waive in RM (threshold reached -> RM amount off) + one-time % backfill.
             RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql", asm);
+            RunDDL(dbsetting, "02_Update_zSCP2_ItemMeter_v8_CommitScope.sql", asm);   // whose charges a minimum is measured against
             // Group "machine" per contract (engine-driven .C concept): fleet-total MIN/WAIVE/RENTAL.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_GroupItem.sql", asm);
             // Per-machine ONLINE/OFFLINE definition -> advanced invoice number format.

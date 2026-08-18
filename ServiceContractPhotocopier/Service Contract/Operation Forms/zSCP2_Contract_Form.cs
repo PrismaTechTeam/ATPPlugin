@@ -5417,8 +5417,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 string sql =
                     "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
                     "(ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                    " RebateQtyInPercent, FOCQty, InitialReading, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, LastModified) " +
-                    "VALUES (@ik,@code,@desc,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                    " RebateQtyInPercent, FOCQty, InitialReading, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, LastModified) " +
+                    "VALUES (@ik,@code,@desc,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
                 using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
                 {
                     cmd.Parameters.AddWithValue("@ik", itemKey);

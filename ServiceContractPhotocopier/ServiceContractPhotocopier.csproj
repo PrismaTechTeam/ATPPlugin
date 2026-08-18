@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -163,6 +163,7 @@
     <Compile Include="Classes\ScpListingLayout.cs" />
     <Compile Include="Classes\ScpExtraDocs.cs" />
     <Compile Include="Classes\ScpBillingFormat.cs" />
+    <Compile Include="Classes\ScpCommittedMin.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
     <Compile Include="Classes\ScpInvoiceLayout.cs" />
     <Compile Include="Classes\MeterInvoiceGenerator.cs" />
@@ -937,6 +938,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterType_v3_DefaultRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v8_CommitScope.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v10_ReportTemplates.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v11_PeriodMode.sql" />

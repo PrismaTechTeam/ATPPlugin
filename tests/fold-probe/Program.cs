@@ -279,6 +279,106 @@ static class FoldProbe
                 pm[2].BillCopies, pm[2].Members[0].BillCopies + pm[2].Members[1].BillCopies);
         }
         finally { DropContract(db, ck7); }
+
+        CommittedMinChecks();
+    }
+
+    // ---- a minimum can be one machine's, a group's, or the whole contract's ----
+    // Six machines sharing RM 3,000 is ONE deal. Expressed by putting one committed meter on one
+    // machine of the group and scoping it to the group; the rest carry none. Six meters at 3,000
+    // would top up six times, which is the mistake this scope exists to prevent.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static void CommittedMinChecks()
+    {
+        Console.WriteLine(Environment.NewLine + "=== COMMITTED MINIMUM (machine / group / contract) ===");
+
+        // Three machines in group PAIR printing 400 + 300 + 200 = 900, and one outside it printing 50.
+        var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+        lines.Add(Printed(1, 101, "PAIR", 400m));
+        lines.Add(Printed(1, 102, "PAIR", 300m));
+        lines.Add(Printed(1, 103, "PAIR", 200m));
+        lines.Add(Printed(1, 104, "", 50m));
+
+        // The deal: RM 1,200 across the group, carried by machine 101 alone.
+        var min = Commit(1, 101, "PAIR", 1200m, "G");
+        lines.Add(min);
+
+        ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(lines);
+        Console.WriteLine("       group of 3 printed " + min.PrintedAmount.ToString("n2") +
+                          ", committed 1,200.00, top-up " + min.Charge.ToString("n2"));
+        Check("group scope sums the whole group", min.PrintedAmount, 900m);
+        Check("and tops up ONCE, by the shortfall", min.Charge, 300m);
+
+        // The same deal read as one machine only: 101 printed 400, so it would bill 800 -- and the
+        // other two would still be billing their own. That is the six-top-ups mistake.
+        var solo = Commit(1, 101, "PAIR", 1200m, "S");
+        var lines2 = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+        lines2.Add(Printed(1, 101, "PAIR", 400m));
+        lines2.Add(Printed(1, 102, "PAIR", 300m));
+        lines2.Add(Printed(1, 103, "PAIR", 200m));
+        lines2.Add(solo);
+        ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(lines2);
+        Check("machine scope sees only its own machine", solo.PrintedAmount, 400m);
+
+        // Whole contract: the three in the group plus the one outside = 950.
+        var whole = Commit(1, 101, "PAIR", 1200m, "C");
+        var lines3 = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+        lines3.Add(Printed(1, 101, "PAIR", 400m));
+        lines3.Add(Printed(1, 102, "PAIR", 300m));
+        lines3.Add(Printed(1, 103, "PAIR", 200m));
+        lines3.Add(Printed(1, 104, "", 50m));
+        lines3.Add(whole);
+        ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(lines3);
+        Check("contract scope sweeps the machines outside the group too", whole.PrintedAmount, 950m);
+
+        // Printing more than the minimum bills nothing, and still prints.
+        var rich = Commit(1, 101, "PAIR", 500m, "G");
+        var lines4 = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+        lines4.Add(Printed(1, 101, "PAIR", 400m));
+        lines4.Add(Printed(1, 102, "PAIR", 300m));
+        lines4.Add(rich);
+        ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(lines4);
+        Check("above the minimum, the top-up is nothing", rich.Charge, 0m);
+        Check("...and the line still bills, so the customer sees the sum", rich.AlwaysBill, true);
+
+        // Colour-only minimum ignores the black charges.
+        var clOnly = Commit(1, 101, "PAIR", 1000m, "G");
+        clOnly.WaiveScope = "CL";
+        var lines5 = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+        var blk = Printed(1, 101, "PAIR", 400m);
+        var col = Printed(1, 102, "PAIR", 250m); col.ColorLabel = "Colour";
+        lines5.Add(blk); lines5.Add(col); lines5.Add(clOnly);
+        ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(lines5);
+        Check("WHICH charges and WHOSE are separate questions", clOnly.PrintedAmount, 250m);
+
+        // Two group-scope minimums on one group would bill the shortfall twice.
+        var a = Commit(1, 101, "PAIR", 1200m, "G");
+        var b = Commit(1, 102, "PAIR", 1200m, "G");
+        var clash = new List<ServiceContractPhotocopier.Classes.MeterBillLine> { a, b };
+        var problems = ServiceContractPhotocopier.Classes.ScpCommittedMin.FindDoubleCounted(clash);
+        Check("two minimums on one group are caught", problems.Count, 1);
+        var ok = new List<ServiceContractPhotocopier.Classes.MeterBillLine> { a };
+        Check("one is fine", ServiceContractPhotocopier.Classes.ScpCommittedMin.FindDoubleCounted(ok).Count, 0);
+    }
+
+    static ServiceContractPhotocopier.Classes.MeterBillLine Printed(long ck, long itemKey,
+        string group, decimal charge)
+    {
+        var l = new ServiceContractPhotocopier.Classes.MeterBillLine();
+        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group;
+        l.ColorLabel = "Black"; l.Charge = charge;
+        return l;
+    }
+
+    static ServiceContractPhotocopier.Classes.MeterBillLine Commit(long ck, long itemKey,
+        string group, decimal amount, string scope)
+    {
+        var l = new ServiceContractPhotocopier.Classes.MeterBillLine();
+        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group;
+        l.IsFlat = true; l.IsCommittedMin = true; l.AlwaysBill = true;
+        l.CommittedAmount = amount; l.MinCharges = amount; l.CommitScope = scope;
+        l.MeterTypeCode = "COMMIT"; l.WaiveScope = "BKCL";
+        return l;
     }
 
     // Picking a format on a contract must land on the four columns the engine reads. This is the

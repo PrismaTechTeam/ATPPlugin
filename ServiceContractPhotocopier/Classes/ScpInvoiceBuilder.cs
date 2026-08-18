@@ -62,6 +62,9 @@ namespace ServiceContractPhotocopier.Classes
                                            // when a contract groups lines by model
         public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
                                            // (zSCP2_Item.LineGroupCode) -- a description, never a split
+        /// <summary>Whose print charges a committed minimum is measured against: 'S' this machine,
+        /// 'G' its merge group, 'C' the whole contract. Ignored unless IsCommittedMin.</summary>
+        public string CommitScope = "S";
         public string MergeGroupCode = ""; // which LINE this machine prints on when the contract merges
                                            // (zSCP2_Item.MergeGroupCode); '' = follow the line mode
         /// <summary>The contract has a Billing Format, so it bills the way the customer's own

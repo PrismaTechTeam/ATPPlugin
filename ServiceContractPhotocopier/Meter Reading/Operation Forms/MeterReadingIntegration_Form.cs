@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -1899,6 +1899,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "     ELSE ISNULL(NULLIF(m.MeterMultiPriceCode,''), ISNULL(mt.MeterMultiPriceCode,'')) END AS MultiPriceCode, " +
                     "ISNULL(m.RebateQtyInPercent,0) AS RebatePct, ISNULL(m.InitialReading,0) AS InitReading, " +
                     "ISNULL(mt.IsFlatCharge,'N') AS IsFlatCharge, ISNULL(mt.IsRentalWaive,'N') AS IsRentalWaive, " +
+                    // WaiveScope says WHICH charges count (black / colour / both); CommitScope says
+                    // WHOSE (this machine / its merge group / the whole contract).
+                    "ISNULL(m.CommitScope,'S') AS CommitScope, " +
                     "ISNULL(m.WaiveFirstNMonths,0) AS WaiveFirstNMonths, ISNULL(m.WaiveTargetAmount,0) AS WaiveTargetAmount, " +
                     "ISNULL(m.WaivePartialThreshold,0) AS WaivePartialThreshold, " +
                     "ISNULL(m.WaivePartialAmount,0) AS WaivePartialAmount, ISNULL(m.WaiveScope,'BKCL') AS WaiveScope, " +
@@ -2006,8 +2009,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["FetchedReading"] = 0m;
                     g["HasConflict"] = false;
                     // A waive meter is flat BY DEFINITION (it has no reading) even if the type's
-                    // rental flag was left unticked in the master.
-                    g["IsWaive"] = S(r["IsRentalWaive"]) == "Y";
+                    // rental flag was left unticked in the master. Recognised by ROLE first, with the
+                    // type's own flag as the OR that keeps the legacy (W) family working untouched.
+                    g["IsWaive"] = S(r["MeterRole"]).Trim().ToUpperInvariant() == "WAIVE" ||
+                                   S(r["IsRentalWaive"]) == "Y";
                     g["IsGroupItem"] = S(r["IsGroupItem"]) == "Y";
                     g["MachineMode"] = S(r["MachineMode"]);
                     g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
@@ -2021,6 +2026,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["WaivePartialThreshold"] = Dec(r["WaivePartialThreshold"]);
                     g["WaivePartialAmount"] = Dec(r["WaivePartialAmount"]);
                     g["WaiveScope"] = S(r["WaiveScope"]);
+                    g["CommitScope"] = S(r["CommitScope"]);
                     // Expired = effective expiry BEFORE the billing month's 1st (still billable IN its
                     // final month — this only flags machines whose last billable month is already over).
                     g["IsExpired"] = r["EffExpiry"] != DBNull.Value &&
@@ -2305,6 +2311,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
             dt.Columns.Add("WaivePartialAmount", typeof(decimal));
             dt.Columns.Add("WaiveScope", typeof(string));
+            dt.Columns.Add("CommitScope", typeof(string));    // S machine / G merge group / C contract
             dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
             dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
             dt.Columns.Add("PeriodByContract", typeof(bool));  // #16: invoice display dates follow the contract cycle (hidden)
@@ -3980,14 +3987,24 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     ln.WaivePartialThreshold = Dec(r["WaivePartialThreshold"]);
                     ln.WaivePartialAmount = Dec(r["WaivePartialAmount"]);
                 }
-                // Committed-minimum ("MIN ...") meter: bill the TOP-UP to the committed amount over the
-                // item's print charges (computed in ApplyCommittedMin), and always show it (transparency).
+                // Committed-minimum meter: bill the TOP-UP to the committed amount over the print
+                // charges it is measured against (computed in ApplyCommittedMin), and always show it
+                // even at zero, so the customer sees the arithmetic.
+                //
+                // Recognised by its ROLE. It used to be recognised by its meter type being NAMED
+                // "MIN something", which is why the old book has forty-odd of them -- one per amount.
+                // The code prefix stays as an OR so every existing machine keeps billing exactly as
+                // it did; without it, a type called COMMIT would have shown the committed-minimum UI
+                // and then quietly billed the whole minimum every month as an ordinary flat meter.
                 if (ln.IsFlat && ln.MinCharges > 0m &&
-                    ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(ln.MeterTypeCode))
+                    (S(r["Role"]).Trim().ToUpperInvariant() == "COMMIT" ||
+                     ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinMeterCode(ln.MeterTypeCode)))
                 {
                     ln.IsCommittedMin = true;
                     ln.CommittedAmount = ln.MinCharges;
                     ln.AlwaysBill = true;
+                    ln.CommitScope = S(r["CommitScope"]).Trim().ToUpperInvariant();
+                    if (ln.CommitScope != "G" && ln.CommitScope != "C") ln.CommitScope = "S";
                 }
                 ln.StrategyCode = S(r["StrategyCode"]);
                 if (r["RentalStartDate"] != DBNull.Value) ln.RentalStartDate = Convert.ToDateTime(r["RentalStartDate"]);
@@ -4459,56 +4476,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             Dictionary<long, StrategyDef> strats)
         {
             {
-                // Sum the actual PRINT charges per service item (non-flat BK/CL usage meters),
-                // split by colour so a MIN meter can count BK only / CL only / both (its scope).
-                Dictionary<long, decimal> printBkByItem = new Dictionary<long, decimal>();
-                Dictionary<long, decimal> printClByItem = new Dictionary<long, decimal>();
-                Dictionary<long, decimal> printBkByContract = new Dictionary<long, decimal>();
-                Dictionary<long, decimal> printClByContract = new Dictionary<long, decimal>();
+                // The arithmetic lives in ScpCommittedMin so it can be tested without a screen. It
+                // sums across ALL jobs on purpose: a rental-separate or Bill Group split spreads one
+                // machine's lines over several jobs, and a per-job sum would read zero on the job
+                // with no usage and bill the whole minimum there.
+                List<MeterBillLine> everything = new List<MeterBillLine>();
                 foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                        if (!l.IsFlat && (l.ColorLabel == "Black" || l.ColorLabel == "Colour") && l.ItemKey > 0)
-                        {
-                            Dictionary<long, decimal> bucket = l.ColorLabel == "Black" ? printBkByItem : printClByItem;
-                            decimal t;
-                            bucket.TryGetValue(l.ItemKey, out t);
-                            bucket[l.ItemKey] = t + l.Charge;
-                            Dictionary<long, decimal> cbucket = l.ColorLabel == "Black" ? printBkByContract : printClByContract;
-                            decimal tc;
-                            cbucket.TryGetValue(l.ContractKey, out tc);
-                            cbucket[l.ContractKey] = tc + l.Charge;
-                        }
+                    foreach (MeterBillLine l in jb.Lines) everything.Add(l);
 
-                // Items already carrying a MIN meter — the COMMIT-MIN rule must not double-charge them.
-                HashSet<long> minMeterItems = new HashSet<long>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                    {
-                        if (!l.IsCommittedMin) continue;
-                        minMeterItems.Add(l.ItemKey);
-                        decimal pBk, pCl;
-                        // The GROUP machine's MIN commits against the WHOLE fleet's print charges.
-                        if (l.IsGroupItem)
-                        {
-                            printBkByContract.TryGetValue(l.ContractKey, out pBk);
-                            printClByContract.TryGetValue(l.ContractKey, out pCl);
-                        }
-                        else
-                        {
-                            printBkByItem.TryGetValue(l.ItemKey, out pBk);
-                            printClByItem.TryGetValue(l.ItemKey, out pCl);
-                        }
-                        string cscope = (l.WaiveScope ?? "BKCL").Trim().ToUpperInvariant();
-                        decimal printed = cscope == "BK" ? pBk : (cscope == "CL" ? pCl : pBk + pCl);
-                        decimal topUp = l.CommittedAmount - printed;
-                        if (topUp < 0m) topUp = 0m;
-                        l.PrintedAmount = printed;
-                        l.Charge = topUp;
-                        l.Foc = 0m;
-                        l.UseMin = false;
-                        l.StrategyNote = "COMMITTED MIN " + l.CommittedAmount.ToString("0.00") + ": printed " +
-                                         printed.ToString("0.00") + " -> top-up " + topUp.ToString("0.00");
-                    }
+                // Items already carrying a committed meter — the COMMIT-MIN rule must not top those
+                // up a second time.
+                ServiceContractPhotocopier.Classes.ScpCommittedMin.PrintedSums printed;
+                HashSet<long> minMeterItems =
+                    ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(everything, out printed);
 
                 // COMMIT-MIN RULES act LIVE too (no meter push): for every covered item WITHOUT a MIN
                 // meter, a top-up line is synthesized when its scoped print charges fall short.
@@ -4545,11 +4525,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(l.ItemKey)) continue;
                             // Scoped print charges of THIS item across ALL jobs (run-wide buckets built
                             // above — identical filter to the old inner loop, but complete after splits).
-                            decimal pBk, pCl;
-                            printBkByItem.TryGetValue(l.ItemKey, out pBk);
-                            printClByItem.TryGetValue(l.ItemKey, out pCl);
-                            decimal printed = rule.Scope == "BK" ? pBk : (rule.Scope == "CL" ? pCl : pBk + pCl);
-                            decimal topUp = rule.CommitAmount - printed;
+                            decimal ruleprinted = printed.ForItem(l.ItemKey, rule.Scope);
+                            decimal topUp = rule.CommitAmount - ruleprinted;
                             if (topUp < 0m) topUp = 0m;
                             MeterBillLine minLn = new MeterBillLine();
                             minLn.ItemKey = l.ItemKey;
@@ -4566,11 +4543,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             minLn.IsCommittedMin = true;
                             minLn.AlwaysBill = true;   // transparency: shown even at RM 0
                             minLn.CommittedAmount = rule.CommitAmount;
-                            minLn.PrintedAmount = printed;
+                            minLn.PrintedAmount = ruleprinted;
                             minLn.Charge = topUp;
                             minLn.StrategyCode = l.StrategyCode;
                             minLn.StrategyNote = "COMMITTED MIN (rule) " + rule.CommitAmount.ToString("0.00") +
-                                                 ": printed " + printed.ToString("0.00") + " -> top-up " + topUp.ToString("0.00");
+                                                 ": printed " + ruleprinted.ToString("0.00") + " -> top-up " + topUp.ToString("0.00");
                             extra.Add(minLn);
                             break;   // one committed-min line per item
                         }

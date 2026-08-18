@@ -59,14 +59,17 @@ namespace ServiceContractPhotocopier.Classes
         public const string TYPE_INITIAL_METER = "INITIAL-METER";
         public const string TYPE_LIMIT = "LIMIT";
 
-        /// <summary>The three meter types the new way needs, seeded by
+        /// <summary>The five meter types the new way needs, seeded by
         /// 04_Seed_zSCP_MeterType_Standard.sql. The old book invented a meter type per machine and per
         /// rate because Master Accounting had nowhere else to put them; here the rate lives on the
         /// machine's meter and the wording comes from the billing format, so a type only says WHICH
-        /// counter this is. The machine form's "Need rental" tick looks up METER_TYPE_RENTAL by code.</summary>
+        /// counter this is, and COMMIT / WAIVE only say which KIND of deal this is -- the amount and
+        /// the terms are on the machine's meter row. The machine form's ticks look these up by code.</summary>
         public const string METER_TYPE_RENTAL = "RENTAL";
         public const string METER_TYPE_BK = "BK";
         public const string METER_TYPE_CL = "CL";
+        public const string METER_TYPE_COMMIT = "COMMIT";
+        public const string METER_TYPE_WAIVE = "WAIVE";
 
         /// <summary>Effective strategy (the contract's OWN rule lines) per contract for the given keys.
         /// Reads zSCP2_ContractStrategyRule — the per-contract copy, edited on the contract, decoupled from

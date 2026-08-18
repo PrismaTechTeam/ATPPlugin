@@ -203,6 +203,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
             dt.Columns.Add("WaivePartialAmount", typeof(decimal));
             dt.Columns.Add("WaiveScope", typeof(string));
+            // Whose print charges a committed minimum is measured against: S machine / G merge
+            // group / C whole contract. WaiveScope answers the other half -- black / colour / both.
+            dt.Columns.Add("CommitScope", typeof(string));
             return dt;
         }
 
@@ -1063,6 +1066,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             r["InitialReading"] = 0m;
             r["CustomTiers"] = "";
             r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m; r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
+            if (_meters.Columns.Contains("CommitScope")) r["CommitScope"] = "S";
             _meters.Rows.Add(r);
         }
 
@@ -1186,6 +1190,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             r["CustomTiers"] = "";
             r["WaiveFirstNMonths"] = 0; r["WaiveTargetAmount"] = 0m; r["WaivePartialThreshold"] = 0m;
             r["WaivePartialAmount"] = 0m; r["WaiveScope"] = "BKCL";
+            if (meters.Columns.Contains("CommitScope")) r["CommitScope"] = "S";
             meters.Rows.Add(r);
             return found;
         }
@@ -2615,7 +2620,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
                             "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, [Description]=@desc, MinimumCharges=@min, ChargesRate=@rate, " +
                             "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
-                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialThreshold=@wpt, WaivePartialAmount=@wpa, WaiveScope=@ws, " +
+                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialThreshold=@wpt, WaivePartialAmount=@wpa, WaiveScope=@ws, CommitScope=@cs, " +
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
                             up.Parameters.AddWithValue("@role", role);
@@ -2631,8 +2636,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
                             "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, " +
                             "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, " +
-                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, LastModified) " +
-                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, LastModified) " +
+                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
                         {
                             ins.Parameters.AddWithValue("@ik", itemKey);
                             ins.Parameters.AddWithValue("@type", type);
@@ -2760,6 +2765,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@wpa", r.Table.Columns.Contains("WaivePartialAmount") && r["WaivePartialAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialAmount"]) : 0m);
             string wsv = r.Table.Columns.Contains("WaiveScope") && r["WaiveScope"] != DBNull.Value ? Convert.ToString(r["WaiveScope"]).Trim() : "";
             cmd.Parameters.AddWithValue("@ws", wsv.Length > 0 ? (object)wsv : (object)"BKCL");
+            string csv = r.Table.Columns.Contains("CommitScope") && r["CommitScope"] != DBNull.Value
+                ? Convert.ToString(r["CommitScope"]).Trim().ToUpperInvariant() : "";
+            cmd.Parameters.AddWithValue("@cs", csv == "G" || csv == "C" ? (object)csv : (object)"S");
         }
 
         // Decide what a context column actually stores. Unbound item: the value as typed. Bound item:
