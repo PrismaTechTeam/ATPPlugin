@@ -38,10 +38,6 @@ ATPDEMO0001
 Authorised Signature
 1.                                                                  	MONTHLY RENTAL (13/36)                                	          	           	    	 	       	1.00000000    	UNIT	1,200.0000     	    	 	                     	1,200.00
                                                                     	MODEL:iR-ADV 6580i  S/N:DEMO05-001
-                                                                    	Current Meter Reading (01/08/2026) : 0                	          	           	    	 	       	              	    	               	    	 	                     	
-                                                                    	Previous Meter Reading (01/07/2026) : 0               	          	           	    	 	       	              	    	               	    	 	                     	
-                                                                    	Meter Charges Usage : 0                               	          	           	    	 	       	              	    	               	    	 	                     	
-                                                                    	                                                      	          	           	    	 	       	              	    	               	    	 	                     	
 2.                                                                  	MONTHLY RENTAL (13/36)                                	          	           	    	 	       	4.00000000    	UNIT	620.0000       	    	 	                     	2,480.00
                                                                     	MODEL:iR-ADV DX 4960i, iR-ADV DX 
                                                                     	C5760i  4 UNIT

@@ -235,9 +235,7 @@ static class RealLayoutCheck
         d1.Attention = "MS TESTER";
         d1.DebtorAddress = "LOT 1, JALAN CONTOH\r\nTAMAN PERINDUSTRIAN\r\n81100 JOHOR BAHRU\r\nJOHOR";
         d1.Lines.Add(Line("MONTHLY RENTAL (13/36)", "MODEL:iR-ADV 6580i  S/N:DEMO05-001",
-            "DEMO-05-001  DEMO05-001", "", 1, 1200m, 1200m, false,
-            "Current Meter Reading (01/08/2026) : 0", "Previous Meter Reading (01/07/2026) : 0",
-            "Meter Charges Usage : 0"));
+            "DEMO-05-001  DEMO05-001", "", 1, 1200m, 1200m, false));
         d1.Lines.Add(Line("MONTHLY RENTAL (13/36)", "MODEL:iR-ADV DX 4960i, iR-ADV DX C5760i  4 UNIT",
             "4 machines:  DEMO05-002, DEMO05-003, DEMO05-004, DEMO05-005", "", 4, 620m, 2480m, false));
         docs.Add(d1);

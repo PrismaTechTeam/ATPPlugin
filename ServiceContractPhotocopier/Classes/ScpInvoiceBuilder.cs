@@ -546,11 +546,15 @@ namespace ServiceContractPhotocopier.Classes
         /// posted document and the Sample Invoice preview call -- a preview that composed its own
         /// version would drift from the article the moment either changed.</para>
         ///
-        /// <para>Returned in print order, ready to become one description-only row each. A committed
-        /// minimum has no reading at all and returns nothing. A RENTAL line does print them, all
-        /// zeros -- that looks like an omission and is not: the book's own invoices do it (doc 2402289
-        /// carries "Current Meter Reading (07/07/2026) : 0" under RA-24MTH_EB2B, between two real
-        /// meter lines), so a document that dropped them would no longer match the article.</para>
+        /// <para>Returned in print order, ready to become one description-only row each.</para>
+        ///
+        /// <para>A line with no meter behind it -- a rental, a waive, a committed minimum -- returns
+        /// nothing, because it has no reading to report. The old system printed the rows anyway, all
+        /// zeros (doc 2402289 carries "Current Meter Reading (07/07/2026) : 0" under RA-24MTH_EB2B),
+        /// and on a merged rental that also meant the serials appeared twice: once on the description
+        /// and again as the block's own S/N row. Zeros the customer has to learn to ignore are not
+        /// fidelity to the article, they are a habit the article had. The free months are real
+        /// information, so a rental that has them still says so.</para>
         /// </summary>
         public static List<string> ComposeReadingRows(ScpFoldedLine row, DateTime readingDate)
         {
@@ -558,6 +562,12 @@ namespace ServiceContractPhotocopier.Classes
             if (row == null || row.Leader == null) return rows;
             MeterBillLine ln = row.Leader;
             if (ln.IsCommittedMin) return rows;
+            if (ln.IsFlat)
+            {
+                decimal freeMonths = row.IsMerged ? row.FocApplied : ln.Foc;
+                if (freeMonths > 0m) rows.Add("Meter FOC Qty : " + Num(freeMonths));
+                return rows;
+            }
 
             // #16: contract-period mode prints the period as ONE range line -- user-specified format
             // "(start - end)" -- and the reading rows drop their dates (the customer must never see
@@ -594,10 +604,10 @@ namespace ServiceContractPhotocopier.Classes
             // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free band
             // (usage - billed copies) -- its FOCQty column is ignored by the engine, so printing the
             // raw column here used to show a FOC that was never deducted.
-            // Flat (rental) lines keep the column value (= free months); a ladder meter's is the
-            // ladder's own free band, since the engine ignores its FOCQty column.
+            // A ladder meter's FOC is the ladder's own free band (usage - billed copies), since the
+            // engine ignores its FOCQty column -- printing the raw column showed a FOC never deducted.
             decimal focApplied = row.IsMerged ? row.FocApplied
-                                              : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies - ln.RebateQty));
+                                              : (ln.Usage - ln.BillCopies - ln.RebateQty);
             if (focApplied < 0m) focApplied = 0m;
             if (focApplied > 0m)
                 rows.Add("Meter FOC Qty : " + Num(focApplied));
