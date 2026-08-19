@@ -236,36 +236,59 @@ namespace ServiceContractPhotocopier.Classes
 
         /// <summary>
         /// Put the rows in print order: every rental first, then the waives that reduce them, then
-        /// black, then colour, and the committed minimum last because it measures the print charges
-        /// printed above it.
+        /// the usage grouped by the machines it is for -- black and colour of the same machine (or the
+        /// same model, when the format merges by model) next to each other -- and the committed
+        /// minimum last, because it measures the print charges printed above it.
         ///
-        /// <para>Both Fold methods have always DESCRIBED this order and neither produced it -- the
-        /// rows came out in whatever order the readings were collected, which is machine by machine,
-        /// so a six-machine contract printed rental, BK, CL, rental, BK, CL down the page. The
-        /// customer reads the rental total off one block and the usage off another; interleaved, that
-        /// is not readable at all.</para>
+        /// <para>Both Fold methods DESCRIBED an order and neither produced one: the rows came out
+        /// however the readings were collected, which is machine by machine, so a six-machine contract
+        /// printed rental, BK, CL, rental, BK, CL down the page. The customer reads the rental total
+        /// off one block and the usage off another; interleaved, neither block exists.</para>
         ///
-        /// <para>Stable within a rank: two rentals stay in the order the machines are listed in the
-        /// contract, which is the order that made sense to whoever entered them. List.Sort is not
-        /// stable, hence the index.</para>
+        /// <para>But black-then-colour is only the order WITHIN a machine. Sorting all the black
+        /// together and all the colour after it separates the two halves of one machine's usage by the
+        /// whole width of the contract, and the customer checking a machine has to read the invoice
+        /// twice. So the usage is grouped by the row's leading machine first -- which is the same
+        /// machine for the BK row and the CL row of one model -- and only then by colour.</para>
+        ///
+        /// <para>Stable within a rank, so machines and models stay in the order the contract lists
+        /// them: the order that made sense to whoever entered them. List.Sort is not stable, hence
+        /// the explicit insertion sort.</para>
         /// </summary>
         public static void SortForPrint(List<ScpFoldedLine> rows)
         {
             if (rows == null || rows.Count < 2) return;
 
             int n = rows.Count;
-            int[] order = new int[n];
-            int[] rank = new int[n];
             ScpFoldedLine[] src = rows.ToArray();
-            for (int i = 0; i < n; i++) { order[i] = i; rank[i] = PrintRank(src[i]); }
+            int[] section = new int[n];
+            int[] group = new int[n];
+            int[] colour = new int[n];
+
+            // Which machine each usage row leads with, in the order those machines first appear. A
+            // model's BK row and its CL row lead with the same machine, so they land in one group.
+            Dictionary<long, int> groupOf = new Dictionary<long, int>();
+            for (int i = 0; i < n; i++)
+            {
+                section[i] = SectionOf(src[i]);
+                colour[i] = ColourOf(src[i]);
+                group[i] = 0;
+                if (section[i] != SECTION_METER) continue;
+                long machine = src[i].Leader == null ? 0L : src[i].Leader.ItemKey;
+                int g;
+                if (!groupOf.TryGetValue(machine, out g)) { g = groupOf.Count; groupOf[machine] = g; }
+                group[i] = g;
+            }
+
+            int[] order = new int[n];
+            for (int i = 0; i < n; i++) order[i] = i;
 
             // Insertion sort: stable, and a printed invoice is a handful of rows.
             for (int i = 1; i < n; i++)
             {
                 int idx = order[i];
-                int r = rank[idx];
                 int j = i - 1;
-                while (j >= 0 && rank[order[j]] > r) { order[j + 1] = order[j]; j--; }
+                while (j >= 0 && After(section, group, colour, order[j], idx)) { order[j + 1] = order[j]; j--; }
                 order[j + 1] = idx;
             }
 
@@ -273,21 +296,41 @@ namespace ServiceContractPhotocopier.Classes
             for (int i = 0; i < n; i++) rows.Add(src[order[i]]);
         }
 
-        private static int PrintRank(ScpFoldedLine row)
+        private const int SECTION_RENTAL = 0;
+        private const int SECTION_WAIVE = 1;
+        private const int SECTION_METER = 2;
+        private const int SECTION_MINIMUM = 3;
+
+        /// <summary>True when row <paramref name="a"/> must print after row <paramref name="b"/>.</summary>
+        private static bool After(int[] section, int[] group, int[] colour, int a, int b)
+        {
+            if (section[a] != section[b]) return section[a] > section[b];
+            if (group[a] != group[b]) return group[a] > group[b];
+            return colour[a] > colour[b];
+        }
+
+        private static int SectionOf(ScpFoldedLine row)
         {
             MeterBillLine ln = row == null ? null : row.Leader;
-            if (ln == null) return 3;
-            if (ln.IsCommittedMin) return 5;
-            if (ln.IsWaiveMeter) return 1;
-            if (ln.IsRental) return 0;
-            string c = (ln.ColorLabel ?? "").Trim();
+            if (ln == null) return SECTION_METER;
+            if (ln.IsCommittedMin) return SECTION_MINIMUM;
+            if (ln.IsWaiveMeter) return SECTION_WAIVE;
+            if (ln.IsRental) return SECTION_RENTAL;
+            return SECTION_METER;
+        }
+
+        private static int ColourOf(ScpFoldedLine row)
+        {
+            MeterBillLine ln = row == null ? null : row.Leader;
+            if (ln == null) return 2;
             // "Black"/"Colour" from the reading grid, "BK"/"CL" from the format preview.
+            string c = (ln.ColorLabel ?? "").Trim();
             if (string.Equals(c, "Black", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(c, "BK", StringComparison.OrdinalIgnoreCase)) return 2;
+                string.Equals(c, "BK", StringComparison.OrdinalIgnoreCase)) return 0;
             if (string.Equals(c, "Colour", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(c, "Color", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(c, "CL", StringComparison.OrdinalIgnoreCase)) return 3;
-            return 4;
+                string.Equals(c, "CL", StringComparison.OrdinalIgnoreCase)) return 1;
+            return 2;
         }
 
         /// <summary>
