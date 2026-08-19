@@ -192,6 +192,7 @@ namespace ServiceContractPhotocopier.Classes
                 result.Add(grp);
             }
             foreach (ScpFoldedLine g in result) Aggregate(g);
+            SortForPrint(result);
             return result;
         }
 
@@ -229,7 +230,64 @@ namespace ServiceContractPhotocopier.Classes
             }
 
             foreach (ScpFoldedLine g in result) Aggregate(g);
+            SortForPrint(result);
             return result;
+        }
+
+        /// <summary>
+        /// Put the rows in print order: every rental first, then the waives that reduce them, then
+        /// black, then colour, and the committed minimum last because it measures the print charges
+        /// printed above it.
+        ///
+        /// <para>Both Fold methods have always DESCRIBED this order and neither produced it -- the
+        /// rows came out in whatever order the readings were collected, which is machine by machine,
+        /// so a six-machine contract printed rental, BK, CL, rental, BK, CL down the page. The
+        /// customer reads the rental total off one block and the usage off another; interleaved, that
+        /// is not readable at all.</para>
+        ///
+        /// <para>Stable within a rank: two rentals stay in the order the machines are listed in the
+        /// contract, which is the order that made sense to whoever entered them. List.Sort is not
+        /// stable, hence the index.</para>
+        /// </summary>
+        public static void SortForPrint(List<ScpFoldedLine> rows)
+        {
+            if (rows == null || rows.Count < 2) return;
+
+            int n = rows.Count;
+            int[] order = new int[n];
+            int[] rank = new int[n];
+            ScpFoldedLine[] src = rows.ToArray();
+            for (int i = 0; i < n; i++) { order[i] = i; rank[i] = PrintRank(src[i]); }
+
+            // Insertion sort: stable, and a printed invoice is a handful of rows.
+            for (int i = 1; i < n; i++)
+            {
+                int idx = order[i];
+                int r = rank[idx];
+                int j = i - 1;
+                while (j >= 0 && rank[order[j]] > r) { order[j + 1] = order[j]; j--; }
+                order[j + 1] = idx;
+            }
+
+            rows.Clear();
+            for (int i = 0; i < n; i++) rows.Add(src[order[i]]);
+        }
+
+        private static int PrintRank(ScpFoldedLine row)
+        {
+            MeterBillLine ln = row == null ? null : row.Leader;
+            if (ln == null) return 3;
+            if (ln.IsCommittedMin) return 5;
+            if (ln.IsWaiveMeter) return 1;
+            if (ln.IsRental) return 0;
+            string c = (ln.ColorLabel ?? "").Trim();
+            // "Black"/"Colour" from the reading grid, "BK"/"CL" from the format preview.
+            if (string.Equals(c, "Black", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c, "BK", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (string.Equals(c, "Colour", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c, "Color", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c, "CL", StringComparison.OrdinalIgnoreCase)) return 3;
+            return 4;
         }
 
         /// <summary>
