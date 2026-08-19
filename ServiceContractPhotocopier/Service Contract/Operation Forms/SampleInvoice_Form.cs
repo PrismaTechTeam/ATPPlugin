@@ -316,6 +316,7 @@ namespace ServiceContractPhotocopier
 
             decimal grand = 0m;
             int totalLines = 0;
+            int waiveHidden = 0;
             foreach (string inv in order)
             {
                 List<ScpFoldedLine> rows = ScpInvoiceLayout.FoldWith(
@@ -379,7 +380,9 @@ namespace ServiceContractPhotocopier
                 "machines it covers all come from this contract's own settings, through the same engine " +
                 "Generate uses. Only the meter READINGS are invented, so the copies and the money are " +
                 "illustrative. A committed minimum prints 0.00 because its charge is the shortfall, " +
-                "which cannot be known until the copies are in.";
+                "which cannot be known until the copies are in. A rental waive is left out " +
+                "altogether: whether it fires, and for how much, is decided at Generate against the " +
+                "real month, and a figure guessed here would be a credit the customer may never get.";
             return docs;
         }
 

@@ -627,7 +627,7 @@ namespace ServiceContractPhotocopier.Classes
         /// their invoices already print:
         /// <code>
         ///   MONTHLY RENTAL (11/36)              BK COPY + PRINT A4&amp;A3
-        ///   MODEL:iR-ADV 4545i  S/N:YAJ01479    MODEL:iR-ADV 4545i  3 UNIT
+        ///   MODEL:iR-ADV 4545i  S/N:YAJ01479    MODEL:iR-ADV 4545i  (3 UNIT)
         /// </code>
         ///
         /// <para>This is what makes a per-machine layout readable. Without it, three machines of the
@@ -675,7 +675,7 @@ namespace ServiceContractPhotocopier.Classes
             else
             {
                 if (tail.Length > 0) tail.Append("  ");
-                tail.Append(row.Units).Append(" UNIT");
+                tail.Append("(").Append(row.Units).Append(" UNIT)");
 
                 // Which machines those units ARE. A meter line already lists them under its readings
                 // ("S/N : ..." in the breakdown block), but a flat line has no breakdown block at all
