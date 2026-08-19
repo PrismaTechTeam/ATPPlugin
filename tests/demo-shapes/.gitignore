@@ -1,3 +1,6 @@
 sample-invoice.pdf
 page.png
+real-invoice.pdf
+real-*.png
+crop-*.png
 *.exe

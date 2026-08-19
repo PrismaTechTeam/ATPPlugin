@@ -26,8 +26,9 @@ namespace ServiceContractPhotocopier.Classes
     /// loaded with a <c>WHERE 1=0</c> query against the very view the real path reads, so a book with
     /// extra UDF columns, a different AutoCount build, or a renamed field still produces a row shaped
     /// exactly the way the layout expects. Only the handful of fields that carry MEANING — who is
-    /// billed, for what, how much — are written by hand; everything else is defaulted to the empty
-    /// value of its own type so a layout that binds it prints a blank rather than throwing.</para>
+    /// billed, for what, how much — are written by hand; every other number is zeroed so the tax and
+    /// total arithmetic has something to work on, and every other text field is left NULL, which is
+    /// what the book itself stores and what the layouts are drawn against.</para>
     ///
     /// <para>Failure is a return value, never an exception. The caller keeps the hand-drawn
     /// <see cref="ScpSampleInvoiceReport"/> as its fallback, and a preview that cannot be built must
@@ -231,27 +232,48 @@ namespace ServiceContractPhotocopier.Classes
             DataTable detail = ds.Tables["Detail"];
 
             int taxEntityId = FirstTaxEntityId(ds.Tables["TaxEntity"]);
+            int qtyDecimals = QtyScale(db);
             DateTime today = DateTime.Today;
-            long dtlKey = -1;
+
+            int lineCount = 0;
+            for (int i = 0; i < invoices.Count; i++) lineCount += invoices[i].Lines.Count;
+            long dtlKey = -(lineCount > 0 ? lineCount : 1);
 
             for (int i = 0; i < invoices.Count; i++)
             {
                 SampleInvoiceDoc doc = invoices[i];
-                long docKey = -(i + 1);
+                // Sentinel keys, negative so they can never collide with a real document — but
+                // ASCENDING in the order the invoices were given. A layout that sorts by DocKey
+                // (the stock ones do) would otherwise print the batch backwards.
+                long docKey = -(invoices.Count - i);
 
                 decimal total = 0m;
                 for (int j = 0; j < doc.Lines.Count; j++) total += doc.Lines[j].Amount;
 
+                // What the caller already worked out wins; the book fills whatever it left blank.
                 DebtorInfo who = LoadDebtor(db, doc.DebtorCode);
-                if (who.CompanyName.Length == 0)
-                    who.CompanyName = (doc.DebtorName ?? "").Trim();
+                if (who.CompanyName.Length == 0) who.CompanyName = (doc.DebtorName ?? "").Trim();
+                string[] addr = SplitAddress(doc.DebtorAddress);
+                if (addr != null)
+                {
+                    who.Address1 = addr[0]; who.Address2 = addr[1];
+                    who.Address3 = addr[2]; who.Address4 = addr[3];
+                }
+                if ((doc.Attention ?? "").Trim().Length > 0) who.Attention = doc.Attention.Trim();
+                if ((doc.Terms ?? "").Trim().Length > 0) who.DisplayTerm = doc.Terms.Trim();
                 CurrencyInfo cur = LoadCurrency(db, who.CurrencyCode);
+
+                string docNo = (doc.DocNo ?? "").Trim();
+                if (docNo.Length == 0) docNo = invoices.Count > 1 ? "SAMPLE-" + (i + 1) : "SAMPLE";
+                DateTime docDate = doc.DocDate == default(DateTime) ? today : doc.DocDate;
 
                 DataRow m = master.NewRow();
                 m["DocKey"] = docKey;
-                Put(m, "DocNo", invoices.Count > 1 ? "SAMPLE-" + (i + 1) : "SAMPLE");
-                Put(m, "DocDate", today);
-                Put(m, "TaxDate", today);
+                Put(m, "DocNo", docNo);
+                Put(m, "DocDate", docDate);
+                Put(m, "TaxDate", docDate);
+                Put(m, "SalesAgent", (doc.Agent ?? "").Trim());
+                Put(m, "SalesAgentDescription", (doc.Agent ?? "").Trim());
                 Put(m, "Description", Note(doc));
                 Put(m, "Ref", (doc.ContractNo ?? "").Trim());
                 Put(m, "DebtorCode", (doc.DebtorCode ?? "").Trim());
@@ -309,9 +331,10 @@ namespace ServiceContractPhotocopier.Classes
                     decimal qty = line.Qty;
                     decimal price = line.UnitPrice;
                     if (qty == 0m) { qty = 1m; price = line.Amount; }
+                    if (qtyDecimals >= 0) qty = AtScale(qty, qtyDecimals);
 
                     DataRow d = detail.NewRow();
-                    d["DtlKey"] = dtlKey--;
+                    d["DtlKey"] = dtlKey++;
                     d["DocKey"] = docKey;
                     Put(d, "Seq", j + 1);
                     Put(d, "MainItem", "T");
@@ -351,6 +374,30 @@ namespace ServiceContractPhotocopier.Classes
             return ds;
         }
 
+        /// <summary>The caller's already-formatted address block back into the four lines the book
+        /// keeps it in. Null when nothing was supplied, which leaves the debtor master to answer.</summary>
+        private static string[] SplitAddress(string block)
+        {
+            string text = (block ?? "").Trim();
+            if (text.Length == 0) return null;
+            string[] raw = text.Replace("\r\n", "\n").Split('\n');
+            string[] four = new string[4] { "", "", "", "" };
+            int n = 0;
+            for (int i = 0; i < raw.Length && n < 4; i++)
+            {
+                string line = raw[i].Trim();
+                if (line.Length == 0) continue;
+                four[n++] = line;
+            }
+            // More lines than the book has slots: the tail joins the last one rather than vanishing.
+            for (int i = 4; i < raw.Length; i++)
+            {
+                string line = raw[i].Trim();
+                if (line.Length > 0) four[3] = (four[3] + " " + line).Trim();
+            }
+            return four;
+        }
+
         /// <summary>What this invoice is — said on the document itself, so a sample can never be
         /// mistaken for a real one just because it wears the real layout.</summary>
         private static string Note(SampleInvoiceDoc doc)
@@ -388,9 +435,15 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>
-        /// Everything still unset becomes the empty value of its own type: "" for text, 0 for money.
-        /// A stock layout binds far more columns than a sample knows about, and a bound NULL is the
-        /// difference between a blank on the page and a rendering that stops.
+        /// Every number still unset becomes 0 — a stock layout binds far more money columns than a
+        /// sample knows about, and tax and total arithmetic runs over all of them.
+        ///
+        /// <para>TEXT is deliberately left NULL. An empty string is not the same as no value on a
+        /// printed page: a real invoice row leaves Discount, TaxCode and SerialNoList null, and a
+        /// layout that hides a caption when its field is null will happily print a stray
+        /// "Serial No.:" against an empty string. Matching what the book stores is what makes the
+        /// sample read like the article. Verified against a real invoice rendered through the same
+        /// design.</para>
         /// </summary>
         private static void FillBlanks(DataRow row, params string[] keepNull)
         {
@@ -403,8 +456,7 @@ namespace ServiceContractPhotocopier.Classes
                 if (skip) continue;
 
                 Type t = c.DataType;
-                if (t == typeof(string)) row[c] = "";
-                else if (t == typeof(decimal)) row[c] = 0m;
+                if (t == typeof(decimal)) row[c] = 0m;
                 else if (t == typeof(double)) row[c] = 0d;
                 else if (t == typeof(float)) row[c] = 0f;
                 else if (t == typeof(long)) row[c] = 0L;
@@ -412,8 +464,47 @@ namespace ServiceContractPhotocopier.Classes
                 else if (t == typeof(short)) row[c] = (short)0;
                 else if (t == typeof(byte)) row[c] = (byte)0;
                 else if (t == typeof(bool)) row[c] = false;
-                // Guid, DateTime and byte[] stay null: an invented one would read as a real value.
+                // Text, Guid, DateTime and byte[] stay null, exactly as the book stores them.
             }
+        }
+
+        /// <summary>
+        /// How many decimals the book stores a quantity with — the scale of vInvoiceDetail.Qty
+        /// itself, so nothing is assumed about this particular AutoCount build. -1 if it cannot be
+        /// read, which leaves the sample's own quantities alone.
+        /// </summary>
+        private static int QtyScale(DBSetting db)
+        {
+            try
+            {
+                object o = db.ExecuteScalar(
+                    "SELECT scale FROM sys.columns WHERE object_id = OBJECT_ID('dbo.vInvoiceDetail')" +
+                    " AND name = 'Qty'");
+                if (o == null || o == DBNull.Value) return -1;
+                return Convert.ToInt32(o);
+            }
+            catch { return -1; }
+        }
+
+        /// <summary>
+        /// A quantity carrying the book's own number of decimals.
+        ///
+        /// <para>A stock invoice layout prints Qty with no format string at all — the decimals you
+        /// see are the ones the stored value carries, rounded down to four by the report engine. So a
+        /// hand-built 1 prints "1" where the real article prints "1.0000", and the sample looks
+        /// subtly unlike the invoice it is previewing. Padding the value to the column's own scale
+        /// puts it on exactly the footing a stored quantity has.</para>
+        /// </summary>
+        private static decimal AtScale(decimal v, int decimals)
+        {
+            if (decimals < 0) decimals = 0;
+            if (decimals > 28) decimals = 28;
+            try
+            {
+                return decimal.Parse(v.ToString("F" + decimals, System.Globalization.CultureInfo.InvariantCulture),
+                    System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch { return v; }
         }
 
         private static int FirstTaxEntityId(DataTable taxEntity)

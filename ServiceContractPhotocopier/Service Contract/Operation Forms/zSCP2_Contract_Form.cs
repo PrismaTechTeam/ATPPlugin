@@ -5149,7 +5149,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 formatName, _billingFormatCode.Length > 0,
                 _rentalLineMode, _meterLineMode,
                 ChkRentalSeparate.Checked, ChkBillSeparate.Checked,
-                _rentalGroupPrices))
+                _rentalGroupPrices,
+                SluInvoiceTemplate == null || SluInvoiceTemplate.EditValue == null
+                    ? "" : Convert.ToString(SluInvoiceTemplate.EditValue)))
             {
                 f.ShowDialog(this);
             }

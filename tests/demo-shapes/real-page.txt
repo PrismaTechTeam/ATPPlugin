@@ -1,0 +1,53 @@
+                                                                    	                                  	          	           	    	 	INVOICE	              	   	               	No. 	:	SAMPLE-RENTAL
+Y.ARCHITECTS SDN BHD                                                	                                  	          	           	    	 	       	              	   	Your Ref.      	    	:	
+MS TESTER                                                           	                                  	          	           	    	 	       	              	   	Our D/O No.    	    	:	
+LOT 1, JALAN CONTOH
+TAMAN PERINDUSTRIAN                                                 	                                  	          	           	    	 	       	              	   	Terms          	    	:	C.O.D.
+81100 JOHOR BAHRU                                                   	                                  	          	           	    	 	       	              	   	Date           	    	:	2026/8/1 0:00:00
+JOHOR
+                                                                    	                                  	          	           	    	 	       	              	   	Page           	    	:	1 of 1
+TEL                                                                 	:                                 	0127827661	           	FAX 	:	
+Item                                                                	                                  	          	Description	    	 	       	Qty           	UOM	U/ Price       	    	 	Disc.                	Total
+                                                                    	                                  	          	           	    	 	       	              	   	RM             	    	 	                     	RM
+1.                                                                  	BLACK COPY + PRINT A4 & A3        	          	           	    	 	       	4813.00000000 	   	0.0190         	    	 	                     	91.45
+                                                                    	MODEL:iR-ADV 6580i  S/N:DEMO05-001
+                                                                    	covers:  DEMO-05-001  DEMO05-001
+2.                                                                  	BLACK COPY + PRINT A4 & A3        	          	           	    	 	       	33260.00000000	   	0.0285         	    	 	                     	947.90
+                                                                    	MODEL:iR-ADV DX 4960i, iR-ADV DX 
+                                                                    	C5760i  5 UNIT
+                                                                    	covers:  5 machines:  DEMO05-002, 
+                                                                    	DEMO05-003, DEMO05-004, DEMO05-
+                                                                    	005, DEMO05-006
+3.                                                                  	MINIMUM COMMITTED PRINT CHARGES   	          	           	    	 	       	1.00000000    	   	0.0000         	    	 	                     	0.00
+                                                                    	covers:  DEMO-05-002  DEMO05-002
+                                                                    	COMMITTED MIN 500.00 -- bills the 
+                                                                    	shortfall, worked out at Generate
+RINGGIT MALAYSIA ONE THOUSAND THIRTY NINE AND CENTS THIRTY FIVE ONLY	                                  	          	           	    	 	       	              	   	B/F Pages Total	    	 	xrBFPageTotal
+                                                                    	                                  	          	           	    	 	       	              	   	Page Total     	    	 	xrPageTotal
+Notes :                                                             	                                  	          	           	    	 	       	              	   	Total          	    	 	1039.35
+1. All cheques should be crossed and made payable to 
+
+ATPDEMO0001
+2. Goods sold are neither returnable nor refundable. Otherwise      	                                  	          	           	    	 	       	              	   	               	    	 	Continue to Next Page
+    a cancellation fee of 20% on purchase price will be imposed.
+
+Authorised Signature
+1.                                                                  	MONTHLY RENTAL (13/36)            	          	           	    	 	       	1.00000000    	   	1,200.0000     	    	 	                     	1,200.00
+                                                                    	MODEL:iR-ADV 6580i  S/N:DEMO05-001
+                                                                    	covers:  DEMO-05-001  DEMO05-001
+2.                                                                  	MONTHLY RENTAL (13/36)            	          	           	    	 	       	4.00000000    	   	620.0000       	    	 	                     	2,480.00
+                                                                    	MODEL:iR-ADV DX 4960i, iR-ADV DX 
+                                                                    	C5760i  4 UNIT
+                                                                    	covers:  4 machines:  DEMO05-002, 
+                                                                    	DEMO05-003, DEMO05-004, DEMO05-
+                                                                    	005
+RINGGIT MALAYSIA THREE THOUSAND SIX HUNDRED EIGHTY ONLY             	                                  	          	           	    	 	       	              	   	B/F Pages Total	    	 	xrBFPageTotal
+                                                                    	                                  	          	           	    	 	       	              	   	Page Total     	    	 	xrPageTotal
+Notes :                                                             	                                  	          	           	    	 	       	              	   	Total          	    	 	3680
+1. All cheques should be crossed and made payable to 
+
+ATPDEMO0001
+2. Goods sold are neither returnable nor refundable. Otherwise      	                                  	          	           	    	 	       	              	   	               	    	 	Continue to Next Page
+    a cancellation fee of 20% on purchase price will be imposed.
+
+Authorised Signature

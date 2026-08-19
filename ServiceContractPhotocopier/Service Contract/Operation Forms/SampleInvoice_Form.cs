@@ -46,6 +46,8 @@ namespace ServiceContractPhotocopier
         private readonly bool _rentalSeparate;
         private readonly bool _perMachine;
         private readonly Dictionary<string, decimal> _groupPrices;
+        /// <summary>The layout this contract names in Invoice Template ("" = the book's default).</summary>
+        private readonly string _invoiceTemplate = "";
         /// <summary>Whether this book still folds rentals the old way — what a contract with no
         /// Billing Format is actually billed under.</summary>
         private bool _legacyRentalFold;
@@ -65,7 +67,7 @@ namespace ServiceContractPhotocopier
         public SampleInvoice_Form(AutoCount.Data.DBSetting db, List<ItemEditData> items,
             string contractNo, string debtor, string formatName, bool hasFormat,
             char rentalMode, char meterMode, bool rentalSeparate, bool perMachine,
-            Dictionary<string, decimal> groupPrices) : this()
+            Dictionary<string, decimal> groupPrices, string invoiceTemplate) : this()
         {
             _db = db;
             _items = items ?? new List<ItemEditData>();
@@ -78,6 +80,7 @@ namespace ServiceContractPhotocopier
             _rentalSeparate = rentalSeparate;
             _perMachine = perMachine;
             _groupPrices = groupPrices ?? new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            _invoiceTemplate = invoiceTemplate ?? "";
         }
 
         private void OnFormLoad(object sender, EventArgs e)
@@ -85,9 +88,31 @@ namespace ServiceContractPhotocopier
             _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
             LoadDebtor();
             List<SampleInvoiceDoc> docs = Build();
+
+            // The book's OWN invoice layout first -- the same design a real printed invoice uses,
+            // and the one this contract names in Invoice Template. Nothing is created or posted to
+            // get it: the report is handed a data set shaped like the one the print path loads.
+            //
+            // The hand-drawn report stays as the fallback, because a book with no invoice layout at
+            // all, or a layout this data trips over, must still show the operator something. Which
+            // one was used is said out loud in the header, so a fallback is never mistaken for the
+            // real thing.
+            string layoutName, why;
+            DevExpress.XtraReports.UI.XtraReport real = ScpSampleInvoiceDocSource.Build(
+                _db, AutoCount.Authentication.UserSession.CurrentUserSession, _invoiceTemplate,
+                docs, out layoutName, out why);
+            if (real != null)
+            {
+                PrintPreview.PrintingSystem = real.PrintingSystem;
+                LblHeader.Text += "        layout: " + (layoutName.Length > 0 ? layoutName : "(book default)");
+                return;
+            }
+
             ScpSampleInvoiceReport rpt = ScpSampleInvoiceReport.Create(docs, _footer, SampleInvoiceCompany.Load(_db));
             rpt.CreateDocument();
             PrintPreview.PrintingSystem = rpt.PrintingSystem;
+            LblHeader.Text += "        layout: built-in sample" +
+                (why.Length > 0 ? "  (the book's own layout could not be used: " + why + ")" : "");
         }
 
         /// <summary>The customer's name, address and terms. Never throws — a debtor that cannot be

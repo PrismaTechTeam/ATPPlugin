@@ -34,6 +34,12 @@ static class RealLayoutCheck
     [MethodImpl(MethodImplOptions.NoInlining)]
     static int Run(string templateName)
     {
+        // AutoCount reads its built-in report designs from report.dat in the STARTUP folder. Hosted
+        // outside Accounting.exe that is this harness's own bin, where no such file exists, and every
+        // system layout silently disappears from the list. Inside the real plugin the two folders are
+        // the same, so this line is a harness concern only.
+        AutoCount.Application.PathHelper.SetStartupPath(AC);
+
         AutoCount.Data.DBSetting db = new AutoCount.Data.DBSetting(
             AutoCount.Data.DBServerType.SQL2000, "localhost,1433", "sa", "rs6663", "AED_ATPTEST", false);
 
@@ -76,15 +82,47 @@ static class RealLayoutCheck
         string outPng = Path.Combine(dir, "real-page.png");
         ps.ExportToImage(outPng, img);
 
-        int bricks = 0;
-        foreach (DevExpress.XtraPrinting.Page pg in ps.Document.Pages) bricks += pg.InnerBricks.Count;
+        // and every page, so each sample invoice can actually be looked at
+        DevExpress.XtraPrinting.ImageExportOptions all = new DevExpress.XtraPrinting.ImageExportOptions();
+        all.Format = DevExpress.Drawing.DXImageFormat.Png;
+        all.Resolution = 110;
+        all.ExportMode = DevExpress.XtraPrinting.ImageExportMode.SingleFilePageByPage;
+        ps.ExportToImage(Path.Combine(dir, "real-all.png"), all);
+
+        // What the document actually SAYS. A page count proves paper was produced; only the text
+        // proves the sample's own numbers reached it.
+        string text = "";
+        using (MemoryStream ms = new MemoryStream())
+        {
+            ps.ExportToText(ms, new DevExpress.XtraPrinting.TextExportOptions());
+            text = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+        }
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+            "real-page.txt"), text);
+        string[] mustSay = { "MONTHLY RENTAL", "SAMPLE-RENTAL", "C.O.D.", "MS TESTER", "JALAN CONTOH", "1,200.00", "2,480.00", "3680",
+                             "BLACK COPY", "947.90", "1039.35", "Y.ARCHITECTS",
+                             "THREE THOUSAND SIX HUNDRED EIGHTY ONLY",
+                             "ONE THOUSAND THIRTY NINE AND CENTS THIRTY FIVE ONLY" };
+        List<string> missing = new List<string>();
+        for (int i = 0; i < mustSay.Length; i++)
+            if (text.IndexOf(mustSay[i], StringComparison.OrdinalIgnoreCase) < 0) missing.Add(mustSay[i]);
 
         Console.WriteLine("RESULT              : OK");
         Console.WriteLine("layout resolved     : " + (layout.Length > 0 ? layout : "(none)"));
-        Console.WriteLine("pages               : " + ps.Document.Pages.Count);
-        Console.WriteLine("bricks              : " + bricks);
+        Console.WriteLine("pages               : " + ps.Document.Pages.Count + "   (invoices " + docs.Count + ")");
+        // Page 1 must be the FIRST invoice handed in, not whichever sentinel key sorted lowest.
+        // Detail lines, not the document number: the text export prints a repeating page header
+        // only once, so invoice 2's "No." never appears in it.
+        int atFirst = text.IndexOf("MONTHLY RENTAL", StringComparison.OrdinalIgnoreCase);
+        int atSecond = text.IndexOf("BLACK COPY", StringComparison.OrdinalIgnoreCase);
+        bool orderOk = atFirst >= 0 && atSecond > atFirst;
+        Console.WriteLine("page 1 is invoice 1 : " + (orderOk ? "yes" : "NO -- the batch printed out of order"));
+
+        Console.WriteLine("on the page         : " + (missing.Count == 0
+            ? "all " + mustSay.Length + " expected values present"
+            : "MISSING -> " + string.Join(", ", missing.ToArray())));
         Console.WriteLine("pdf                 : " + outPdf + "  (" + new FileInfo(outPdf).Length + " bytes)");
-        foreach (string f in Directory.GetFiles(dir, "real-page*.png"))
+        foreach (string f in Directory.GetFiles(dir, "real-*.png"))
             Console.WriteLine("png                 : " + f + "  (" + new FileInfo(f).Length + " bytes)");
 
         long ivAfter = Count(db, "IV");
@@ -94,8 +132,77 @@ static class RealLayoutCheck
             ? "book untouched      : yes"
             : "!! BOOK CHANGED     : an invoice was written");
 
-        if (bricks < 20) Console.WriteLine("!! suspiciously few bricks -- the page may be blank");
-        return (ivAfter == ivBefore && dtlAfter == dtlBefore && bricks >= 20) ? 0 : 1;
+
+        // What the design actually asks for. Anything listed here that the sample leaves unset is a
+        // field that will print blank -- which is the only way to know what still needs filling.
+        Console.WriteLine();
+        Console.WriteLine("---- fields this layout binds ----");
+        List<string> bound = new List<string>();
+        foreach (DevExpress.XtraReports.UI.Band b in xr.Bands) Collect(b, bound);
+        bound.Sort();
+        Console.WriteLine(string.Join(", ", bound.ToArray()));
+
+        // The same layout, fed a REAL invoice from the book. Side by side with real-page.png this
+        // says whether the sample is missing anything the printed article has.
+        Control(us, layout, dir);
+
+        return (ivAfter == ivBefore && dtlAfter == dtlBefore
+                && missing.Count == 0 && orderOk && ps.Document.Pages.Count == docs.Count) ? 0 : 1;
+    }
+
+    /// <summary>Every data member and expression the design refers to, once each.</summary>
+    static void Collect(DevExpress.XtraReports.UI.XRControl c, List<string> into)
+    {
+        foreach (DevExpress.XtraReports.UI.XRBinding bd in c.DataBindings)
+            Add(into, bd.DataMember);
+        foreach (DevExpress.XtraReports.UI.ExpressionBinding eb in c.ExpressionBindings)
+            Add(into, eb.Expression);
+        foreach (DevExpress.XtraReports.UI.XRControl k in c.Controls) Collect(k, into);
+    }
+
+    static void Add(List<string> into, string what)
+    {
+        string s = (what ?? "").Trim();
+        if (s.Length == 0) return;
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(s, @"\[([A-Za-z0-9_. ]+)\]"))
+        {
+            string f = m.Groups[1].Value.Trim();
+            if (f.Length > 0 && !into.Contains(f)) into.Add(f);
+        }
+        if (s.IndexOf('[') < 0 && !into.Contains(s)) into.Add(s);
+    }
+
+    /// <summary>A genuine invoice from the book through the identical layout, as the control.</summary>
+    static void Control(AutoCount.Authentication.UserSession us, string layout, string dir)
+    {
+        try
+        {
+            object o = us.DBSetting.ExecuteScalar(
+                "SELECT TOP 1 DocKey FROM dbo.IV WHERE DocKey IN (SELECT DocKey FROM dbo.IVDTL) ORDER BY DocKey DESC");
+            if (o == null) { Console.WriteLine("control             : no real invoice to compare against"); return; }
+            long docKey = Convert.ToInt64(o);
+
+            AutoCount.Invoicing.Sales.Invoice.InvoiceListingReport r =
+                AutoCount.Invoicing.Sales.Invoice.InvoiceListingReport.Create(us);
+            object ds = r.GetReportDataSource(docKey);
+            AutoCount.Report.ReportTemplate t =
+                AutoCount.Report.AutoCountReport.GetInstance().GetReport(layout, ds, us, true);
+            DevExpress.XtraReports.UI.XtraReport cx = t.Report as DevExpress.XtraReports.UI.XtraReport;
+            ServiceContractPhotocopier.Classes.ScpReportScripts.Prepare(cx);
+            cx.DataSource = ds;
+            cx.CreateDocument();
+
+            DevExpress.XtraPrinting.ImageExportOptions img = new DevExpress.XtraPrinting.ImageExportOptions();
+            img.Format = DevExpress.Drawing.DXImageFormat.Png;
+            img.Resolution = 110;
+            img.ExportMode = DevExpress.XtraPrinting.ImageExportMode.SingleFilePageByPage;
+            img.PageRange = "1";
+            string outPng = Path.Combine(dir, "real-control.png");
+            cx.PrintingSystem.ExportToImage(outPng, img);
+            Console.WriteLine("control (DocKey " + docKey + "): " + outPng);
+        }
+        catch (Exception ex) { Console.WriteLine("control             : failed -- " + ex.Message); }
     }
 
     static long Count(AutoCount.Data.DBSetting db, string table)
@@ -121,6 +228,12 @@ static class RealLayoutCheck
         d1.DebtorName = "DEMO CUSTOMER SDN BHD";
         d1.ContractNo = "DEMO-05";
         d1.Note = "rental only";
+        // the caller-supplied header fields, so the class is exercised on the path the form uses
+        d1.DocNo = "SAMPLE-RENTAL";
+        d1.DocDate = new DateTime(2026, 8, 1);
+        d1.Terms = "C.O.D.";
+        d1.Attention = "MS TESTER";
+        d1.DebtorAddress = "LOT 1, JALAN CONTOH\r\nTAMAN PERINDUSTRIAN\r\n81100 JOHOR BAHRU\r\nJOHOR";
         d1.Lines.Add(Line("MONTHLY RENTAL (13/36)", "MODEL:iR-ADV 6580i  S/N:DEMO05-001",
             "DEMO-05-001  DEMO05-001", "", 1, 1200m, 1200m, false));
         d1.Lines.Add(Line("MONTHLY RENTAL (13/36)", "MODEL:iR-ADV DX 4960i, iR-ADV DX C5760i  4 UNIT",
