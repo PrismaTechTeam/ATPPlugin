@@ -19,7 +19,7 @@ static class DemoShapes
     const string AC = @"C:\Program Files\AutoCount\Accounting 2.2";
     const string PLUGIN = @"C:\Dev\Plugin\ATP\ServiceContractPhotocopier\bin\Debug\ServiceContractPhotocopier.dll";
 
-    static int Main()
+    static int Main(string[] args)
     {
         AppDomain.CurrentDomain.AssemblyResolve += (s, a) =>
         {
@@ -30,13 +30,13 @@ static class DemoShapes
             p = Path.Combine(Path.GetDirectoryName(PLUGIN), n + ".dll");
             return File.Exists(p) ? Assembly.LoadFrom(p) : null;
         };
-        try { Run(); }
+        try { Run(args.Length > 0 ? args[0] : "DEMO-%"); }
         catch (Exception ex) { Console.WriteLine("FATAL: " + ex); return 2; }
         return 0;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    static void Run()
+    static void Run(string like)
     {
         var db = new AutoCount.Data.DBSetting(AutoCount.Data.DBServerType.SQL2000,
             "localhost,1433", "sa", "rs6663", "AED_ATPTEST", false);
@@ -46,7 +46,7 @@ static class DemoShapes
             "ISNULL(RentalLineMode,'A') AS RLM, ISNULL(MeterLineMode,'S') AS MLM, " +
             "ISNULL(RentalSeparateInvoice,'N') AS RSep, ISNULL(BillingMode,'G') AS BM, " +
             "ISNULL([Description],'') AS Descr " +
-            "FROM dbo.zSCP2_Contract WHERE ContractNo LIKE 'DEMO-%' ORDER BY ContractNo", false);
+            "FROM dbo.zSCP2_Contract WHERE ContractNo LIKE N'" + like.Replace("'","''") + "' ORDER BY ContractNo", false);
 
         bool legacyFold = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.LegacyRentalFold(db);
         foreach (DataRow c in contracts.Rows)

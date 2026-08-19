@@ -37,6 +37,10 @@ static class RenderCheck
         d1.Title = "TAX INVOICE";
         d1.DebtorCode = "3000-A0002";
         d1.DebtorName = "DEMO CUSTOMER SDN BHD";
+        d1.DebtorAddress = "NO 12, JALAN PERINDUSTRIAN 4" + Environment.NewLine + "TAMAN PERINDUSTRIAN SKUDAI" + Environment.NewLine + "81300 SKUDAI, JOHOR";
+        d1.Attention = "MS JEAN";
+        d1.DocNo = "IV-SAMPLE";
+        d1.Terms = "30 DAYS";
         d1.ContractNo = contractNo;
         d1.Note = "rental";
         d1.Lines.Add(Line("MONTHLY RENTAL (13/36)", "MODEL:iR-ADV 6580i  S/N:DEMO05-001",
@@ -48,6 +52,10 @@ static class RenderCheck
         d2.Title = "TAX INVOICE";
         d2.DebtorCode = "3000-A0002";
         d2.DebtorName = "DEMO CUSTOMER SDN BHD";
+        d2.DebtorAddress = "NO 12, JALAN PERINDUSTRIAN 4" + Environment.NewLine + "TAMAN PERINDUSTRIAN SKUDAI" + Environment.NewLine + "81300 SKUDAI, JOHOR";
+        d2.Attention = "MS JEAN";
+        d2.DocNo = "IV-SAMPLE";
+        d2.Terms = "30 DAYS";
         d2.ContractNo = contractNo;
         d2.Note = "meters";
         d2.Lines.Add(Line("BLACK COPY + PRINT A4 & A3", "MODEL:iR-ADV 6580i  S/N:DEMO05-001",
@@ -62,8 +70,16 @@ static class RenderCheck
         docs.Add(d1);
         docs.Add(d2);
 
+        var co = new ServiceContractPhotocopier.Classes.SampleInvoiceCompany();
+        co.Name = "ATP SOLUTION SDN BHD";
+        co.RegisterNo = "202001012345 (1234567-X)";
+        co.Address = "NO 8, JALAN TEKNOLOGI 3" + Environment.NewLine + "TAMAN TEKNOLOGI JOHOR" + Environment.NewLine + "81400 SENAI, JOHOR";
+        co.Phone = "07-1234567";
+        co.Fax = "07-1234568";
+        co.Email = "atp@prismatechnology.com.my";
+
         var rpt = ServiceContractPhotocopier.Classes.ScpSampleInvoiceReport.Create(docs,
-            "The SHAPE is real. Only the meter READINGS are invented.");
+            "The SHAPE is real. Only the meter READINGS are invented.", co);
         rpt.CreateDocument();
         var ps = rpt.PrintingSystem;
 

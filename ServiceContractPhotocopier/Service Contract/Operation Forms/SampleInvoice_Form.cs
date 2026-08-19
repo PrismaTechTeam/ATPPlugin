@@ -50,6 +50,12 @@ namespace ServiceContractPhotocopier
         /// Billing Format is actually billed under.</summary>
         private bool _legacyRentalFold;
         private string _footer = "";
+        // The customer block, read from the book so the sample carries the same "To:" the real
+        // document does rather than a bare account code.
+        private string _debtorName = "";
+        private string _debtorAddress = "";
+        private string _debtorAttn = "";
+        private string _terms = "";
 
         public SampleInvoice_Form()
         {
@@ -77,10 +83,39 @@ namespace ServiceContractPhotocopier
         private void OnFormLoad(object sender, EventArgs e)
         {
             _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
+            LoadDebtor();
             List<SampleInvoiceDoc> docs = Build();
-            ScpSampleInvoiceReport rpt = ScpSampleInvoiceReport.Create(docs, _footer);
+            ScpSampleInvoiceReport rpt = ScpSampleInvoiceReport.Create(docs, _footer, SampleInvoiceCompany.Load(_db));
             rpt.CreateDocument();
             PrintPreview.PrintingSystem = rpt.PrintingSystem;
+        }
+
+        /// <summary>The customer's name, address and terms. Never throws — a debtor that cannot be
+        /// read simply prints as its code, which is still a usable sample.</summary>
+        private void LoadDebtor()
+        {
+            if (_debtor.Length == 0) return;
+            try
+            {
+                DataTable t = _db.GetDataTable(
+                    "SELECT TOP 1 ISNULL(CompanyName,'') AS CompanyName, ISNULL(Address1,'') AS A1, " +
+                    "ISNULL(Address2,'') AS A2, ISNULL(Address3,'') AS A3, ISNULL(Address4,'') AS A4, " +
+                    "ISNULL(Attention,'') AS Attn, ISNULL(TermCode,'') AS TermCode " +
+                    "FROM dbo.Debtor WHERE AccNo = N'" + _debtor.Replace("'", "''") + "'", false);
+                if (t.Rows.Count == 0) return;
+                DataRow r = t.Rows[0];
+                _debtorName = Convert.ToString(r["CompanyName"]).Trim();
+                List<string> lines = new List<string>();
+                foreach (string col in new string[] { "A1", "A2", "A3", "A4" })
+                {
+                    string v = Convert.ToString(r[col]).Trim();
+                    if (v.Length > 0) lines.Add(v);
+                }
+                _debtorAddress = string.Join(Environment.NewLine, lines.ToArray());
+                _debtorAttn = Convert.ToString(r["Attn"]).Trim();
+                _terms = Convert.ToString(r["TermCode"]).Trim();
+            }
+            catch { }
         }
 
         // ---------- the sample fleet ----------
@@ -239,8 +274,13 @@ namespace ServiceContractPhotocopier
                 SampleInvoiceDoc doc = new SampleInvoiceDoc();
                 doc.Title = "TAX INVOICE";
                 doc.DebtorCode = _debtor;
+                doc.DebtorName = _debtorName;
+                doc.DebtorAddress = _debtorAddress;
+                doc.Attention = _debtorAttn;
                 doc.ContractNo = _contractNo;
                 doc.Note = inv;
+                doc.Terms = _terms;
+                doc.DocDate = DateTime.Today;
                 docs.Add(doc);
 
                 foreach (ScpFoldedLine row in rows)
