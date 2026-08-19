@@ -418,63 +418,11 @@ namespace ServiceContractPhotocopier.Classes
                 if (!string.IsNullOrEmpty(ln.StrategyNote))
                     AddTextRow(doc, ln.StrategyNote, block);
 
-                // Reading text rows — exactly the master's content: Current / Previous / (FOC when >0)
-                // / Usage, each carrying the same block, then a blank separator row. Dates dd/MM/yyyy,
-                // readings plain digits (no thousands separators — the master prints "126699").
-                // A committed-minimum meter has no reading, so it skips these (its committed/print/top-up
-                // breakdown is already on the charge row's description).
-                if (!ln.IsCommittedMin)
-                {
-                // #16: contract-period mode prints the period as ONE range line — user-specified
-                // format "(start - end)" — and the reading rows drop their dates (the customer must
-                // never see cross-month reading dates). Normal mode is unchanged.
-                bool periodMode = ln.PeriodStart.HasValue && ln.PeriodEnd.HasValue;
-                if (periodMode)
-                    AddTextRow(doc, "Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
-                                    " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")", block);
-                // A merged row shows the group's summed readings — no machine has these numbers, and
-                // that is exactly what the customer's invoices print (Rompin's AMR2607.0087 shows
-                // 349,707, its four machines added up). Where the members were read on different
-                // days the row prints the span rather than picking one machine's date and implying
-                // the others were read then too.
-                DateTime curDate = (row.IsMerged ? row.CurDate : ln.AuditDate) ?? readingDate;
-                string curDateStr = DateSpan(row, true, curDate);
-                string lastDateStr = DateSpan(row, false, ln.LastDate ?? DateTime.MinValue);
-                decimal showCurrent = row.IsMerged ? row.Current : ln.Current;
-                decimal showLast = row.IsMerged ? row.Last : ln.Last;
-
-                AddTextRow(doc, periodMode
-                    ? "Current Meter Reading : " + Num(showCurrent)
-                    : "Current Meter Reading (" + curDateStr + ") : " + Num(showCurrent), block);
-
-                AddTextRow(doc, periodMode
-                    ? "Previous Meter Reading : " + Num(showLast)
-                    : "Previous Meter Reading (" + lastDateStr + ") : " + Num(showLast), block);
-
-                // Which machines are on this row. A single-machine row already says so on the charge
-                // line, so only a merged one needs the list — Pontian prints exactly this, all six
-                // serials against one BK line of 74,722.
-                if (row.IsMerged)
-                    AddTextRow(doc, "S/N : " + SerialList(row), block);
-
-                // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free
-                // band (usage − billed copies) — its FOCQty column is ignored by the engine, so printing
-                // the raw column here used to show a FOC that was never deducted. Flat (rental) lines
-                // keep the column value (= free months).
-                decimal focApplied = row.IsMerged ? row.FocApplied
-                                                  : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies - ln.RebateQty));
-                if (focApplied < 0m) focApplied = 0m;
-                if (focApplied > 0m)
-                    AddTextRow(doc, "Meter FOC Qty : " + Num(focApplied), block);
-
-                // The copies the rebate removed, shown the way Kastam and Tangkak show them
-                // ("Meter Rebate Qty (3%) : 141") so the arithmetic on the line is followable.
-                decimal rebQty = row.IsMerged ? row.RebateQty : ln.RebateQty;
-                if (rebQty > 0m)
-                    AddTextRow(doc, "Meter Rebate Qty (" + ln.RebatePct.ToString("0.##") + "%) : " + Num(rebQty), block);
-
-                AddTextRow(doc, "Meter Charges Usage : " + Num(row.IsMerged ? row.BillCopies : ln.BillCopies), block);
-                }   // end reading rows (skipped for committed-minimum meters)
+                // Reading text rows -- Current / Previous / (S/N when merged) / (FOC) / (rebate)
+                // / Usage, each carrying the same More Description block, composed by the method the
+                // Sample Invoice preview also calls so the two cannot drift.
+                foreach (string readingRow in ComposeReadingRows(row, readingDate))
+                    AddTextRow(doc, readingRow, block);
 
                 // Blank separator between meters (the master prints one). Like every other text row it
                 // is excluded from the subtotal, which is also what keeps its empty Description away
@@ -583,6 +531,88 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>
+        /// The lines a meter charge prints UNDER itself -- the reading breakdown the customer's own
+        /// invoices carry:
+        /// <code>
+        ///   BK COPY + PRINT A4&amp;A3                          10,929      0.0250      273.23
+        ///   Current Meter Reading (04/08/2026) : 140608
+        ///   Previous Meter Reading (19/03/2026) : 129679
+        ///   Meter Charges Usage : 10929
+        /// </code>
+        ///
+        /// <para>Without them a meter line is a number with nothing behind it, and the customer has
+        /// no way to check the usage they are being billed for. This is the single most recognisable
+        /// thing about a meter invoice from this business, so it lives in one method that both the
+        /// posted document and the Sample Invoice preview call -- a preview that composed its own
+        /// version would drift from the article the moment either changed.</para>
+        ///
+        /// <para>Returned in print order, ready to become one description-only row each. A committed
+        /// minimum has no reading at all and returns nothing. A RENTAL line does print them, all
+        /// zeros -- that looks like an omission and is not: the book's own invoices do it (doc 2402289
+        /// carries "Current Meter Reading (07/07/2026) : 0" under RA-24MTH_EB2B, between two real
+        /// meter lines), so a document that dropped them would no longer match the article.</para>
+        /// </summary>
+        public static List<string> ComposeReadingRows(ScpFoldedLine row, DateTime readingDate)
+        {
+            List<string> rows = new List<string>();
+            if (row == null || row.Leader == null) return rows;
+            MeterBillLine ln = row.Leader;
+            if (ln.IsCommittedMin) return rows;
+
+            // #16: contract-period mode prints the period as ONE range line -- user-specified format
+            // "(start - end)" -- and the reading rows drop their dates (the customer must never see
+            // cross-month reading dates). Normal mode is unchanged.
+            bool periodMode = ln.PeriodStart.HasValue && ln.PeriodEnd.HasValue;
+            if (periodMode)
+                rows.Add("Billing Period (" + ln.PeriodStart.Value.ToString("dd/MM/yyyy") +
+                         " - " + ln.PeriodEnd.Value.ToString("dd/MM/yyyy") + ")");
+
+            // A merged row shows the group's summed readings -- no machine has these numbers, and that
+            // is exactly what the customer's invoices print (Rompin's AMR2607.0087 shows 349,707, its
+            // four machines added up). Where the members were read on different days the row prints
+            // the span rather than picking one machine's date and implying the others were read then.
+            DateTime curDate = (row.IsMerged ? row.CurDate : ln.AuditDate) ?? readingDate;
+            string curDateStr = DateSpan(row, true, curDate);
+            string lastDateStr = DateSpan(row, false, ln.LastDate ?? DateTime.MinValue);
+            decimal showCurrent = row.IsMerged ? row.Current : ln.Current;
+            decimal showLast = row.IsMerged ? row.Last : ln.Last;
+
+            rows.Add(periodMode
+                ? "Current Meter Reading : " + Num(showCurrent)
+                : "Current Meter Reading (" + curDateStr + ") : " + Num(showCurrent));
+
+            rows.Add(periodMode
+                ? "Previous Meter Reading : " + Num(showLast)
+                : "Previous Meter Reading (" + lastDateStr + ") : " + Num(showLast));
+
+            // Which machines are on this row. A single-machine row already says so on the charge
+            // line, so only a merged one needs the list -- Pontian prints exactly this, all six
+            // serials against one BK line of 74,722.
+            if (row.IsMerged)
+                rows.Add("S/N : " + SerialList(row));
+
+            // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free band
+            // (usage - billed copies) -- its FOCQty column is ignored by the engine, so printing the
+            // raw column here used to show a FOC that was never deducted.
+            // Flat (rental) lines keep the column value (= free months); a ladder meter's is the
+            // ladder's own free band, since the engine ignores its FOCQty column.
+            decimal focApplied = row.IsMerged ? row.FocApplied
+                                              : (ln.IsFlat ? ln.Foc : (ln.Usage - ln.BillCopies - ln.RebateQty));
+            if (focApplied < 0m) focApplied = 0m;
+            if (focApplied > 0m)
+                rows.Add("Meter FOC Qty : " + Num(focApplied));
+
+            // The copies the rebate removed, shown the way Kastam and Tangkak show them
+            // ("Meter Rebate Qty (3%) : 141") so the arithmetic on the line is followable.
+            decimal rebQty = row.IsMerged ? row.RebateQty : ln.RebateQty;
+            if (rebQty > 0m)
+                rows.Add("Meter Rebate Qty (" + ln.RebatePct.ToString("0.##") + "%) : " + Num(rebQty));
+
+            rows.Add("Meter Charges Usage : " + Num(row.IsMerged ? row.BillCopies : ln.BillCopies));
+            return rows;
+        }
+
+        /// <summary>
         /// What a line says about the machines it covers — the customer's own proposal, and what
         /// their invoices already print:
         /// <code>
@@ -636,6 +666,17 @@ namespace ServiceContractPhotocopier.Classes
             {
                 if (tail.Length > 0) tail.Append("  ");
                 tail.Append(row.Units).Append(" UNIT");
+
+                // Which machines those units ARE. A meter line already lists them under its readings
+                // ("S/N : ..." in the breakdown block), but a flat line has no breakdown block at all
+                // -- so a merged rental printed "5 UNIT" and never said which five, and the customer
+                // could not tell one 5-unit rental line from another. Its own line, because a list of
+                // serials run onto the end of the model list reads as one more model.
+                if (ln.IsFlat)
+                {
+                    string serials = SerialList(row);
+                    if (serials.Length > 0) tail.Append("\r\n").Append("S/N:").Append(serials);
+                }
             }
             return tail.Length == 0 ? head : head + "\r\n" + tail;
         }

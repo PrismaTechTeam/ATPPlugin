@@ -10,6 +10,11 @@ namespace ServiceContractPhotocopier.Classes
     /// <summary>One printed line of a sample invoice.</summary>
     public class SampleInvoiceLine
     {
+        /// <summary>The reading breakdown printed under the charge -- "Current Meter Reading
+        /// (04/08/2026) : 140608", "Meter Charges Usage : 10929". One description-only row each,
+        /// exactly as the posted document carries them.</summary>
+        public readonly List<string> TextRows = new List<string>();
+
         public string ItemCode = "";         // what the line is billed under, same as a posted one
         public string Uom = "";
         public string Description = "";
@@ -185,7 +190,13 @@ namespace ServiceContractPhotocopier.Classes
 
             // ---- the lines ----
             DetailBand detail = new DetailBand();
-            detail.HeightF = 44f;
+            detail.HeightF = 32f;
+            detail.CanGrow = true;
+            // A band border draws at the band's ACTUAL height, so it follows the text down; an XRLine
+            // at a fixed y would be struck through the middle of a line with six reading rows.
+            detail.Borders = BorderSide.Bottom;
+            detail.BorderColor = Color.FromArgb(215, 215, 215);
+            detail.BorderWidth = 1f;
             Bands.Add(detail);
 
             detail.Controls.Add(Bound("[LineNo]", 0, 2, W_NO, 14, 9f, FontStyle.Regular, Color.Black, TextAlignment.TopLeft));
@@ -195,22 +206,15 @@ namespace ServiceContractPhotocopier.Classes
             detail.Controls.Add(Money("[PriceText]", x, 2, W_PRICE)); x += W_PRICE;
             detail.Controls.Add(Money("[AmountText]", x, 2, W_AMOUNT));
 
+            // The MODEL block, the strategy note and the reading breakdown, in one growing label.
+            // The posted document gives each of those its own detail row; the difference does not
+            // show on paper, and one label means the rule below cannot be left behind by the text.
             XRLabel sub = Bound("[Sub]", W_NO, 17, w - W_NO, 12, 8f, FontStyle.Regular,
                 Color.FromArgb(70, 70, 70), TextAlignment.TopLeft);
+            sub.Multiline = true;
+            sub.CanGrow = true;
             sub.CanShrink = true;
             detail.Controls.Add(sub);
-
-            XRLabel note = Bound("[NoteLine]", W_NO, 30, w - W_NO, 12, 7.5f, FontStyle.Regular,
-                Color.FromArgb(120, 90, 20), TextAlignment.TopLeft);
-            note.CanShrink = true;
-            detail.Controls.Add(note);
-
-            XRLine rule = new XRLine();
-            rule.LocationF = new PointF(0, 42);
-            rule.WidthF = w;
-            rule.HeightF = 2;
-            rule.ForeColor = Color.FromArgb(215, 215, 215);
-            detail.Controls.Add(rule);
 
             // ---- the total ----
             GroupFooterBand foot = new GroupFooterBand();
@@ -302,7 +306,6 @@ namespace ServiceContractPhotocopier.Classes
             t.Columns.Add("LineNo", typeof(int));
             t.Columns.Add("Description", typeof(string));
             t.Columns.Add("Sub", typeof(string));
-            t.Columns.Add("NoteLine", typeof(string));
             t.Columns.Add("QtyText", typeof(string));
             t.Columns.Add("PriceText", typeof(string));
             t.Columns.Add("AmountText", typeof(string));
@@ -335,8 +338,21 @@ namespace ServiceContractPhotocopier.Classes
                     Header(r, key, d, i, invoices.Count, totalWords);
                     r["LineNo"] = n;
                     r["Description"] = l.Description;
-                    r["Sub"] = l.SubDescription;
-                    r["NoteLine"] = l.Note;
+                    // The reading breakdown joins the MODEL block under the charge. The posted
+                    // document gives each of these its own detail row; here they are lines in
+                    // one growing label, which prints the same and needs no second band.
+                    System.Text.StringBuilder sub = new System.Text.StringBuilder(l.SubDescription);
+                    if ((l.Note ?? "").Length > 0)
+                    {
+                        if (sub.Length > 0) sub.Append("\r\n");
+                        sub.Append(l.Note);
+                    }
+                    for (int k = 0; k < l.TextRows.Count; k++)
+                    {
+                        if (sub.Length > 0) sub.Append("\r\n");
+                        sub.Append(l.TextRows[k]);
+                    }
+                    r["Sub"] = sub.ToString();
                     r["QtyText"] = l.ShowQty ? l.Qty.ToString("n0") : "";
                     r["PriceText"] = l.ShowQty ? l.UnitPrice.ToString("n4") : l.UnitPrice.ToString("n2");
                     r["AmountText"] = l.Amount.ToString("n2");
@@ -350,7 +366,7 @@ namespace ServiceContractPhotocopier.Classes
                     Header(r, key, d, i, invoices.Count, totalWords);
                     r["LineNo"] = 0;
                     r["Description"] = "(nothing to bill)";
-                    r["Sub"] = ""; r["NoteLine"] = "";
+                    r["Sub"] = "";
                     r["QtyText"] = ""; r["PriceText"] = ""; r["AmountText"] = "0.00";
                     r["Amount"] = 0m;
                     r["InvTotal"] = "0.00";

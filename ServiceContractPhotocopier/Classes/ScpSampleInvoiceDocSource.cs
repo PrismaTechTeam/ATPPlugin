@@ -325,6 +325,7 @@ namespace ServiceContractPhotocopier.Classes
                 FillBlanks(m);
                 master.Rows.Add(m);
 
+                int seq = 0;
                 for (int j = 0; j < doc.Lines.Count; j++)
                 {
                     SampleInvoiceLine line = doc.Lines[j];
@@ -336,7 +337,7 @@ namespace ServiceContractPhotocopier.Classes
                     DataRow d = detail.NewRow();
                     d["DtlKey"] = dtlKey++;
                     d["DocKey"] = docKey;
-                    Put(d, "Seq", j + 1);
+                    Put(d, "Seq", ++seq);
                     Put(d, "MainItem", "T");
                     Put(d, "DtlType", "N");
                     Put(d, "PrintOut", "T");
@@ -376,6 +377,50 @@ namespace ServiceContractPhotocopier.Classes
                     FillBlanks(d, "ValueXferSODocKey");
                     if (detail.Columns["ValueXferSODocKey"] != null) d["ValueXferSODocKey"] = DBNull.Value;
                     detail.Rows.Add(d);
+
+                    // The reading breakdown, one description-only row each -- the shape the book's own
+                    // invoices have (doc 2402289: the charge row, then Current / Previous / Usage,
+                    // then a blank before the next meter). No ItemCode and no Qty, exactly as those
+                    // rows carry them: the printed "Item" column is SG_AutoNumbering, which counts the
+                    // rows that are items -- DocumentReportControl.cs:230 numbers a row when its
+                    // ItemCode, Qty or FOCQty has any text at all -- so leaving those three null is
+                    // what keeps 1. 2. 3. running down the charges and not down every line of text.
+                    for (int k = 0; k < line.TextRows.Count; k++)
+                    {
+                        DataRow t = detail.NewRow();
+                        t["DtlKey"] = dtlKey++;
+                        t["DocKey"] = docKey;
+                        Put(t, "Seq", ++seq);
+                        Put(t, "MainItem", "T");
+                        Put(t, "DtlType", "N");
+                        Put(t, "PrintOut", "T");
+                        Put(t, "Transferable", "T");
+                        Put(t, "AddToCost", "F");
+                        // Carries no money, so it stays out of the subtotal -- and out of the
+                        // e-Invoice payload, which submits the rows where this is true.
+                        Put(t, "AddToSubTotal", "F");
+                        Put(t, "Description", line.TextRows[k]);
+                        Put(t, "ItemDescription", line.TextRows[k]);
+                        FillBlanksText(t);
+                        detail.Rows.Add(t);
+                    }
+
+                    // The blank separator between meters, the way the master prints one.
+                    if (line.TextRows.Count > 0 && j < doc.Lines.Count - 1)
+                    {
+                        DataRow gap = detail.NewRow();
+                        gap["DtlKey"] = dtlKey++;
+                        gap["DocKey"] = docKey;
+                        Put(gap, "Seq", ++seq);
+                        Put(gap, "MainItem", "T");
+                        Put(gap, "DtlType", "N");
+                        Put(gap, "PrintOut", "T");
+                        Put(gap, "AddToSubTotal", "F");
+                        Put(gap, "AddToCost", "F");
+                        Put(gap, "Description", "");
+                        FillBlanksText(gap);
+                        detail.Rows.Add(gap);
+                    }
                 }
             }
             return ds;
@@ -451,6 +496,21 @@ namespace ServiceContractPhotocopier.Classes
         /// sample read like the article. Verified against a real invoice rendered through the same
         /// design.</para>
         /// </summary>
+        /// <summary>A description-only row keeps every number NULL, which is how the book stores its
+        /// own: doc 2402289 seq 32 -- "Current Meter Reading (07/07/2026) : 11890" -- has Qty,
+        /// UnitPrice, SubTotal, Discount and FOCQty all null. Zeros there print a column of 0.00
+        /// beside every line of the reading breakdown, and the report numbers the row as an item
+        /// (DocumentReportControl.cs:230 counts any row whose ItemCode, Qty or FOCQty has text), so
+        /// 1. 2. 3. would run down the text instead of down the charges.</summary>
+        private static void FillBlanksText(DataRow row)
+        {
+            foreach (DataColumn c in row.Table.Columns)
+            {
+                if (!row.IsNull(c)) continue;
+                if (c.DataType == typeof(bool)) row[c] = false;
+            }
+        }
+
         private static void FillBlanks(DataRow row, params string[] keepNull)
         {
             foreach (DataColumn c in row.Table.Columns)

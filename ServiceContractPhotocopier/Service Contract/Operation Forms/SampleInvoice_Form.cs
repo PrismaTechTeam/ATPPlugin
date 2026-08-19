@@ -345,6 +345,10 @@ namespace ServiceContractPhotocopier
                     if (br >= 0) { head = composed.Substring(0, br); sub = composed.Substring(br + 2); }
 
                     SampleInvoiceLine sl = new SampleInvoiceLine();
+                    // The reading breakdown under the charge -- the most recognisable thing about a
+                    // meter invoice from this business, and the preview had none of it. Same method
+                    // the posted document uses, so the two cannot say different things.
+                    sl.TextRows.AddRange(ScpInvoiceBuilder.ComposeReadingRows(row, DateTime.Today));
                     sl.ItemCode = row.Leader.ACItemCode ?? "";
                     sl.Uom = "UNIT";
                     sl.Description = head;

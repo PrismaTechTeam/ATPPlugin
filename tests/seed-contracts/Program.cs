@@ -34,7 +34,7 @@ static class SeedContracts
     static readonly DateTime START = new DateTime(2026, 1, 1);
     static readonly DateTime EXPIRY = new DateTime(2028, 12, 31);
 
-    static int Main()
+    static int Main(string[] args)
     {
         AppDomain.CurrentDomain.AssemblyResolve += (s, a) =>
         {
@@ -42,12 +42,63 @@ static class SeedContracts
             string p = Path.Combine(AC, n + ".dll");
             return File.Exists(p) ? Assembly.LoadFrom(p) : null;
         };
-        try { Run(); }
+        // "serials" refreshes the machines' serial numbers in place and touches nothing else, so a
+        // demo contract that has been edited by hand keeps those edits. Without it the seeder does
+        // what it always did: delete every DEMO contract and build all twelve again.
+        bool serialsOnly = args != null && args.Length > 0 &&
+            string.Equals(args[0], "serials", StringComparison.OrdinalIgnoreCase);
+        try { if (serialsOnly) RefreshSerials(); else Run(); }
         catch (Exception ex) { Console.WriteLine("FATAL: " + ex); return 2; }
         Console.WriteLine();
         Console.WriteLine("Models   : " + _itemsMade + " created, " + _itemsKept + " already there.");
         Console.WriteLine("Contracts: " + _ctMade + " rebuilt, " + _machMade + " machines, " + _meterMade + " meters.");
         return 0;
+    }
+
+    /// <summary>Replaces the tag a demo machine was seeded with by the serial it should have had.
+    /// Idempotent: once a row's serial no longer reads like a tag it is left alone.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static void RefreshSerials()
+    {
+        // Same book, same way in: this mode skips Run(), so it opens its own connection.
+        AutoCount.Data.DBSetting dbs = new AutoCount.Data.DBSetting(
+            AutoCount.Data.DBServerType.SQL2000,
+            "localhost,1433", "sa", "rs6663", "AED_ATPTEST", false);
+        _conn = dbs.ConnectionString;
+
+        int done = 0;
+        Dictionary<string, string> seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        using (SqlConnection cn = new SqlConnection(_conn))
+        {
+            cn.Open();
+            DataTable t = new DataTable();
+            using (SqlCommand q = new SqlCommand(
+                "SELECT ItemKey, ServiceItemNo, ItemCode, SerialNumber FROM dbo.zSCP2_Item " +
+                "WHERE ServiceItemNo LIKE 'DEMO-%' ORDER BY ItemKey", cn))
+            using (SqlDataAdapter a = new SqlDataAdapter(q)) a.Fill(t);
+
+            foreach (DataRow r in t.Rows)
+            {
+                string tag = TagOf(Convert.ToString(r["ServiceItemNo"]));
+                string sn = Serial(tag);
+                if (seen.ContainsKey(sn))
+                    Console.WriteLine("  !! " + sn + " already taken by " + seen[sn]);
+                else seen[sn] = Convert.ToString(r["ServiceItemNo"]).Trim();
+                using (SqlCommand u = new SqlCommand(
+                    "UPDATE dbo.zSCP2_Item SET SerialNumber = @sn, [Description] = @desc, " +
+                    "LastModified = GETDATE() WHERE ItemKey = @ik", cn))
+                {
+                    u.Parameters.AddWithValue("@sn", sn);
+                    u.Parameters.AddWithValue("@desc", Convert.ToString(r["ItemCode"]).Trim() + " / " + sn);
+                    u.Parameters.AddWithValue("@ik", Convert.ToInt64(r["ItemKey"]));
+                    u.ExecuteNonQuery();
+                }
+                Console.WriteLine("  " + Convert.ToString(r["ServiceItemNo"]).PadRight(14) + " -> " + sn);
+                done++;
+            }
+        }
+        Console.WriteLine();
+        Console.WriteLine(done + " machines given a factory-shaped serial, " + seen.Count + " distinct.");
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -207,7 +258,48 @@ static class SeedContracts
         public List<Mach> Machines = new List<Mach>();
     }
 
-    static Mach M(string model, string serial) { Mach m = new Mach(); m.Model = model; m.Serial = serial; return m; }
+    static Mach M(string model, string tag) { Mach m = new Mach(); m.Model = model; m.Serial = tag; return m; }
+
+    // The second argument above is a TAG -- "DEMO01-003" -- so the scenarios below stay readable and
+    // a machine keeps its identity across a re-seed. It is not the serial number. A serial number is
+    // stamped on the machine by the factory and has nothing to do with the number the contract files
+    // it under: this book's real ones read 0057231, 77878, A/UMW02197-110V against service items
+    // called CSSI 260000014. Demo data that made the two the same taught the wrong thing about the
+    // module, so the tag is folded into a Canon-shaped serial instead -- three characters then five
+    // digits, YAJ01479 / 2JC10897 / 4NL20240 -- deterministically, so re-seeding gives every machine
+    // back the same serial it had.
+    static string Serial(string tag)
+    {
+        // FNV-1a and then an avalanche step. The plain hash alone is not enough here: the tags differ
+        // only in their last character, and slicing an unmixed hash handed DEMO01-001, DEMO01-003 and
+        // DEMO01-004 the same serial -- three machines on one contract sharing a serial number is
+        // exactly the confusion this was meant to remove.
+        uint h = 2166136261u;
+        foreach (char ch in tag ?? "") { unchecked { h ^= ch; h *= 16777619u; } }
+        unchecked
+        {
+            h ^= h >> 16; h *= 0x7feb352du;
+            h ^= h >> 15; h *= 0x846ca68bu;
+            h ^= h >> 16;
+        }
+        const string A = "ABCDEFGHJKLMNPRSTUVWXYZ";   // no I/O/Q, the way a real plate leaves them out
+        uint n = h % 100000u;
+        uint r = h / 100000u;
+        char c2 = A[(int)(r % (uint)A.Length)]; r /= (uint)A.Length;
+        char c1 = A[(int)(r % (uint)A.Length)]; r /= (uint)A.Length;
+        char c0 = (r % 3u == 0u) ? (char)('2' + (r / 3u) % 8u) : A[(int)((r / 3u) % (uint)A.Length)];
+        return new string(new char[] { c0, c1, c2 }) + n.ToString("00000", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The tag a demo machine was seeded under, recovered from the number the contract files
+    /// it as: DEMO-01-003 was seeded as DEMO01-003. Reading it from here rather than from the serial
+    /// column means the refresh can be run again after the rule changes, instead of only once.</summary>
+    static string TagOf(string serviceItemNo)
+    {
+        string v = (serviceItemNo ?? "").Trim();
+        int i = v.IndexOf('-');
+        return i < 0 ? v : v.Substring(0, i) + v.Substring(i + 1);
+    }
 
     // ------------------------------------------------------------------ the twelve
 
@@ -533,8 +625,9 @@ static class SeedContracts
             cmd.Parameters.AddWithValue("@ck", ck);
             cmd.Parameters.AddWithValue("@sino", sino);
             cmd.Parameters.AddWithValue("@code", m.Model);
-            cmd.Parameters.AddWithValue("@sn", m.Serial);
-            cmd.Parameters.AddWithValue("@desc", m.Model + " / " + m.Serial);
+            string sn = Serial(m.Serial);
+            cmd.Parameters.AddWithValue("@sn", sn);
+            cmd.Parameters.AddWithValue("@desc", m.Model + " / " + sn);
             cmd.Parameters.AddWithValue("@pos", pos);
             cmd.Parameters.AddWithValue("@grp", m.MergeGroup);
             cmd.Parameters.AddWithValue("@mmode", m.MachineMode);
