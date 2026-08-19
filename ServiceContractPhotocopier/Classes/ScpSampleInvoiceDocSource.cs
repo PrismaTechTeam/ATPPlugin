@@ -343,6 +343,13 @@ namespace ServiceContractPhotocopier.Classes
                     Put(d, "Transferable", "T");
                     Put(d, "AddToSubTotal", "T");
                     Put(d, "AddToCost", "F");
+                    // The stock item the line is billed under. AutoCount's own invoice designs do
+                    // not print it -- the "Item" column over the description is a running number
+                    // (SG_AutoNumbering) -- but a posted line carries it, so the sample does too:
+                    // switch to a design that shows the code and it is already there.
+                    Put(d, "ItemCode", (line.ItemCode ?? "").Trim());
+                    Put(d, "UOM", (line.Uom ?? "").Trim());
+                    Put(d, "UserUOM", (line.Uom ?? "").Trim());
                     Put(d, "Description", (line.Description ?? "").Trim());
                     Put(d, "ItemDescription", (line.Description ?? "").Trim());
                     Put(d, "FurtherDescription", Sub(line));
@@ -412,7 +419,6 @@ namespace ServiceContractPhotocopier.Classes
         {
             List<string> parts = new List<string>();
             if ((line.SubDescription ?? "").Trim().Length > 0) parts.Add(line.SubDescription.Trim());
-            if ((line.Covers ?? "").Trim().Length > 0) parts.Add("covers:  " + line.Covers.Trim());
             if ((line.Note ?? "").Trim().Length > 0) parts.Add(line.Note.Trim());
             return string.Join(Environment.NewLine, parts.ToArray());
         }

@@ -114,7 +114,7 @@ static class RenderCheck
         string covers, string note, decimal qty, decimal price, decimal amount, bool showQty)
     {
         var l = new ServiceContractPhotocopier.Classes.SampleInvoiceLine();
-        l.Description = desc; l.SubDescription = sub; l.Covers = covers; l.Note = note;
+        l.Description = desc; l.SubDescription = sub; l.Note = note;
         l.Qty = qty; l.UnitPrice = price; l.Amount = amount; l.ShowQty = showQty;
         return l;
     }

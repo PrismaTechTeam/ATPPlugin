@@ -264,7 +264,11 @@ static class RealLayoutCheck
     {
         ServiceContractPhotocopier.Classes.SampleInvoiceLine l =
             new ServiceContractPhotocopier.Classes.SampleInvoiceLine();
-        l.Description = desc; l.SubDescription = sub; l.Covers = covers; l.Note = note;
+        l.Description = desc; l.SubDescription = sub; l.Note = note;
+        l.Uom = "UNIT";
+        l.ItemCode = desc.StartsWith("MONTHLY RENTAL") ? "RENTAL"
+            : desc.StartsWith("BLACK") ? "BK" : desc.StartsWith("COLOUR") ? "CL"
+            : desc.StartsWith("MINIMUM") ? "COMMIT" : desc.StartsWith("RENTAL WAIVE") ? "WAIVE" : "";
         l.Qty = qty; l.UnitPrice = price; l.Amount = amount; l.ShowQty = showQty;
         return l;
     }

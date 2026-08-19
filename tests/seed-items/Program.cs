@@ -50,6 +50,49 @@ static class SeedItems
         Make(db, ses, "imageFORCE C5150", "COPIER imageFORCE C5150 - COLOUR A3 HEAVY DUTY");
         Make(db, ses, "iR-ADV DX 4951i",  "COPIER iR-ADV DX 4951i - MONO A3 HEAVY DUTY");
         Make(db, ses, "iR-ADV DX C3922i", "COPIER iR-ADV DX C3922i - COLOUR A3 LIGHT DUTY");
+
+        // The five charge items an invoice line is posted under. The old book has one per customer
+        // per machine (01.MR.BK.2JC10897 and 445 more) because a meter type had to carry its own;
+        // under the new rules the rate lives on the machine's meter, so five serve every contract.
+        // Group S001 / no stock control is the book's own convention for these; R001 is what it
+        // types a rental and M001 a meter reading.
+        Charge(db, ses, "RENTAL", "MONTHLY RENTAL", "R001");
+        Charge(db, ses, "BK", "BLACK COPY + PRINT A4 & A3", "M001");
+        Charge(db, ses, "CL", "COLOUR COPY + PRINT A4 & A3", "M001");
+        Charge(db, ses, "COMMIT", "MINIMUM COMMITTED PRINT CHARGES", "M001");
+        Charge(db, ses, "WAIVE", "RENTAL WAIVE", "R001");
+    }
+
+    // A charge item, not a machine: no serial, no stock, billed by the line.
+    static void Charge(AutoCount.Data.DBSetting db, AutoCount.Authentication.UserSession ses,
+        string code, string desc, string itemType)
+    {
+        object exists = db.ExecuteScalar(
+            "SELECT ItemCode FROM dbo.Item WHERE ItemCode = N'" + code.Replace("'", "''") + "'");
+        if (exists != null && exists != DBNull.Value)
+        {
+            Console.WriteLine("  kept   " + code);
+            _kept++;
+            return;
+        }
+        AutoCount.Stock.Item.ItemDataAccess da = AutoCount.Stock.Item.ItemDataAccess.Create(ses, db);
+        AutoCount.Stock.Item.ItemEntity it = da.NewItem();
+        it.ItemCode = code;
+        it.Description = desc;
+        it.ItemGroup = "S001";
+        it.ItemType = itemType;
+        if (it.UomCount > 0) it.GetUom(0).Uom = "UNIT";
+        else it.NewUom("UNIT", 1m);
+        it.BaseUom = "UNIT";
+        it.SalesUom = "UNIT";
+        it.PurchaseUom = "UNIT";
+        it.ReportUom = "UNIT";
+        it.StockControl = false;
+        it.HasSerialNo = false;
+        it.IsActive = true;
+        da.SaveData(it, "ADMIN");
+        Console.WriteLine("  new    " + code + "   " + desc);
+        _made++;
     }
 
     // Same shape as the book's existing copiers (iR-ADV C5540i): group C001, type H001, one UNIT,

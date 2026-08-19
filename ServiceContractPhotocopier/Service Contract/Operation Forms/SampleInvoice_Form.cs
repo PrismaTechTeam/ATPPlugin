@@ -147,6 +147,31 @@ namespace ServiceContractPhotocopier
 
         /// <summary>Turns the contract's machines into the bill lines a month would produce. The
         /// prices are the contract's own; only the meter readings are invented.</summary>
+        /// <summary>The stock item a meter's charges are billed under, read the same way Generate
+        /// reads it -- the meter type's own ACItemCode, falling back to its StockCode. A type that
+        /// names neither bills under nothing, which is what a real invoice from it would do.</summary>
+        private string ChargeItemOf(string meterTypeCode)
+        {
+            if (_chargeItems == null)
+            {
+                _chargeItems = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    DataTable t = _db.GetDataTable(
+                        "SELECT MeterTypeCode, ISNULL(NULLIF(ACItemCode,), ISNULL(StockCode,)) AS ChargeItem " +
+                        "FROM dbo.zSCP_MeterType", false);
+                    foreach (DataRow r in t.Rows)
+                        _chargeItems[Convert.ToString(r["MeterTypeCode"]).Trim()] =
+                            Convert.ToString(r["ChargeItem"]).Trim();
+                }
+                catch { }
+            }
+            string code;
+            return _chargeItems.TryGetValue((meterTypeCode ?? "").Trim(), out code) ? code : "";
+        }
+
+        private Dictionary<string, string> _chargeItems;
+
         private List<MeterBillLine> BuildLines()
         {
             List<MeterBillLine> lines = new List<MeterBillLine>();
@@ -175,7 +200,7 @@ namespace ServiceContractPhotocopier
                     l.LineGroupCode = d.LineGroupCode ?? "";
                     l.MeterTypeCode = type;
                     l.MeterTypeName = Str(mr, "Description");
-                    l.ACItemCode = type;
+                    l.ACItemCode = ChargeItemOf(type);
                     l.NewMoneyRules = _hasFormat;
                     l.AuditDate = period;
                     l.LastDate = period.AddMonths(-1);
@@ -320,9 +345,15 @@ namespace ServiceContractPhotocopier
                     if (br >= 0) { head = composed.Substring(0, br); sub = composed.Substring(br + 2); }
 
                     SampleInvoiceLine sl = new SampleInvoiceLine();
+                    sl.ItemCode = row.Leader.ACItemCode ?? "";
+                    sl.Uom = "UNIT";
                     sl.Description = head;
+                    // The description says what the line is and which models it is for. It does
+                    // NOT list the machines: "covers:  5 machines:  DEMO07-001, ..." was a way to
+                    // check a contract's shape while this was still a grid, but an invoice is what
+                    // the customer reads and no invoice explains itself that way. The MODEL line
+                    // and the unit count already say how many machines are on the line.
                     sl.SubDescription = sub;
-                    sl.Covers = Covers(row);
                     sl.Note = row.Leader.StrategyNote ?? "";
                     sl.Qty = row.PrintQty;
                     sl.UnitPrice = row.PrintUnitPrice;
@@ -356,20 +387,6 @@ namespace ServiceContractPhotocopier
             if (l.IsCommittedMin) return "MINIMUM COMMITTED PRINT CHARGES";
             if (l.IsWaiveMeter) return "RENTAL WAIVE";
             return (l.ColorLabel ?? "").Length > 0 ? l.ColorLabel.ToUpperInvariant() + " COPIES" : l.MeterTypeCode;
-        }
-
-        /// <summary>Which machines a printed line actually covers — the question the shape is being
-        /// checked for.</summary>
-        private static string Covers(ScpFoldedLine row)
-        {
-            if (!row.IsMerged) return row.Leader.ItemName + "  " + row.Leader.SerialNumber;
-            List<string> names = new List<string>();
-            foreach (MeterBillLine m in row.Members)
-            {
-                string s = (m.SerialNumber ?? "").Trim();
-                names.Add(s.Length > 0 ? s : m.ItemName);
-            }
-            return row.Members.Count + " machines:  " + string.Join(", ", names.ToArray());
         }
 
         private static string Str(DataRow r, string col)

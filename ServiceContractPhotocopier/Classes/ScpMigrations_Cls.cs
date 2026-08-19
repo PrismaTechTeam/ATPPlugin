@@ -233,6 +233,8 @@ namespace ServiceContractPhotocopier.Classes
                 // The three meter types the new way needs -- RENTAL / BK / CL. The machine form's
                 // "Need rental" tick picks RENTAL by code, so this seed is what makes it work.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard.sql", asm));
+                // ...and point them at the five charge items, so an invoice line has an Item Code.
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard_v2_ACItem.sql", asm));
             }
             catch (Exception ex)
             {

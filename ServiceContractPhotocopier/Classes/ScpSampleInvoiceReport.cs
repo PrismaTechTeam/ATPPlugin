@@ -10,9 +10,10 @@ namespace ServiceContractPhotocopier.Classes
     /// <summary>One printed line of a sample invoice.</summary>
     public class SampleInvoiceLine
     {
+        public string ItemCode = "";         // what the line is billed under, same as a posted one
+        public string Uom = "";
         public string Description = "";
         public string SubDescription = "";   // the MODEL: / S/N: / n UNIT block under the wording
-        public string Covers = "";           // which machines this line speaks for
         public string Note = "";             // the strategy note a real invoice prints beneath the line
         public decimal Qty;
         public decimal UnitPrice;
@@ -334,8 +335,7 @@ namespace ServiceContractPhotocopier.Classes
                     Header(r, key, d, i, invoices.Count, totalWords);
                     r["LineNo"] = n;
                     r["Description"] = l.Description;
-                    r["Sub"] = l.SubDescription + (l.Covers.Length > 0
-                        ? (l.SubDescription.Length > 0 ? "        " : "") + "covers:  " + l.Covers : "");
+                    r["Sub"] = l.SubDescription;
                     r["NoteLine"] = l.Note;
                     r["QtyText"] = l.ShowQty ? l.Qty.ToString("n0") : "";
                     r["PriceText"] = l.ShowQty ? l.UnitPrice.ToString("n4") : l.UnitPrice.ToString("n2");
