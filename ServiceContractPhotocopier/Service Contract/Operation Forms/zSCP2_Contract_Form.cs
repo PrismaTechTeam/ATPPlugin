@@ -5202,6 +5202,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             string formatName = SluBillingFormat != null && SluBillingFormat.EditValue != null
                 ? Convert.ToString(SluBillingFormat.Text) : "";
+            // Read live from the format rather than from a copy on the contract. The three invoice
+            // answers are copied because changing them retroactively changes what a signed contract
+            // bills; this one only changes the wording on the line, and a house-style decision is
+            // meant to reach every invoice at once. Generate reads it the same way.
+            char machineLine = ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
+            if (_billingFormatCode.Length > 0)
+            {
+                ServiceContractPhotocopier.Classes.ScpBillingFormat fmt =
+                    ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, _billingFormatCode);
+                if (fmt != null) machineLine = fmt.MachineLineShows;
+            }
+
             using (SampleInvoice_Form f = new SampleInvoice_Form(
                 _db, _items, TxtContractNo.Text.Trim(),
                 LkDebtorCode == null || LkDebtorCode.EditValue == null ? "" : Convert.ToString(LkDebtorCode.EditValue),
@@ -5210,7 +5222,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ChkRentalSeparate.Checked, ChkBillSeparate.Checked,
                 _rentalGroupPrices,
                 SluInvoiceTemplate == null || SluInvoiceTemplate.EditValue == null
-                    ? "" : Convert.ToString(SluInvoiceTemplate.EditValue)))
+                    ? "" : Convert.ToString(SluInvoiceTemplate.EditValue),
+                machineLine))
             {
                 f.ShowDialog(this);
             }

@@ -51,6 +51,17 @@ namespace ServiceContractPhotocopier.Classes
         /// produced nine invoices in July 2026 (one machine has no rental).</summary>
         public const string SPLIT_PER_MACHINE_SEPARATE = "PMS";
 
+        // ----- what the machine line under a charge names -----
+
+        /// <summary>Model only: <c>MODEL:imageFORCE C5150  (2 UNIT)</c>.</summary>
+        public const char MACHINE_LINE_MODEL = 'M';
+        /// <summary>Duty label only: <c>MEDIUM HEAVY DUTY "50 ppm"  (2 UNIT)</c>. Closest to what this
+        /// business printed before -- its old invoices never named the model in the description,
+        /// because the model was carried by the item code.</summary>
+        public const char MACHINE_LINE_LABEL = 'L';
+        /// <summary>Both, the label on the charge sentence and the model below it. The default.</summary>
+        public const char MACHINE_LINE_BOTH = 'B';
+
         public string FormatCode = "";
         public string FormatName = "";
         public string InvoiceSplit = SPLIT_ONE;
@@ -59,6 +70,7 @@ namespace ServiceContractPhotocopier.Classes
         public string ReadingText = "";     // "" = follow the company default
         public string RentalDescTemplate;   // null = follow the company default
         public string MeterDescTemplate;    // null = follow the company default
+        public char MachineLineShows = MACHINE_LINE_BOTH;
         public string Remark = "";
 
         /// <summary>'G' one invoice for the contract / 'S' one per machine — the existing column.</summary>
@@ -96,6 +108,13 @@ namespace ServiceContractPhotocopier.Classes
             return "1 invoice";
         }
 
+        public static string DescribeMachineLine(char shows)
+        {
+            if (shows == MACHINE_LINE_MODEL) return "model only";
+            if (shows == MACHINE_LINE_LABEL) return "line label only";
+            return "model + line label";
+        }
+
         public static string DescribeLineMode(char mode)
         {
             if (mode == LINE_SAME_MODEL) return "per model";
@@ -114,6 +133,7 @@ namespace ServiceContractPhotocopier.Classes
                 DataTable t = db.GetDataTable(
                     "SELECT FormatCode, FormatName, InvoiceSplit, RentalLineMode, MeterLineMode, " +
                     "ISNULL(ReadingText,'') AS ReadingText, RentalDescTemplate, MeterDescTemplate, " +
+                    "ISNULL(MachineLineShows,'B') AS MachineLineShows, " +
                     "ISNULL(Remark,'') AS Remark " +
                     "FROM dbo.zSCP2_BillingFormat WHERE Inactive='N' ORDER BY FormatCode", false);
                 foreach (DataRow r in t.Rows) list.Add(FromRow(r));
@@ -131,6 +151,7 @@ namespace ServiceContractPhotocopier.Classes
                 DataTable t = db.GetDataTable(
                     "SELECT FormatCode, FormatName, InvoiceSplit, RentalLineMode, MeterLineMode, " +
                     "ISNULL(ReadingText,'') AS ReadingText, RentalDescTemplate, MeterDescTemplate, " +
+                    "ISNULL(MachineLineShows,'B') AS MachineLineShows, " +
                     "ISNULL(Remark,'') AS Remark " +
                     "FROM dbo.zSCP2_BillingFormat WHERE Inactive='N' AND FormatCode=N'" +
                     formatCode.Replace("'", "''") + "'", false);
@@ -149,6 +170,8 @@ namespace ServiceContractPhotocopier.Classes
             f.RentalLineMode = Chr(r["RentalLineMode"], LINE_ACROSS_MODEL);
             f.MeterLineMode = Chr(r["MeterLineMode"], LINE_PER_MACHINE);
             f.ReadingText = Str(r["ReadingText"]);
+            string mls = Str(r["MachineLineShows"]).Trim();
+            f.MachineLineShows = mls.Length > 0 ? char.ToUpperInvariant(mls[0]) : MACHINE_LINE_BOTH;
             f.RentalDescTemplate = r["RentalDescTemplate"] == DBNull.Value ? null : Convert.ToString(r["RentalDescTemplate"]);
             f.MeterDescTemplate = r["MeterDescTemplate"] == DBNull.Value ? null : Convert.ToString(r["MeterDescTemplate"]);
             f.Remark = Str(r["Remark"]);

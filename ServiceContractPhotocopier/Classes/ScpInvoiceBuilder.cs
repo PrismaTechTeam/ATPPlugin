@@ -60,6 +60,11 @@ namespace ServiceContractPhotocopier.Classes
                                            // MIN/WAIVE sums span the WHOLE fleet, not one machine
         public string ModelCode = "";      // the machine's stock item (zSCP2_Item.ItemCode) — the bucket
                                            // when a contract groups lines by model
+        /// <summary>What the machine line under this charge names -- the model, the duty label, or
+        /// both. From the contract's Billing Format; 'B' when it has none, which is what every
+        /// contract printed before the setting existed.</summary>
+        public char MachineLineShows = ScpBillingFormat.MACHINE_LINE_BOTH;
+
         public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
                                            // (zSCP2_Item.LineGroupCode) -- a description, never a split
         /// <summary>Whose print charges a committed minimum is measured against: 'S' this machine,
@@ -656,19 +661,30 @@ namespace ServiceContractPhotocopier.Classes
             // The duty labels the machines carry. The old system had them baked into the item code --
             // MEDIUM DUTY "30-50 ppm" - IRADX4935I was an item, and a customer with three duty classes
             // needed three item codes -- so the words are familiar to the customer and belong on the
-            // line.
+            // line. Where they go depends on what the format says the machine line names.
+            char shows = ln.MachineLineShows;
             string duty = LineLabels(row);
-            if (duty.Length > 0) head += "  " + duty;
+            if (duty.Length > 0 && shows == ScpBillingFormat.MACHINE_LINE_BOTH)
+                head += "  " + duty;
 
             System.Text.StringBuilder tail = new System.Text.StringBuilder();
-            List<string> models = new List<string>();
-            foreach (MeterBillLine m in row.Members)
+            if (shows == ScpBillingFormat.MACHINE_LINE_LABEL)
             {
-                string mc = (m.ModelCode ?? "").Trim();
-                if (mc.Length > 0 && !models.Contains(mc)) models.Add(mc);
+                // The label stands in for the model entirely, which is how this business printed
+                // before: MEDIUM HEAVY DUTY ''45cpm'' - MONTHLY RENTAL - never named the machine.
+                tail.Append(duty);
             }
-            if (models.Count > 0)
-                tail.Append("MODEL:").Append(string.Join(", ", models.ToArray()));
+            else
+            {
+                List<string> models = new List<string>();
+                foreach (MeterBillLine m in row.Members)
+                {
+                    string mc = (m.ModelCode ?? "").Trim();
+                    if (mc.Length > 0 && !models.Contains(mc)) models.Add(mc);
+                }
+                if (models.Count > 0)
+                    tail.Append("MODEL:").Append(string.Join(", ", models.ToArray()));
+            }
 
             if (!row.IsMerged)
             {

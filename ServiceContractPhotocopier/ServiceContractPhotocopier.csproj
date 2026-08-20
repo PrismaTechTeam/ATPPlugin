@@ -968,6 +968,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v11_LineGroup.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v12_MergeGroup.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v13_LineGroupCode_60.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_BillingFormat_v2_MachineLineShows.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v14_LineModes.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\04_Seed_zSCP2_BillingFormat.sql" />

@@ -42,6 +42,9 @@ namespace ServiceContractPhotocopier
         private readonly char _rentalMode;
         private readonly char _meterMode;
         private readonly bool _hasFormat;
+        /// <summary>What the machine line names -- model, duty label, or both. Read live from the
+        /// format when the preview is opened, so it matches what Generate will do.</summary>
+        private readonly char _machineLineShows = ScpBillingFormat.MACHINE_LINE_BOTH;
         private readonly string _formatName;
         private readonly bool _rentalSeparate;
         private readonly bool _perMachine;
@@ -67,7 +70,8 @@ namespace ServiceContractPhotocopier
         public SampleInvoice_Form(AutoCount.Data.DBSetting db, List<ItemEditData> items,
             string contractNo, string debtor, string formatName, bool hasFormat,
             char rentalMode, char meterMode, bool rentalSeparate, bool perMachine,
-            Dictionary<string, decimal> groupPrices, string invoiceTemplate) : this()
+            Dictionary<string, decimal> groupPrices, string invoiceTemplate,
+            char machineLineShows) : this()
         {
             _db = db;
             _items = items ?? new List<ItemEditData>();
@@ -81,6 +85,7 @@ namespace ServiceContractPhotocopier
             _perMachine = perMachine;
             _groupPrices = groupPrices ?? new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
             _invoiceTemplate = invoiceTemplate ?? "";
+            _machineLineShows = machineLineShows;
         }
 
         private void OnFormLoad(object sender, EventArgs e)
@@ -202,6 +207,7 @@ namespace ServiceContractPhotocopier
                     l.MeterTypeName = Str(mr, "Description");
                     l.ACItemCode = ChargeItemOf(type);
                     l.NewMoneyRules = _hasFormat;
+                    l.MachineLineShows = _machineLineShows;
                     l.AuditDate = period;
                     l.LastDate = period.AddMonths(-1);
                     l.PeriodEnd = period;

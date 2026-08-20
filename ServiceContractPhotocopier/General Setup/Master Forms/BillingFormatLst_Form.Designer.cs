@@ -37,6 +37,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private GroupControl GrpRental;
         private RadioGroup RgRental;
         private GroupControl GrpMeter;
+        private GroupControl GrpMachineLine;
+        private RadioGroup RgMachineLine;
         private RadioGroup RgMeter;
 
         private SplitContainerControl SplitMain;
@@ -94,6 +96,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.GrpRental = new GroupControl();
             this.RgRental = new RadioGroup();
             this.GrpMeter = new GroupControl();
+            this.GrpMachineLine = new GroupControl();
+            this.RgMachineLine = new RadioGroup();
             this.RgMeter = new RadioGroup();
             this.SplitMain = new SplitContainerControl();
             this.GridFormats = new GridControl();
@@ -123,6 +127,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             ((System.ComponentModel.ISupportInitialize)(this.RgRental.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeter)).BeginInit();
             this.GrpMeter.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpMachineLine)).BeginInit();
+            this.GrpMachineLine.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.RgMachineLine.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RgMeter.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SplitMain)).BeginInit();
             this.SplitMain.SuspendLayout();
@@ -321,13 +328,14 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             //
             // Add order matters: WinForms lays docked children out from the HIGHEST index down, so
             // the Fill control must go in first and the leftmost Left-docked one last.
+            this.PanelQuestions.Controls.Add(this.GrpMachineLine);
             this.PanelQuestions.Controls.Add(this.GrpMeter);
             this.PanelQuestions.Controls.Add(this.GrpRental);
             this.PanelQuestions.Controls.Add(this.GrpInvoices);
             this.PanelQuestions.Dock = DockStyle.Top;
             this.PanelQuestions.Name = "PanelQuestions";
             this.PanelQuestions.Padding = new Padding(14, 6, 14, 6);
-            this.PanelQuestions.Size = new Size(1050, 140);
+            this.PanelQuestions.Size = new Size(1390, 140);
             this.PanelQuestions.TabIndex = 3;
             //
             // GrpInvoices
@@ -383,11 +391,34 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             // GrpMeter
             //
             this.GrpMeter.Controls.Add(this.RgMeter);
-            this.GrpMeter.Dock = DockStyle.Fill;
+            this.GrpMeter.Dock = DockStyle.Left;
             this.GrpMeter.Name = "GrpMeter";
             this.GrpMeter.Size = new Size(342, 128);
             this.GrpMeter.TabIndex = 2;
             this.GrpMeter.Text = "Black && Colour lines";
+            //
+            // GrpMachineLine
+            //
+            this.GrpMachineLine.Controls.Add(this.RgMachineLine);
+            this.GrpMachineLine.Dock = DockStyle.Fill;
+            this.GrpMachineLine.Name = "GrpMachineLine";
+            this.GrpMachineLine.Size = new Size(340, 128);
+            this.GrpMachineLine.TabIndex = 3;
+            this.GrpMachineLine.Text = "The machine line says";
+            //
+            // RgMachineLine
+            //
+            this.RgMachineLine.Dock = DockStyle.Fill;
+            this.RgMachineLine.Name = "RgMachineLine";
+            this.RgMachineLine.Properties.Appearance.BackColor = Color.Transparent;
+            this.RgMachineLine.Properties.BorderStyle = DevExpress.XtraEditors.Controls.BorderStyles.NoBorder;
+            this.RgMachineLine.Properties.ItemVertAlignment = DevExpress.XtraEditors.RadioItemVertAlignment.Top;
+            this.RgMachineLine.Properties.ItemHorzAlignment = DevExpress.XtraEditors.RadioItemHorzAlignment.Near;
+            this.RgMachineLine.Properties.Items.AddRange(new DevExpress.XtraEditors.Controls.RadioGroupItem[] {
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("B", "Model and line label"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("M", "Model only"),
+            new DevExpress.XtraEditors.Controls.RadioGroupItem("L", "Line label only")});
+            this.RgMachineLine.TabIndex = 0;
             //
             // RgMeter
             //
@@ -524,7 +555,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.Font = new Font("Segoe UI", 9F);
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(1050, 790);
+            this.ClientSize = new Size(1390, 790);
             // Docked bands, added Fill-first and header-last: WinForms positions docked children from
             // the highest index down, each taking a slice out of what is left, so no two of these can
             // ever share a pixel at any client size.
@@ -553,6 +584,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             ((System.ComponentModel.ISupportInitialize)(this.SplitMain)).EndInit();
             this.SplitMain.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.RgMeter.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RgMachineLine.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.GrpMachineLine)).EndInit();
+            this.GrpMachineLine.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.GrpMeter)).EndInit();
             this.GrpMeter.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.RgRental.Properties)).EndInit();

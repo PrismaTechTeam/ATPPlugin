@@ -149,6 +149,18 @@ static class DemoShapes
     static List<ServiceContractPhotocopier.Classes.MeterBillLine> BuildLines(
         AutoCount.Data.DBSetting db, long ck, bool hasFormat)
     {
+        // What the machine line names, read live from the contract's format the way Generate reads it.
+        char machineLine = ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
+        DataTable ft = db.GetDataTable(
+            "SELECT ISNULL(bf.MachineLineShows,'B') AS MachineLineShows FROM dbo.zSCP2_Contract c " +
+            "LEFT JOIN dbo.zSCP2_BillingFormat bf ON bf.FormatCode = c.BillingFormatCode " +
+            "WHERE c.ContractKey = " + ck, false);
+        if (ft.Rows.Count > 0)
+        {
+            string mls = Convert.ToString(ft.Rows[0]["MachineLineShows"]).Trim();
+            if (mls.Length > 0) machineLine = char.ToUpperInvariant(mls[0]);
+        }
+
         var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
         DataTable t = db.GetDataTable(
             "SELECT i.ItemKey, i.ServiceItemNo, ISNULL(i.ItemCode,'') AS Model, " +
@@ -183,6 +195,7 @@ static class DemoShapes
             l.MeterTypeCode = type; l.ACItemCode = type;
             l.MeterTypeName = Convert.ToString(r["Descr"]);
             l.NewMoneyRules = hasFormat;
+            l.MachineLineShows = machineLine;
             l.AuditDate = period; l.LastDate = period.AddMonths(-1); l.PeriodEnd = period;
             l.MinCharges = Convert.ToDecimal(r["MinChg"]);
             l.Rate = Convert.ToDecimal(r["Rate"]);

@@ -131,6 +131,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             AddCol(GridViewFormats, "Invoices", "Invoices", 150);
             AddCol(GridViewFormats, "Rental", "Rental lines", 130);
             AddCol(GridViewFormats, "Meters", "BK & CL lines", 135);
+            AddCol(GridViewFormats, "MachineLine", "Machine line", 150);
             AddCol(GridViewFormats, "UsedBy", "Contracts", 80);
             AddCol(GridViewFormats, "Inactive", "Inactive", 70);
 
@@ -162,6 +163,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             {
                 _dt = _dbSetting.GetDataTable(
                     "SELECT f.FormatCode, f.FormatName, f.InvoiceSplit, f.RentalLineMode, f.MeterLineMode, " +
+                    "ISNULL(f.MachineLineShows,'B') AS MachineLineShows, " +
                     "ISNULL(f.Remark,'') AS Remark, f.Inactive, " +
                     "(SELECT COUNT(*) FROM dbo.zSCP2_Contract c WHERE c.BillingFormatCode = f.FormatCode) AS UsedBy " +
                     "FROM dbo.zSCP2_BillingFormat f ORDER BY f.FormatCode", false);
@@ -179,6 +181,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             foreach (DataRow r in _dt.Rows)
             {
                 r["Invoices"] = ScpBillingFormat.DescribeSplit(Convert.ToString(r["InvoiceSplit"]));
+                r["MachineLine"] = ScpBillingFormat.DescribeMachineLine(
+                    FirstChar(r["MachineLineShows"], ScpBillingFormat.MACHINE_LINE_BOTH));
                 r["Rental"] = ScpBillingFormat.DescribeLineMode(FirstChar(r["RentalLineMode"], 'A'));
                 r["Meters"] = ScpBillingFormat.DescribeLineMode(FirstChar(r["MeterLineMode"], 'S'));
             }
@@ -240,6 +244,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     SetRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE, ScpBillingFormat.SPLIT_ONE);
                     SetRadio(RgRental, "A", "A");
                     SetRadio(RgMeter, "S", "S");
+                    SetRadio(RgMachineLine, "B", "B");
                 }
                 else
                 {
@@ -252,6 +257,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                              ScpBillingFormat.SPLIT_ONE);
                     SetRadio(RgRental, FirstChar(GridViewFormats.GetRowCellValue(rh, "RentalLineMode"), 'A').ToString(), "A");
                     SetRadio(RgMeter, FirstChar(GridViewFormats.GetRowCellValue(rh, "MeterLineMode"), 'S').ToString(), "S");
+                    SetRadio(RgMachineLine,
+                             FirstChar(GridViewFormats.GetRowCellValue(rh, "MachineLineShows"), 'B').ToString(), "B");
                 }
             }
             finally { _loading = false; }
@@ -309,6 +316,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 SetRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE, ScpBillingFormat.SPLIT_ONE);
                 SetRadio(RgRental, "A", "A");
                 SetRadio(RgMeter, "S", "S");
+                SetRadio(RgMachineLine, "B", "B");
             }
             finally { _loading = false; }
             RefreshPreview();
@@ -361,9 +369,11 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
 
                     _dbSetting.ExecuteNonQuery(
                         "INSERT INTO dbo.zSCP2_BillingFormat " +
-                        "(FormatCode, FormatName, InvoiceSplit, RentalLineMode, MeterLineMode, Remark, Inactive) " +
+                        "(FormatCode, FormatName, InvoiceSplit, RentalLineMode, MeterLineMode, " +
+                        " MachineLineShows, Remark, Inactive) " +
                         "VALUES (" + Q(code) + "," + Q(name) + "," + Q(CurrentSplit()) + "," +
-                        Q(CurrentRental()) + "," + Q(CurrentMeter()) + "," + Q(TxtRemark.Text.Trim()) +
+                        Q(CurrentRental()) + "," + Q(CurrentMeter()) + "," +
+                        Q(CurrentMachineLine().ToString()) + "," + Q(TxtRemark.Text.Trim()) +
                         ",'" + (ChkInactive.Checked ? 'Y' : 'N') + "')");
                 }
                 else
@@ -373,6 +383,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                         ", InvoiceSplit=" + Q(CurrentSplit()) +
                         ", RentalLineMode=" + Q(CurrentRental()) +
                         ", MeterLineMode=" + Q(CurrentMeter()) +
+                        ", MachineLineShows=" + Q(CurrentMachineLine().ToString()) +
                         ", Remark=" + Q(TxtRemark.Text.Trim()) +
                         ", Inactive='" + (ChkInactive.Checked ? 'Y' : 'N') + "'" +
                         ", LastModified=GETDATE() WHERE FormatCode=" + Q(code));
@@ -453,6 +464,17 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private static string Q(string s) { return "N'" + (s ?? "").Replace("'", "''") + "'"; }
 
         private string CurrentSplit() { return ReadRadio(RgInvoices, ScpBillingFormat.SPLIT_ONE); }
+
+        /// <summary>What the machine line under a charge names. Unlike the three answers above it, this
+        /// one is NOT copied onto the contract: a contract reads it from its format every time it
+        /// bills. The three invoice answers are copied because changing them retroactively changes
+        /// what a signed contract bills; this one only changes the wording on the line, and a
+        /// house-style decision is meant to reach every invoice at once.</summary>
+        private char CurrentMachineLine()
+        {
+            string v = ReadRadio(RgMachineLine, ScpBillingFormat.MACHINE_LINE_BOTH.ToString());
+            return v.Length > 0 ? char.ToUpperInvariant(v[0]) : ScpBillingFormat.MACHINE_LINE_BOTH;
+        }
         private string CurrentRental() { return ReadRadio(RgRental, "A"); }
         private string CurrentMeter() { return ReadRadio(RgMeter, "S"); }
 
@@ -565,7 +587,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         /// order, so interleaving them per machine would scatter the rental lines through the invoice
         /// and make "rental per model" impossible to see.</para>
         /// </summary>
-        private static List<MeterBillLine> SampleFleet()
+        private List<MeterBillLine> SampleFleet()
         {
             List<MeterBillLine> lines = new List<MeterBillLine>();
             // Rentals, all at the same price on purpose. A machine rented at a different price --
@@ -601,7 +623,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             return lines;
         }
 
-        private static MeterBillLine Rent(string model, string serial, string label, decimal amount)
+        private MeterBillLine Rent(string model, string serial, string label, decimal amount)
         {
             MeterBillLine l = NewSample(model, serial, label);
             l.IsFlat = true; l.IsRental = true;
@@ -611,7 +633,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             return l;
         }
 
-        private static MeterBillLine Meter(string model, string serial, string label, string role,
+        private MeterBillLine Meter(string model, string serial, string label, string role,
             string name, decimal rate, decimal prev, decimal cur)
         {
             MeterBillLine m = NewSample(model, serial, label);
@@ -623,7 +645,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             return m;
         }
 
-        private static MeterBillLine NewSample(string model, string serial, string label)
+        private MeterBillLine NewSample(string model, string serial, string label)
         {
             MeterBillLine l = new MeterBillLine();
             l.ModelCode = model; l.SerialNumber = serial; l.LineGroupCode = label;
@@ -631,6 +653,7 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             // The sample is a contract that HAS a format — that is the whole subject of this screen —
             // so it must be described the way such a contract's invoice is described.
             l.NewMoneyRules = true;
+            l.MachineLineShows = CurrentMachineLine();
             return l;
         }
 

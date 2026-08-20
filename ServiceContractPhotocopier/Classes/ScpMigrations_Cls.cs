@@ -208,6 +208,7 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v11_LineGroup.sql", asm);
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v12_MergeGroup.sql", asm);   // which machines print as ONE line
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v13_LineGroupCode_60.sql", asm);  // room for the labels they print
+            RunDDL(dbsetting, "02_Update_zSCP2_BillingFormat_v2_MachineLineShows.sql", asm);  // model / label / both
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // v3: Demo 28/07 #10 - CN reading-correction linkage (CNDocKey/CNDocNo + filtered index).

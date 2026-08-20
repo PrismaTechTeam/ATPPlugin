@@ -1892,6 +1892,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                     "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
                     "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
+                    // What the machine line names -- model, duty label, or both. From the contract's
+                    // format; 'B' for a contract that has none, which is what it printed before.
+                    "ISNULL(bf.MachineLineShows,'B') AS MachineLineShows, " +
                     "ISNULL(c.RentalBillingDay,0) AS RentalBillingDay, " +
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
@@ -1933,6 +1936,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                     "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
                     "LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
+                    "LEFT JOIN dbo.zSCP2_BillingFormat bf ON bf.FormatCode = c.BillingFormatCode " +
                     "LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = m.MeterTypeCode " +
                     "LEFT JOIN (SELECT DISTINCT ItemMeterKey FROM dbo.zSCP2_ItemMeterPrice) pm ON pm.ItemMeterKey = m.ItemMeterKey " +
                     // Latest reading per meter in ONE pass over zSCP_MeterTrans (window function),
@@ -2027,6 +2031,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["BillingMode"] = S(r["BillingMode"]);
                     g["ItemMeterKey"] = D64(r["ItemMeterKey"]);
                     g["ACItemCode"] = S(r["ACItemCode"]);
+                g["MachineLineShows"] = S(r["MachineLineShows"]);
                     g["Role"] = S(r["MeterRole"]);
                     g["EntrySource"] = "";
                     g["FetchedReading"] = 0m;
@@ -2314,6 +2319,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("BillingMode", typeof(string));
             dt.Columns.Add("ItemMeterKey", typeof(long));
             dt.Columns.Add("ACItemCode", typeof(string));
+            dt.Columns.Add("MachineLineShows", typeof(string));
             dt.Columns.Add("Role", typeof(string));
             dt.Columns.Add("Shade", typeof(int));   // 0/1 per-item zebra shade (hidden)
             dt.Columns.Add("EntrySource", typeof(string));    // where CurrentReading came from: MANUAL/ONLINE/OFFLINE/'' (hidden)
@@ -3998,6 +4004,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // Which printed line this machine belongs on, when its contract folds lines together.
                 ln.ModelCode = S(r["ModelCode"]);
                 ln.LineGroupCode = S(r["LineGroupCode"]);
+                string mls = S(r["MachineLineShows"]).Trim();
+                ln.MachineLineShows = mls.Length > 0 ? char.ToUpperInvariant(mls[0])
+                    : ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
                 ln.MergeGroupCode = S(r["MergeGroupCode"]);
                 ln.IsWaiveMeter = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
                 // Scope is shared: waive meters use it for the target sum, MIN meters for the
