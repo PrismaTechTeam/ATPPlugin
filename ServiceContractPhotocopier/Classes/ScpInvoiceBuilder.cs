@@ -697,8 +697,12 @@ namespace ServiceContractPhotocopier.Classes
 
             if (!row.IsMerged)
             {
+                // A row that stands for ONE machine names it, whatever the format says about models.
+                // "Label only" drops the serial from a merged row because that row is about a group
+                // and the count already describes it -- but a per-machine line IS about that machine,
+                // and without the serial the customer cannot tell which of their five it is.
                 string sn = (ln.SerialNumber ?? "").Trim();
-                if (sn.Length > 0 && !labelOnly)
+                if (sn.Length > 0)
                 {
                     if (tail.Length > 0) tail.Append("  ");
                     tail.Append("S/N:").Append(sn);
