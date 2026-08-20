@@ -109,6 +109,17 @@ static class DemoShapes
                         "       {0,-6} {1,2} machine(s)  qty {2,9:n0}  @ {3,-9} = {4,10:n2}   {5}",
                         kind, row.Members.Count, row.PrintQty, row.PrintUnitPrice, row.PrintAmount,
                         Models(row)));
+
+                    // What the line will actually SAY -- composed by the same method the posted
+                    // invoice and the Sample Invoice preview both call, so this is the printed
+                    // wording and not a summary of it.
+                    string desc = ServiceContractPhotocopier.Classes.ScpInvoiceBuilder
+                        .ComposeFoldedDescription(row, kind == "RENTAL" ? "MONTHLY RENTAL"
+                            : kind == "WAIVE" ? "RENTAL WAIVE"
+                            : kind == "COMMIT" ? "MINIMUM COMMITTED PRINT CHARGES"
+                            : kind == "CL" ? "COLOUR COPY + PRINT A4 & A3" : "BLACK COPY + PRINT A4 & A3");
+                    foreach (string dl in desc.Split(new string[] { "\r\n" }, StringSplitOptions.None))
+                        Console.WriteLine("              | " + dl);
                 }
             }
         }
@@ -142,6 +153,7 @@ static class DemoShapes
         DataTable t = db.GetDataTable(
             "SELECT i.ItemKey, i.ServiceItemNo, ISNULL(i.ItemCode,'') AS Model, " +
             "ISNULL(i.SerialNumber,'') AS Serial, ISNULL(i.MergeGroupCode,'') AS Grp, " +
+            "ISNULL(i.LineGroupCode,'') AS Lbl, " +
             "m.MeterTypeCode, ISNULL(m.MeterRole,'') AS Role, ISNULL(m.[Description],'') AS Descr, " +
             "ISNULL(m.ChargesRate,0) AS Rate, ISNULL(m.MinimumCharges,0) AS MinChg, " +
             "ISNULL(m.FOCQty,0) AS Foc, ISNULL(m.RebateQtyInPercent,0) AS Reb, " +
@@ -167,6 +179,7 @@ static class DemoShapes
             l.SerialNumber = Convert.ToString(r["Serial"]);
             l.ModelCode = Convert.ToString(r["Model"]);
             l.MergeGroupCode = Convert.ToString(r["Grp"]);
+            l.LineGroupCode = Convert.ToString(r["Lbl"]);
             l.MeterTypeCode = type; l.ACItemCode = type;
             l.MeterTypeName = Convert.ToString(r["Descr"]);
             l.NewMoneyRules = hasFormat;

@@ -653,12 +653,11 @@ namespace ServiceContractPhotocopier.Classes
             if (ln.IsRental && ln.RentalMonths > 0)
                 head += " (" + ScpInvoiceLayout.RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
 
-            // The duty label the machines carry, if they all carry the same one. The old system had it
-            // baked into the item code -- MEDIUM DUTY "30-50 ppm" - IRADX4935I was an item, and a
-            // customer with three duty classes needed three item codes -- so the words are familiar to
-            // the customer and they belong back on the line. A row whose machines disagree prints
-            // nothing rather than one machine's word standing for all of them.
-            string duty = SharedLineLabel(row);
+            // The duty labels the machines carry. The old system had them baked into the item code --
+            // MEDIUM DUTY "30-50 ppm" - IRADX4935I was an item, and a customer with three duty classes
+            // needed three item codes -- so the words are familiar to the customer and belong on the
+            // line.
+            string duty = LineLabels(row);
             if (duty.Length > 0) head += "  " + duty;
 
             System.Text.StringBuilder tail = new System.Text.StringBuilder();
@@ -699,22 +698,32 @@ namespace ServiceContractPhotocopier.Classes
             return tail.Length == 0 ? head : head + "\r\n" + tail;
         }
 
-        /// <summary>The duty label of a printed row -- "HEAVY DUTY", "MEDIUM DUTY \"30-50 ppm\"" --
-        /// when every machine on the row carries the same one, and empty when they do not.
+        /// <summary>The duty labels on a printed row, each one once, in the order the machines appear:
+        /// <c>MEDIUM DUTY "30-50 ppm", HEAVY DUTY "65 ppm"</c>.
         ///
-        /// <para>The label is a DESCRIPTION and never a reason to split a line. That is why the row can
-        /// legitimately hold machines whose labels differ, and why it then has to print none: on JPJ's
-        /// invoice twelve machines tagged HEAVY / MEDIUM / LIGHT share one black line of 80,720 because
-        /// they share a rate, and no single one of those three words is true of that line.</para></summary>
-        private static string SharedLineLabel(ScpFoldedLine row)
+        /// <para>The label is a DESCRIPTION and never a reason to split a line, so a row can hold
+        /// machines whose labels differ -- JPJ merges twelve machines tagged HEAVY / MEDIUM / LIGHT
+        /// onto one black line of 80,720 because they share a rate. This first printed nothing at all
+        /// in that case, on the argument that no single word was true of the row. That was wrong twice
+        /// over: it threw away information the customer is used to reading, and a line that has gone
+        /// silent is indistinguishable from a label nobody filled in.</para>
+        ///
+        /// <para>The MODEL list one line below had the right answer all along -- four models on a row
+        /// print as four models -- so the labels follow it: list what is there.</para></summary>
+        private static string LineLabels(ScpFoldedLine row)
         {
             if (row == null || row.Leader == null) return "";
-            string label = (row.Leader.LineGroupCode ?? "").Trim();
-            if (label.Length == 0) return "";
+            List<string> labels = new List<string>();
             foreach (MeterBillLine m in row.Members)
-                if (!string.Equals((m.LineGroupCode ?? "").Trim(), label, StringComparison.OrdinalIgnoreCase))
-                    return "";
-            return label;
+            {
+                string label = (m.LineGroupCode ?? "").Trim();
+                if (label.Length == 0) continue;
+                bool seen = false;
+                for (int i = 0; i < labels.Count; i++)
+                    if (string.Equals(labels[i], label, StringComparison.OrdinalIgnoreCase)) seen = true;
+                if (!seen) labels.Add(label);
+            }
+            return labels.Count == 0 ? "" : string.Join(", ", labels.ToArray());
         }
 
         // The legacy 16-line More Description block (legend + 15 values), copied verbatim from the
