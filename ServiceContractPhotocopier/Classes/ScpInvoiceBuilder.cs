@@ -667,11 +667,20 @@ namespace ServiceContractPhotocopier.Classes
             if (duty.Length > 0 && shows == ScpBillingFormat.MACHINE_LINE_BOTH)
                 head += "  " + duty;
 
+            // "Label only" means the line names the CLASS of machine and not the machine: no model
+            // and no serial. That is how this business printed before ATP -- MEDIUM HEAVY DUTY
+            // ''45cpm'' - MONTHLY RENTAL - names neither, and of 37,179 rental lines in the old book
+            // 247 carry a serial and of 114,361 meter lines, twelve do. The serial line is ours, not
+            // theirs.
+            //
+            // A row with no label falls back to the model. Choosing "label only" and then meeting a
+            // machine nobody labelled would otherwise print a line that says nothing at all about
+            // what is being billed -- and a line gone blank is indistinguishable from a bug.
+            bool labelOnly = shows == ScpBillingFormat.MACHINE_LINE_LABEL && duty.Length > 0;
+
             System.Text.StringBuilder tail = new System.Text.StringBuilder();
-            if (shows == ScpBillingFormat.MACHINE_LINE_LABEL)
+            if (labelOnly)
             {
-                // The label stands in for the model entirely, which is how this business printed
-                // before: MEDIUM HEAVY DUTY ''45cpm'' - MONTHLY RENTAL - never named the machine.
                 tail.Append(duty);
             }
             else
@@ -689,7 +698,7 @@ namespace ServiceContractPhotocopier.Classes
             if (!row.IsMerged)
             {
                 string sn = (ln.SerialNumber ?? "").Trim();
-                if (sn.Length > 0)
+                if (sn.Length > 0 && !labelOnly)
                 {
                     if (tail.Length > 0) tail.Append("  ");
                     tail.Append("S/N:").Append(sn);
@@ -705,7 +714,7 @@ namespace ServiceContractPhotocopier.Classes
                 // -- so a merged rental printed "5 UNIT" and never said which five, and the customer
                 // could not tell one 5-unit rental line from another. Its own line, because a list of
                 // serials run onto the end of the model list reads as one more model.
-                if (ln.IsFlat)
+                if (ln.IsFlat && !labelOnly)
                 {
                     string serials = SerialList(row);
                     if (serials.Length > 0) tail.Append("\r\n").Append("S/N:").Append(serials);
