@@ -86,8 +86,9 @@ static class SeedContracts
                 else seen[sn] = Convert.ToString(r["ServiceItemNo"]).Trim();
                 using (SqlCommand u = new SqlCommand(
                     "UPDATE dbo.zSCP2_Item SET SerialNumber = @sn, [Description] = @desc, " +
-                    "LastModified = GETDATE() WHERE ItemKey = @ik", cn))
+                    "LineGroupCode = @label, LastModified = GETDATE() WHERE ItemKey = @ik", cn))
                 {
+                    u.Parameters.AddWithValue("@label", DutyLabel(Convert.ToString(r["ItemCode"])));
                     u.Parameters.AddWithValue("@sn", sn);
                     u.Parameters.AddWithValue("@desc", Convert.ToString(r["ItemCode"]).Trim() + " / " + sn);
                     u.Parameters.AddWithValue("@ik", Convert.ToInt64(r["ItemKey"]));
@@ -289,6 +290,37 @@ static class SeedContracts
         char c1 = A[(int)(r % (uint)A.Length)]; r /= (uint)A.Length;
         char c0 = (r % 3u == 0u) ? (char)('2' + (r / 3u) % 8u) : A[(int)((r / 3u) % (uint)A.Length)];
         return new string(new char[] { c0, c1, c2 }) + n.ToString("00000", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The words the printed line carries for a machine of this model -- its duty class, in
+    /// the form this book already prints ("MEDIUM DUTY \"30-50 ppm\" - IRADX4935I", "HEAVY DUTY
+    /// ''105cpm''"). It is a DESCRIPTION and never a reason to split a line: DEMO-01 merges five
+    /// machines carrying two different labels onto one rental line, and DEMO-04 keeps two models
+    /// carrying the SAME label on two lines. Both are worth being able to see.</summary>
+    static string DutyLabel(string model)
+    {
+        switch ((model ?? "").Trim())
+        {
+            case "iR-ADV DX C3922i": return "LIGHT DUTY";
+            case "iR-ADV 2745i":     return "LIGHT DUTY";
+            case "iR-ADV C1234":     return "LIGHT DUTY";
+            case "iR-ADV C3560i":    return "MEDIUM DUTY \"30-50 ppm\"";
+            case "iR-ADV C5335":     return "MEDIUM DUTY \"30-50 ppm\"";
+            case "iR-ADV DX C3940i": return "MEDIUM DUTY \"30-50 ppm\"";
+            case "imageFORCE C5150": return "MEDIUM HEAVY DUTY \"50 ppm\"";
+            case "iR-ADV DX C5760i": return "MEDIUM HEAVY DUTY \"57 ppm\"";
+            case "iR-ADV DX 4951i":  return "MEDIUM HEAVY DUTY \"51 ppm\"";
+            case "iR-ADV DX 4960i":  return "MEDIUM HEAVY DUTY \"60 ppm\"";
+            case "iR-ADV C5665":     return "HEAVY DUTY \"65 ppm\"";
+            case "iR-ADV 6580i":     return "HEAVY DUTY \"65 ppm\"";
+            case "iR-ADV C7565i":    return "HEAVY DUTY \"65 ppm\"";
+            case "imageFORCE C7165": return "HEAVY DUTY \"65 ppm\"";
+            case "imageFORCE 6170":  return "HEAVY DUTY \"70 ppm\"";
+            case "iR-ADV DX 6980i":  return "HEAVY DUTY \"80 ppm\"";
+            case "iR-ADV DX C5880i": return "HEAVY DUTY \"80 ppm\"";
+            case "imagePRESS C910":  return "HEAVY DUTY \"90 ppm\"";
+        }
+        return "";
     }
 
     /// <summary>The tag a demo machine was seeded under, recovered from the number the contract files
@@ -617,9 +649,9 @@ static class SeedContracts
         using (SqlCommand cmd = new SqlCommand(
             "INSERT INTO dbo.zSCP2_Item " +
             "(ContractKey, ServiceItemNo, ItemCode, SerialNumber, [Description], Pos, " +
-            " MergeGroupCode, Inactive, IsGroupItem, MachineMode, " +
+            " MergeGroupCode, LineGroupCode, Inactive, IsGroupItem, MachineMode, " +
             " ServiceStartDate, ServiceExpiryDate, LastModified) " +
-            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
+            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, @label, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
             "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
         {
             cmd.Parameters.AddWithValue("@ck", ck);
@@ -630,6 +662,7 @@ static class SeedContracts
             cmd.Parameters.AddWithValue("@desc", m.Model + " / " + sn);
             cmd.Parameters.AddWithValue("@pos", pos);
             cmd.Parameters.AddWithValue("@grp", m.MergeGroup);
+            cmd.Parameters.AddWithValue("@label", DutyLabel(m.Model));
             cmd.Parameters.AddWithValue("@mmode", m.MachineMode);
             cmd.Parameters.AddWithValue("@sd", START);
             cmd.Parameters.AddWithValue("@ed", EXPIRY);

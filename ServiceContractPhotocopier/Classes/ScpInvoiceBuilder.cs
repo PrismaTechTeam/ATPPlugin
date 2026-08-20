@@ -653,6 +653,14 @@ namespace ServiceContractPhotocopier.Classes
             if (ln.IsRental && ln.RentalMonths > 0)
                 head += " (" + ScpInvoiceLayout.RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
 
+            // The duty label the machines carry, if they all carry the same one. The old system had it
+            // baked into the item code -- MEDIUM DUTY "30-50 ppm" - IRADX4935I was an item, and a
+            // customer with three duty classes needed three item codes -- so the words are familiar to
+            // the customer and they belong back on the line. A row whose machines disagree prints
+            // nothing rather than one machine's word standing for all of them.
+            string duty = SharedLineLabel(row);
+            if (duty.Length > 0) head += "  " + duty;
+
             System.Text.StringBuilder tail = new System.Text.StringBuilder();
             List<string> models = new List<string>();
             foreach (MeterBillLine m in row.Members)
@@ -689,6 +697,24 @@ namespace ServiceContractPhotocopier.Classes
                 }
             }
             return tail.Length == 0 ? head : head + "\r\n" + tail;
+        }
+
+        /// <summary>The duty label of a printed row -- "HEAVY DUTY", "MEDIUM DUTY \"30-50 ppm\"" --
+        /// when every machine on the row carries the same one, and empty when they do not.
+        ///
+        /// <para>The label is a DESCRIPTION and never a reason to split a line. That is why the row can
+        /// legitimately hold machines whose labels differ, and why it then has to print none: on JPJ's
+        /// invoice twelve machines tagged HEAVY / MEDIUM / LIGHT share one black line of 80,720 because
+        /// they share a rate, and no single one of those three words is true of that line.</para></summary>
+        private static string SharedLineLabel(ScpFoldedLine row)
+        {
+            if (row == null || row.Leader == null) return "";
+            string label = (row.Leader.LineGroupCode ?? "").Trim();
+            if (label.Length == 0) return "";
+            foreach (MeterBillLine m in row.Members)
+                if (!string.Equals((m.LineGroupCode ?? "").Trim(), label, StringComparison.OrdinalIgnoreCase))
+                    return "";
+            return label;
         }
 
         // The legacy 16-line More Description block (legend + 15 values), copied verbatim from the
