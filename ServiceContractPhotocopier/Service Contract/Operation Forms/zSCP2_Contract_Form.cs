@@ -4987,6 +4987,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Ellipsis);
             maintain.ToolTip = "Create, rename or edit billing formats";
             SluBillingFormat.Properties.Buttons.Add(maintain);
+
+            // And a third that puts the contract back on its format, shown only once it has moved off
+            // one. Without it, a tick made by mistake can only be undone by remembering what the
+            // format said and ticking it back.
+            _btnResetFormat =
+                new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Undo);
+            _btnResetFormat.ToolTip = "Put this contract back on its billing format";
+            _btnResetFormat.Visible = false;
+            SluBillingFormat.Properties.Buttons.Add(_btnResetFormat);
             SluBillingFormat.Properties.ButtonClick +=
                 new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(SluBillingFormat_ButtonClick);
             SluBillingFormat.EditValueChanged += new EventHandler(SluBillingFormat_EditValueChanged);
@@ -5027,10 +5036,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             c.Width = width;
         }
 
+        private DevExpress.XtraEditors.Controls.EditorButton _btnResetFormat;
+
         private void SluBillingFormat_ButtonClick(object sender,
             DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
-            if (e.Button == null || e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Ellipsis) return;
+            if (e.Button == null) return;
+            if (e.Button.Kind == DevExpress.XtraEditors.Controls.ButtonPredefines.Undo)
+            {
+                ApplyFormatToControls(_billingFormatCode);
+                return;
+            }
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Ellipsis) return;
             try
             {
                 using (ServiceContractPhotocopier.GeneralSetup.MasterForms.BillingFormatLst_Form f =
@@ -5068,9 +5085,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, code);
             if (f == null) { UpdateFormatSummary(); return; }
 
+            ApplyFormatToControls(code);
+        }
+
+        /// <summary>Copy a format's answers onto the screen. A format is a template, not a wire: this
+        /// runs when one is picked and when the Undo button asks for it back, and never again -- a
+        /// preset edited afterwards must not change how a signed contract bills.</summary>
+        private void ApplyFormatToControls(string code)
+        {
+            if (code == null || code.Trim().Length == 0) { UpdateFormatSummary(); return; }
+            ServiceContractPhotocopier.Classes.ScpBillingFormat f =
+                ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, code.Trim());
+            if (f == null) { UpdateFormatSummary(); return; }
+
             _formatApplying = true;
             try
             {
+                _billingFormatCode = code.Trim();
+                if (SluBillingFormat != null) SluBillingFormat.EditValue = _billingFormatCode;
                 ChkBillGroup.Checked = f.BillingMode == 'G';
                 ChkBillSeparate.Checked = f.BillingMode == 'S';
                 ChkRentalSeparate.Checked = f.RentalSeparateInvoice;
@@ -5079,6 +5111,33 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             finally { _formatApplying = false; }
             UpdateFormatSummary();
+        }
+
+        /// <summary>What this contract answers differently from the format it names, in the words the
+        /// tick boxes use. Empty when it still matches, or when there is no format to match.
+        ///
+        /// <para>Read from the format master every time rather than remembered in a column, so it stays
+        /// true after somebody edits the preset -- that is exactly the case where the name on the
+        /// contract stops describing what the contract does, and the one worth showing.</para></summary>
+        private string FormatDeviation()
+        {
+            if (_billingFormatCode.Length == 0) return "";
+            ServiceContractPhotocopier.Classes.ScpBillingFormat f;
+            try { f = ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, _billingFormatCode); }
+            catch { return ""; }
+            if (f == null) return "";
+
+            System.Collections.Generic.List<string> diff = new System.Collections.Generic.List<string>();
+            bool wantSeparateEach = f.BillingMode == 'S';
+            if (ChkBillSeparate.Checked != wantSeparateEach)
+                diff.Add(ChkBillSeparate.Checked ? "one invoice per machine" : "one invoice for the contract");
+            if (ChkRentalSeparate.Checked != f.RentalSeparateInvoice)
+                diff.Add(ChkRentalSeparate.Checked ? "rental on its own invoice" : "rental on the same invoice");
+            if (_rentalLineMode != f.RentalLineMode)
+                diff.Add("rental " + ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(_rentalLineMode));
+            if (_meterLineMode != f.MeterLineMode)
+                diff.Add("BK+CL " + ServiceContractPhotocopier.Classes.ScpBillingFormat.DescribeLineMode(_meterLineMode));
+            return diff.Count == 0 ? "" : string.Join(", ", diff.ToArray());
         }
 
         /// <summary>Lines &amp; Rental Price — which machines print as one line, and what it costs.</summary>
@@ -5176,14 +5235,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         /// <summary>Ticking a box by hand takes the contract off its format rather than silently
         /// disagreeing with it — the summary then says so.</summary>
+        /// <summary>
+        /// A tick moves the contract off its format's answer -- it does NOT take the format away.
+        ///
+        /// <para>It used to. Clearing the code looks harmless, and is not: whether a contract carries
+        /// a format code is also what tells the engine to use the new layout rules at all. So ticking
+        /// "Rental separate invoice" on a contract printing three merged lines silently sent it back
+        /// to the legacy rules, where usage never merges, and the next Generate printed eleven. The
+        /// user changed which invoices there are; what changed was how the lines merge.</para>
+        ///
+        /// <para>Now the code stays, the line modes stay, and only the thing that was actually ticked
+        /// moves. The summary says which answer no longer matches the format, and the Undo button
+        /// beside the picker puts it back.</para>
+        /// </summary>
         private void BillingFlag_Changed(object sender, EventArgs e)
         {
             if (_formatApplying) return;
-            if (_billingFormatCode.Length > 0)
-            {
-                _billingFormatCode = "";
-                if (SluBillingFormat != null) SluBillingFormat.EditValue = null;
-            }
             UpdateFormatSummary();
         }
 
@@ -5198,6 +5265,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (LblFormatSummary == null) return;
             if (_billingFormatCode.Length == 0)
             {
+                if (_btnResetFormat != null) _btnResetFormat.Visible = false;
+                LblFormatSummary.Appearance.ForeColor = System.Drawing.Color.DimGray;
                 LblFormatSummary.Text = "Billing as before — pick a format to use the new layout rules.";
                 return;
             }
@@ -5220,6 +5289,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     if (kv.Value > 0m) pricedGroups++;
             if (pricedGroups > 0)
                 words += ", rental priced by the " + (pricedGroups == 1 ? "group" : pricedGroups + " groups");
+
+            // When the contract has moved off its format, say so and which answer moved -- otherwise
+            // the name at the top describes an invoice this contract no longer prints.
+            string deviation = FormatDeviation();
+            if (deviation.Length > 0)
+                words = "Differs from " + _billingFormatCode + ":  " + deviation + "        " + words;
+            if (_btnResetFormat != null) _btnResetFormat.Visible = deviation.Length > 0;
+            LblFormatSummary.Appearance.ForeColor = deviation.Length > 0
+                ? System.Drawing.Color.FromArgb(150, 90, 0) : System.Drawing.Color.DimGray;
             LblFormatSummary.Text = words;
         }
 
