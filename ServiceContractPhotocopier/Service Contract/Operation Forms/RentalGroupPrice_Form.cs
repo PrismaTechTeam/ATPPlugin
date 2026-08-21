@@ -218,11 +218,16 @@ namespace ServiceContractPhotocopier
             _dtLines.Columns.Add("GroupCode", typeof(string));
             _dtLines.Columns.Add("Field", typeof(string));
 
-            foreach (Line L in Collect(SIDE_R)) AddLineRow(L, "Monthly rental", "OwnRate", 2);
+            foreach (Line L in Collect(SIDE_R))
+            {
+                AddLineRow(L, "Monthly rental", "OwnRate", 2);
+                AddTermRow(L, "Rental waive", "WAIVE");
+            }
             foreach (Line L in Collect(SIDE_M))
             {
                 AddLineRow(L, "Black copies", "OwnBk", 4);
                 AddLineRow(L, "Colour copies", "OwnCl", 4);
+                AddTermRow(L, "Minimum charge", "COMMIT");
             }
 
             GridLines.DataSource = _dtLines;
@@ -265,6 +270,74 @@ namespace ServiceContractPhotocopier
             r["GroupCode"] = L.GroupCode;
             r["Field"] = field;
             _dtLines.Rows.Add(r);
+        }
+
+        /// <summary>The minimum and the waive are terms measured in ringgit over the line's black and
+        /// colour, not prices on a charge — so they get a row each rather than a column nothing else
+        /// would use, and they carry the two figures the deal actually has.
+        ///
+        /// <para>They are stored where the engine already looks: a COMMIT or WAIVE meter on the first
+        /// machine of the line, scoped 'G' so it is measured over the machines that share the line.
+        /// That is the same mechanism the committed minimum has always used; nothing new is invented,
+        /// so nothing can be written here and quietly never read.</para></summary>
+        private void AddTermRow(Line L, string charge, string role)
+        {
+            decimal at = 0m, amt = 0m;
+            DataRow meter = FindTermMeter(L, role);
+            if (meter != null)
+            {
+                if (role == "WAIVE")
+                {
+                    at = Dec(meter, "WaiveTargetAmount");
+                    amt = Math.Abs(Dec(meter, "MinimumCharges"));
+                    if (amt <= 0m) amt = Math.Abs(Dec(meter, "ChargesRate"));
+                }
+                else
+                {
+                    amt = Dec(meter, "MinimumCharges");
+                }
+            }
+
+            DataRow r = _dtLines.NewRow();
+            r["LineName"] = L.Name;
+            r["Charge"] = charge;
+            r["Units"] = L.Rows.Count;
+            r["OnMachines"] = role == "WAIVE"
+                ? (at > 0m ? "if BK+CL reaches " + at.ToString("n2") : "not set")
+                : (amt > 0m ? "over this line's BK+CL" : "not set");
+            r["UnitPrice"] = amt;
+            r["Monthly"] = role == "WAIVE"
+                ? (at > 0m ? "waive " + amt.ToString("n2") : "")
+                : (amt > 0m ? "billed if the copies come to less" : "");
+            r["Side"] = L.Side;
+            r["GroupCode"] = L.GroupCode;
+            r["Field"] = role;
+            _dtLines.Rows.Add(r);
+        }
+
+        /// <summary>The COMMIT or WAIVE meter that carries this line's terms, if one has been set.
+        /// It lives on the FIRST machine of the line: one meter states the deal for the line, the way
+        /// one row states it on paper — spreading it over every machine would bill it that many times.
+        /// </summary>
+        private DataRow FindTermMeter(Line L, string role)
+        {
+            foreach (int i in L.Rows)
+            {
+                ItemEditData d = ItemAt(i);
+                if (d == null || d.Meters == null) continue;
+                foreach (DataRow mr in d.Meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    if (Str(mr, "MeterRole").Trim().ToUpperInvariant() == role) return mr;
+                }
+            }
+            return null;
+        }
+
+        private ItemEditData ItemAt(int machineRow)
+        {
+            int idx = Convert.ToInt32(_dtMachines.Rows[machineRow]["Idx"]);
+            return idx >= 0 && idx < _items.Count ? _items[idx] : null;
         }
 
         private decimal SumOf(Line L, string field)
@@ -377,8 +450,92 @@ namespace ServiceContractPhotocopier
             if (e.Column != ColUnitPrice) return;
             _changed = true;
             GridViewLines.PostEditor();
+
+            DataRow r = GridViewLines.GetDataRow(e.RowHandle);
+            if (r != null)
+            {
+                string field = Convert.ToString(r["Field"]);
+                if (field == "WAIVE" || field == "COMMIT")
+                {
+                    decimal v = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                    WriteTerm(r, v);
+                    if (field == "WAIVE" && v > 0m) AskWaiveTarget(r);
+                    RebuildLines();
+                    return;
+                }
+            }
             RecomputeMonthly();
             RefreshSummary();
+        }
+
+        /// <summary>Write a line's minimum or waive onto the meter the engine reads. Zero clears it:
+        /// the row is removed rather than left at nothing, so a term that was taken off the deal does
+        /// not sit in the data waiting to surprise somebody.</summary>
+        private void WriteTerm(DataRow lineRow, decimal value)
+        {
+            string role = Convert.ToString(lineRow["Field"]);
+            string grp = Convert.ToString(lineRow["GroupCode"]).Trim();
+            Line target = null;
+            foreach (Line L in Collect(Convert.ToString(lineRow["Side"])))
+            {
+                bool mine = grp.Length > 0
+                    ? string.Equals(L.GroupCode, grp, StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(L.Name, Convert.ToString(lineRow["LineName"]), StringComparison.OrdinalIgnoreCase);
+                if (mine) { target = L; break; }
+            }
+            if (target == null || target.Rows.Count == 0) return;
+
+            DataRow existing = FindTermMeter(target, role);
+            if (value <= 0m)
+            {
+                if (existing != null) existing.Delete();
+                return;
+            }
+
+            if (existing == null)
+            {
+                ItemEditData first = ItemAt(target.Rows[0]);
+                if (first == null || first.Meters == null) return;
+                existing = first.Meters.NewRow();
+                existing["MeterTypeCode"] = role;
+                existing["MeterRole"] = role;
+                existing["Description"] = role == "WAIVE"
+                    ? "RENTAL WAIVE" : "MINIMUM COMMITTED PRINT CHARGES";
+                first.Meters.Rows.Add(existing);
+            }
+
+            // Scoped over the LINE, not the machine it happens to sit on. Same column the committed
+            // minimum has always used to say the same thing.
+            if (existing.Table.Columns.Contains("CommitScope"))
+                existing["CommitScope"] = target.GroupCode.Length > 0 ? "G" : "S";
+            if (existing.Table.Columns.Contains("WaiveScope")) existing["WaiveScope"] = "BKCL";
+
+            if (role == "WAIVE")
+            {
+                existing["MinimumCharges"] = value;      // what comes off the rental
+            }
+            else
+            {
+                existing["MinimumCharges"] = value;      // the floor the copies are topped up to
+            }
+        }
+
+        /// <summary>The waive's other half: how much the line's black and colour have to reach.</summary>
+        private void WriteWaiveTarget(DataRow lineRow, decimal target)
+        {
+            string grp = Convert.ToString(lineRow["GroupCode"]).Trim();
+            Line line = null;
+            foreach (Line L in Collect(SIDE_R))
+            {
+                bool mine = grp.Length > 0
+                    ? string.Equals(L.GroupCode, grp, StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(L.Name, Convert.ToString(lineRow["LineName"]), StringComparison.OrdinalIgnoreCase);
+                if (mine) { line = L; break; }
+            }
+            if (line == null) return;
+            DataRow m = FindTermMeter(line, "WAIVE");
+            if (m == null) return;
+            if (m.Table.Columns.Contains("WaiveTargetAmount")) m["WaiveTargetAmount"] = target;
         }
 
         private void RecomputeMonthly()
@@ -404,6 +561,34 @@ namespace ServiceContractPhotocopier
             }
         }
 
+        /// <summary>A waive has two figures — what the copies have to reach, and what comes off the
+        /// rental when they do. The grid cell holds the second; this asks for the first, because a
+        /// waive with no target fires every month and gives the rental away.</summary>
+        private void AskWaiveTarget(DataRow lineRow)
+        {
+            string current = "0.00";
+            string grp = Convert.ToString(lineRow["GroupCode"]).Trim();
+            foreach (Line L in Collect(SIDE_R))
+            {
+                bool mine = grp.Length > 0
+                    ? string.Equals(L.GroupCode, grp, StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(L.Name, Convert.ToString(lineRow["LineName"]), StringComparison.OrdinalIgnoreCase);
+                if (!mine) continue;
+                DataRow m = FindTermMeter(L, "WAIVE");
+                if (m != null) current = Dec(m, "WaiveTargetAmount").ToString("n2");
+                break;
+            }
+
+            string answer = XtraInputBox.Show(
+                "When this line's black and colour reach how much in a month?" + Environment.NewLine +
+                "0 = waive every month, whatever they print.",
+                "Rental waive", current);
+            if (answer == null) return;
+            decimal t;
+            if (!decimal.TryParse(answer.Trim(), out t) || t < 0m) t = 0m;
+            WriteWaiveTarget(lineRow, t);
+        }
+
         /// <summary>One agreed figure per line, taken from the machines — the highest where they
         /// disagree, because dropping to the lowest quietly gives money away.</summary>
         private void BtnFromMachines_Click(object sender, EventArgs e)
@@ -411,6 +596,7 @@ namespace ServiceContractPhotocopier
             foreach (DataRow r in _dtLines.Rows)
             {
                 string field = Convert.ToString(r["Field"]);
+                if (field == "WAIVE" || field == "COMMIT") continue;   // terms, not a unit price
                 string side = Convert.ToString(r["Side"]);
                 string grp = Convert.ToString(r["GroupCode"]).Trim();
                 decimal top = 0m;
@@ -435,7 +621,12 @@ namespace ServiceContractPhotocopier
 
         private void BtnClear_Click(object sender, EventArgs e)
         {
-            foreach (DataRow r in _dtLines.Rows) r["UnitPrice"] = 0m;
+            foreach (DataRow r in _dtLines.Rows)
+            {
+                string f = Convert.ToString(r["Field"]);
+                if (f == "WAIVE" || f == "COMMIT") continue;   // clearing prices is not tearing up terms
+                r["UnitPrice"] = 0m;
+            }
             _changed = true;
             RecomputeMonthly();
             RefreshSummary();
@@ -492,6 +683,8 @@ namespace ServiceContractPhotocopier
             Result = new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
             foreach (DataRow r in _dtLines.Rows)
             {
+                string fld = Convert.ToString(r["Field"]);
+                if (fld == "WAIVE" || fld == "COMMIT") continue;   // those live on the meter, not here
                 decimal p = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
                 if (p <= 0m) continue;
                 string side = Convert.ToString(r["Side"]);

@@ -4097,6 +4097,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     ln.IsCommittedMin = true;
                     ln.CommittedAmount = ln.MinCharges;
                     ln.AlwaysBill = true;
+                }
+
+                // Whose charges a term is measured over -- read for EVERY flat meter, not only the
+                // committed minimum. A waive asks the same question ("print this much and the rent is
+                // on us"), and reading the column only for one of them is how a line-scoped waive gets
+                // stored, displayed, and then quietly measured per machine anyway.
+                if (ln.IsFlat)
+                {
                     ln.CommitScope = S(r["CommitScope"]).Trim().ToUpperInvariant();
                     if (ln.CommitScope != "G" && ln.CommitScope != "C") ln.CommitScope = "S";
                 }
@@ -4437,6 +4445,30 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
         }
 
+        /// <summary>Does this usage line count towards that waive's target?
+        ///
+        /// <para>A waive is "print this much and the rent is on us". Which copies count is the whole
+        /// question, and it has three answers: this machine's, the whole fleet's (a group machine),
+        /// or the ones on the same rental line as the waive (CommitScope 'G'). The third is what a
+        /// deal agreed over a merged line means, and without it a five-machine line whose members
+        /// each print RM 200 against a line target of RM 800 fires nothing -- silently, because a
+        /// waive that does not fire prints exactly like a quiet month.</para></summary>
+        private static bool WaiveCounts(MeterBillLine waive, MeterBillLine usageLine)
+        {
+            if (waive.IsGroupItem) return usageLine.ContractKey == waive.ContractKey;
+
+            string grp = (waive.MergeGroupCode ?? "").Trim();
+            bool byGroup = grp.Length > 0 &&
+                string.Equals((waive.CommitScope ?? "").Trim(), "G", StringComparison.OrdinalIgnoreCase);
+            if (byGroup)
+            {
+                return usageLine.ContractKey == waive.ContractKey &&
+                       string.Equals((usageLine.MergeGroupCode ?? "").Trim(), grp,
+                                     StringComparison.OrdinalIgnoreCase);
+            }
+            return usageLine.ItemKey == waive.ItemKey;
+        }
+
         // ═══ WAIVE METERS (master-style contra, engine-decided) ═══
         // A Rental-Waive meter (its own item code, e.g. RA-MONTH(W)-13MTH) bills NEGATIVE when its
         // per-meter Waive Configuration says so — replacing the master's manual monthly decision:
@@ -4489,8 +4521,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         decimal total = 0m;
                         foreach (MeterBillLine u in usage)
                         {
-                            // Per-MACHINE deal normally; the GROUP machine counts the WHOLE fleet.
-                            if (l.IsGroupItem ? u.ContractKey != l.ContractKey : u.ItemKey != l.ItemKey) continue;
+                            // Whose copies count towards the target. Per MACHINE normally; the fleet
+                            // machine counts the WHOLE contract; and a waive scoped 'G' counts the
+                            // machines that share its rental line -- because the deal was struck over
+                            // that line, not over one of the machines on it. Same scope column the
+                            // committed minimum uses, for the same question.
+                            if (!WaiveCounts(l, u)) continue;
                             if (u.ColorLabel != "Black" && u.ColorLabel != "Colour") continue;
                             if (l.WaiveScope == "BK" && u.ColorLabel != "Black") continue;
                             if (l.WaiveScope == "CL" && u.ColorLabel != "Colour") continue;
