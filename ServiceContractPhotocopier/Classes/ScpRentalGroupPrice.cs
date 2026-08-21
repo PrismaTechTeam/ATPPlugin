@@ -20,6 +20,36 @@ namespace ServiceContractPhotocopier.Classes
     ///
     /// <para>No row means no override. A contract nobody has priced bills exactly as before.</para>
     /// </summary>
+    /// <summary>What one printed line charges, when the line has been given an agreed figure rather
+    /// than letting each machine bill its own. Rental and copies are separate lines, so a line row
+    /// carries a price for whichever charge it is.
+    ///
+    /// <para>Zero means "no agreement" -- the machines keep their own rates and, if those rates
+    /// differ, the line comes apart into one line per rate. That is not a fault: a printed line is
+    /// one Qty x Unit Price, and two prices cannot share the cell.</para></summary>
+    public class ScpLineTerms
+    {
+        public const string SIDE_RENTAL = "R";
+        public const string SIDE_METER = "M";
+
+        public string GroupCode = "";
+        public string Side = SIDE_RENTAL;
+        public decimal UnitPrice;      // rental: a month for ONE machine
+        public decimal BkPrice;        // copies: per black copy
+        public decimal ClPrice;        // copies: per colour copy
+
+        public bool IsEmpty
+        {
+            get { return UnitPrice <= 0m && BkPrice <= 0m && ClPrice <= 0m; }
+        }
+
+        public static string Key(string side, string groupCode)
+        {
+            return (side ?? SIDE_RENTAL).Trim().ToUpperInvariant() + "|" +
+                   (groupCode ?? "").Trim().ToUpperInvariant();
+        }
+    }
+
     public static class ScpRentalGroupPrice
     {
         /// <summary>Which line a machine falls on, under a merging line mode.</summary>
@@ -50,6 +80,34 @@ namespace ServiceContractPhotocopier.Classes
             return s.Length > 40 ? s.Substring(0, 40) : s;
         }
 
+        /// <summary>Every line's agreed terms for one contract, keyed "SIDE|GROUPCODE". Never throws:
+        /// an older book without the columns simply has no agreements.</summary>
+        public static Dictionary<string, ScpLineTerms> LoadTerms(DBSetting db, long contractKey)
+        {
+            Dictionary<string, ScpLineTerms> map =
+                new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
+            if (db == null || contractKey <= 0) return map;
+            try
+            {
+                DataTable t = db.GetDataTable(
+                    "SELECT ISNULL(Side,'R') AS Side, GroupCode, ISNULL(UnitPrice,0) AS UnitPrice, " +
+                    "ISNULL(BkPrice,0) AS BkPrice, ISNULL(ClPrice,0) AS ClPrice " +
+                    "FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + contractKey, false);
+                foreach (DataRow r in t.Rows)
+                {
+                    ScpLineTerms x = new ScpLineTerms();
+                    x.Side = Convert.ToString(r["Side"]).Trim().ToUpperInvariant();
+                    x.GroupCode = Convert.ToString(r["GroupCode"]).Trim();
+                    x.UnitPrice = Convert.ToDecimal(r["UnitPrice"]);
+                    x.BkPrice = Convert.ToDecimal(r["BkPrice"]);
+                    x.ClPrice = Convert.ToDecimal(r["ClPrice"]);
+                    map[ScpLineTerms.Key(x.Side, x.GroupCode)] = x;
+                }
+            }
+            catch { }
+            return map;
+        }
+
         /// <summary>Prices for one contract, keyed by GroupCode ('' = the whole contract).
         /// Never throws: an older book without the table simply has no overrides.</summary>
         public static Dictionary<string, decimal> LoadForContract(DBSetting db, long contractKey)
@@ -60,7 +118,7 @@ namespace ServiceContractPhotocopier.Classes
             {
                 DataTable t = db.GetDataTable(
                     "SELECT GroupCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
-                    "WHERE ContractKey = " + contractKey, false);
+                    "WHERE ContractKey = " + contractKey + " AND ISNULL(Side,'R') = 'R'", false);
                 foreach (DataRow r in t.Rows)
                     map[Convert.ToString(r["GroupCode"]).Trim()] =
                         r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
@@ -91,8 +149,11 @@ namespace ServiceContractPhotocopier.Classes
             try
             {
                 DataTable t = db.GetDataTable(
+                    // Rental rows only: the copies now keep their agreed rates in the same table,
+                    // on the M side, and a rental price map that swallowed them would price a rental
+                    // line at a rate per copy.
                     "SELECT ContractKey, GroupCode, UnitPrice FROM dbo.zSCP2_ContractRentalPrice " +
-                    "WHERE ContractKey IN (" + inList + ")", false);
+                    "WHERE ContractKey IN (" + inList + ") AND ISNULL(Side,'R') = 'R'", false);
                 foreach (DataRow r in t.Rows)
                 {
                     long ck = Convert.ToInt64(r["ContractKey"]);

@@ -39,6 +39,13 @@ namespace ServiceContractPhotocopier.Classes
         /// BK and CL paired per machine.</summary>
         public const char LINE_PER_MACHINE = 'S';
 
+        /// <summary>The machines decide. A machine that was put in a group prints on that group's
+        /// line; a machine in no group prints on its own. There is no rule above it to override --
+        /// which is the point: "all on one line", "one line per model" and "one line per machine"
+        /// are all reachable by grouping, and so is every arrangement in between that no mode could
+        /// name. This is what a contract on the new layout uses.</summary>
+        public const char LINE_BY_GROUP = 'G';
+
         // ----- invoice split (maps onto the two columns that already carry it) -----
 
         /// <summary>Everything on one invoice.</summary>

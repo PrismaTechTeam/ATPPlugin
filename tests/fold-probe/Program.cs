@@ -223,13 +223,13 @@ static class FoldProbe
         try
         {
             var lines = new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
-            var a1 = RentalPaid(ck6, "MODEL C5335", "M1", 300m); a1.MergeGroupCode = "PAIR";
-            var a2 = RentalPaid(ck6, "MODEL C5665", "M2", 300m); a2.MergeGroupCode = "PAIR";
+            var a1 = RentalPaid(ck6, "MODEL C5335", "M1", 300m); a1.MergeGroupCode = "PAIR"; a1.MergeGroupCodeMeter = "PAIR";
+            var a2 = RentalPaid(ck6, "MODEL C5665", "M2", 300m); a2.MergeGroupCode = "PAIR"; a2.MergeGroupCodeMeter = "PAIR";
             lines.Add(a1); lines.Add(a2);
             for (int i = 0; i < 4; i++) lines.Add(RentalPaid(ck6, "MODEL C1234", "N" + i, 250m));
             // ...and their black meters follow the same grouping, at their own rates.
-            var b1 = Bk(ck6, "MODEL C5335", "M1", "", 0.03m, 0m, 1000m); b1.MergeGroupCode = "PAIR";
-            var b2 = Bk(ck6, "MODEL C5665", "M2", "", 0.03m, 0m, 2000m); b2.MergeGroupCode = "PAIR";
+            var b1 = Bk(ck6, "MODEL C5335", "M1", "", 0.03m, 0m, 1000m); b1.MergeGroupCode = "PAIR"; b1.MergeGroupCodeMeter = "PAIR";
+            var b2 = Bk(ck6, "MODEL C5665", "M2", "", 0.03m, 0m, 2000m); b2.MergeGroupCode = "PAIR"; b2.MergeGroupCodeMeter = "PAIR";
             lines.Add(b1); lines.Add(b2);
             for (int i = 0; i < 4; i++) lines.Add(Bk(ck6, "MODEL C1234", "N" + i, "", 0.03m, 0m, 500m));
 
@@ -246,6 +246,8 @@ static class FoldProbe
 
             // Ungrouped, the same fleet is three lines -- one per model. The group is doing the work.
             a1.MergeGroupCode = ""; a2.MergeGroupCode = ""; b1.MergeGroupCode = ""; b2.MergeGroupCode = "";
+            a1.MergeGroupCodeMeter = ""; a2.MergeGroupCodeMeter = "";
+            b1.MergeGroupCodeMeter = ""; b2.MergeGroupCodeMeter = "";
             var plain = ServiceContractPhotocopier.Classes.ScpInvoiceLayout.Fold(db, lines);
             Check("without the group it is one line per model again", Where(plain, true).Count, 3);
         }
@@ -365,7 +367,7 @@ static class FoldProbe
         string group, decimal charge)
     {
         var l = new ServiceContractPhotocopier.Classes.MeterBillLine();
-        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group;
+        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group; l.MergeGroupCodeMeter = group;
         l.ColorLabel = "Black"; l.Charge = charge;
         return l;
     }
@@ -374,7 +376,7 @@ static class FoldProbe
         string group, decimal amount, string scope)
     {
         var l = new ServiceContractPhotocopier.Classes.MeterBillLine();
-        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group;
+        l.ContractKey = ck; l.ItemKey = itemKey; l.MergeGroupCode = group; l.MergeGroupCodeMeter = group;
         l.IsFlat = true; l.IsCommittedMin = true; l.AlwaysBill = true;
         l.CommittedAmount = amount; l.MinCharges = amount; l.CommitScope = scope;
         l.MeterTypeCode = "COMMIT"; l.WaiveScope = "BKCL";

@@ -72,6 +72,77 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             long v; return (k != null && k != DBNull.Value && long.TryParse(k.ToString(), out v)) ? v : 0;
         }
 
+        // ── grid layout persistence, the same way Meter Reading Integration does it ──
+        // Layouts live in dbo.Layout / dbo.LayoutUsers exactly like AutoCount's own screens:
+        // right-click a column header -> Save Layout / Load Layout / Reset Layout / Layout Manager.
+        // The ctor restores this user's assigned layout (else the all-user default), and on close a
+        // per-user layout is saved and assigned silently, so nobody re-arranges the same columns
+        // every morning. Two scopes, because the machine grid and the meter grid are different
+        // questions and one shared title would have them overwriting each other.
+
+        private const string LAYOUT_ITEMS = "SCP_CONTRACT.ITEMS";
+        private const string LAYOUT_METERS = "SCP_CONTRACT.METERS";
+        private AutoCount.XtraUtils.CustomizeGridLayout _layoutItems;
+        private AutoCount.XtraUtils.CustomizeGridLayout _layoutMeters;
+
+        private void WireGridLayouts()
+        {
+            if (_layoutItems != null || _layoutMeters != null) return;
+            try
+            {
+                AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
+                if (us == null) return;
+                if (GridViewItems != null) _layoutItems = NewLayout(us, LAYOUT_ITEMS, GridViewItems);
+                if (GridViewMeterCfg != null) _layoutMeters = NewLayout(us, LAYOUT_METERS, GridViewMeterCfg);
+            }
+            catch { }   // layout plumbing must never break the screen
+        }
+
+        private AutoCount.XtraUtils.CustomizeGridLayout NewLayout(
+            AutoCount.Authentication.UserSession us, string key, DevExpress.XtraGrid.Views.Grid.GridView view)
+        {
+            AutoCount.XtraUtils.CustomizeGridLayout gl = new AutoCount.XtraUtils.CustomizeGridLayout(us, key, view);
+            // Our grid, our rules: every user gets the layout/column/export menu here (the native
+            // SYS_BHV_* rights default to admin-ish groups only).
+            gl.GetAccessRightSetting +=
+                new AutoCount.XtraUtils.GetCustomizeGridLayoutAccessRightSettingEventHandler(delegate
+                {
+                    AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting a =
+                        new AutoCount.XtraUtils.CustomizeGridLayoutAccessRightSetting();
+                    a.AllowCustomizeGridLayout = true;
+                    a.AllowColumnChooser = true;
+                    a.AllowColumnCaption = true;
+                    a.AllowExportGridContent = true;
+                    a.AllowPrintGridContent = true;
+                    return a;
+                });
+            return gl;
+        }
+
+        private void SaveGridLayouts()
+        {
+            SaveOneLayout(_layoutItems, "SCP Contract Items");
+            SaveOneLayout(_layoutMeters, "SCP Contract Meters");
+        }
+
+        private void SaveOneLayout(AutoCount.XtraUtils.CustomizeGridLayout gl, string what)
+        {
+            if (gl == null || _db == null) return;
+            try
+            {
+                string user = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? "";
+                if (user.Length == 0) return;
+                string title = what + " - " + user;
+                if (title.Length > 60) title = title.Substring(0, 60);
+                if (!gl.SaveLayout(title, false)) return;    // title owned by someone else -- leave it
+                string t = title.Replace("'", "''"), u = user.Replace("'", "''");
+                _db.ExecuteNonQuery(
+                    "IF NOT EXISTS (SELECT 1 FROM dbo.LayoutUsers WHERE Title = N'" + t + "' AND UserID = N'" + u + "') " +
+                    "INSERT INTO dbo.LayoutUsers (Title, UserID) VALUES (N'" + t + "', N'" + u + "')");
+            }
+            catch { }   // a layout that will not save must not stop the form closing
+        }
+
         private void OnFormLoad(object sender, EventArgs e)
         {
             if (_db == null) return;
@@ -742,8 +813,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void InitBillingHeaderData()
         {
             SpnRentalDay.Value = _loadedRentalDay;
-            SpnRentalDay.Enabled = ChkRentalSeparate.Checked;
-            ChkRentalSeparate.CheckedChanged += delegate { SpnRentalDay.Enabled = ChkRentalSeparate.Checked; };
+            SetRentalDayEnabled();
+            ChkRentalSeparate.CheckedChanged += delegate { SetRentalDayEnabled(); };
             BuildBillingFormatPicker();
             // #16: invoice DISPLAY dates follow the contract cycle instead of the actual reading dates.
             ChkPeriodByContract.ToolTip =
@@ -1285,7 +1356,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             LoadBillingFormat(r);
             // The prices of this contract's merged rental lines, if anyone has set them.
-            _rentalGroupPrices = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContract(_db, _contractKey);
+            _lineTerms = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(_db, _contractKey);
             _rentalPricesDirty = false;
             UpdateFormatSummary();   // now that the prices are in, the summary can mention them
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
@@ -1357,6 +1428,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(AsStr(r["BillGroupCode"])) : "";
             d.LineGroupCode = r.Table.Columns.Contains("LineGroupCode") ? AsStr(r["LineGroupCode"]).Trim() : "";
             d.MergeGroupCode = r.Table.Columns.Contains("MergeGroupCode") ? AsStr(r["MergeGroupCode"]).Trim() : "";
+            d.MergeGroupCodeMeter = r.Table.Columns.Contains("MergeGroupCodeMeter")
+                ? AsStr(r["MergeGroupCodeMeter"]).Trim() : "";
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             d.ItemCodes = zSCP2_Item_Form.CreateItemCodesTable();
 
@@ -1749,6 +1822,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewMeterCfg.CustomColumnDisplayText += new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(ViewMeterCfg_CustomColumnDisplayText);
 
             GridViewItems.FocusedRowChanged += new DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventHandler(GridViewItems_FocusedRowChangedMeterCfg);
+
+            // Both grids are built by now, so their saved arrangement can be put back and the
+            // layout menu added to their column headers.
+            WireGridLayouts();
+            this.FormClosed += delegate { SaveGridLayouts(); };
         }
 
         private DevExpress.XtraGrid.Columns.GridColumn MeterCfgCol(string field, string caption, int width,
@@ -4935,17 +5013,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>One price per merged rental line, keyed by ModelCode ('' = the whole
         /// contract). Empty means nobody has priced the groups and every machine still prices its
         /// own rental.</summary>
-        private System.Collections.Generic.Dictionary<string, decimal> _rentalGroupPrices =
-            new System.Collections.Generic.Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        private System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>
+            _lineTerms = new System.Collections.Generic.Dictionary<string,
+                ServiceContractPhotocopier.Classes.ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Only a save that follows an actual edit rewrites the price table -- otherwise a
         /// book whose table failed to load would have its prices deleted by an ordinary save.</summary>
         private bool _rentalPricesDirty;
         private DataTable _formatLookup;
         private bool _formatApplying;   // guard: applying a format ticks boxes, which must not re-enter
 
+        /// <summary>
+        /// The Billing Format picker is HIDDEN while the new layout is on trial.
+        ///
+        /// <para>A format answered three questions — how many invoices, how rentals merge, how copies
+        /// merge — and a contract on the new layout answers all three by grouping its machines in
+        /// Lines &amp; Price, where the answer can be seen instead of named. Two ways to say the same
+        /// thing is what produced the bug where ticking "rental separate invoice" silently changed
+        /// how lines merge, so only one of them is on screen.</para>
+        ///
+        /// <para>Nothing is deleted. The master screen still exists under General Setup, the columns
+        /// still hold their values, and every contract still on a format bills exactly as before —
+        /// UseNewLayout is what decides which rules apply, per contract, one at a time.</para>
+        /// </summary>
         private void BuildBillingFormatPicker()
         {
             if (SluBillingFormat == null) return;
+
+            SluBillingFormat.Visible = false;
+            if (LblFormatSummary != null) LblFormatSummary.Visible = false;
+            if (ChkBillGroup != null) ChkBillGroup.Visible = false;
+            if (ChkBillSeparate != null) ChkBillSeparate.Visible = false;
+            if (ChkRentalSeparate != null) ChkRentalSeparate.Visible = false;
+            HideLayoutItems();
+            if (true) return;
+#pragma warning disable 0162
             try
             {
                 _formatLookup = _db.GetDataTable(
@@ -4981,6 +5082,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             AddFormatCol("Meters", "BK & CL lines", 100);
             AddFormatCol("UsedBy", "Used by", 60);
             AddFormatCol("Remark", "Seen on", 260);
+            // The buttons and the handlers go on ONCE. This method runs again every time the format
+            // master is closed (a format may have been added or renamed), and it used to add another
+            // pair of buttons and another set of event handlers on each pass -- so the editor grew a
+            // row of ellipses, and one pick fired EditValueChanged as many times as the screen had
+            // been opened.
+            if (_formatPickerWired)
+            {
+                UpdateFormatSummary();
+                return;
+            }
+            _formatPickerWired = true;
+
             // A second button beside the drop-down opens the maintenance screen, so a format can be
             // created or renamed from the place it is being chosen rather than hunted for in a menu.
             DevExpress.XtraEditors.Controls.EditorButton maintain =
@@ -5003,6 +5116,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkBillSeparate.CheckedChanged += new EventHandler(BillingFlag_Changed);
             ChkRentalSeparate.CheckedChanged += new EventHandler(BillingFlag_Changed);
             UpdateFormatSummary();
+#pragma warning restore 0162
+        }
+
+        /// <summary>A LayoutControl keeps its own item for every control, and hiding the control
+        /// leaves the item's label and its slot behind. The items go too, so the panel closes up
+        /// rather than showing five gaps where the format used to be.</summary>
+        private void HideLayoutItems()
+        {
+            DevExpress.XtraLayout.BaseLayoutItem[] gone = new DevExpress.XtraLayout.BaseLayoutItem[] {
+                layoutControlItem33, layoutControlItem34, layoutControlItem22,
+                layoutControlItem23, layoutControlItem24 };
+            for (int i = 0; i < gone.Length; i++)
+            {
+                if (gone[i] == null) continue;
+                gone[i].Visibility = DevExpress.XtraLayout.Utils.LayoutVisibility.Never;
+            }
         }
 
         /// <summary>Restore a saved contract's format. The line modes come from the CONTRACT, not
@@ -5037,6 +5166,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         private DevExpress.XtraEditors.Controls.EditorButton _btnResetFormat;
+        private bool _formatPickerWired;
 
         private void SluBillingFormat_ButtonClick(object sender,
             DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
@@ -5152,16 +5282,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// </remarks>
         private void barRentalPrice_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
-            if (_rentalLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE &&
-                _meterLineMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
-            {
-                XtraMessageBox.Show(
-                    "This contract prints one line per machine — nothing merges, so there is no line to " +
-                    "group and no group to price." + Environment.NewLine + Environment.NewLine +
-                    "Pick a format that merges lines first.",
-                    "Lines & Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
             if (_items == null || _items.Count == 0)
             {
                 XtraMessageBox.Show("Add the machines first — the lines are counted off them.",
@@ -5169,13 +5289,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 return;
             }
             using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
-                new ServiceContractPhotocopier.RentalGroupPrice_Form(
-                    _items, _rentalLineMode, _meterLineMode, _rentalGroupPrices))
+                new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _lineTerms))
             {
                 if (f.ShowDialog(this) != DialogResult.OK) return;
-                _rentalGroupPrices = f.Result;
+                _lineTerms = f.Result;
                 _rentalPricesDirty = true;
                 _dirty = true;
+                RebuildItemsView();
             }
             UpdateFormatSummary();
         }
@@ -5220,7 +5340,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 formatName, _billingFormatCode.Length > 0,
                 _rentalLineMode, _meterLineMode,
                 ChkRentalSeparate.Checked, ChkBillSeparate.Checked,
-                _rentalGroupPrices,
+                RentalPricesForSample(),
                 SluInvoiceTemplate == null || SluInvoiceTemplate.EditValue == null
                     ? "" : Convert.ToString(SluInvoiceTemplate.EditValue),
                 machineLine))
@@ -5230,19 +5350,43 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         /// <summary>Replace-all inside the contract save transaction, and only after a real edit.</summary>
+        /// <summary>The rental side of the agreed figures, keyed the way the fold engine keys a
+        /// rental line. The sample invoice only prices rentals; the copies carry their agreed rate on
+        /// the meter line itself.</summary>
+        private System.Collections.Generic.Dictionary<string, decimal> RentalPricesForSample()
+        {
+            System.Collections.Generic.Dictionary<string, decimal> map =
+                new System.Collections.Generic.Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            if (_lineTerms == null) return map;
+            foreach (System.Collections.Generic.KeyValuePair<string,
+                        ServiceContractPhotocopier.Classes.ScpLineTerms> kv in _lineTerms)
+            {
+                ServiceContractPhotocopier.Classes.ScpLineTerms t = kv.Value;
+                if (t == null || t.UnitPrice <= 0m) continue;
+                if (!string.Equals(t.Side, "R", StringComparison.OrdinalIgnoreCase)) continue;
+                string key = (t.GroupCode ?? "").Trim();
+                map[key.Length > 0 ? "#" + key.ToUpperInvariant() : ""] = t.UnitPrice;
+            }
+            return map;
+        }
+
         private void SaveRentalGroupPrices(SqlConnection conn, SqlTransaction tx)
         {
             if (!_rentalPricesDirty || _contractKey <= 0) return;
             ExecNonQuery(conn, tx, "DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey=@ck",
                 P("@ck", _contractKey));
-            if (_rentalGroupPrices == null) return;
-            foreach (System.Collections.Generic.KeyValuePair<string, decimal> kv in _rentalGroupPrices)
+            if (_lineTerms == null) return;
+            foreach (System.Collections.Generic.KeyValuePair<string,
+                        ServiceContractPhotocopier.Classes.ScpLineTerms> kv in _lineTerms)
             {
-                if (kv.Value <= 0m) continue;   // not priced -- the machines keep their own rates
+                ServiceContractPhotocopier.Classes.ScpLineTerms t = kv.Value;
+                if (t == null || t.IsEmpty) continue;   // nothing agreed -- the machines keep their own
                 ExecNonQuery(conn, tx,
-                    "INSERT INTO dbo.zSCP2_ContractRentalPrice (ContractKey, GroupCode, UnitPrice, LastModified) " +
-                    "VALUES (@ck,@mc,@up,GETDATE())",
-                    P("@ck", _contractKey), P("@mc", kv.Key ?? ""), P("@up", kv.Value));
+                    "INSERT INTO dbo.zSCP2_ContractRentalPrice " +
+                    "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, LastModified) " +
+                    "VALUES (@ck,@sd,@mc,@up,@bk,@cl,GETDATE())",
+                    P("@ck", _contractKey), P("@sd", t.Side ?? "R"), P("@mc", t.GroupCode ?? ""),
+                    P("@up", t.UnitPrice), P("@bk", t.BkPrice), P("@cl", t.ClPrice));
             }
         }
 
@@ -5261,6 +5405,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// moves. The summary says which answer no longer matches the format, and the Undo button
         /// beside the picker puts it back.</para>
         /// </summary>
+        /// <summary>Rental has its own billing day only when it has its own invoice. Greying the box is
+        /// half the message: the tick that controls it now lives inside "Split the invoices by hand",
+        /// which is collapsed, so the box says why it is grey instead of leaving the reader to hunt.</summary>
+        private void SetRentalDayEnabled()
+        {
+            bool on = ChkRentalSeparate.Checked;
+            SpnRentalDay.Enabled = on;
+            SpnRentalDay.ToolTip = on
+                ? "The day of the month the rental invoice is dated."
+                : "Used only when rental is billed on its own invoice." + "\r\n" +
+                  "Pick a format with two invoices, or open \"Split the invoices by hand\".";
+        }
+
         private void BillingFlag_Changed(object sender, EventArgs e)
         {
             if (_formatApplying) return;
@@ -5296,10 +5453,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             // A priced group overrides its machines' own rental rates, which is worth saying out loud.
             int pricedGroups = 0;
-            if (_rentalGroupPrices != null &&
-                _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE)
-                foreach (System.Collections.Generic.KeyValuePair<string, decimal> kv in _rentalGroupPrices)
-                    if (kv.Value > 0m) pricedGroups++;
+            if (_lineTerms != null)
+                foreach (System.Collections.Generic.KeyValuePair<string,
+                            ServiceContractPhotocopier.Classes.ScpLineTerms> kv in _lineTerms)
+                    if (kv.Value != null && kv.Value.UnitPrice > 0m) pricedGroups++;
             if (pricedGroups > 0)
                 words += ", rental priced by the " + (pricedGroups == 1 ? "group" : pricedGroups + " groups");
 
@@ -5472,8 +5629,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string sql =
                 "INSERT INTO [dbo].[zSCP2_Item] " +
                 "(ContractKey, ServiceItemNo, SerialNumber, Description, BillingDayOverride, " +
-                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LineGroupCode, MergeGroupCode, LastModified) " +
-                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,@lgrp,@mgrp,GETDATE()); " +
+                " DepartmentCode, JobCode, StockLocationCode, Pos, Inactive, IsGroupItem, MachineMode, BillGroupCode, LineGroupCode, MergeGroupCode, MergeGroupCodeMeter, LastModified) " +
+                "VALUES (@ck,@no,@serial,@desc,@bday,@dept,@job,@loc,@pos,@inact,@isgrp,@mmode,@bgrp,@lgrp,@mgrp,@mgrpm,GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
@@ -5492,6 +5649,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@mgrp", d.MergeGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@mgrpm", d.MergeGroupCodeMeter ?? "");
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -5505,7 +5663,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // stale direct-owner would mis-resolve the COALESCE if the contract's debtor were blank.
                 "UPDATE [dbo].[zSCP2_Item] SET ContractKey=@ck, OwnerDebtorCode='', ServiceItemNo=@no, SerialNumber=@serial, " +
                 "Description=@desc, BillingDayOverride=@bday, DepartmentCode=@dept, JobCode=@job, " +
-                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LineGroupCode=@lgrp, MergeGroupCode=@mgrp, LastModified=GETDATE() WHERE ItemKey=@ik";
+                "StockLocationCode=@loc, Pos=@pos, Inactive=@inact, IsGroupItem=@isgrp, MachineMode=@mmode, BillGroupCode=@bgrp, LineGroupCode=@lgrp, MergeGroupCode=@mgrp, MergeGroupCodeMeter=@mgrpm, LastModified=GETDATE() WHERE ItemKey=@ik";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 cmd.Parameters.AddWithValue("@ck", _contractKey);
@@ -5523,6 +5681,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 cmd.Parameters.AddWithValue("@bgrp", d.BillGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@lgrp", d.LineGroupCode ?? "");
                 cmd.Parameters.AddWithValue("@mgrp", d.MergeGroupCode ?? "");
+                cmd.Parameters.AddWithValue("@mgrpm", d.MergeGroupCodeMeter ?? "");
                 cmd.Parameters.AddWithValue("@ik", d.ItemKey);
                 cmd.ExecuteNonQuery();
             }

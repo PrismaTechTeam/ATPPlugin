@@ -43,6 +43,7 @@ static class DemoShapes
 
         DataTable contracts = db.GetDataTable(
             "SELECT ContractKey, ContractNo, ISNULL(BillingFormatCode,'') AS Fmt, " +
+            "ISNULL(UseNewLayout,'N') AS NewLayout, " +
             "ISNULL(RentalLineMode,'A') AS RLM, ISNULL(MeterLineMode,'S') AS MLM, " +
             "ISNULL(RentalSeparateInvoice,'N') AS RSep, ISNULL(BillingMode,'G') AS BM, " +
             "ISNULL([Description],'') AS Descr " +
@@ -53,9 +54,18 @@ static class DemoShapes
         {
             long ck = Convert.ToInt64(c["ContractKey"]);
             string no = Convert.ToString(c["ContractNo"]);
-            bool hasFormat = Convert.ToString(c["Fmt"]).Trim().Length > 0;
+            // The new rules carry their own switch; a contract on them names no format at all and
+            // takes its shape from how its machines are grouped.
+            bool newLayout = Convert.ToString(c["NewLayout"]).Trim().ToUpperInvariant() == "Y";
+            bool hasFormat = newLayout || Convert.ToString(c["Fmt"]).Trim().Length > 0;
             char rlm = Convert.ToString(c["RLM"])[0];
             char mlm = Convert.ToString(c["MLM"])[0];
+            // On the new layout there is no mode: the machines' groups are the whole answer.
+            if (newLayout)
+            {
+                rlm = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_BY_GROUP;
+                mlm = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_BY_GROUP;
+            }
             bool rentalSep = Convert.ToString(c["RSep"]) == "Y";
             bool perMachine = Convert.ToString(c["BM"]) == "S";
 
@@ -86,7 +96,9 @@ static class DemoShapes
             }
 
             Console.WriteLine();
-            Console.WriteLine("=== " + no + "   format " + (hasFormat ? Convert.ToString(c["Fmt"]) : "(legacy)") +
+            Console.WriteLine("=== " + no + "   " +
+                              (newLayout ? "grouped by the machines"
+                                         : (hasFormat ? "format " + Convert.ToString(c["Fmt"]) : "(legacy)")) +
                               "   rental " + rlm + " / meters " + mlm +
                               (rentalSep ? "   rental on its own invoice" : "") +
                               (perMachine ? "   one invoice per machine" : ""));
@@ -165,6 +177,7 @@ static class DemoShapes
         DataTable t = db.GetDataTable(
             "SELECT i.ItemKey, i.ServiceItemNo, ISNULL(i.ItemCode,'') AS Model, " +
             "ISNULL(i.SerialNumber,'') AS Serial, ISNULL(i.MergeGroupCode,'') AS Grp, " +
+            "ISNULL(i.MergeGroupCodeMeter,'') AS GrpM, " +
             "ISNULL(i.LineGroupCode,'') AS Lbl, " +
             "m.MeterTypeCode, ISNULL(m.MeterRole,'') AS Role, ISNULL(m.[Description],'') AS Descr, " +
             "ISNULL(m.ChargesRate,0) AS Rate, ISNULL(m.MinimumCharges,0) AS MinChg, " +
@@ -191,6 +204,7 @@ static class DemoShapes
             l.SerialNumber = Convert.ToString(r["Serial"]);
             l.ModelCode = Convert.ToString(r["Model"]);
             l.MergeGroupCode = Convert.ToString(r["Grp"]);
+            l.MergeGroupCodeMeter = Convert.ToString(r["GrpM"]);
             l.LineGroupCode = Convert.ToString(r["Lbl"]);
             l.MeterTypeCode = type; l.ACItemCode = type;
             l.MeterTypeName = Convert.ToString(r["Descr"]);

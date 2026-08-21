@@ -3,445 +3,521 @@ using System.Collections.Generic;
 using System.Data;
 using System.Windows.Forms;
 using DevExpress.XtraEditors;
+using ServiceContractPhotocopier.Classes;
 using ServiceContractPhotocopier.ServiceContract.OperationForms;
 
 namespace ServiceContractPhotocopier
 {
     /// <summary>
-    /// Which machines print as ONE line, and what that line costs.
+    /// Every line this contract will print, and what each one charges.
     ///
-    /// <para>The three line modes answer the question in general — merge everything, merge by model,
-    /// do not merge — and none of them can say "a C5335 and a C5665 together, four C1234 apart".
-    /// Ticking machines and merging them says exactly that: the group replaces whatever bucket the
-    /// mode would have used, so under "merge by model" it merges models together and under "merge,
-    /// ignoring model" it splits a set off the single line. It never turns merging on — a contract
-    /// set to one line per machine stays one line per machine.</para>
+    /// <para>A machine on its own line is a line too — merging is only one way to make one. Tick
+    /// machines and put them on one line: for the rental, for the copies, or for both. That is the
+    /// whole vocabulary, and it reaches every arrangement — "all on one line" is grouping them all,
+    /// "one line per model" is grouping by model, "one line per machine" is grouping none of them,
+    /// and everything in between (a C5335 and a C5665 together while four C1234 stay apart) is
+    /// simply which machines were ticked.</para>
     ///
-    /// <para>A merged rental line is also a deal, so the line carries a price: every rental meter on
-    /// it bills at that figure, whatever each machine's own meter says, and a machine added to the
-    /// line later joins at it. Leave a line at 0 and its machines keep their own rates.</para>
+    /// <para><b>Rental and copies group separately.</b> The commonest deal here is one agreed rental
+    /// across the fleet while every machine still bills its own copies, and a single grouping column
+    /// could not say it. So a machine carries two: the line its rental prints on, and the line its
+    /// black and colour print on.</para>
     ///
-    /// <para>Rental only for the price. Black and colour take the same grouping — a machine that
-    /// prints with a group prints with it on every line — but each meter keeps its own rate and the
-    /// merged usage line is worth the sum of its machines.</para>
+    /// <para><b>A printed line carries ONE unit price.</b> That is why a line can be given an agreed
+    /// figure at all: machines whose own rates differ cannot share a row — the row has one price
+    /// cell and there is no honest way to put two numbers in it — so until a figure is agreed here,
+    /// such a group still comes out as one line per rate. The grid says so where it happens.</para>
     ///
     /// <para>Everything is written back into the contract editor on OK only, and the contract still
     /// has to be saved.</para>
     /// </summary>
     public partial class RentalGroupPrice_Form : XtraForm
     {
+        private const string SIDE_R = "R";
+        private const string SIDE_M = "M";
+
         private readonly List<ItemEditData> _items;
-        private readonly char _rentalMode;
-        private readonly char _meterMode;
-        private readonly Dictionary<string, decimal> _prices;   // GroupCode -> price
+        private readonly Dictionary<string, ScpLineTerms> _terms;   // "SIDE|GROUP" -> agreed figures
         private DataTable _dtMachines;
         private DataTable _dtLines;
         private bool _changed;
+        private int _seq;
 
-        /// <summary>The prices as edited, keyed by group code ('' = the whole contract, '#NAME' = a
-        /// hand-made group, otherwise a model). A line left at 0 is absent.</summary>
-        public Dictionary<string, decimal> Result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>True when a rental line can carry a price at all — when the contract merges its
-        /// rental lines. Grouping still matters for black and colour when it does not.</summary>
-        private bool Priceable
-        {
-            get { return _rentalMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE; }
-        }
-
-        /// <summary>The mode whose buckets the lines are counted from: the rental one when rental
-        /// merges, otherwise the meter one.</summary>
-        private char GroupingMode
-        {
-            get { return Priceable ? _rentalMode : _meterMode; }
-        }
+        /// <summary>The agreed figures as edited, keyed "SIDE|GROUPCODE". A line left at 0 is absent.
+        /// </summary>
+        public Dictionary<string, ScpLineTerms> Result =
+            new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
 
         public RentalGroupPrice_Form()
         {
             InitializeComponent();
         }
 
-        public RentalGroupPrice_Form(List<ItemEditData> items, char rentalMode, char meterMode,
-            Dictionary<string, decimal> current) : this()
+        public RentalGroupPrice_Form(List<ItemEditData> items, Dictionary<string, ScpLineTerms> current) : this()
         {
             _items = items ?? new List<ItemEditData>();
-            _rentalMode = rentalMode;
-            _meterMode = meterMode;
-            _prices = current ?? new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            _terms = current ?? new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
         }
+
+        // ---------- load ----------
 
         private void OnFormLoad(object sender, EventArgs e)
         {
-            _dtMachines = new DataTable();
-            _dtMachines.Columns.Add("Idx", typeof(int));
-            _dtMachines.Columns.Add("Sel", typeof(bool));
-            _dtMachines.Columns.Add("ServiceItemNo", typeof(string));
-            _dtMachines.Columns.Add("SerialNumber", typeof(string));
-            _dtMachines.Columns.Add("ItemCode", typeof(string));
-            _dtMachines.Columns.Add("MergeGroup", typeof(string));   // the machine's own group ('' = none)
-            _dtMachines.Columns.Add("PrintsOn", typeof(string));     // the line it lands on
-            _dtMachines.Columns.Add("OwnRate", typeof(decimal));
-
-            _dtLines = new DataTable();
-            _dtLines.Columns.Add("GroupKey", typeof(string));
-            _dtLines.Columns.Add("LineName", typeof(string));
-            _dtLines.Columns.Add("Units", typeof(int));
-            _dtLines.Columns.Add("OnMachines", typeof(string));
-            _dtLines.Columns.Add("UnitPrice", typeof(decimal));
-            _dtLines.Columns.Add("Monthly", typeof(decimal));
+            LblHint.Text =
+                "Tick the machines that belong on ONE line and say which line: the rental, the copies, " +
+                "or both. A machine in no group prints on its own." + Environment.NewLine +
+                "Then type what that line charges — a rental a month for ONE machine, a rate per copy " +
+                "for black and colour. Left at 0, every machine keeps its own rate; where those rates " +
+                "differ the line still comes out one per rate, because a printed line has one price cell.";
 
             BuildMachines();
-            this.GridMachines.DataSource = _dtMachines;
-            this.GridLines.DataSource = _dtLines;
-            this.GridViewLines.CellValueChanged +=
+            RebuildLines();
+
+            BtnMerge.Click += new EventHandler(BtnMerge_Click);
+            BtnMergeMeter.Click += new EventHandler(BtnMergeMeter_Click);
+            BtnMergeBoth.Click += new EventHandler(BtnMergeBoth_Click);
+            BtnUngroup.Click += new EventHandler(BtnUngroup_Click);
+            BtnByPrice.Click += new EventHandler(BtnByPrice_Click);
+            BtnByModel.Click += new EventHandler(BtnByModel_Click);
+            BtnFromMachines.Click += new EventHandler(BtnFromMachines_Click);
+            BtnClear.Click += new EventHandler(BtnClear_Click);
+            BtnOK.Click += new EventHandler(BtnOK_Click);
+            GridViewLines.CellValueChanged +=
                 new DevExpress.XtraGrid.Views.Base.CellValueChangedEventHandler(GridViewLines_CellValueChanged);
             this.FormClosing += new FormClosingEventHandler(OnFormClosingGuard);
-
-            this.ColUnitPrice.OptionsColumn.AllowEdit = Priceable;
-            this.ColUnitPrice.OptionsColumn.ReadOnly = !Priceable;
-            this.BtnFromMachines.Enabled = Priceable;
-            this.BtnClear.Enabled = Priceable;
-            this.LblHint.Text = HintText();
-
-            RebuildLines();
-        }
-
-        private string HintText()
-        {
-            string modeWords =
-                GroupingMode == ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_SAME_MODEL
-                    ? "This contract prints one line per model. "
-                    : "This contract merges its lines regardless of model. ";
-            string grouping = "Tick the machines that belong on ONE line and press Merge — the group " +
-                "beats the model either way, so you can put a C5335 and a C5665 on one line and keep four " +
-                "C1234 on another.";
-            string pricing = Priceable
-                ? " Then type what each rental line costs a month for ONE machine; a line left at 0 keeps " +
-                  "each machine's own meter rate."
-                : " Rental prints one line per machine here, so there is nothing to price — the grouping " +
-                  "still decides the black and colour lines.";
-            return modeWords + grouping + pricing;
         }
 
         private void BuildMachines()
         {
+            _dtMachines = new DataTable();
+            _dtMachines.Columns.Add("Sel", typeof(bool));
+            _dtMachines.Columns.Add("ItemNo", typeof(string));
+            _dtMachines.Columns.Add("Serial", typeof(string));
+            _dtMachines.Columns.Add("Model", typeof(string));
+            _dtMachines.Columns.Add("MergeGroup", typeof(string));
+            _dtMachines.Columns.Add("MeterGroup", typeof(string));
+            _dtMachines.Columns.Add("PrintsOn", typeof(string));
+            _dtMachines.Columns.Add("OwnRate", typeof(decimal));
+            _dtMachines.Columns.Add("OwnBk", typeof(decimal));
+            _dtMachines.Columns.Add("OwnCl", typeof(decimal));
+            _dtMachines.Columns.Add("Idx", typeof(int));
+
             for (int i = 0; i < _items.Count; i++)
             {
                 ItemEditData d = _items[i];
-                if (d == null || d.IsGroupItem) continue;
+                if (d == null || d.IsGroupItem || d.Inactive) continue;
                 DataRow r = _dtMachines.NewRow();
-                r["Idx"] = i;
                 r["Sel"] = false;
-                r["ServiceItemNo"] = string.IsNullOrWhiteSpace(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
-                r["SerialNumber"] = d.SerialNumber ?? "";
-                r["ItemCode"] = d.ItemCode ?? "";
+                r["ItemNo"] = d.ServiceItemNo ?? "";
+                r["Serial"] = d.SerialNumber ?? "";
+                r["Model"] = d.ItemCode ?? "";
                 r["MergeGroup"] = d.MergeGroupCode ?? "";
+                r["MeterGroup"] = d.MergeGroupCodeMeter ?? "";
+                r["PrintsOn"] = LineNameOf(d.MergeGroupCode, d.ServiceItemNo);
                 decimal rate;
-                r["OwnRate"] = RentalRateOf(d, out rate) ? rate : 0m;
+                r["OwnRate"] = RateOf(d, "RENTAL", out rate) ? rate : 0m;
+                r["OwnBk"] = RateOf(d, "BK", out rate) ? rate : 0m;
+                r["OwnCl"] = RateOf(d, "CL", out rate) ? rate : 0m;
+                r["Idx"] = i;
                 _dtMachines.Rows.Add(r);
             }
+            GridMachines.DataSource = _dtMachines;
+            ColPrintsOn.Caption = "Rental line";
+            ColMergeGroup.Caption = "Rental group";
+            ColMergeGroup.Visible = false;      // the "prints on" column already says it in words
         }
 
-        /// <summary>The name of the line a machine lands on, in the words the invoice would use.</summary>
-        private string LineNameOf(string groupKey, string modelCode)
-        {
-            if (groupKey.StartsWith("#")) return groupKey.Substring(1);
-            if (groupKey.Length == 0) return "All machines";
-            return modelCode;
-        }
-
-        // Recount the lines off the machines as they now stand, keeping any price already typed for
-        // a line that still exists. Regrouping can retire a line; its price goes with it, because
-        // there is no longer anything it was the price of.
-        private void RebuildLines()
-        {
-            Dictionary<string, decimal> keep = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-            foreach (DataRow r in _dtLines.Rows)
-            {
-                if (r.RowState == DataRowState.Deleted) continue;
-                decimal v = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
-                if (v > 0m) keep[Convert.ToString(r["GroupKey"])] = v;
-            }
-            foreach (KeyValuePair<string, decimal> kv in _prices)
-                if (!keep.ContainsKey(kv.Key) && kv.Value > 0m) keep[kv.Key] = kv.Value;
-
-            _dtLines.Rows.Clear();
-            List<string> order = new List<string>();
-            Dictionary<string, int> units = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, string> names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, List<decimal>> rates = new Dictionary<string, List<decimal>>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (DataRow m in _dtMachines.Rows)
-            {
-                if (m.RowState == DataRowState.Deleted) continue;
-                string model = Convert.ToString(m["ItemCode"]);
-                string grp = Convert.ToString(m["MergeGroup"]);
-                string key = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.GroupKeyFor(
-                    GroupingMode, model, grp);
-                m["PrintsOn"] = LineNameOf(key, model);
-                decimal own = m["OwnRate"] == DBNull.Value ? 0m : Convert.ToDecimal(m["OwnRate"]);
-                if (own <= 0m && Priceable) { /* still counts as a machine on the line */ }
-                if (!units.ContainsKey(key))
-                {
-                    order.Add(key); units[key] = 0; rates[key] = new List<decimal>();
-                    names[key] = LineNameOf(key, model);
-                }
-                units[key] = units[key] + 1;
-                if (own > 0m) rates[key].Add(own);
-            }
-
-            order.Sort(StringComparer.OrdinalIgnoreCase);
-            foreach (string key in order)
-            {
-                DataRow r = _dtLines.NewRow();
-                r["GroupKey"] = key;
-                r["LineName"] = names[key];
-                r["Units"] = units[key];
-                r["OnMachines"] = DescribeRates(rates[key]);
-                decimal price;
-                r["UnitPrice"] = keep.TryGetValue(key, out price) ? price : 0m;
-                r["Monthly"] = Convert.ToDecimal(r["UnitPrice"]) * units[key];
-                _dtLines.Rows.Add(r);
-            }
-            GridViewMachines.RefreshData();
-            GridViewLines.RefreshData();
-            RefreshSummary();
-        }
-
-        /// <summary>This machine's monthly rental as its own meter states it. False when the machine
-        /// has no rental meter at all.</summary>
-        private static bool RentalRateOf(ItemEditData d, out decimal rate)
+        /// <summary>A machine's own rate for one role, from its meter rows. Rentals are the awkward
+        /// one: the old book puts a rental's money in MinimumCharges as often as in ChargesRate, so
+        /// both are read and the larger stands.</summary>
+        private static bool RateOf(ItemEditData d, string role, out decimal rate)
         {
             rate = 0m;
             if (d == null || d.Meters == null) return false;
+            bool found = false;
             foreach (DataRow mr in d.Meters.Rows)
             {
                 if (mr.RowState == DataRowState.Deleted) continue;
-                string type = mr.Table.Columns.Contains("MeterTypeCode") ? Convert.ToString(mr["MeterTypeCode"]).Trim() : "";
-                string role = mr.Table.Columns.Contains("MeterRole") ? Convert.ToString(mr["MeterRole"]).Trim() : "";
-                if (string.Equals(role, "WAIVE", StringComparison.OrdinalIgnoreCase)) continue;
-                bool isRental = string.Equals(role, "RENTAL", StringComparison.OrdinalIgnoreCase) ||
-                    (type.Length > 0 && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(type));
-                if (!isRental) continue;
-                decimal r = mr.Table.Columns.Contains("ChargesRate") && mr["ChargesRate"] != DBNull.Value
-                    ? Convert.ToDecimal(mr["ChargesRate"]) : 0m;
-                decimal m = mr.Table.Columns.Contains("MinimumCharges") && mr["MinimumCharges"] != DBNull.Value
-                    ? Convert.ToDecimal(mr["MinimumCharges"]) : 0m;
-                rate = r > 0m ? r : m;   // the flat charge is whichever column carries it
-                return true;
+                string r = Str(mr, "MeterRole").Trim().ToUpperInvariant();
+                string t = Str(mr, "MeterTypeCode").Trim().ToUpperInvariant();
+                bool isRole = role == "RENTAL"
+                    ? ScpStrategy.IsRentalRole(r, t)
+                    : (r == role || (r.Length == 0 && t == role));
+                if (!isRole) continue;
+                decimal v = Dec(mr, "ChargesRate");
+                if (role == "RENTAL")
+                {
+                    decimal m = Dec(mr, "MinimumCharges");
+                    if (m > v) v = m;
+                }
+                if (v > rate) rate = v;
+                found = true;
             }
-            return false;
+            return found;
         }
 
-        // "300.00" when they agree, "250.00 - 475.00 (mixed)" when they do not -- which is exactly
-        // the case a line price is for.
-        private static string DescribeRates(List<decimal> rates)
+        private static string Str(DataRow r, string col)
         {
-            if (rates == null || rates.Count == 0) return "";
-            decimal lo = rates[0], hi = rates[0];
-            for (int i = 1; i < rates.Count; i++)
+            return r.Table.Columns.Contains(col) && r[col] != DBNull.Value ? Convert.ToString(r[col]) : "";
+        }
+        private static decimal Dec(DataRow r, string col)
+        {
+            return r.Table.Columns.Contains(col) && r[col] != DBNull.Value ? Convert.ToDecimal(r[col]) : 0m;
+        }
+
+        private static string LineNameOf(string group, string itemNo)
+        {
+            string g = (group ?? "").Trim();
+            return g.Length > 0 ? g : (itemNo ?? "");
+        }
+
+        // ---------- the lines ----------
+
+        private class Line
+        {
+            public string Side;
+            public string GroupCode;      // "" = the machine's own line
+            public string Name;
+            public List<int> Rows = new List<int>();
+        }
+
+        private List<Line> Collect(string side)
+        {
+            List<Line> outp = new List<Line>();
+            Dictionary<string, Line> by = new Dictionary<string, Line>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _dtMachines.Rows.Count; i++)
             {
-                if (rates[i] < lo) lo = rates[i];
-                if (rates[i] > hi) hi = rates[i];
+                DataRow r = _dtMachines.Rows[i];
+                string g = Convert.ToString(r[side == SIDE_R ? "MergeGroup" : "MeterGroup"]).Trim();
+                string key = g.Length > 0 ? "#" + g.ToUpperInvariant() : "=" + Convert.ToString(r["ItemNo"]);
+                Line L;
+                if (!by.TryGetValue(key, out L))
+                {
+                    L = new Line();
+                    L.Side = side;
+                    L.GroupCode = g;
+                    L.Name = g.Length > 0 ? g : Convert.ToString(r["ItemNo"]);
+                    by[key] = L;
+                    outp.Add(L);
+                }
+                L.Rows.Add(i);
             }
-            if (lo == hi) return lo.ToString("n2");
-            return lo.ToString("n2") + " - " + hi.ToString("n2") + " (mixed)";
+            return outp;
         }
 
-        // ---- grouping ----
-
-        private List<DataRow> TickedMachines()
+        private void RebuildLines()
         {
-            GridViewMachines.CloseEditor();
-            GridViewMachines.UpdateCurrentRow();
-            List<DataRow> list = new List<DataRow>();
+            _dtLines = new DataTable();
+            _dtLines.Columns.Add("LineName", typeof(string));
+            _dtLines.Columns.Add("Charge", typeof(string));
+            _dtLines.Columns.Add("Units", typeof(int));
+            _dtLines.Columns.Add("OnMachines", typeof(string));
+            _dtLines.Columns.Add("UnitPrice", typeof(decimal));
+            _dtLines.Columns.Add("Monthly", typeof(string));
+            _dtLines.Columns.Add("Side", typeof(string));
+            _dtLines.Columns.Add("GroupCode", typeof(string));
+            _dtLines.Columns.Add("Field", typeof(string));
+
+            foreach (Line L in Collect(SIDE_R)) AddLineRow(L, "Monthly rental", "OwnRate", 2);
+            foreach (Line L in Collect(SIDE_M))
+            {
+                AddLineRow(L, "Black copies", "OwnBk", 4);
+                AddLineRow(L, "Colour copies", "OwnCl", 4);
+            }
+
+            GridLines.DataSource = _dtLines;
+            ColUnitPrice.Caption = "Agreed for this line";
+            ColOnMachines.Caption = "Unit price now";
+            ColMonthly.Caption = "A month";
+            RefreshSummary();
+        }
+
+        private void AddLineRow(Line L, string charge, string field, int dp)
+        {
+            List<decimal> rates = new List<decimal>();
+            foreach (int i in L.Rows)
+            {
+                decimal v = Convert.ToDecimal(_dtMachines.Rows[i][field]);
+                if (!rates.Contains(v)) rates.Add(v);
+            }
+
+            ScpLineTerms t;
+            _terms.TryGetValue(ScpLineTerms.Key(L.Side, L.GroupCode), out t);
+            decimal agreed = t == null ? 0m
+                : (field == "OwnRate" ? t.UnitPrice : (field == "OwnBk" ? t.BkPrice : t.ClPrice));
+
+            DataRow r = _dtLines.NewRow();
+            r["LineName"] = L.Name;
+            r["Charge"] = charge;
+            r["Units"] = L.Rows.Count;
+            // One printed line is one Qty x Unit Price. Where the machines disagree and nothing has
+            // been agreed, this line does not exist -- it comes out as one line per price, and saying
+            // so here is the only way the screen matches the paper.
+            r["OnMachines"] = rates.Count == 1
+                ? rates[0].ToString(dp == 4 ? "n4" : "n2")
+                : rates.Count + " prices -> " + rates.Count + " lines";
+            r["UnitPrice"] = agreed;
+            r["Monthly"] = field == "OwnRate"
+                ? (agreed > 0m ? (agreed * L.Rows.Count).ToString("n2")
+                               : SumOf(L, field).ToString("n2") + "  own")
+                : "by usage";
+            r["Side"] = L.Side;
+            r["GroupCode"] = L.GroupCode;
+            r["Field"] = field;
+            _dtLines.Rows.Add(r);
+        }
+
+        private decimal SumOf(Line L, string field)
+        {
+            decimal sum = 0m;
+            foreach (int i in L.Rows) sum += Convert.ToDecimal(_dtMachines.Rows[i][field]);
+            return sum;
+        }
+
+        // ---------- grouping ----------
+
+        private List<DataRow> Ticked()
+        {
+            List<DataRow> picked = new List<DataRow>();
             foreach (DataRow r in _dtMachines.Rows)
-            {
-                if (r.RowState == DataRowState.Deleted) continue;
-                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"])) list.Add(r);
-            }
-            return list;
+                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"])) picked.Add(r);
+            return picked;
         }
 
-        private void BtnMerge_Click(object sender, EventArgs e)
+        private void MergeTicked(bool rental, bool meter, string what)
         {
-            List<DataRow> ticked = TickedMachines();
-            if (ticked.Count < 2)
+            GridViewMachines.PostEditor();
+            List<DataRow> picked = Ticked();
+            if (picked.Count < 2)
             {
-                XtraMessageBox.Show("Tick at least two machines — a line of one is what not merging already does.",
-                    "Merge into one line", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Tick at least two machines to put them on one line.",
+                    "Lines & Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            // Default the name to a group already in play, so merging a third machine into an
-            // existing line is a matter of ticking it and pressing OK.
-            string suggested = "";
-            foreach (DataRow r in ticked)
-            {
-                string g = Convert.ToString(r["MergeGroup"]).Trim();
-                if (g.Length > 0) { suggested = g; break; }
-            }
-            if (suggested.Length == 0) suggested = "GROUP 1";
-            string name = Convert.ToString(XtraInputBox.Show(
-                "Name this line. It is only how you recognise the group here — the invoice prints the " +
-                "line's own description.", "Merge into one line", suggested));
-            name = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.Sanitize(name);
+
+            bool same = true;
+            string model0 = Convert.ToString(picked[0]["Model"]);
+            foreach (DataRow r in picked)
+                if (!string.Equals(Convert.ToString(r["Model"]), model0, StringComparison.OrdinalIgnoreCase))
+                    same = false;
+
+            string suggest = same ? model0 : "GROUP " + (_seq + 1);
+            string name = XtraInputBox.Show("What is this " + what + " line called?", "Lines & Price", suggest);
+            if (name == null) return;
+            name = ScpRentalGroupPrice.Sanitize(name);
             if (name.Length == 0) return;
-            foreach (DataRow r in ticked) r["MergeGroup"] = name;
+            if (!same) _seq++;
+
+            foreach (DataRow r in picked)
+            {
+                if (rental) { r["MergeGroup"] = name; r["PrintsOn"] = name; }
+                if (meter) r["MeterGroup"] = name;
+                r["Sel"] = false;
+            }
             _changed = true;
             RebuildLines();
         }
+
+        private void BtnMerge_Click(object sender, EventArgs e) { MergeTicked(true, false, "rental"); }
+        private void BtnMergeMeter_Click(object sender, EventArgs e) { MergeTicked(false, true, "BK+CL"); }
+        private void BtnMergeBoth_Click(object sender, EventArgs e) { MergeTicked(true, true, "rental and BK+CL"); }
 
         private void BtnUngroup_Click(object sender, EventArgs e)
         {
-            List<DataRow> ticked = TickedMachines();
-            if (ticked.Count == 0) return;
-            foreach (DataRow r in ticked) r["MergeGroup"] = "";
+            GridViewMachines.PostEditor();
+            List<DataRow> picked = Ticked();
+            if (picked.Count == 0) return;
+            foreach (DataRow r in picked)
+            {
+                r["MergeGroup"] = "";
+                r["MeterGroup"] = "";
+                r["PrintsOn"] = Convert.ToString(r["ItemNo"]);
+                r["Sel"] = false;
+            }
             _changed = true;
             RebuildLines();
         }
 
-        // ---- pricing ----
+        /// <summary>Group by what a line can actually carry. Machines on the same price merge into one
+        /// line and stay there; machines on different prices were never going to share a line, so this
+        /// is the largest merge that does not come apart the moment it prints.</summary>
+        private void BtnByPrice_Click(object sender, EventArgs e)
+        {
+            foreach (DataRow r in _dtMachines.Rows)
+            {
+                r["MergeGroup"] = "RENTAL " + Convert.ToDecimal(r["OwnRate"]).ToString("n2");
+                r["MeterGroup"] = "COPIES " + Convert.ToDecimal(r["OwnBk"]).ToString("n4") +
+                                  " / " + Convert.ToDecimal(r["OwnCl"]).ToString("n4");
+                r["PrintsOn"] = Convert.ToString(r["MergeGroup"]);
+                r["Sel"] = false;
+            }
+            _changed = true;
+            RebuildLines();
+        }
+
+        private void BtnByModel_Click(object sender, EventArgs e)
+        {
+            foreach (DataRow r in _dtMachines.Rows)
+            {
+                string m = ScpRentalGroupPrice.Sanitize(Convert.ToString(r["Model"]));
+                r["MergeGroup"] = m;
+                r["MeterGroup"] = m;
+                r["PrintsOn"] = m;
+                r["Sel"] = false;
+            }
+            _changed = true;
+            RebuildLines();
+        }
+
+        // ---------- prices ----------
 
         private void GridViewLines_CellValueChanged(object sender,
             DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
-            if (e.Column == null || e.Column.FieldName != "UnitPrice") return;
-            decimal price = e.Value == null || e.Value == DBNull.Value ? 0m : Convert.ToDecimal(e.Value);
-            if (price < 0m) { price = 0m; GridViewLines.SetRowCellValue(e.RowHandle, "UnitPrice", 0m); }
-            object u = GridViewLines.GetRowCellValue(e.RowHandle, "Units");
-            int units = u == null || u == DBNull.Value ? 0 : Convert.ToInt32(u);
-            GridViewLines.SetRowCellValue(e.RowHandle, "Monthly", price * units);
+            if (e.Column != ColUnitPrice) return;
             _changed = true;
+            GridViewLines.PostEditor();
+            RecomputeMonthly();
+            RefreshSummary();
+        }
+
+        private void RecomputeMonthly()
+        {
+            foreach (DataRow r in _dtLines.Rows)
+            {
+                if (Convert.ToString(r["Field"]) != "OwnRate") continue;
+                decimal agreed = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                int units = Convert.ToInt32(r["Units"]);
+                if (agreed > 0m) { r["Monthly"] = (agreed * units).ToString("n2"); continue; }
+                decimal sum = 0m;
+                string grp = Convert.ToString(r["GroupCode"]).Trim();
+                foreach (DataRow m in _dtMachines.Rows)
+                {
+                    string g = Convert.ToString(m["MergeGroup"]).Trim();
+                    bool mine = grp.Length > 0
+                        ? string.Equals(g, grp, StringComparison.OrdinalIgnoreCase)
+                        : string.Equals(Convert.ToString(m["ItemNo"]), Convert.ToString(r["LineName"]),
+                                        StringComparison.OrdinalIgnoreCase);
+                    if (mine) sum += Convert.ToDecimal(m["OwnRate"]);
+                }
+                r["Monthly"] = sum.ToString("n2") + "  own";
+            }
+        }
+
+        /// <summary>One agreed figure per line, taken from the machines — the highest where they
+        /// disagree, because dropping to the lowest quietly gives money away.</summary>
+        private void BtnFromMachines_Click(object sender, EventArgs e)
+        {
+            foreach (DataRow r in _dtLines.Rows)
+            {
+                string field = Convert.ToString(r["Field"]);
+                string side = Convert.ToString(r["Side"]);
+                string grp = Convert.ToString(r["GroupCode"]).Trim();
+                decimal top = 0m;
+                foreach (DataRow m in _dtMachines.Rows)
+                {
+                    string g = Convert.ToString(m[side == SIDE_R ? "MergeGroup" : "MeterGroup"]).Trim();
+                    bool mine = grp.Length > 0
+                        ? string.Equals(g, grp, StringComparison.OrdinalIgnoreCase)
+                        : (g.Length == 0 && string.Equals(Convert.ToString(m["ItemNo"]),
+                                                          Convert.ToString(r["LineName"]),
+                                                          StringComparison.OrdinalIgnoreCase));
+                    if (!mine) continue;
+                    decimal v = Convert.ToDecimal(m[field]);
+                    if (v > top) top = v;
+                }
+                r["UnitPrice"] = top;
+            }
+            _changed = true;
+            RecomputeMonthly();
+            RefreshSummary();
+        }
+
+        private void BtnClear_Click(object sender, EventArgs e)
+        {
+            foreach (DataRow r in _dtLines.Rows) r["UnitPrice"] = 0m;
+            _changed = true;
+            RecomputeMonthly();
             RefreshSummary();
         }
 
         private void RefreshSummary()
         {
-            int priced = 0, machines = 0;
-            decimal money = 0m;
+            int rentalLines = 0, meterLines = 0, priced = 0, split = 0;
             foreach (DataRow r in _dtLines.Rows)
             {
-                if (r.RowState == DataRowState.Deleted) continue;
-                int units = r["Units"] == DBNull.Value ? 0 : Convert.ToInt32(r["Units"]);
-                decimal price = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
-                machines += units;
-                if (price <= 0m) continue;
-                priced++;
-                money += price * units;
+                bool isRental = Convert.ToString(r["Field"]) == "OwnRate";
+                if (isRental) rentalLines++;
+                decimal p = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                if (p > 0m) priced++;
+                else if (Convert.ToString(r["OnMachines"]).IndexOf("prices ->", StringComparison.Ordinal) >= 0)
+                    split++;
             }
-            int lines = _dtLines.Rows.Count;
-            if (lines == 0) { LblSummary.Text = "No machines on this contract yet."; return; }
-            string t = lines + " line" + (lines == 1 ? "" : "s") + " - " + machines + " machine" +
-                       (machines == 1 ? "" : "s");
-            if (Priceable)
-            {
-                t += " - " + priced + " priced here";
-                if (priced > 0) t += " - " + money.ToString("n2") + " a month";
-                if (priced < lines) t += "   (the rest keep their own meter rates)";
-            }
-            LblSummary.Text = t;
+            foreach (Line L in Collect(SIDE_M)) meterLines += 2;
+
+            LblSummary.Text =
+                rentalLines + (rentalLines == 1 ? " rental line" : " rental lines") + "  ·  " +
+                meterLines + " BK+CL " + (meterLines == 1 ? "line" : "lines") + "  ·  " +
+                _dtMachines.Rows.Count + " machines  ·  " + priced + " priced here" +
+                (split > 0
+                    ? "   ·   " + split + (split == 1 ? " line" : " lines") +
+                      " still prints one per price until a figure is agreed"
+                    : "   (the rest bill at the machine's own rate)");
         }
 
-        private void BtnClear_Click(object sender, EventArgs e)
-        {
-            GridViewLines.CloseEditor();
-            GridViewLines.UpdateCurrentRow();
-            foreach (DataRow r in _dtLines.Rows)
-            {
-                if (r.RowState == DataRowState.Deleted) continue;
-                r["UnitPrice"] = 0m;
-                r["Monthly"] = 0m;
-            }
-            _changed = true;
-            GridViewLines.RefreshData();
-            RefreshSummary();
-        }
-
-        // Seed every line from what its machines already charge, so a contract only being moved onto
-        // the new rules starts from its real numbers. Lines whose machines disagree are left alone --
-        // there is no honest number to fill in.
-        private void BtnFromMachines_Click(object sender, EventArgs e)
-        {
-            GridViewLines.CloseEditor();
-            GridViewLines.UpdateCurrentRow();
-            int filled = 0, skipped = 0;
-            foreach (DataRow r in _dtLines.Rows)
-            {
-                if (r.RowState == DataRowState.Deleted) continue;
-                string shown = Convert.ToString(r["OnMachines"]);
-                decimal v;
-                if (shown.IndexOf("mixed", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    !decimal.TryParse(shown, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.CurrentCulture, out v) || v <= 0m)
-                { skipped++; continue; }
-                r["UnitPrice"] = v;
-                r["Monthly"] = v * (r["Units"] == DBNull.Value ? 0 : Convert.ToInt32(r["Units"]));
-                filled++;
-            }
-            _changed = true;
-            GridViewLines.RefreshData();
-            RefreshSummary();
-            if (skipped > 0)
-                XtraMessageBox.Show(filled + " line(s) filled in. " + skipped + " left blank because their " +
-                    "machines charge different amounts - type the price the line has agreed.",
-                    "Take from machines", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        // ---- apply ----
+        // ---------- out ----------
 
         private void BtnOK_Click(object sender, EventArgs e)
         {
-            GridViewMachines.CloseEditor();
-            GridViewMachines.UpdateCurrentRow();
-            GridViewLines.CloseEditor();
-            GridViewLines.UpdateCurrentRow();
             Harvest();
             this.DialogResult = DialogResult.OK;
             this.Close();
         }
 
-        /// <summary>Writes the grouping back into the contract editor's machines and collects the
-        /// prices.</summary>
         private void Harvest()
         {
+            GridViewLines.PostEditor();
+            GridViewMachines.PostEditor();
+
+            // the grouping goes back onto the machines
             foreach (DataRow r in _dtMachines.Rows)
             {
-                if (r.RowState == DataRowState.Deleted) continue;
                 int idx = Convert.ToInt32(r["Idx"]);
                 if (idx < 0 || idx >= _items.Count) continue;
-                _items[idx].MergeGroupCode = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.Sanitize(
-                    Convert.ToString(r["MergeGroup"]));
+                _items[idx].MergeGroupCode = ScpRentalGroupPrice.Sanitize(Convert.ToString(r["MergeGroup"]));
+                _items[idx].MergeGroupCodeMeter = ScpRentalGroupPrice.Sanitize(Convert.ToString(r["MeterGroup"]));
             }
-            Result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-            if (!Priceable) return;   // nothing on this contract is a priced rental line
+
+            // and the agreed figures go back as one row per line per side
+            Result = new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
             foreach (DataRow r in _dtLines.Rows)
             {
-                if (r.RowState == DataRowState.Deleted) continue;
-                decimal price = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
-                if (price <= 0m) continue;   // not priced -- the machines keep their own rates
-                Result[Convert.ToString(r["GroupKey"])] = price;
+                decimal p = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                if (p <= 0m) continue;
+                string side = Convert.ToString(r["Side"]);
+                string grp = ScpRentalGroupPrice.Sanitize(Convert.ToString(r["GroupCode"]));
+                string key = ScpLineTerms.Key(side, grp);
+                ScpLineTerms t;
+                if (!Result.TryGetValue(key, out t))
+                {
+                    t = new ScpLineTerms();
+                    t.Side = side;
+                    t.GroupCode = grp;
+                    Result[key] = t;
+                }
+                string field = Convert.ToString(r["Field"]);
+                if (field == "OwnRate") t.UnitPrice = p;
+                else if (field == "OwnBk") t.BkPrice = p;
+                else t.ClPrice = p;
             }
         }
 
-        // Grouping machines and then closing the window would lose it silently.
         private void OnFormClosingGuard(object sender, FormClosingEventArgs e)
         {
             if (this.DialogResult == DialogResult.OK || !_changed) return;
-            DialogResult r = XtraMessageBox.Show(
-                "You changed the lines but did not press OK." + Environment.NewLine + Environment.NewLine +
-                "Apply them to the contract?" + Environment.NewLine +
-                "(Remember to SAVE the contract afterwards.)",
-                "Lines & Rental Price", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (r == DialogResult.Cancel) { e.Cancel = true; return; }
-            if (r == DialogResult.Yes)
-            {
-                GridViewMachines.CloseEditor();
-                GridViewMachines.UpdateCurrentRow();
-                GridViewLines.CloseEditor();
-                GridViewLines.UpdateCurrentRow();
-                Harvest();
-                this.DialogResult = DialogResult.OK;
-            }
+            if (XtraMessageBox.Show("You have unsaved changes. Discard them and close?",
+                    "Lines & Price", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
+                e.Cancel = true;
         }
     }
 }

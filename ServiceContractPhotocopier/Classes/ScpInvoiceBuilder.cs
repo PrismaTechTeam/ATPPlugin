@@ -65,6 +65,11 @@ namespace ServiceContractPhotocopier.Classes
         /// contract printed before the setting existed.</summary>
         public char MachineLineShows = ScpBillingFormat.MACHINE_LINE_BOTH;
 
+        /// <summary>Which line this machine's BLACK and COLOUR print on. Separate from the rental's
+        /// group because the two questions have different answers: one agreed rental across the
+        /// fleet while every machine still bills its own copies is the commonest deal here.</summary>
+        public string MergeGroupCodeMeter = "";
+
         public string LineGroupCode = "";  // the "HEAVY DUTY" / "MEDIUM DUTY" word printed on the line
                                            // (zSCP2_Item.LineGroupCode) -- a description, never a split
         /// <summary>Whose print charges a committed minimum is measured against: 'S' this machine,

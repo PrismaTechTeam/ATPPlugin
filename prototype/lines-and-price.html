@@ -1,0 +1,991 @@
+<title>Lines &amp; Rental Price</title>
+<style>
+  :root{
+    --win-bg:#e8ecf0; --win-face:#f0f2f5; --win-line:#b9c0ca; --win-line-soft:#d7dce3;
+    --ink:#1b1f26; --ink-soft:#4a5361; --ink-faint:#7b8494;
+    --grid-head:#e4e9ef; --sel:#cddef5; --sel-line:#7ba3dd;
+    --accent:#1a5fb4; --child:#f7f9fc; --amber:#8a5a00; --amber-bg:#fdf6e6;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:16px; background:var(--win-bg); color:var(--ink);
+    font:12px/1.4 "Segoe UI","Segoe UI Variable",system-ui,-apple-system,sans-serif;
+  }
+  .window{
+    max-width:1120px; margin:0 auto; background:var(--win-face);
+    border:1px solid var(--win-line); overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,28,45,.10), 0 8px 28px rgba(20,28,45,.10);
+  }
+  .titlebar{
+    display:flex; align-items:center; gap:8px; padding:6px 10px;
+    background:linear-gradient(#fdfdfe,#e9edf2); border-bottom:1px solid var(--win-line); font-weight:600;
+  }
+  .titlebar .dot{width:11px;height:11px;border-radius:2px;background:var(--accent);flex:none}
+  .titlebar .spacer{flex:1}
+  .titlebar .glyph{color:var(--ink-faint);letter-spacing:3px;font-size:11px}
+
+  .body{padding:12px 14px}
+  .intro{color:var(--ink-soft); margin:0 0 14px; white-space:pre-line}
+  .caption{margin:0 0 6px; color:var(--ink)}
+  .caption.two{margin-top:16px}
+  .caption.fold{cursor:pointer; user-select:none; display:inline-flex; gap:6px; align-items:baseline}
+  .caption.fold:hover{color:var(--accent)}
+  .caption.fold .tri{font-size:10px; color:var(--ink-soft)}
+  .caption .hint{color:var(--ink-faint)}
+
+  .gridwrap{border:1px solid var(--win-line); background:#fff; overflow:auto}
+  .gridwrap.tall{height:196px}
+  .gridwrap.lines{max-height:260px}
+  table{border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums}
+  th{
+    background:var(--grid-head); text-align:left; font-weight:400; color:var(--ink);
+    padding:4px 7px; border-right:1px solid var(--win-line-soft); border-bottom:1px solid var(--win-line);
+    white-space:nowrap; position:sticky; top:0; z-index:1;
+  }
+  td{padding:3px 7px; border-right:1px solid #eef0f3; border-bottom:1px solid #eef0f3; white-space:nowrap}
+  td.num,th.num{text-align:right}
+  td.edge,th.edge{border-right:1px solid var(--win-line-soft)}
+  td.spanned{vertical-align:middle}
+  tbody tr.on td{background:var(--sel)}
+  tbody tr.kid td{background:var(--child); color:var(--ink-soft)}
+  tbody tr.kid td:nth-child(2){padding-left:26px}
+  tbody tr.extra td{background:#fbfcfe}
+  td.terms .sep{color:var(--win-line); margin:0 8px}
+  input.tiny{text-align:right; border:1px solid var(--win-line); background:#fff; padding:1px 4px}
+  td.terms b{font-variant-numeric:tabular-nums}
+  tbody tr.locked td{background:var(--amber-bg)}
+  .marker{width:18px; text-align:center; padding:0; color:var(--accent)}
+  .exp{cursor:pointer; user-select:none; color:var(--ink-soft); font-size:10px}
+  .exp:hover{color:var(--accent)}
+  .rename{cursor:text; border-bottom:1px dotted var(--ink-faint)}
+  .rename:hover{color:var(--accent); border-bottom-color:var(--accent)}
+  .faint{color:var(--ink-faint)}
+  .warn{color:var(--amber)}
+  .charge{color:var(--ink-soft)}
+  .set{cursor:pointer; color:var(--accent); border-bottom:1px dotted var(--accent)}
+  .set.none{color:var(--ink-faint); border-bottom-color:var(--ink-faint)}
+  .lock{color:var(--amber)}
+
+  .bar{margin-top:10px; padding:8px; border:1px solid var(--win-line-soft); background:#f7f8fa}
+  .bar .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .bar .row + .row{margin-top:7px; padding-top:7px; border-top:1px solid var(--win-line-soft)}
+  .bar .lbl{color:var(--ink-soft); min-width:196px}
+  .bar .warn{line-height:1.5}
+  button{
+    font:inherit; padding:5px 12px; border:1px solid var(--win-line); border-radius:2px;
+    background:linear-gradient(#fff,#eef1f5); color:var(--ink); cursor:pointer; min-width:130px;
+  }
+  button:hover:not(:disabled){background:linear-gradient(#fff,#e4ebf6); border-color:var(--sel-line)}
+  button:active:not(:disabled){background:#dde6f4}
+  button:disabled{opacity:.45; cursor:default}
+  button.quiet{min-width:0; margin-left:14px; color:var(--ink-soft)}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  select{font:inherit; padding:1px 4px; border:1px solid var(--win-line); background:#fff; color:var(--ink)}
+
+  .splitbar{display:flex; gap:16px; align-items:center; margin:16px 0 0; flex-wrap:wrap}
+  .splitbar label{display:flex; gap:6px; align-items:baseline; cursor:pointer}
+  .splitbar .lbl{color:var(--ink-soft)}
+  .splitbar label.off{opacity:.5}
+
+  input[type=number]{
+    font:inherit; padding:2px 5px; border:1px solid transparent; background:transparent;
+    color:var(--ink); width:100%; text-align:right; font-variant-numeric:tabular-nums;
+  }
+  input[type=number]:hover:not(:disabled){border-color:var(--win-line); background:#fff}
+  input[type=number]:focus{outline:none; border-color:var(--accent); background:#fff}
+  input[type=number]:disabled{color:var(--ink-faint)}
+
+  .status{margin:12px 0 0; color:var(--accent)}
+  .status .rest{color:var(--ink-faint)}
+
+  .footbar{display:flex; align-items:center; gap:8px; margin-top:12px; padding-top:12px;
+           border-top:1px solid var(--win-line-soft)}
+  .footbar .spacer{flex:1}
+
+  .modal{position:fixed; inset:0; background:rgba(20,28,45,.45); display:flex;
+         align-items:center; justify-content:center; padding:24px; z-index:10}
+  .modal[hidden]{display:none}
+  .sheet{background:var(--win-face); border:1px solid var(--win-line); width:min(780px,100%);
+         max-height:100%; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(20,28,45,.35)}
+  .sheethead{display:flex; gap:10px; align-items:center; padding:8px 12px;
+             background:linear-gradient(#fdfdfe,#e9edf2); border-bottom:1px solid var(--win-line)}
+  .sheethead .spacer{flex:1}
+  .sheethead .opt{display:flex; gap:6px; align-items:baseline; cursor:pointer; color:var(--ink-soft)}
+  .sheetbody{overflow:auto; padding:14px; background:#dfe3e9}
+  .paper{background:#fff; border:1px solid var(--win-line); padding:16px 20px; margin:0 0 12px}
+  .paper h3{margin:0 0 2px; font-size:15px; letter-spacing:.14em; text-align:center; font-weight:700}
+  .paper .docno{text-align:center; color:var(--ink-faint); font-size:11px; margin-bottom:12px}
+  .paper table{font-size:11px}
+  .paper th{background:none; border:none; border-bottom:1px solid var(--ink); padding:3px 4px; position:static}
+  .paper td{border:none; padding:4px; vertical-align:top; white-space:normal}
+  .paper tr.tot td{border-top:1px solid var(--ink); font-weight:700; padding-top:6px}
+  .paper .sub{color:var(--ink-soft); font-size:10.5px}
+  .paper .read{margin-top:2px}
+</style>
+
+<div class="window">
+  <div class="titlebar">
+    <span class="dot"></span>
+    <span>Lines &amp; Rental Price — which machines print together, and what the line costs</span>
+    <span class="spacer"></span>
+    <span class="glyph">— ▫ ✕</span>
+  </div>
+
+  <div class="body">
+    <p class="intro" id="intro"></p>
+
+    <p class="caption fold" id="mFold"><span class="tri">&#9654;</span> <span id="mTitle"></span></p>
+    <div class="gridwrap tall" id="mGrid" hidden>
+      <table id="machines">
+        <thead>
+          <tr>
+            <th class="marker"></th>
+            <th style="width:52px"><input type="checkbox" id="selAll" title="Select all"> Select</th>
+            <th>Service Item No</th>
+            <th>Serial No</th>
+            <th>Model</th>
+            <th class="edge">Rental line</th>
+            <th class="edge">BK+CL line</th>
+            <th class="num">Rental</th>
+            <th class="num">BK</th>
+            <th class="num edge">CL</th>
+            <th>Min charge</th>
+            <th>Multi-price</th>
+            <th>Rental waive</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="bar" id="mBar" hidden>
+      <div class="row">
+        <span class="lbl">Put the ticked machines on one</span>
+        <button id="btnMergeR" disabled>rental line…</button>
+        <button id="btnMergeM" disabled>BK+CL line…</button>
+        <button id="btnMergeB" disabled>line for both…</button>
+        <button id="btnUngroup" disabled class="quiet">Ungroup the ticked</button>
+      </div>
+      <div class="row" id="mLocked" hidden>
+        <span class="warn" id="mLockedText"></span>
+      </div>
+      <div class="row">
+        <span class="lbl">Every machine at once</span>
+        <button id="btnByPrice">Group by unit price</button>
+        <button id="btnByModel">Group by model</button>
+        <button id="btnEach">Ungroup everything</button>
+      </div>
+    </div>
+
+    <div class="splitbar">
+      <span class="lbl">This contract sends</span>
+      <label><input type="radio" name="sp" value="ONE" checked> one invoice for everything</label>
+      <label><input type="radio" name="sp" value="RS"> a rental invoice and a meter invoice</label>
+      <label><input type="radio" name="sp" value="PM"> one invoice per machine</label>
+      <label><input type="radio" name="sp" value="PMS"> per machine, rental apart</label>
+    </div>
+
+    <div id="invoices"></div>
+
+    <p class="status" id="status"></p>
+
+    <div class="footbar">
+      <button id="btnTake">Take from machines</button>
+      <button id="btnClear">Clear all prices</button>
+      <button id="btnSample">Sample Invoice…</button>
+      <span class="spacer"></span>
+      <button id="btnOk">OK</button>
+      <button id="btnCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="sample" hidden>
+  <div class="sheet">
+    <div class="sheethead">
+      <b>Sample Invoice</b>
+      <span class="hint faint" id="sampleNote"></span>
+      <span class="spacer"></span>
+      <label class="opt"><input type="checkbox" id="optHideMachine"> Hide model and serial</label>
+      <button id="btnSampleClose">Close</button>
+    </div>
+    <div class="sheetbody" id="sampleBody"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var LADDERS = ["", "TIER-A", "TIER-B"];
+  var LADDER_TEXT = {
+    "TIER-A":"first 5,000 @ 0.0300 · next 15,000 @ 0.0250 · beyond @ 0.0200",
+    "TIER-B":"first 10,000 @ 0.0280 · beyond @ 0.0220"
+  };
+
+  // A machine carries its own prices, and may carry its own minimum, ladder or waive. Anything it
+  // carries of its own is a reason it cannot join a line with others: a printed line has one rate,
+  // one minimum and one set of terms, and there is no way to show two.
+  var machines = [
+    { no:"DEMO-07-001", sn:"UCS00547", model:"iR-ADV C3560i",    rent:385, bk:0.026, cl:0.26,
+      min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0, grpR:"", grpM:"", sel:false },
+    { no:"DEMO-07-002", sn:"6XS25465", model:"iR-ADV DX C3940i", rent:385, bk:0.026, cl:0.26,
+      min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0, grpR:"", grpM:"", sel:false },
+    { no:"DEMO-07-003", sn:"XMX68660", model:"iR-ADV DX C3940i", rent:385, bk:0.026, cl:0.26,
+      min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0, grpR:"", grpM:"", sel:false },
+    { no:"DEMO-07-004", sn:"DGV76811", model:"iR-ADV C5335",     rent:385, bk:0.028, cl:0.28,
+      min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0, grpR:"", grpM:"", sel:false },
+    { no:"DEMO-07-005", sn:"MVD24721", model:"iR-ADV C5665",     rent:385, bk:0.028, cl:0.28,
+      min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0, grpR:"", grpM:"", sel:false }
+  ];
+  machines.forEach(function (m, i) {
+    m.bkQty = 4813 + i * 613;      m.clQty = 1037 + i * 137;
+    m.bkPrev = 140608 + i * 9111;  m.clPrev = 38240 + i * 2755;
+  });
+
+  var line = {};        // line key -> { rent, bk, cl, min, ladBk, ladCl, waive }
+  var open = {};
+  var focus = "";
+  var seq = 0;
+  var PERIOD = { cur:"01/08/2026", prev:"01/07/2026" };
+
+  var $ = function (s) { return document.querySelector(s); };
+  var money = function (n, dp) {
+    return n.toLocaleString("en-MY", { minimumFractionDigits:dp || 2, maximumFractionDigits:dp || 2 });
+  };
+  var qty = function (n) { return n.toLocaleString("en-MY"); };
+  var split = function () { return document.querySelector("input[name=sp]:checked").value; };
+  var perMachine = function () { var v = split(); return v === "PM" || v === "PMS"; };
+  var waiveAllowed = function () { return split() === "ONE"; };
+
+  $("#intro").textContent =
+    "Every line this contract will print, and what each one charges. A machine on its own line is a " +
+    "line too — merging is only one way to make one.\n\n" +
+    "A printed line carries ONE unit price, ONE minimum and ONE set of terms. So a machine that has " +
+    "been given its own minimum charge or its own multi-price ladder cannot join a line with others, " +
+    "and machines on different prices print apart until a price is agreed for the line.\n\n" +
+    "A rental waive is a deal, not a discount: when the line's black and colour come to at least " +
+    "the figure agreed, the rental comes back off the invoice as a line of its own, in the negative.";
+
+  // ---- what a machine carries of its own ----
+  function ownMin(m) { return m.min > 0; }
+  function ownLadder(m) { return m.ladBk !== "" || m.ladCl !== ""; }
+  function lockedFor(m, side) {
+    // A minimum is measured over the print charges and a ladder prices them, so both lock the BK+CL
+    // line. Neither has anything to say about the rental line, which is why they do not lock it.
+    if (side === "M") return ownMin(m) || ownLadder(m);
+    return false;
+  }
+  function lockReason(m) {
+    var r = [];
+    if (ownMin(m)) r.push("its own minimum " + money(m.min));
+    if (ownLadder(m)) r.push("its own ladder");
+    return r.join(" and ");
+  }
+
+  // ---- lines ----
+  function grpOf(m, side) {
+    if (perMachine()) return "";
+    if (lockedFor(m, side)) return "";
+    return side === "R" ? m.grpR : m.grpM;
+  }
+  function keyOf(m, side) { var g = grpOf(m, side); return g ? side + "#" + g : side + "=" + m.no; }
+  function nameOf(m, side) { return grpOf(m, side) || m.no; }
+  function lineOf(key) {
+    if (!line[key]) line[key] = { rent:0, bk:0, cl:0, min:0, ladBk:"", ladCl:"", wavAt:0, wavAmt:0 };
+    return line[key];
+  }
+
+  function charge(members, field) {
+    var vals = members.map(function (m) { return m[field]; })
+                      .filter(function (v, i, a) { return a.indexOf(v) === i; });
+    return { rates:vals.length, one:vals.length === 1 ? vals[0] : null, spread:vals.length > 1,
+             sum:members.reduce(function (a, m) { return a + m[field]; }, 0) };
+  }
+
+  function linesFor(side) {
+    var out = [], by = {};
+    machines.forEach(function (m) {
+      var k = keyOf(m, side);
+      if (!by[k]) { by[k] = { key:k, side:side, name:nameOf(m, side), members:[] }; out.push(by[k]); }
+      by[k].members.push(m);
+    });
+    out.forEach(function (L) {
+      L.set = lineOf(L.key);
+      L.single = L.members.length === 1 ? L.members[0] : null;
+      ["rent", "bk", "cl"].forEach(function (f) { L[f] = charge(L.members, f); L[f].price = L.set[f]; });
+      L.rent.month = L.set.rent > 0 ? L.set.rent * L.members.length : L.rent.sum;
+      // A single machine shows what IT carries; a group shows what the line carries.
+      L.min   = L.single ? (L.single.min   || L.set.min)   : L.set.min;
+      L.ladBk = L.single ? (L.single.ladBk || L.set.ladBk) : L.set.ladBk;
+      L.ladCl = L.single ? (L.single.ladCl || L.set.ladCl) : L.set.ladCl;
+      // Both set: the group wins. A line is billed as one thing, and the line's own terms are the
+      // later, more specific decision -- the machine's are what it had before it joined.
+      L.waiveFromLine = L.set.wavAt > 0;
+      L.wavAt  = L.waiveFromLine ? L.set.wavAt  : (L.single ? L.single.wavAt  : 0);
+      L.wavAmt = L.waiveFromLine ? L.set.wavAmt : (L.single ? L.single.wavAmt : 0);
+    });
+    return out;
+  }
+
+  function build() { return { rent:linesFor("R"), meter:linesFor("M") }; }
+
+  // ---- drawing: machines ----
+  function cellSet(kind, id, text, none) {
+    return '<span class="set' + (none ? " none" : "") + '" data-kind="' + kind + '" data-id="' + id +
+           '">' + text + "</span>";
+  }
+
+  function drawMachines() {
+    var tb = $("#machines tbody");
+    tb.innerHTML = "";
+    machines.forEach(function (m, i) {
+      var tr = document.createElement("tr");
+      var lock = lockedFor(m, "M");
+      if (lock) tr.className = "locked";
+      var lad = (m.ladBk || m.ladCl)
+        ? (m.ladBk === m.ladCl ? m.ladBk : ("BK " + (m.ladBk || "—") + " / CL " + (m.ladCl || "—")))
+        : "";
+      tr.innerHTML =
+        '<td class="marker">' + (lock ? '<span class="lock" title="' + lockReason(m) +
+                                        ' — cannot join a line with others">&#128274;</span>' : "") + "</td>" +
+        '<td style="text-align:center"><input type="checkbox" ' + (m.sel ? "checked" : "") + ' data-i="' + i + '"></td>' +
+        "<td>" + m.no + "</td><td>" + m.sn + "</td><td>" + m.model + "</td>" +
+        '<td class="edge">' + (grpOf(m, "R") || '<span class="faint">its own line</span>') + "</td>" +
+        '<td class="edge">' + (grpOf(m, "M") || '<span class="faint">its own line</span>') + "</td>" +
+        '<td class="num">' + money(m.rent) + "</td>" +
+        '<td class="num">' + money(m.bk, 4) + "</td>" +
+        '<td class="num edge">' + money(m.cl, 4) + "</td>" +
+        "<td>" + cellSet("min", i, m.min > 0 ? money(m.min) : "set…", m.min <= 0) + "</td>" +
+        "<td>" + cellSet("lad", i, lad || "set…", !lad) + "</td>" +
+        "<td>" + (waiveAllowed()
+          ? (m.wavAt > 0 ? money(m.wavAt) + ' <span class="faint">&rarr;</span> ' + money(m.wavAmt)
+                         : '<span class="faint">&mdash;</span>')
+          : '<span class="faint">one invoice only</span>') + "</td>";
+      tb.appendChild(tr);
+    });
+
+    tb.querySelectorAll('input[type=checkbox]').forEach(function (c) {
+      c.addEventListener("change", function () { machines[+c.dataset.i].sel = c.checked; draw(); });
+    });
+    tb.querySelectorAll(".set").forEach(function (x) {
+      x.addEventListener("click", function () { editMachine(+x.dataset.id, x.dataset.kind); });
+    });
+
+    var locked = perMachine();
+    var any = machines.some(function (m) { return m.sel; });
+    ["#btnMergeR", "#btnMergeM", "#btnMergeB", "#btnUngroup"].forEach(function (id) {
+      $(id).disabled = locked || !any;
+    });
+    ["#btnByPrice", "#btnByModel", "#btnEach"].forEach(function (id) { $(id).disabled = locked; });
+    $("#selAll").disabled = locked;
+    tb.querySelectorAll('input[type=checkbox]').forEach(function (c) { c.disabled = locked; });
+
+    var lockedCount = machines.filter(function (m) { return lockedFor(m, "M"); }).length;
+    $("#mLocked").hidden = !(locked || lockedCount > 0);
+    $("#mLockedText").innerHTML = locked
+      ? "Grouping is off while each machine has its own invoice &mdash; a line cannot span two " +
+        "invoices. Anything already grouped is kept and comes back if you switch away."
+      : lockedCount + " machine" + (lockedCount === 1 ? " has" : "s have") +
+        " a minimum or a ladder of their own, so their copies print on a line of their own. " +
+        "Clear it there to let them join a line.";
+
+    var on = machines.filter(function (m) { return m.sel; }).length;
+    $("#selAll").checked = on === machines.length && on > 0;
+    $("#selAll").indeterminate = on > 0 && on < machines.length;
+  }
+
+  function editMachine(i, kind) {
+    var m = machines[i];
+    if (kind === "min") {
+      var v = prompt("Minimum charge a month for " + m.no + " — billed when its copies come to less.\n" +
+                     "0 = no minimum.", m.min ? m.min.toFixed(2) : "0.00");
+      if (v === null) return;
+      m.min = Math.max(0, parseFloat(v) || 0);
+      if (m.min > 0 && m.grpM) m.grpM = "";
+    } else if (kind === "lad") {
+      var pick = prompt("Multi-price ladder for " + m.no + ".\n" +
+        LADDERS.filter(Boolean).map(function (l) { return "   " + l + " — " + LADDER_TEXT[l]; }).join("\n") +
+        "\n\nType TIER-A, TIER-B, or leave blank for none.\nUse BK=… CL=… to set them apart.",
+        m.ladBk === m.ladCl ? m.ladBk : "BK=" + m.ladBk + " CL=" + m.ladCl);
+      if (pick === null) return;
+      pick = pick.trim().toUpperCase();
+      if (pick.indexOf("BK=") === 0 || pick.indexOf("CL=") === 0) {
+        var mb = /BK=([A-Z-]*)/.exec(pick), mc = /CL=([A-Z-]*)/.exec(pick);
+        m.ladBk = mb && LADDERS.indexOf(mb[1]) >= 0 ? mb[1] : "";
+        m.ladCl = mc && LADDERS.indexOf(mc[1]) >= 0 ? mc[1] : "";
+      } else {
+        m.ladBk = m.ladCl = LADDERS.indexOf(pick) >= 0 ? pick : "";
+      }
+      if (ownLadder(m) && m.grpM) m.grpM = "";
+    } else {
+      var at = prompt("Rental waive for " + m.no + ".\n\nWhen its black and colour reach this much " +
+                      "in a month...\n0 = no waive.", m.wavAt ? m.wavAt.toFixed(2) : "0.00");
+      if (at === null) return;
+      m.wavAt = Math.max(0, parseFloat(at) || 0);
+      if (m.wavAt > 0) {
+        var amt = prompt("...waive this much off the rental.", m.wavAmt ? m.wavAmt.toFixed(2) : "0.00");
+        if (amt === null) return;
+        m.wavAmt = Math.max(0, parseFloat(amt) || 0);
+      } else { m.wavAmt = 0; }
+    }
+    draw();
+  }
+
+  // ---- drawing: lines ----
+  function lineName(L) {
+    if (L.single) return L.name + ' <span class="faint">' + L.single.model + "</span>";
+    return '<span class="rename" data-side="' + L.side + '" data-g="' + L.name +
+           '" title="Click to rename this line">' + L.name + "</span>";
+  }
+  function expCell(L) {
+    return L.members.length > 1
+      ? '<span class="exp" data-k="' + L.key + '">' + (open[L.key] ? "&#9660;" : "&#9654;") + "</span>"
+      : "";
+  }
+  function priceInput(L, f, dp, off) {
+    return '<input type="number" step="' + (dp === 4 ? "0.0001" : "0.01") + '" min="0" value="' +
+           (L.set[f] || 0).toFixed(dp) + '" data-k="' + L.key + '" data-f="' + f + '"' +
+           (off ? " disabled" : "") + ">";
+  }
+  function nowCell(c, dp) {
+    return c.spread ? '<span class="warn">' + c.rates + " prices &rarr; " + c.rates + " lines</span>"
+                    : money(c.one, dp);
+  }
+
+  function chargeTable(items) {
+    var box = document.createElement("div");
+    box.className = "gridwrap lines";
+    box.innerHTML =
+      "<table><thead><tr>" +
+      '<th class="marker"></th><th>Line</th><th>Charge</th><th class="num">Machines</th>' +
+      '<th class="num">Unit price now</th><th class="num">Line price</th>' +
+      "<th>Multi-price</th>" +
+      '<th class="num">A month</th></tr></thead><tbody></tbody></table>';
+    var tb = box.querySelector("tbody");
+
+    items.forEach(function (it) {
+      var L = it.L, f = it.field;
+      if (f === "extra") { extraRows(tb, L, it); return; }
+      var dp = f === "rent" ? 2 : 4, c = L[f];
+      var lad = f === "bk" ? L.ladBk : (f === "cl" ? L.ladCl : "");
+      var span = it.span > 1 ? ' rowspan="' + it.span + '"' : "";
+      var tr = document.createElement("tr");
+      if (focus === L.key + f) tr.className = "on";
+      tr.innerHTML =
+        (it.first ? '<td class="marker"' + span + ">" + expCell(L) + "</td>" +
+                    "<td" + span + ' class="spanned">' + lineName(L) + "</td>" : "") +
+        '<td class="charge">' + it.name + "</td>" +
+        (it.first ? '<td class="num spanned"' + span + ">" + L.members.length + "</td>" : "") +
+        '<td class="num">' + nowCell(c, dp) + "</td>" +
+        '<td class="num">' + priceInput(L, f, dp, !!lad) + "</td>" +
+        "<td>" + (f === "rent" ? '<span class="faint">&mdash;</span>'
+                               : cellSet("line-" + f, L.key, lad || "flat rate", !lad)) + "</td>" +
+        '<td class="num">' + (f === "rent"
+          ? money(L.rent.month) + (L.set.rent > 0 ? "" : ' <span class="faint">own</span>')
+          : (lad ? '<span class="faint">by ladder</span>' : '<span class="faint">by usage</span>')) + "</td>";
+      tr.addEventListener("mousedown", function () { focus = L.key + f; draw(); });
+      tb.appendChild(tr);
+
+      if (it.last && open[L.key]) {
+        L.members.forEach(function (m) {
+          var k = document.createElement("tr");
+          k.className = "kid";
+          k.innerHTML = '<td class="marker"></td><td>' + m.no +
+            ' <span class="faint">' + m.sn + '</span></td><td class="charge"></td>' +
+            '<td class="num"></td><td class="num">' +
+            (f === "rent" ? money(m.rent) : money(m.bk, 4) + " / " + money(m.cl, 4)) +
+            '</td><td class="num"></td><td></td><td class="num"></td>';
+          tb.appendChild(k);
+        });
+      }
+    });
+    return box;
+  }
+
+  // Terms measured in RINGGIT over the line's black and colour, not prices on a charge -- so these
+  // rows carry their own labelled boxes instead of borrowing a column heading that means something
+  // else. Two figures for a waive, because the deal has two halves: what they have to print, and
+  // what comes off if they do.
+  function num(scope, key, field, value, w) {
+    return '<input type="number" class="tiny" step="0.01" min="0" style="width:' + (w || 84) +
+           'px" value="' + Number(value || 0).toFixed(2) + '" data-scope="' + scope +
+           '" data-k="' + key + '" data-f="' + field + '">';
+  }
+
+  function extraRows(tb, L, it) {
+    var scope = L.single && !L.set.min && !L.set.wavAt ? "machine" : "line";
+    var key = scope === "machine" ? String(machines.indexOf(L.single)) : L.key;
+    var tr = document.createElement("tr");
+    tr.className = "extra";
+
+    // Terms, not results. This screen is where the deal is written down; whether it fires this
+    // month is a question for the month, and answering it here only invites the figure to be read
+    // as a number the customer will see.
+    var body = it.kind === "min"
+      ? '<span class="faint">bill at least</span> ' + num(scope, key, "min", L.min)
+      : '<span class="faint">if BK+CL reaches</span> ' + num(scope, key, "wavAt", L.wavAt) +
+        '<span class="sep">&middot;</span><span class="faint">waive</span> ' +
+        num(scope, key, "wavAmt", L.wavAmt);
+
+    tr.innerHTML =
+      '<td class="marker"></td><td></td>' +
+      '<td class="charge">' + it.name + "</td>" +
+      '<td colspan="5" class="terms">' + body + "</td>";
+    tb.appendChild(tr);
+  }
+
+  function rentalItems(lines) {
+    var out = [];
+    lines.forEach(function (L) {
+      out.push({ L:L, field:"rent", name:"Monthly rental", first:true, last:true, span:1 });
+      if (waiveAllowed()) out.push({ L:L, field:"extra", kind:"wav", name:"Rental waive" });
+    });
+    return out;
+  }
+  function meterItems(lines) {
+    var out = [];
+    lines.forEach(function (L) {
+      out.push({ L:L, field:"bk", name:"Black copies",  first:true,  last:false, span:2 });
+      out.push({ L:L, field:"cl", name:"Colour copies", first:false, last:true,  span:2 });
+      out.push({ L:L, field:"extra", kind:"min", name:"Minimum charge" });
+    });
+    return out;
+  }
+
+  function section(title, nodes) {
+    var wrap = document.createElement("div");
+    var cap = document.createElement("p");
+    cap.className = "caption two";
+    cap.innerHTML = title;
+    wrap.appendChild(cap);
+    nodes.forEach(function (n) { wrap.appendChild(n); });
+    return wrap;
+  }
+
+  function drawInvoices(L) {
+    var host = $("#invoices");
+    host.innerHTML = "";
+    var v = split();
+    if (v === "ONE") {
+      host.appendChild(section('The invoice <span class="hint">&mdash; every line it prints, in print order</span>',
+        [chargeTable(rentalItems(L.rent).concat(meterItems(L.meter)))]));
+    } else if (v === "RS") {
+      host.appendChild(section('Rental invoice <span class="hint">&mdash; what prints on it, and what each line costs a month</span>',
+        [chargeTable(rentalItems(L.rent))]));
+      host.appendChild(section('Meter invoice <span class="hint">&mdash; what prints on it, and what each line charges per copy</span>',
+        [chargeTable(meterItems(L.meter))]));
+    } else {
+      host.appendChild(section("Per-machine invoices " + '<span class="hint">&mdash; ' +
+        (v === "PM" ? "each machine gets its own invoice, rental and copies together"
+                    : "each machine gets two: its rental, and its copies") + "</span>",
+        [chargeTable(rentalItems(L.rent).concat(meterItems(L.meter)))]));
+    }
+
+    host.querySelectorAll("input").forEach(function (inp) {
+      inp.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+      inp.addEventListener("change", function () {
+        var val = parseFloat(inp.value);
+        val = isNaN(val) || val <= 0 ? 0 : val;
+        var target = inp.dataset.scope === "machine" ? machines[+inp.dataset.k] : lineOf(inp.dataset.k);
+        target[inp.dataset.f] = val;
+        // A machine that has been given its own minimum cannot share a line with others.
+        if (inp.dataset.scope === "machine" && inp.dataset.f === "min" && val > 0) {
+          machines[+inp.dataset.k].grpM = "";
+        }
+        draw();
+      });
+    });
+    host.querySelectorAll(".rename").forEach(function (x) {
+      x.addEventListener("mousedown", function (e) {
+        e.stopPropagation();
+        var was = x.dataset.g, side = x.dataset.side;
+        var name = prompt("What is this line called?", was);
+        if (name === null) return;
+        name = name.trim().toUpperCase();
+        if (!name || name === was.toUpperCase()) return;
+        machines.forEach(function (m) {
+          if (side === "R" && m.grpR === was) m.grpR = name;
+          if (side === "M" && m.grpM === was) m.grpM = name;
+        });
+        draw();
+      });
+    });
+    host.querySelectorAll(".exp").forEach(function (x) {
+      x.addEventListener("mousedown", function (e) {
+        e.stopPropagation(); open[x.dataset.k] = !open[x.dataset.k]; draw();
+      });
+    });
+    host.querySelectorAll(".set").forEach(function (x) {
+      x.addEventListener("mousedown", function (e) { e.stopPropagation(); editLine(x.dataset.id, x.dataset.kind); });
+    });
+  }
+
+  function editLine(key, kind) {
+    var set = lineOf(key);
+    if (kind === "line-min") {
+      var v = prompt("Minimum charge a month for this line — billed when its copies come to less.\n" +
+                     "0 = no minimum.", set.min ? set.min.toFixed(2) : "0.00");
+      if (v === null) return;
+      set.min = Math.max(0, parseFloat(v) || 0);
+    } else if (kind === "line-wav") {
+      return;
+    } else {
+      var f = kind === "line-bk" ? "ladBk" : "ladCl";
+      var pick = prompt("Multi-price ladder for this line.\n" +
+        LADDERS.filter(Boolean).map(function (l) { return "   " + l + " — " + LADDER_TEXT[l]; }).join("\n") +
+        "\n\nType TIER-A, TIER-B, or leave blank for a flat rate.", set[f]);
+      if (pick === null) return;
+      pick = pick.trim().toUpperCase();
+      set[f] = LADDERS.indexOf(pick) >= 0 ? pick : "";
+    }
+    draw();
+  }
+
+  function drawFold() {
+    var openIt = !$("#mGrid").hidden;
+    $("#mFold").querySelector(".tri").innerHTML = openIt ? "&#9660;" : "&#9654;";
+    var grouped = machines.filter(function (m) { return m.grpR || m.grpM; }).length;
+    $("#mTitle").innerHTML = "Machines (" + machines.length + ")" +
+      (openIt ? ' <span class="hint">&mdash; tick the ones that belong on one line, or set what one machine carries of its own</span>'
+              : ' <span class="hint">&mdash; open to put machines on one line' +
+                (grouped > 0 ? "; " + grouped + " grouped by hand" : "") + "</span>");
+  }
+
+  function drawStatus(L) {
+    var v = split();
+    var docs = v === "ONE" ? 1 : v === "RS" ? 2 : v === "PM" ? machines.length : machines.length * 2;
+    var priced = 0, total = L.rent.length + L.meter.length * 2, printed = L.rent.length, stuck = 0, merged = 0;
+    L.rent.forEach(function (x) {
+      if (x.set.rent > 0) priced++;
+      else if (x.rent.spread) { stuck++; printed += x.rent.rates - 1; }
+      if (x.members.length > 1) merged++;
+    });
+    L.meter.forEach(function (x) {
+      if (x.members.length > 1) merged++;
+      ["bk", "cl"].forEach(function (f) {
+        var lad = f === "bk" ? x.ladBk : x.ladCl;
+        if (x.set[f] > 0 || lad) { priced++; printed++; }
+        else { printed += x[f].rates; if (x[f].spread) stuck++; }
+      });
+    });
+    var mins = L.meter.filter(function (x) { return x.min > 0; }).length;
+    var waives = waiveAllowed() ? L.rent.filter(function (x) { return x.wavAt > 0; }).length : 0;
+
+    $("#status").innerHTML =
+      docs + (docs === 1 ? " invoice" : " invoices") + " &middot; " +
+      printed + (printed === 1 ? " line" : " lines") + " &middot; " +
+      machines.length + " machines &middot; " + priced + " of " + total + " priced here " +
+      '<span class="rest">(the rest bill at the machine&rsquo;s own rate' +
+      (perMachine() ? "; groups are set aside while each machine has its own invoice"
+                    : (merged > 0 ? "; " + merged + " " + (merged === 1 ? "line covers" : "lines cover") +
+                                    " more than one machine" : "; nothing merged")) + ")</span>" +
+      (mins > 0 ? " &middot; " + mins + " minimum" + (mins === 1 ? "" : "s") : "") +
+      (waives > 0 ? " &middot; " + waives + " waive" + (waives === 1 ? "" : "s") : "") +
+      (stuck > 0 ? ' &middot; <span class="warn">' + stuck + " grouped " +
+                   (stuck === 1 ? "charge" : "charges") + " still prints apart until a price is agreed</span>" : "");
+  }
+
+  function draw() {
+    document.querySelectorAll(".splitbar label").forEach(function (l) { l.classList.remove("off"); });
+    drawFold();
+    drawMachines();
+    var L = build();
+    drawInvoices(L);
+    drawStatus(L);
+  }
+
+  // ---- grouping ----
+  function offerOnePrice(scope) {
+    var stuck = [], B = build();
+    function look(lines, fields) {
+      lines.forEach(function (L) {
+        if (L.members.length < 2) return;
+        fields.forEach(function (f) {
+          if (L[f].spread && L.set[f] <= 0) {
+            stuck.push({ L:L, f:f, top:Math.max.apply(null, L.members.map(function (m) { return m[f]; })) });
+          }
+        });
+      });
+    }
+    if (scope === "B" || scope === "R") look(B.rent, ["rent"]);
+    if (scope === "B" || scope === "M") look(B.meter, ["bk", "cl"]);
+    if (!stuck.length) return;
+    var msg = stuck.map(function (s) {
+      var what = s.f === "rent" ? "rental" : (s.f === "bk" ? "black" : "colour");
+      return "   " + s.L.name + " — " + what + ": " + s.L[s.f].rates +
+             " prices, highest " + money(s.top, s.f === "rent" ? 2 : 4);
+    }).join("\n");
+    if (!confirm("Grouped, but these still print one line per price — a printed line is one " +
+                 "Qty × Unit Price, and there is no honest way to show two.\n\n" + msg +
+                 "\n\nAgree the highest on each, so they print as one line?")) return;
+    stuck.forEach(function (s) { lineOf(s.L.key)[s.f] = s.top; });
+  }
+
+  function apply(scope, opts) {
+    var refused = [];
+    machines.forEach(function (m) {
+      if (opts.pickedOnly && !m.sel) return;
+      var name = opts.name(m);
+      if (scope === "B" || scope === "R") m.grpR = name;
+      if (scope === "B" || scope === "M") {
+        if (name && lockedFor(m, "M")) { refused.push(m); }
+        else m.grpM = name;
+      }
+      m.sel = false;
+    });
+    if (refused.length) {
+      alert("Left out of the BK+CL line:\n\n" +
+        refused.map(function (m) { return "   " + m.no + " — " + lockReason(m); }).join("\n") +
+        "\n\nA line carries one minimum and one ladder. Clear theirs to let them join.");
+    }
+    offerOnePrice(scope);
+    draw();
+  }
+
+  function mergeTicked(scope, what) {
+    var picked = machines.filter(function (m) { return m.sel; });
+    if (picked.length < 2) { alert("Tick at least two machines to put them on one line."); return; }
+    var same = picked.every(function (m) { return m.model === picked[0].model; });
+    var name = prompt("What is this " + what + " line called?", same ? picked[0].model : "GROUP " + (seq + 1));
+    if (name === null) return;
+    name = name.trim().toUpperCase();
+    if (!name) return;
+    if (!same) seq++;
+    apply(scope, { pickedOnly:true, name:function () { return name; } });
+  }
+
+  $("#mFold").addEventListener("click", function () {
+    var openIt = $("#mGrid").hidden;
+    $("#mGrid").hidden = !openIt;
+    $("#mBar").hidden = !openIt;
+    draw();
+  });
+  $("#selAll").addEventListener("change", function () {
+    var want = $("#selAll").checked;
+    machines.forEach(function (m) { m.sel = want; });
+    draw();
+  });
+  $("#btnMergeR").addEventListener("click", function () { mergeTicked("R", "rental"); });
+  $("#btnMergeM").addEventListener("click", function () { mergeTicked("M", "BK+CL"); });
+  $("#btnMergeB").addEventListener("click", function () { mergeTicked("B", "rental and BK+CL"); });
+  $("#btnUngroup").addEventListener("click", function () {
+    apply("B", { pickedOnly:true, name:function () { return ""; } });
+  });
+  $("#btnByPrice").addEventListener("click", function () {
+    machines.forEach(function (m) {
+      m.grpR = "RENTAL " + m.rent.toFixed(2);
+      if (!lockedFor(m, "M")) m.grpM = "COPIES " + m.bk.toFixed(4) + " / " + m.cl.toFixed(4);
+      m.sel = false;
+    });
+    draw();
+  });
+  $("#btnByModel").addEventListener("click", function () {
+    apply("B", { name:function (m) { return m.model.toUpperCase(); } });
+  });
+  $("#btnEach").addEventListener("click", function () {
+    apply("B", { name:function () { return ""; } });
+  });
+
+  $("#btnTake").addEventListener("click", function () {
+    var L = build();
+    L.rent.forEach(function (x) {
+      lineOf(x.key).rent = Math.max.apply(null, x.members.map(function (m) { return m.rent; }));
+    });
+    L.meter.forEach(function (x) {
+      ["bk", "cl"].forEach(function (f) {
+        lineOf(x.key)[f] = Math.max.apply(null, x.members.map(function (m) { return m[f]; }));
+      });
+    });
+    draw();
+  });
+  $("#btnClear").addEventListener("click", function () { line = {}; draw(); });
+  document.querySelectorAll("input[name=sp]").forEach(function (r) { r.addEventListener("change", draw); });
+
+  // ---- sample ----
+  function qtyOf(m, f) { return f === "bk" ? m.bkQty : (f === "cl" ? m.clQty : 1); }
+
+  function printedFor(L, f) {
+    var agreed = L.set[f], lad = f === "bk" ? L.ladBk : (f === "cl" ? L.ladCl : "");
+    if (lad || agreed > 0) {
+      return [{ members:L.members, rate:agreed, ladder:lad,
+                qty:L.members.reduce(function (a, m) { return a + qtyOf(m, f); }, 0) }];
+    }
+    var by = {}, out = [];
+    L.members.forEach(function (m) {
+      var k = m[f].toFixed(4);
+      if (!by[k]) { by[k] = { members:[], rate:m[f], ladder:"", qty:0 }; out.push(by[k]); }
+      by[k].members.push(m);
+      by[k].qty += qtyOf(m, f);
+    });
+    return out;
+  }
+
+  function machineText(members) {
+    if ($("#optHideMachine").checked) return "";
+    var models = members.map(function (m) { return m.model; })
+                        .filter(function (v, i, a) { return a.indexOf(v) === i; });
+    return members.length > 1 ? "MODEL:" + models.join(", ") + "  (" + members.length + " UNIT)"
+                              : "MODEL:" + members[0].model + "  S/N:" + members[0].sn;
+  }
+
+  function ladderAmount(scheme, n) {
+    var bands = scheme === "TIER-A" ? [[5000, 0.03], [15000, 0.025], [Infinity, 0.02]]
+                                    : [[10000, 0.028], [Infinity, 0.022]];
+    var left = n, amt = 0;
+    bands.forEach(function (b) {
+      var take = Math.min(left, b[0]);
+      amt += take * b[1];
+      left -= take;
+    });
+    return Math.round(amt * 100) / 100;
+  }
+
+  // What each machine's black and colour come to in money this month. A waive is tested against
+  // this, not against copies -- the deal is "if they print enough, the rent is on us", and enough
+  // is measured in ringgit. A merged line's amount is shared out over its machines in proportion to
+  // what each of them printed, which is the only split that adds back up to the line.
+  function meterMoneyByMachine(L) {
+    var byMachine = {};
+    machines.forEach(function (m) { byMachine[m.no] = 0; });
+    L.meter.forEach(function (x) {
+      ["bk", "cl"].forEach(function (f) {
+        printedFor(x, f).forEach(function (seg) {
+          var amt = seg.ladder ? ladderAmount(seg.ladder, seg.qty)
+                               : Math.round(seg.qty * seg.rate * 100) / 100;
+          var total = seg.members.reduce(function (a, m) { return a + qtyOf(m, f); }, 0) || 1;
+          seg.members.forEach(function (m) { byMachine[m.no] += amt * qtyOf(m, f) / total; });
+        });
+      });
+    });
+    return byMachine;
+  }
+
+  // The waive on a rental line is measured over the copies of the machines ON that line.
+  function waiveBase(L, byMachine) {
+    return L.members.reduce(function (a, m) { return a + (byMachine[m.no] || 0); }, 0);
+  }
+
+  function sampleRows(L) {
+    var byMachine = meterMoneyByMachine(L);
+    var rows = [];
+    L.rent.forEach(function (x) {
+      printedFor(x, "rent").forEach(function (seg) {
+        rows.push({ kind:"R", desc:"MONTHLY RENTAL (13/36)", sub:machineText(seg.members),
+                    machine:seg.members.length === 1 ? seg.members[0].no : null,
+                    qty:seg.members.length, price:seg.rate || seg.members[0].rent,
+                    amt:Math.round(seg.members.length * (seg.rate || seg.members[0].rent) * 100) / 100 });
+      });
+      if (waiveAllowed() && x.wavAt > 0) {
+        var base = waiveBase(x, byMachine);
+        if (base >= x.wavAt) {
+          // A line of its own, with the rental back off the invoice. Not a note: the customer is
+          // being given money back and the total has to show it.
+          rows.push({ kind:"R", desc:"RENTAL WAIVE",
+                      note:"black and colour came to " + money(base) + ", at or over the " +
+                           money(x.wavAt) + " agreed",
+                      machine:x.single ? x.single.no : null, sub:machineText(x.members),
+                      qty:1, price:-x.wavAmt, amt:-x.wavAmt, waive:true });
+        } else {
+          rows.push({ kind:"R", desc:"RENTAL WAIVE",
+                      note:"black and colour came to " + money(base) + ", short of the " +
+                           money(x.wavAt) + " agreed \u2014 nothing waived this month",
+                      machine:x.single ? x.single.no : null, sub:machineText(x.members),
+                      qty:0, price:0, amt:0, waive:true, dormant:true });
+        }
+      }
+    });
+    L.meter.forEach(function (x) {
+      [["bk", "BLACK COPY + PRINT A4 & A3"], ["cl", "COLOUR COPY + PRINT A4 & A3"]].forEach(function (pair) {
+        var f = pair[0];
+        printedFor(x, f).forEach(function (seg) {
+          var prev = seg.members.reduce(function (a, m) { return a + m[f + "Prev"]; }, 0);
+          var amt = seg.ladder ? ladderAmount(seg.ladder, seg.qty)
+                               : Math.round(seg.qty * seg.rate * 100) / 100;
+          rows.push({ kind:"M", desc:pair[1], sub:machineText(seg.members), qty:seg.qty,
+                      machine:seg.members.length === 1 ? seg.members[0].no : null,
+                      price:seg.rate, ladder:seg.ladder, amt:amt,
+                      reading:{ curr:prev + seg.qty, prev:prev, usage:seg.qty,
+                                serials:seg.members.length > 1
+                                  ? seg.members.map(function (m) { return m.sn; }).join(", ") : "" } });
+        });
+      });
+      if (x.min > 0) {
+        rows.push({ kind:"M", desc:"MINIMUM COMMITTED PRINT CHARGES",
+                    note:"billed if the copies above come to less than " + money(x.min),
+                    machine:x.single ? x.single.no : null, sub:machineText(x.members),
+                    qty:1, price:0, amt:0, min:true });
+      }
+    });
+    return rows;
+  }
+
+  function paper(note, rows) {
+    var total = rows.reduce(function (a, r) { return a + r.amt; }, 0);
+    var el = document.createElement("div");
+    el.className = "paper";
+    el.innerHTML =
+      "<h3>TAX INVOICE</h3><div class=\"docno\">" + note + "</div>" +
+      '<table><thead><tr><th style="width:22px"></th><th>Description</th>' +
+      '<th class="num">Qty</th><th class="num">U/Price</th><th class="num">Amount</th></tr></thead><tbody>' +
+      rows.map(function (r, i) {
+        return "<tr><td>" + (i + 1) + ".</td><td>" + r.desc +
+          (r.ladder ? ' <span class="faint">(' + r.ladder + ")</span>" : "") +
+          (r.sub ? '<div class="sub">' + r.sub + "</div>" : "") +
+          (r.note ? '<div class="sub read">' + r.note + "</div>" : "") +
+          (r.reading
+            ? '<div class="sub read">Current Meter Reading (' + PERIOD.cur + ") : " + qty(r.reading.curr) + "</div>" +
+              '<div class="sub read">Previous Meter Reading (' + PERIOD.prev + ") : " + qty(r.reading.prev) + "</div>" +
+              (r.reading.serials ? '<div class="sub read">S/N : ' + r.reading.serials + "</div>" : "") +
+              '<div class="sub read">Meter Charges Usage : ' + qty(r.reading.usage) + "</div>"
+            : "") + "</td>" +
+          '<td class="num">' + (r.dormant ? "" : qty(r.qty)) + "</td>" +
+          '<td class="num">' + (r.dormant || r.ladder || r.min
+                                  ? '<span class="faint">&mdash;</span>'
+                                  : money(r.price, r.kind === "M" ? 4 : 2)) + "</td>" +
+          '<td class="num">' + (r.dormant ? '<span class="faint">0.00</span>' : money(r.amt)) + "</td></tr>";
+      }).join("") +
+      '<tr class="tot"><td></td><td>TOTAL</td><td></td><td></td><td class="num">' +
+      money(total) + "</td></tr></tbody></table>";
+    return el;
+  }
+
+  function showSample() {
+    var L = build(), rows = sampleRows(L), body = $("#sampleBody"), v = split();
+    body.innerHTML = "";
+    function of(kind, m) {
+      return rows.filter(function (r) {
+        return (kind === null || r.kind === kind) && (!m || r.machine === m.no);
+      });
+    }
+    if (v === "ONE") { body.appendChild(paper("one invoice", rows)); $("#sampleNote").textContent = "1 invoice"; }
+    else if (v === "RS") {
+      body.appendChild(paper("rental only", of("R")));
+      body.appendChild(paper("meters only", of("M")));
+      $("#sampleNote").textContent = "2 invoices";
+    } else if (v === "PM") {
+      machines.forEach(function (m) { body.appendChild(paper(m.no, of(null, m))); });
+      $("#sampleNote").textContent = machines.length + " invoices — one per machine";
+    } else {
+      machines.forEach(function (m) {
+        body.appendChild(paper(m.no + " — rental", of("R", m)));
+        body.appendChild(paper(m.no + " — meters", of("M", m)));
+      });
+      $("#sampleNote").textContent = (machines.length * 2) + " invoices — two per machine";
+    }
+    $("#sampleNote").textContent += " — readings are invented, the shape is real";
+    $("#sample").hidden = false;
+  }
+
+  $("#btnSample").addEventListener("click", showSample);
+  $("#optHideMachine").addEventListener("change", showSample);
+  $("#btnSampleClose").addEventListener("click", function () { $("#sample").hidden = true; });
+  $("#sample").addEventListener("mousedown", function (e) { if (e.target === $("#sample")) $("#sample").hidden = true; });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("#sample").hidden = true; });
+
+  $("#btnOk").addEventListener("click", function () { showSample(); });
+  $("#btnCancel").addEventListener("click", function () { alert("Closed without saving."); });
+
+  draw();
+})();
+</script>

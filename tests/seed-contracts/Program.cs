@@ -572,48 +572,64 @@ static class SeedContracts
         }
     }
 
+    /// <summary>The twelve shapes, written out. They used to be looked up from a Billing Format
+    /// preset; now the contract carries the answers itself and the grouping is stamped onto the
+    /// machines, which is what the screen edits and what the engine folds on. The codes stay as the
+    /// scenario's NAME -- they are how the demo contracts are talked about -- but nothing reads them
+    /// at billing time any more.</summary>
+    static void Shape(string code, out string split, out char rMode, out char mMode, out string fname)
+    {
+        switch (code)
+        {
+            case "1INV-ALL":       split = "ONE"; rMode = 'A'; mMode = 'A'; fname = "1 invoice, rental 1 line, BK+CL 1 line each"; return;
+            case "1INV-RMODEL":    split = "ONE"; rMode = 'M'; mMode = 'A'; fname = "1 invoice, rental per model, BK+CL 1 line each"; return;
+            case "1INV-MMACHINE":  split = "ONE"; rMode = 'A'; mMode = 'S'; fname = "1 invoice, rental 1 line, BK+CL per machine"; return;
+            case "1INV-BYMODEL":   split = "ONE"; rMode = 'M'; mMode = 'M'; fname = "1 invoice, rental per model, BK+CL per model"; return;
+            case "2INV-ALL":       split = "RS";  rMode = 'A'; mMode = 'A'; fname = "2 invoices, rental 1 line, BK+CL 1 line each"; return;
+            case "2INV-RMODEL":    split = "RS";  rMode = 'M'; mMode = 'A'; fname = "2 invoices, rental per model, BK+CL 1 line each"; return;
+            case "2INV-MMACHINE":  split = "RS";  rMode = 'A'; mMode = 'S'; fname = "2 invoices, rental 1 line, BK+CL per machine"; return;
+            case "2INV-RMODEL-MM": split = "RS";  rMode = 'M'; mMode = 'S'; fname = "2 invoices, rental per model, BK+CL per machine"; return;
+            case "2INV-EACH":      split = "RS";  rMode = 'S'; mMode = 'S'; fname = "2 invoices, rental per machine, BK+CL per machine"; return;
+            case "2INV-RMACHINE":  split = "RS";  rMode = 'S'; mMode = 'A'; fname = "2 invoices, rental per machine, BK+CL 1 line each"; return;
+            case "PERMACHINE":     split = "PMS"; rMode = 'S'; mMode = 'S'; fname = "One rental + one meter invoice per machine"; return;
+        }
+        split = "ONE"; rMode = 'A'; mMode = 'S'; fname = "(legacy - the old rules, nothing grouped)";
+    }
+
+    /// <summary>The group a machine belongs to on one side, under the shape being demonstrated.
+    /// This is the whole of the new model: no mode is stored anywhere, the machines carry the
+    /// grouping and the engine folds on that. 'A' is everyone in one group, 'M' is a group per
+    /// model, 'S' is nobody grouped -- and anything the three cannot say is reachable too, by
+    /// ticking machines and merging them, which no mode could ever express.</summary>
+    static string GroupFor(char mode, string model)
+    {
+        if (mode == 'A') return "ALL MACHINES";
+        if (mode == 'M') return model.ToUpperInvariant();
+        return "";
+    }
+
     static void Build(SqlConnection cn, Ct c)
     {
-        // The engine reads the CONTRACT, not the preset: BillingFormatCode only says "this contract
-        // has been given a format". So the preset's four answers get stamped onto the contract the
-        // same way ScpBillingFormat.ApplyTo does it.
-        string split = "ONE";
-        char rMode = 'A';
-        char mMode = 'S';
-        string fname = "(legacy - no format)";
-        if (c.Format.Length > 0)
-        {
-            using (SqlCommand cmd = new SqlCommand(
-                "SELECT FormatName, InvoiceSplit, RentalLineMode, MeterLineMode " +
-                "FROM dbo.zSCP2_BillingFormat WHERE FormatCode=@f", cn))
-            {
-                cmd.Parameters.AddWithValue("@f", c.Format);
-                using (SqlDataReader rd = cmd.ExecuteReader())
-                {
-                    if (!rd.Read()) throw new Exception("Billing format '" + c.Format + "' not found.");
-                    fname = Convert.ToString(rd["FormatName"]);
-                    split = Convert.ToString(rd["InvoiceSplit"]).Trim();
-                    rMode = Convert.ToString(rd["RentalLineMode"]).Trim()[0];
-                    mMode = Convert.ToString(rd["MeterLineMode"]).Trim()[0];
-                }
-            }
-        }
+        string split; char rMode; char mMode; string fname;
+        Shape(c.Format, out split, out rMode, out mMode, out fname);
+        bool newLayout = c.Format.Length > 0;
         char billingMode = split == "PM" || split == "PMS" ? 'S' : 'G';
         string rentalSep = split == "RS" || split == "PMS" ? "Y" : "N";
 
         long ck = 0;
         using (SqlCommand cmd = new SqlCommand(
             "INSERT INTO dbo.zSCP2_Contract " +
-            "(ContractNo, DebtorCode, [Description], BillingFormatCode, RentalLineMode, MeterLineMode, " +
+            "(ContractNo, DebtorCode, [Description], BillingFormatCode, UseNewLayout, MachineLineShows, " +
+            " RentalLineMode, MeterLineMode, " +
             " BillingMode, BillingDay, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
             " RentalSeparateInvoice, Inactive, CreatedBy, ModifiedBy, Created, Modified, LastModified) " +
-            "VALUES (@no, @deb, @desc, @fmt, @rm, @mm, @bm, 1, @sd, @sd, @ed, @rsep, 'N', 'ADMIN', 'ADMIN', " +
+            "VALUES (@no, @deb, @desc, '', @new, 'L', @rm, @mm, @bm, 1, @sd, @sd, @ed, @rsep, 'N', 'ADMIN', 'ADMIN', " +
             " GETDATE(), GETDATE(), GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
         {
             cmd.Parameters.AddWithValue("@no", c.No);
             cmd.Parameters.AddWithValue("@deb", _debtor);
             cmd.Parameters.AddWithValue("@desc", c.Desc);
-            cmd.Parameters.AddWithValue("@fmt", c.Format);
+            cmd.Parameters.AddWithValue("@new", newLayout ? "Y" : "N");
             cmd.Parameters.AddWithValue("@rm", rMode.ToString());
             cmd.Parameters.AddWithValue("@mm", mMode.ToString());
             cmd.Parameters.AddWithValue("@bm", billingMode.ToString());
@@ -629,7 +645,7 @@ static class SeedContracts
         foreach (Mach m in c.Machines)
         {
             pos++;
-            long ik = InsertMachine(cn, ck, c, m, pos);
+            long ik = InsertMachine(cn, ck, c, m, pos, GroupFor(rMode, m.Model), GroupFor(mMode, m.Model));
             foreach (Meter mt in m.Meters) { InsertMeter(cn, ik, m, mt); meters++; }
             _machMade++;
         }
@@ -643,15 +659,18 @@ static class SeedContracts
         Console.WriteLine("        prints -> " + c.Prints);
     }
 
-    static long InsertMachine(SqlConnection cn, long ck, Ct c, Mach m, int pos)
+    static long InsertMachine(SqlConnection cn, long ck, Ct c, Mach m, int pos,
+                              string rentalGroup, string meterGroup)
     {
+        // A group typed by hand on the screen beats the shape, exactly as it does in the engine.
+        if ((m.MergeGroup ?? "").Trim().Length > 0) { rentalGroup = m.MergeGroup; meterGroup = m.MergeGroup; }
         string sino = c.No + "-" + pos.ToString("000", CultureInfo.InvariantCulture);
         using (SqlCommand cmd = new SqlCommand(
             "INSERT INTO dbo.zSCP2_Item " +
             "(ContractKey, ServiceItemNo, ItemCode, SerialNumber, [Description], Pos, " +
-            " MergeGroupCode, LineGroupCode, Inactive, IsGroupItem, MachineMode, " +
+            " MergeGroupCode, MergeGroupCodeMeter, LineGroupCode, Inactive, IsGroupItem, MachineMode, " +
             " ServiceStartDate, ServiceExpiryDate, LastModified) " +
-            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, @label, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
+            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, @grpm, @label, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
             "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
         {
             cmd.Parameters.AddWithValue("@ck", ck);
@@ -661,7 +680,8 @@ static class SeedContracts
             cmd.Parameters.AddWithValue("@sn", sn);
             cmd.Parameters.AddWithValue("@desc", m.Model + " / " + sn);
             cmd.Parameters.AddWithValue("@pos", pos);
-            cmd.Parameters.AddWithValue("@grp", m.MergeGroup);
+            cmd.Parameters.AddWithValue("@grp", rentalGroup ?? "");
+            cmd.Parameters.AddWithValue("@grpm", meterGroup ?? "");
             cmd.Parameters.AddWithValue("@label", DutyLabel(m.Model));
             cmd.Parameters.AddWithValue("@mmode", m.MachineMode);
             cmd.Parameters.AddWithValue("@sd", START);

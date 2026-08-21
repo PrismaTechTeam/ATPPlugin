@@ -36,6 +36,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>Which printed LINE this machine merges onto ("" = follow the contract's line
         /// mode). Set from the Rental Price screen, not typed on the machine.</summary>
         public string MergeGroupCode = "";
+        /// <summary>Which line this machine's BLACK and COLOUR print on. Kept apart from the rental's
+        /// group because one agreed rental across the fleet, with every machine still billing its own
+        /// copies, is the commonest deal here and needs the two answered separately.</summary>
+        public string MergeGroupCodeMeter = "";
 
         // --- overhaul: header + More Header + Note/Remarks (persisted by PersistItemExtras) ---
         public string ItemCode = "";

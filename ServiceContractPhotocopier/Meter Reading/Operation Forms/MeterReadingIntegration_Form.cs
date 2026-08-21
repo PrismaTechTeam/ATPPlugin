@@ -1458,6 +1458,61 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
+        /// <summary>
+        /// The rate an agreed BK or CL line charges, stamped onto every machine on that line.
+        ///
+        /// <para>A merged usage line has one Qty x Unit Price like any other, so machines whose own
+        /// rates differ cannot share it. Agreeing a figure for the line is what makes them one line:
+        /// without it they stay apart, correctly, because there is no honest single rate to print.
+        /// This runs before the fold, so the fold sees them already agreeing.</para>
+        /// </summary>
+        private void ApplyMeterLinePrices()
+        {
+            if (_dtGrid == null || _dtGrid.Rows.Count == 0) return;
+            System.Collections.Generic.List<long> keys = new System.Collections.Generic.List<long>();
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+                if (ck > 0 && !keys.Contains(ck)) keys.Add(ck);
+            }
+            if (keys.Count == 0) return;
+
+            System.Collections.Generic.Dictionary<long,
+                System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>> byContract =
+                new System.Collections.Generic.Dictionary<long,
+                    System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>>();
+            foreach (long ck in keys)
+                byContract[ck] = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(_dbSetting, ck);
+
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                if (r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"])) continue;
+                if (r["NewMoneyRules"] == DBNull.Value || !Convert.ToBoolean(r["NewMoneyRules"])) continue;
+                string role = S(r["Role"]).Trim().ToUpperInvariant();
+                if (role != "BK" && role != "CL") continue;
+
+                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+                System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms> terms;
+                if (!byContract.TryGetValue(ck, out terms) || terms.Count == 0) continue;
+
+                string grp = S(r["MergeGroupCodeMeter"]).Trim();
+                if (grp.Length == 0) continue;      // its own line -- its own rate, nothing to agree
+
+                ServiceContractPhotocopier.Classes.ScpLineTerms t;
+                if (!terms.TryGetValue(
+                        ServiceContractPhotocopier.Classes.ScpLineTerms.Key(
+                            ServiceContractPhotocopier.Classes.ScpLineTerms.SIDE_METER, grp), out t)) continue;
+
+                decimal agreed = role == "BK" ? t.BkPrice : t.ClPrice;
+                if (agreed <= 0m) continue;
+
+                // A ladder prices the copies by band and outranks a flat figure; leave it alone.
+                if (S(r["MultiPriceCode"]).Trim().Length > 0) continue;
+
+                r["UnitPrice"] = agreed;
+            }
+        }
+
         /// <summary>Is this grid row a committed minimum? The same test the billing engine makes —
         /// role first, the legacy "MIN..." type name as the OR that keeps old machines working.</summary>
         private static bool IsCommitRow(DataRow r)
@@ -1894,7 +1949,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
                     // What the machine line names -- model, duty label, or both. From the contract's
                     // format; 'B' for a contract that has none, which is what it printed before.
-                    "ISNULL(bf.MachineLineShows,'B') AS MachineLineShows, " +
+                    // The contract carries its own answer now; the format is only a fallback for
+                    // the contracts that have not been moved across yet.
+                    "ISNULL(NULLIF(c.MachineLineShows,''), ISNULL(bf.MachineLineShows,'B')) AS MachineLineShows, " +
                     "ISNULL(c.RentalBillingDay,0) AS RentalBillingDay, " +
                     "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
                     "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
@@ -1903,6 +1960,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     // ("HEAVY DUTY") the line prints. ItemCode is the machine's model — the bucket
                     // when a contract groups its lines by model (v11 / v14).
                     "ISNULL(i.BillGroupCode,'') AS BillGroupCode, ISNULL(i.LineGroupCode,'') AS LineGroupCode, " +
+                    "ISNULL(i.MergeGroupCodeMeter,'') AS MergeGroupCodeMeter, " +
                     // MergeGroupCode says which LINE this machine prints on when the contract merges
                     // -- a hand-made group beats the line mode's own bucket (v12).
                     "ISNULL(i.MergeGroupCode,'') AS MergeGroupCode, " +
@@ -2032,6 +2090,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     g["ItemMeterKey"] = D64(r["ItemMeterKey"]);
                     g["ACItemCode"] = S(r["ACItemCode"]);
                 g["MachineLineShows"] = S(r["MachineLineShows"]);
+                g["MergeGroupCodeMeter"] = S(r["MergeGroupCodeMeter"]);
                     g["Role"] = S(r["MeterRole"]);
                     g["EntrySource"] = "";
                     g["FetchedReading"] = 0m;
@@ -2072,7 +2131,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
 
                 PrefillFromStaging(SelectedMonth(), SelectedYear());
-                ApplyRentalGroupPrices();   // the contract's own price for a merged rental line, if set
+                ApplyRentalGroupPrices();
+                ApplyMeterLinePrices();   // the contract's own price for a merged rental line, if set
                 AutoFillFlatMeters();
                 RecomputeNeedManual();
 
@@ -2320,6 +2380,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("ItemMeterKey", typeof(long));
             dt.Columns.Add("ACItemCode", typeof(string));
             dt.Columns.Add("MachineLineShows", typeof(string));
+            dt.Columns.Add("MergeGroupCodeMeter", typeof(string));
             dt.Columns.Add("Role", typeof(string));
             dt.Columns.Add("Shade", typeof(int));   // 0/1 per-item zebra shade (hidden)
             dt.Columns.Add("EntrySource", typeof(string));    // where CurrentReading came from: MANUAL/ONLINE/OFFLINE/'' (hidden)
@@ -4008,6 +4069,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 ln.MachineLineShows = mls.Length > 0 ? char.ToUpperInvariant(mls[0])
                     : ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
                 ln.MergeGroupCode = S(r["MergeGroupCode"]);
+                ln.MergeGroupCodeMeter = S(r["MergeGroupCodeMeter"]);
                 ln.IsWaiveMeter = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
                 // Scope is shared: waive meters use it for the target sum, MIN meters for the
                 // committed-minimum printed sum (BK only / CL only / both).

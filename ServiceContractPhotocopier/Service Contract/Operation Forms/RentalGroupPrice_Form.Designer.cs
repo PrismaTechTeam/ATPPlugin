@@ -43,6 +43,14 @@ namespace ServiceContractPhotocopier
             this.PanelGroupBtns = new DevExpress.XtraEditors.PanelControl();
             this.BtnMerge = new DevExpress.XtraEditors.SimpleButton();
             this.BtnUngroup = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnMergeMeter = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnMergeBoth = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnByPrice = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnByModel = new DevExpress.XtraEditors.SimpleButton();
+            this.ColMeterGroup = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColOwnBk = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColOwnCl = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColCharge = new DevExpress.XtraGrid.Columns.GridColumn();
             this.LblLines = new DevExpress.XtraEditors.LabelControl();
             this.GridLines = new DevExpress.XtraGrid.GridControl();
             this.GridViewLines = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -79,7 +87,7 @@ namespace ServiceContractPhotocopier
             this.LblHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblHint.Location = new System.Drawing.Point(12, 9);
             this.LblHint.Name = "LblHint";
-            this.LblHint.Size = new System.Drawing.Size(836, 58);
+            this.LblHint.Size = new System.Drawing.Size(1150, 58);
             this.LblHint.TabIndex = 0;
             this.LblHint.Text = "";
             //
@@ -101,7 +109,7 @@ namespace ServiceContractPhotocopier
             this.GridMachines.Name = "GridMachines";
             this.GridMachines.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
             this.RepoSel});
-            this.GridMachines.Size = new System.Drawing.Size(836, 230);
+            this.GridMachines.Size = new System.Drawing.Size(1150, 230);
             this.GridMachines.TabIndex = 2;
             this.GridMachines.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewMachines});
@@ -114,8 +122,11 @@ namespace ServiceContractPhotocopier
             this.ColSerial,
             this.ColModel,
             this.ColMergeGroup,
+            this.ColMeterGroup,
             this.ColPrintsOn,
-            this.ColOwnRate});
+            this.ColOwnRate,
+            this.ColOwnBk,
+            this.ColOwnCl});
             this.GridViewMachines.GridControl = this.GridMachines;
             this.GridViewMachines.Name = "GridViewMachines";
             this.GridViewMachines.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
@@ -205,25 +216,29 @@ namespace ServiceContractPhotocopier
             this.PanelGroupBtns.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.PanelGroupBtns.Controls.Add(this.BtnMerge);
+            this.PanelGroupBtns.Controls.Add(this.BtnMergeMeter);
+            this.PanelGroupBtns.Controls.Add(this.BtnMergeBoth);
             this.PanelGroupBtns.Controls.Add(this.BtnUngroup);
+            this.PanelGroupBtns.Controls.Add(this.BtnByPrice);
+            this.PanelGroupBtns.Controls.Add(this.BtnByModel);
             this.PanelGroupBtns.Location = new System.Drawing.Point(12, 330);
             this.PanelGroupBtns.Name = "PanelGroupBtns";
-            this.PanelGroupBtns.Size = new System.Drawing.Size(836, 40);
+            this.PanelGroupBtns.Size = new System.Drawing.Size(1150, 40);
             this.PanelGroupBtns.TabIndex = 3;
             //
             // BtnMerge
             //
             this.BtnMerge.Location = new System.Drawing.Point(9, 7);
             this.BtnMerge.Name = "BtnMerge";
-            this.BtnMerge.Size = new System.Drawing.Size(210, 26);
+            this.BtnMerge.Size = new System.Drawing.Size(180, 26);
             this.BtnMerge.TabIndex = 0;
-            this.BtnMerge.Text = "Merge ticked into one line...";
+            this.BtnMerge.Text = "Ticked -> one rental line...";
             this.BtnMerge.ToolTip = "Put the ticked machines on the SAME printed line, whatever their models";
             this.BtnMerge.Click += new System.EventHandler(this.BtnMerge_Click);
             //
             // BtnUngroup
             //
-            this.BtnUngroup.Location = new System.Drawing.Point(227, 7);
+            this.BtnUngroup.Location = new System.Drawing.Point(508, 7);
             this.BtnUngroup.Name = "BtnUngroup";
             this.BtnUngroup.Size = new System.Drawing.Size(160, 26);
             this.BtnUngroup.TabIndex = 1;
@@ -240,6 +255,82 @@ namespace ServiceContractPhotocopier
             this.LblLines.TabIndex = 4;
             this.LblLines.Text = "Lines — what comes out, and what each rental line costs a month per machine";
             //
+            // ColMeterGroup
+            //
+            this.ColMeterGroup.Caption = "BK+CL line";
+            this.ColMeterGroup.FieldName = "MeterGroup";
+            this.ColMeterGroup.Name = "ColMeterGroup";
+            this.ColMeterGroup.OptionsColumn.AllowEdit = false;
+            this.ColMeterGroup.Visible = true;
+            this.ColMeterGroup.VisibleIndex = 5;
+            this.ColMeterGroup.Width = 130;
+            //
+            // ColOwnBk
+            //
+            this.ColOwnBk.Caption = "Own BK";
+            this.ColOwnBk.DisplayFormat.FormatString = "n4";
+            this.ColOwnBk.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.ColOwnBk.FieldName = "OwnBk";
+            this.ColOwnBk.Name = "ColOwnBk";
+            this.ColOwnBk.OptionsColumn.AllowEdit = false;
+            this.ColOwnBk.Visible = true;
+            this.ColOwnBk.VisibleIndex = 8;
+            this.ColOwnBk.Width = 80;
+            //
+            // ColOwnCl
+            //
+            this.ColOwnCl.Caption = "Own CL";
+            this.ColOwnCl.DisplayFormat.FormatString = "n4";
+            this.ColOwnCl.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
+            this.ColOwnCl.FieldName = "OwnCl";
+            this.ColOwnCl.Name = "ColOwnCl";
+            this.ColOwnCl.OptionsColumn.AllowEdit = false;
+            this.ColOwnCl.Visible = true;
+            this.ColOwnCl.VisibleIndex = 9;
+            this.ColOwnCl.Width = 80;
+            //
+            // ColCharge
+            //
+            this.ColCharge.Caption = "Charge";
+            this.ColCharge.FieldName = "Charge";
+            this.ColCharge.Name = "ColCharge";
+            this.ColCharge.OptionsColumn.AllowEdit = false;
+            this.ColCharge.Visible = true;
+            this.ColCharge.VisibleIndex = 1;
+            this.ColCharge.Width = 120;
+            //
+            // BtnMergeMeter
+            //
+            this.BtnMergeMeter.Location = new System.Drawing.Point(195, 7);
+            this.BtnMergeMeter.Name = "BtnMergeMeter";
+            this.BtnMergeMeter.Size = new System.Drawing.Size(150, 26);
+            this.BtnMergeMeter.TabIndex = 4;
+            this.BtnMergeMeter.Text = "Ticked -> one BK+CL line...";
+            //
+            // BtnMergeBoth
+            //
+            this.BtnMergeBoth.Location = new System.Drawing.Point(351, 7);
+            this.BtnMergeBoth.Name = "BtnMergeBoth";
+            this.BtnMergeBoth.Size = new System.Drawing.Size(150, 26);
+            this.BtnMergeBoth.TabIndex = 5;
+            this.BtnMergeBoth.Text = "Ticked -> one of each...";
+            //
+            // BtnByPrice
+            //
+            this.BtnByPrice.Location = new System.Drawing.Point(664, 7);
+            this.BtnByPrice.Name = "BtnByPrice";
+            this.BtnByPrice.Size = new System.Drawing.Size(150, 26);
+            this.BtnByPrice.TabIndex = 7;
+            this.BtnByPrice.Text = "Group by unit price";
+            //
+            // BtnByModel
+            //
+            this.BtnByModel.Location = new System.Drawing.Point(820, 7);
+            this.BtnByModel.Name = "BtnByModel";
+            this.BtnByModel.Size = new System.Drawing.Size(150, 26);
+            this.BtnByModel.TabIndex = 8;
+            this.BtnByModel.Text = "Group by model";
+            //
             // GridLines
             //
             this.GridLines.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
@@ -249,7 +340,7 @@ namespace ServiceContractPhotocopier
             this.GridLines.Name = "GridLines";
             this.GridLines.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
             this.RepoPrice});
-            this.GridLines.Size = new System.Drawing.Size(836, 160);
+            this.GridLines.Size = new System.Drawing.Size(1150, 160);
             this.GridLines.TabIndex = 5;
             this.GridLines.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewLines});
@@ -258,6 +349,7 @@ namespace ServiceContractPhotocopier
             //
             this.GridViewLines.Columns.AddRange(new DevExpress.XtraGrid.Columns.GridColumn[] {
             this.ColLineName,
+            this.ColCharge,
             this.ColUnits,
             this.ColOnMachines,
             this.ColUnitPrice,
@@ -343,7 +435,7 @@ namespace ServiceContractPhotocopier
             this.LblSummary.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
             this.LblSummary.Location = new System.Drawing.Point(12, 567);
             this.LblSummary.Name = "LblSummary";
-            this.LblSummary.Size = new System.Drawing.Size(836, 18);
+            this.LblSummary.Size = new System.Drawing.Size(1150, 18);
             this.LblSummary.TabIndex = 6;
             this.LblSummary.Text = "";
             //
@@ -357,7 +449,7 @@ namespace ServiceContractPhotocopier
             this.PanelBottom.Controls.Add(this.BtnCancel);
             this.PanelBottom.Location = new System.Drawing.Point(12, 591);
             this.PanelBottom.Name = "PanelBottom";
-            this.PanelBottom.Size = new System.Drawing.Size(836, 44);
+            this.PanelBottom.Size = new System.Drawing.Size(1150, 44);
             this.PanelBottom.TabIndex = 7;
             //
             // BtnFromMachines
@@ -407,7 +499,7 @@ namespace ServiceContractPhotocopier
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.BtnCancel;
-            this.ClientSize = new System.Drawing.Size(860, 647);
+            this.ClientSize = new System.Drawing.Size(1180, 647);
             this.Controls.Add(this.LblHint);
             this.Controls.Add(this.LblMachines);
             this.Controls.Add(this.GridMachines);
@@ -449,10 +541,17 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraGrid.Columns.GridColumn ColMergeGroup;
         private DevExpress.XtraGrid.Columns.GridColumn ColPrintsOn;
         private DevExpress.XtraGrid.Columns.GridColumn ColOwnRate;
+        private DevExpress.XtraGrid.Columns.GridColumn ColMeterGroup;
+        private DevExpress.XtraGrid.Columns.GridColumn ColOwnBk;
+        private DevExpress.XtraGrid.Columns.GridColumn ColOwnCl;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit RepoSel;
         private DevExpress.XtraEditors.PanelControl PanelGroupBtns;
         private DevExpress.XtraEditors.SimpleButton BtnMerge;
         private DevExpress.XtraEditors.SimpleButton BtnUngroup;
+        private DevExpress.XtraEditors.SimpleButton BtnMergeMeter;
+        private DevExpress.XtraEditors.SimpleButton BtnMergeBoth;
+        private DevExpress.XtraEditors.SimpleButton BtnByPrice;
+        private DevExpress.XtraEditors.SimpleButton BtnByModel;
         private DevExpress.XtraEditors.LabelControl LblLines;
         private DevExpress.XtraGrid.GridControl GridLines;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewLines;
@@ -461,6 +560,7 @@ namespace ServiceContractPhotocopier
         private DevExpress.XtraGrid.Columns.GridColumn ColOnMachines;
         private DevExpress.XtraGrid.Columns.GridColumn ColUnitPrice;
         private DevExpress.XtraGrid.Columns.GridColumn ColMonthly;
+        private DevExpress.XtraGrid.Columns.GridColumn ColCharge;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoPrice;
         private DevExpress.XtraEditors.LabelControl LblSummary;
         private DevExpress.XtraEditors.PanelControl PanelBottom;

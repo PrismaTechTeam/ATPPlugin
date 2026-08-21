@@ -369,6 +369,12 @@ namespace ServiceContractPhotocopier.Classes
                 }
                 if (lay.RentalMode == ScpBillingFormat.LINE_PER_MACHINE) return null;
 
+                // On the new layout the machines decide: in a group, share that group's line; in no
+                // group, print alone. No mode sits above it, so there is nothing that can disagree
+                // with what the screen showed.
+                if (lay.RentalMode == ScpBillingFormat.LINE_BY_GROUP &&
+                    (ln.MergeGroupCode ?? "").Trim().Length == 0) return null;
+
                 // Money splits the line. Three machines at 250, 300 and 475 are three deals, and
                 // "3 UNIT at ..." can only name one figure. Agreeing a group price is what turns
                 // them into one line: ApplyRentalGroupPrices stamps that figure onto every member
@@ -395,6 +401,8 @@ namespace ServiceContractPhotocopier.Classes
             // ----- BK / CL -----
             if (!lay.HasFormat) return null;                                  // legacy never merged usage
             if (lay.MeterMode == ScpBillingFormat.LINE_PER_MACHINE) return null;
+            if (lay.MeterMode == ScpBillingFormat.LINE_BY_GROUP &&
+                (ln.MergeGroupCodeMeter ?? "").Trim().Length == 0) return null;
 
             // Price splits the line; nothing else about the money does. Machines at one rate sum to
             // exactly qty x that rate, so the row a reader can check by hand is the row that prints.
@@ -413,7 +421,8 @@ namespace ServiceContractPhotocopier.Classes
             // Same bucket rule as the rental line: a machine put in a group prints with its group,
             // whatever the mode would otherwise have done. Grouping is about which machines belong
             // together, and that answer does not change between the rental line and the black one.
-            m += "|" + ScpRentalGroupPrice.GroupKeyFor(lay.MeterMode, ln.ModelCode, ln.MergeGroupCode);
+            // The copies group on their own column, so "rental together, copies apart" is sayable.
+            m += "|" + ScpRentalGroupPrice.GroupKeyFor(lay.MeterMode, ln.ModelCode, ln.MergeGroupCodeMeter);
             return m;
         }
 
@@ -497,14 +506,29 @@ namespace ServiceContractPhotocopier.Classes
             {
                 DataTable t = db.GetDataTable(
                     "SELECT ContractKey, ISNULL(BillingFormatCode,'') AS BillingFormatCode, " +
+                    "ISNULL(UseNewLayout,'N') AS UseNewLayout, " +
                     "ISNULL(RentalLineMode,'A') AS RentalLineMode, ISNULL(MeterLineMode,'S') AS MeterLineMode " +
                     "FROM dbo.zSCP2_Contract WHERE ContractKey IN (" + inList + ")", false);
                 foreach (DataRow r in t.Rows)
                 {
                     ContractLayout lay = new ContractLayout();
-                    lay.HasFormat = Convert.ToString(r["BillingFormatCode"]).Trim().Length > 0;
-                    lay.RentalMode = FirstChar(r["RentalLineMode"], ScpBillingFormat.LINE_ACROSS_MODEL);
-                    lay.MeterMode = FirstChar(r["MeterLineMode"], ScpBillingFormat.LINE_PER_MACHINE);
+                    // The new rules have their own switch now. They used to ride on "does this
+                    // contract name a format", which meant a label was deciding the arithmetic --
+                    // clearing the name quietly moved the money back to the old rounding and the
+                    // old rebate. UseNewLayout says it out loud, and a contract can be moved across
+                    // one at a time, which is also how the parallel run against the old system works.
+                    bool newLayout = Convert.ToString(r["UseNewLayout"]).Trim().ToUpperInvariant() == "Y";
+                    lay.HasFormat = newLayout || Convert.ToString(r["BillingFormatCode"]).Trim().Length > 0;
+                    if (newLayout)
+                    {
+                        lay.RentalMode = ScpBillingFormat.LINE_BY_GROUP;
+                        lay.MeterMode = ScpBillingFormat.LINE_BY_GROUP;
+                    }
+                    else
+                    {
+                        lay.RentalMode = FirstChar(r["RentalLineMode"], ScpBillingFormat.LINE_ACROSS_MODEL);
+                        lay.MeterMode = FirstChar(r["MeterLineMode"], ScpBillingFormat.LINE_PER_MACHINE);
+                    }
                     map[Convert.ToInt64(r["ContractKey"])] = lay;
                 }
             }
@@ -534,13 +558,18 @@ namespace ServiceContractPhotocopier.Classes
             {
                 DataTable t = db.GetDataTable(
                     "SELECT ContractKey, ISNULL(BillingFormatCode,'') AS BillingFormatCode, " +
+                    "ISNULL(UseNewLayout,'N') AS UseNewLayout, " +
                     "ISNULL(RentalLineMode,'A') AS RentalLineMode " +
                     "FROM dbo.zSCP2_Contract WHERE ContractKey IN (" + inList + ")", false);
                 foreach (DataRow r in t.Rows)
-                    map[Convert.ToInt64(r["ContractKey"])] =
-                        Convert.ToString(r["BillingFormatCode"]).Trim().Length == 0
+                {
+                    bool newLayout = Convert.ToString(r["UseNewLayout"]).Trim().ToUpperInvariant() == "Y";
+                    map[Convert.ToInt64(r["ContractKey"])] = newLayout
+                        ? ScpBillingFormat.LINE_BY_GROUP
+                        : (Convert.ToString(r["BillingFormatCode"]).Trim().Length == 0
                             ? ScpBillingFormat.LINE_PER_MACHINE
-                            : FirstChar(r["RentalLineMode"], ScpBillingFormat.LINE_ACROSS_MODEL);
+                            : FirstChar(r["RentalLineMode"], ScpBillingFormat.LINE_ACROSS_MODEL));
+                }
             }
             catch { }   // older book without the v14 columns -> no contract has groups
             return map;

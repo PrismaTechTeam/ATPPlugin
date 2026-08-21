@@ -202,6 +202,7 @@ namespace ServiceContractPhotocopier
                     l.SerialNumber = d.SerialNumber ?? "";
                     l.ModelCode = d.ItemCode ?? "";
                     l.MergeGroupCode = d.MergeGroupCode ?? "";
+                    l.MergeGroupCodeMeter = d.MergeGroupCodeMeter ?? "";
                     l.LineGroupCode = d.LineGroupCode ?? "";
                     l.MeterTypeCode = type;
                     l.MeterTypeName = Str(mr, "Description");

@@ -174,10 +174,11 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     "Billing Format", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            // The three answers in words, so the codes never have to be decoded by eye.
+            // The four answers in words, so the codes never have to be decoded by eye.
             _dt.Columns.Add("Invoices", typeof(string));
             _dt.Columns.Add("Rental", typeof(string));
             _dt.Columns.Add("Meters", typeof(string));
+            _dt.Columns.Add("MachineLine", typeof(string));
             foreach (DataRow r in _dt.Rows)
             {
                 r["Invoices"] = ScpBillingFormat.DescribeSplit(Convert.ToString(r["InvoiceSplit"]));
