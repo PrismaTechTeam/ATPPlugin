@@ -67,4 +67,11 @@ build_out.txt
 # The analysis .md files in that folder ARE versioned; the PDFs stay local.
 Type Of BillingFormat/*.pdf
 /*.pdf
-"3000-F0019 INV 2607.pdf + 3000-F001.txt"
+# The quotes here were literal, so this rule matched nothing and the file sat untracked.
+# It is one customer document whose name happens to contain a plus sign.
+3000-F0019 INV 2607.pdf + 3000-F001.txt
+
+# Test harness build output. The .exe files stay on disk and keep working -- git just
+# stops offering them, because they are rebuilt from the .cs beside them by run.ps1.
+tests/**/*.exe
+

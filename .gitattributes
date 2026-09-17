@@ -1,0 +1,17 @@
+# Without this git renormalises line endings differently per machine and a release diff
+# fills up with churn nobody made.
+* text=auto
+
+# Binaries: never touched, never diffed as text.
+*.app    binary
+*.exe    binary
+*.dll    binary
+*.pdb    binary
+*.pdf    binary
+*.xlsx   binary
+*.png    binary
+*.jpg    binary
+*.ico    binary
+*.resx   text
+*.sql    text
+*.cs     text diff=csharp
