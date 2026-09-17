@@ -200,6 +200,15 @@ static class SeedContracts
         public decimal WaiveTarget = 0m, WaivePartialThreshold = 0m, WaivePartialAmount = 0m;
         public int RentalMonths = 0;
         public string RentalBasis = "A";
+
+        /// <summary>A ladder off the master list (zSCP_MeterMultiPrice), by code.</summary>
+        public string MultiPriceCode = "";
+
+        /// <summary>Or this meter's OWN ladder, written to zSCP2_ItemMeterPrice and keyed by the meter
+        /// itself. Pairs of (upper boundary, unit price), ascending; the last boundary is the ceiling.
+        /// A ladder is MARGINAL -- each slice of usage pays its own band -- so a first band priced 0.00
+        /// is how a free-copy allowance is written.</summary>
+        public List<decimal[]> Tiers;
     }
 
     class Mach
@@ -207,6 +216,9 @@ static class SeedContracts
         public string Model = "";
         public string Serial = "";
         public string MergeGroup = "";
+        /// <summary>Which BRANCH this machine is billed under. A bill group is a separate invoice --
+        /// the contract stays one contract, but each group's machines get their own paper.</summary>
+        public string BillGroup = "";
         public string MachineMode = "";
         public List<Meter> Meters = new List<Meter>();
 
@@ -245,7 +257,41 @@ static class SeedContracts
             m.WaiveFirstN = firstN; m.WaiveTarget = target; m.WaiveScope = scope;
             Meters.Add(m); return this;
         }
+
+        /// <summary>A waive measured over the whole RENTAL line rather than one machine: the machines
+        /// sharing this one's rental group have their copies added up, and the whole line's rental comes
+        /// off when they reach the target. One meter for the line -- one per machine would credit the
+        /// rental once for each of them.</summary>
+        public Mach GroupWaive(decimal amount, decimal target)
+        {
+            Waive(amount, 0, target, "BKCL");
+            Meters[Meters.Count - 1].CommitScope = "G";
+            return this;
+        }
+        /// <summary>Black on a ladder from the master list. Two machines on the SAME code still merge
+        /// onto one printed line; a different code, or an own-ladder below, splits them -- the fold keys
+        /// on the ladder rather than the rate, because with tiers there is no single rate to key on.</summary>
+        public Mach BkLadder(string code, decimal initial)
+        {
+            Meter m = new Meter();
+            m.Type = "BK"; m.Role = "BK"; m.Initial = initial; m.MultiPriceCode = code;
+            Meters.Add(m); return this;
+        }
+
+        /// <summary>Black on a ladder of this meter's own. Pairs: boundary, price, boundary, price...
+        /// Never merges with anything, because the ladder is keyed to this one meter.</summary>
+        public Mach BkTiers(decimal initial, params decimal[] pairs)
+        {
+            Meter m = new Meter();
+            m.Type = "BK"; m.Role = "BK"; m.Initial = initial;
+            m.Tiers = new List<decimal[]>();
+            for (int i = 0; i + 1 < pairs.Length; i += 2)
+                m.Tiers.Add(new decimal[] { pairs[i], pairs[i + 1] });
+            Meters.Add(m); return this;
+        }
+
         public Mach Group(string g) { MergeGroup = g; return this; }
+        public Mach Branch(string b) { BillGroup = b; MergeGroup = b; return this; }
         public Mach Online() { MachineMode = "ONLINE"; return this; }
         public Mach Offline() { MachineMode = "OFFLINE"; return this; }
     }
@@ -254,6 +300,12 @@ static class SeedContracts
     {
         public string No = "";
         public string Format = "";        // '' = the legacy control
+
+        /// <summary>Tier bands agreed for the contract's black line as a whole, "boundary|price;...".
+        /// Written to zSCP2_ContractRentalPrice on the copies side, which is where the engine looks.
+        /// </summary>
+        public string GroupLadderBk = "";
+        public string GroupLadderCl = "";
         public string Desc = "";
         public string Prints = "";        // what the invoice should come out as, for the console
         public List<Mach> Machines = new List<Mach>();
@@ -488,6 +540,251 @@ static class SeedContracts
         c12.Machines.Add(M("imageFORCE C7165", "DEMO12-005").Rent(450m).Bk(0.0250m, 342800m).Cl(0.2500m, 129440m));
         all.Add(c12);
 
+        // -- Mode 13 -- one invoice per machine with EVERYTHING that machine owes on it: its rental
+        // and its own black and colour, on one page. The only split "S" without "rental apart", and
+        // the one shape the other twelve never reach -- DEMO-11 also cuts per machine but sends the
+        // rental to a second invoice, so no demo showed a machine's whole month on a single page.
+        //
+        // Three machines at three different rentals and three different rates, so nothing could merge
+        // even if the split allowed it: each invoice is unmistakably one machine's own.
+        Ct c13 = New("DEMO-13", "PERMACHINE-ONE",
+            "Mode 13 - one invoice per machine; rental and BK+CL together on it",
+            "3 invoices, 3 lines each: RENTAL + BK + CL for that one machine = 9 lines");
+        c13.Machines.Add(M("iR-ADV C3560i", "DEMO13-001").Rent(495m).Bk(0.0250m, 128400m).Cl(0.2500m, 44100m));
+        c13.Machines.Add(M("iR-ADV DX C5760i", "DEMO13-002").Rent(815m).Bk(0.0230m, 214750m).Cl(0.2300m, 68320m));
+        c13.Machines.Add(M("imageFORCE C7165", "DEMO13-003").Rent(1180m).Bk(0.0210m, 392610m).Cl(0.2100m, 147880m));
+        all.Add(c13);
+
+        // -- Mode 14 -- the committed minimum, all three answers on one page. The invented readings
+        // climb with the machine's position (black 4,813 then 5,426 then 6,039), so the rates below are
+        // what decide whether a machine reaches its floor -- machine 2 is priced an order down on
+        // purpose so it falls short and gets topped up.
+        //
+        //   001  120.33 + 259.25 = 379.58  vs a floor of 300  -> over it, nothing happens
+        //   002   54.26 + 117.40 = 171.66  vs a floor of 300  -> short, a COMMIT line makes up 128.34
+        //   003  150.98 + 327.75 = 478.73  no floor at all    -> the control
+        Ct c14 = New("DEMO-14", "1INV-MMACHINE",
+            "Mode 14 - committed minimum per machine; one over its floor, one short, one without",
+            "1 INV: 1 rental line + BK/CL per machine + ONE commit top-up (DEMO14-002 only)");
+        c14.Machines.Add(M("iR-ADV C3560i", "DEMO14-001").Rent(450m)
+                          .Bk(0.0250m, 118400m).Cl(0.2500m, 41200m).Commit(300m, "S"));
+        c14.Machines.Add(M("iR-ADV C3560i", "DEMO14-002").Rent(450m)
+                          .Bk(0.0100m, 96350m).Cl(0.1000m, 33780m).Commit(300m, "S"));
+        c14.Machines.Add(M("iR-ADV C3560i", "DEMO14-003").Rent(450m)
+                          .Bk(0.0250m, 205110m).Cl(0.2500m, 62940m));
+        all.Add(c14);
+
+        // -- Mode 15 -- the rental waive, on ONE invoice because that is the only place it means
+        // anything: the credit and the copies that earned it have to be on the same page.
+        //
+        //   001  copies come to 379.58, the deal says reach 300  -> fires, -495.00 off the rental
+        //   002  copies come to 429.15, the deal says reach 900  -> silent, no line at all
+        //   003  free for the first 24 months and this is month 13 -> fires on the window, -640.00
+        Ct c15 = New("DEMO-15", "1INV-MMACHINE",
+            "Mode 15 - rental waive on one invoice; by usage, not reached, and by free months",
+            "1 INV: 1 rental line + BK/CL per machine + 2 waive contras (001 by target, 003 by window)");
+        c15.Machines.Add(M("iR-ADV C3560i", "DEMO15-001").Rent(495m)
+                          .Bk(0.0250m, 118400m).Cl(0.2500m, 41200m).Waive(495m, 0, 300m, "BKCL"));
+        c15.Machines.Add(M("iR-ADV C3560i", "DEMO15-002").Rent(815m)
+                          .Bk(0.0250m, 96350m).Cl(0.2500m, 33780m).Waive(815m, 0, 900m, "BKCL"));
+        c15.Machines.Add(M("iR-ADV C3560i", "DEMO15-003").Rent(640m)
+                          .Bk(0.0250m, 205110m).Cl(0.2500m, 62940m).Waive(640m, 24, 0m, "BKCL"));
+        all.Add(c15);
+
+        // -- Mode 16 -- tiered pricing, and what it does to the LINES. Everything here is in one group
+        // and every rental is 450, so the fold is free to merge all five; what actually splits the black
+        // lines is the ladder, because with tiers there is no single rate a line could print.
+        //
+        //   001 + 005  the same master ladder  -> ONE line for the two of them
+        //   002        a ladder of its own     -> alone, whatever it shares with anyone
+        //   003        a free allowance written as a first band at 0.00
+        //   004        no ladder, a flat rate  -> alone again, on the rate
+        // Colour is a flat 0.2500 on all five, so it comes out as the single line the group asked for.
+        Ct c16 = New("DEMO-16", "1INV-ALL",
+            "Mode 16 - tiered (multi) pricing; the ladder is what splits the line, not the rate",
+            "1 INV: 1 rental line + 4 BK lines (2 machines share a master ladder) + 1 CL line = 6");
+        c16.Machines.Add(M("iR-ADV C3560i", "DEMO16-001").Rent(450m)
+                          .BkLadder("BK +P - 0.028 FOC300", 118400m).Cl(0.2500m, 41200m));
+        c16.Machines.Add(M("iR-ADV C3560i", "DEMO16-002").Rent(450m)
+                          .BkTiers(96350m, 2000m, 0.0300m, 5000m, 0.0250m, 100000000m, 0.0200m)
+                          .Cl(0.2500m, 33780m));
+        c16.Machines.Add(M("iR-ADV C3560i", "DEMO16-003").Rent(450m)
+                          .BkTiers(205110m, 2500m, 0m, 100000000m, 0.0250m)
+                          .Cl(0.2500m, 62940m));
+        c16.Machines.Add(M("iR-ADV C3560i", "DEMO16-004").Rent(450m)
+                          .Bk(0.0250m, 187620m).Cl(0.2500m, 58015m));
+        c16.Machines.Add(M("iR-ADV C3560i", "DEMO16-005").Rent(450m)
+                          .BkLadder("BK +P - 0.028 FOC300", 342800m).Cl(0.2500m, 129440m));
+        all.Add(c16);
+
+        // -- Mode 17 & 18 -- the two ways to floor a merged line, side by side. The user's own
+        // worksheet: same three machines, same copies, SAME invoice shape -- one merged copies row and
+        // ONE minimum row -- and only the arithmetic differs.
+        //
+        //   17  a floor on EACH machine   350 / 400 / 450, each measured against its own copies,
+        //       the row printing the shortfalls added up
+        //   18  ONE floor for the GROUP   1,500 measured against the copies added up
+        //
+        // Everything else is held identical on purpose, so a difference in the output can only come
+        // from the thing being demonstrated. Copies are 4,813 / 5,426 / 6,039 black at 0.02 (the
+        // invented readings climb with position), colour 1,037 / 1,174 / 1,311 at 0.20.
+        Ct c17 = New("DEMO-17", "1INV-ALL",
+            "Mode 17 - a minimum on EACH machine, copies merged onto one line",
+            "1 INV: 1 rental + 1 BK + 1 CL + ONE minimum row carrying the three shortfalls added up");
+        c17.Machines.Add(M("iR-ADV C3560i", "DEMO17-001").Rent(450m)
+                          .Bk(0.0200m, 118400m).Cl(0.2000m, 41200m).Commit(350m, "S"));
+        c17.Machines.Add(M("iR-ADV C3560i", "DEMO17-002").Rent(450m)
+                          .Bk(0.0200m, 96350m).Cl(0.2000m, 33780m).Commit(400m, "S"));
+        c17.Machines.Add(M("iR-ADV C3560i", "DEMO17-003").Rent(450m)
+                          .Bk(0.0200m, 205110m).Cl(0.2000m, 62940m).Commit(450m, "S"));
+        all.Add(c17);
+
+        // The group floor lives on ONE machine and is scoped to the group; the other two carry none.
+        // Six meters against seven, and that difference is the whole point -- one deal, one meter.
+        Ct c18 = New("DEMO-18", "1INV-ALL",
+            "Mode 18 - ONE minimum for the whole group, copies merged onto one line",
+            "1 INV: 1 rental + 1 BK + 1 CL + ONE minimum row measured on the group total");
+        c18.Machines.Add(M("iR-ADV C3560i", "DEMO18-001").Rent(450m)
+                          .Bk(0.0200m, 118400m).Cl(0.2000m, 41200m).Commit(1500m, "G"));
+        c18.Machines.Add(M("iR-ADV C3560i", "DEMO18-002").Rent(450m)
+                          .Bk(0.0200m, 96350m).Cl(0.2000m, 33780m));
+        c18.Machines.Add(M("iR-ADV C3560i", "DEMO18-003").Rent(450m)
+                          .Bk(0.0200m, 205110m).Cl(0.2000m, 62940m));
+        all.Add(c18);
+
+        // -- Mode 19 & 20 -- the two ways to waive a rental, side by side. A waive is a credit against
+        // the RENTAL decided by what the COPIES came to, so it only means anything when both land on
+        // the same piece of paper: one invoice for everything.
+        //
+        //   19  ONE waive for the rental line   the three machines' copies added up against one target,
+        //       and the whole line's rental comes off
+        //   20  a waive on EACH machine         each measured against its own copies, so a machine that
+        //       prints enough loses its rental while the others keep paying
+        //
+        // Same three machines, same rates, same targets where comparable -- only the scope differs.
+        Ct c19 = New("DEMO-19", "1INV-ALL",
+            "Mode 19 - ONE rental waive for the whole line, on the group's copies",
+            "1 INV: rental + BK + CL, and one waive contra for the whole line when the copies reach 1,000");
+        c19.Machines.Add(M("iR-ADV C3560i", "DEMO19-001").Rent(450m)
+                          .Bk(0.0200m, 118400m).Cl(0.2000m, 41200m).GroupWaive(1350m, 1000m));
+        c19.Machines.Add(M("iR-ADV C3560i", "DEMO19-002").Rent(450m)
+                          .Bk(0.0200m, 96350m).Cl(0.2000m, 33780m));
+        c19.Machines.Add(M("iR-ADV C3560i", "DEMO19-003").Rent(450m)
+                          .Bk(0.0200m, 205110m).Cl(0.2000m, 62940m));
+        all.Add(c19);
+
+        // Targets set so the three machines answer differently on the same month -- the point of the
+        // per-machine shape is that they are judged one at a time.
+        Ct c20 = New("DEMO-20", "1INV-ALL",
+            "Mode 20 - a rental waive on EACH machine, on that machine's own copies",
+            "1 INV: rental + BK + CL, and a waive contra only for the machines that reached their target");
+        c20.Machines.Add(M("iR-ADV C3560i", "DEMO20-001").Rent(450m)
+                          .Bk(0.0200m, 118400m).Cl(0.2000m, 41200m).Waive(450m, 0, 350m, "BKCL"));
+        c20.Machines.Add(M("iR-ADV C3560i", "DEMO20-002").Rent(450m)
+                          .Bk(0.0200m, 96350m).Cl(0.2000m, 33780m).Waive(450m, 0, 350m, "BKCL"));
+        c20.Machines.Add(M("iR-ADV C3560i", "DEMO20-003").Rent(450m)
+                          .Bk(0.0200m, 205110m).Cl(0.2000m, 62940m).Waive(450m, 0, 350m, "BKCL"));
+        all.Add(c20);
+
+        // -- Mode 21 -- one machine, one invoice, and everything that machine's month contains on it:
+        // the rental, the waive that can take the rental away, the floor under its copies, and the
+        // copies themselves. This is the shape a customer means by "bill each machine separately" --
+        // not five invoices for five things, ONE invoice per machine that answers for that machine.
+        //
+        // A rental waive is allowed here for the same reason it is allowed on a single invoice: the
+        // machine's rental and the machine's copies are on the same piece of paper, so the credit and
+        // the reason for it are printed together. Only sending the rental to an invoice of its own
+        // breaks that, and this split does not.
+        //
+        // The floor and the waive are measured over the SAME copies but do different things -- the
+        // floor tops the COPIES up, the waive credits the RENT -- and the waive is judged first, on
+        // what the machine actually printed, before any top-up. So the three machines answer three
+        // different ways on one contract:
+        //
+        //   001  copies 400  target 300, floor 300  -> waive FIRES, floor met      (COMMIT prints 0.00)
+        //   002  copies 150  target 300, floor 300  -> waive silent, floor tops up 150
+        //   003  copies 300  target 250, floor 400  -> waive FIRES *and* floor tops up 100
+        Ct c21 = New("DEMO-21", "PERMACHINE-ONE",
+            "Mode 21 - one invoice per machine carrying rental + waive + minimum + BK/CL",
+            "3 invoices: RENTAL, WAIVE, COMMIT, BK, CL for that one machine (002 has no waive line)");
+        c21.Machines.Add(M("iR-ADV C3560i", "DEMO21-001").Rent(450m)
+                          .Bk(0.0200m, 118400m).Cl(0.2000m, 41200m)
+                          .Waive(450m, 0, 300m, "BKCL").Commit(300m, "S"));
+        c21.Machines.Add(M("iR-ADV C3560i", "DEMO21-002").Rent(450m)
+                          .Bk(0.0200m, 96350m).Cl(0.2000m, 33780m)
+                          .Waive(450m, 0, 300m, "BKCL").Commit(300m, "S"));
+        c21.Machines.Add(M("iR-ADV C3560i", "DEMO21-003").Rent(450m)
+                          .Bk(0.0200m, 205110m).Cl(0.2000m, 62940m)
+                          .Waive(450m, 0, 250m, "BKCL").Commit(400m, "S"));
+        all.Add(c21);
+
+        // -- Mode 22 -- tier pricing agreed over the GROUP. Three machines print 5,000 black each.
+        // Every one of them alone would pay the first band on its own copies; together they climb one
+        // ladder once, and the 15,000 reaches the cheap end.
+        //
+        //   per machine   5,000 @ the 2,000/5,000/rest ladder  = 60.00 + 75.00        =    135.00 each
+        //                                                                   three of them   405.00
+        //   as a group   15,000 over the same ladder = 2,000@.030 + 3,000@.025 + 10,000@.020
+        //                                            =  60.00 +  75.00 + 200.00      =    335.00
+        //
+        // Same machines, same copies, same bands -- 70.00 apart. That difference IS the feature.
+        Ct c22 = New("DEMO-22", "1INV-ALL",
+            "Mode 22 - tier pricing agreed over the whole group, not machine by machine",
+            "1 INV: ONE black line of 15,000 climbing the group's ladder once = 335.00");
+        c22.Machines.Add(M("iR-ADV C3560i", "DEMO22-001").Rent(450m)
+                          .Bk(0.0300m, 118400m).Cl(0.2000m, 41200m));
+        c22.Machines.Add(M("iR-ADV C3560i", "DEMO22-002").Rent(450m)
+                          .Bk(0.0300m, 96350m).Cl(0.2000m, 33780m));
+        c22.Machines.Add(M("iR-ADV C3560i", "DEMO22-003").Rent(450m)
+                          .Bk(0.0300m, 205110m).Cl(0.2000m, 62940m));
+        c22.GroupLadderBk = "2000|0.030;5000|0.025;100000000|0.020";
+        all.Add(c22);
+
+        // -- Mode 23 -- the other half of tier pricing: one invoice per machine, and every machine
+        // priced on a ladder of its OWN. Nothing merges here and nothing is meant to -- a ladder that
+        // belongs to one machine is the statement that this machine is priced unlike the others, and
+        // the split gives each of them its own page to say it on.
+        //
+        // All three ways a machine can carry a ladder are on this one contract, so the three invoices
+        // are a side-by-side of what each looks like when it prints:
+        //
+        //   001  its own bands, with a free first band  3,000 free, 10,000 @ .025, rest @ .020
+        //   002  its own bands, no free band            5,000 @ .030, rest @ .022
+        //   003  a ladder off the master price list     BK +P - 0.028 FOC300
+        Ct c23 = New("DEMO-23", "PERMACHINE-ONE",
+            "Mode 23 - one invoice per machine, each machine on its own tier ladder",
+            "3 invoices, 3 lines each: RENTAL + a laddered BK + CL for that one machine");
+        c23.Machines.Add(M("iR-ADV C3560i", "DEMO23-001").Rent(450m)
+                          .BkTiers(118400m, 3000m, 0.0000m, 10000m, 0.0250m, 100000000m, 0.0200m)
+                          .Cl(0.2000m, 41200m));
+        c23.Machines.Add(M("iR-ADV DX C3940i", "DEMO23-002").Rent(450m)
+                          .BkTiers(96350m, 5000m, 0.0300m, 100000000m, 0.0220m)
+                          .Cl(0.2000m, 33780m));
+        c23.Machines.Add(M("imageFORCE C7165", "DEMO23-003").Rent(450m)
+                          .BkLadder("BK +P - 0.028 FOC300", 205110m)
+                          .Cl(0.2000m, 62940m));
+        all.Add(c23);
+
+        // -- Mode 24 -- one contract, two branches, two invoices. The customer is one debtor with one
+        // agreement, but each branch settles its own paper, so every machine carries the branch it is
+        // billed under and the run makes one invoice per branch.
+        //
+        // The branches are also the merge groups, and they have to be: a printed line lives on one
+        // invoice, so machines billed apart can never share one. Merging across them is refused on the
+        // pricing screen -- this contract is what that refusal is about.
+        Ct c24 = New("DEMO-24", "1INV-ALL",
+            "Mode 24 - one contract, two branches, one invoice each",
+            "2 INV: NORTH prints rental + BK + CL for its 2 machines; SOUTH the same for its 2");
+        c24.Machines.Add(M("iR-ADV C3560i", "DEMO24-001").Branch("NORTH").Rent(450m)
+                          .Bk(0.0250m, 118400m).Cl(0.2500m, 41200m));
+        c24.Machines.Add(M("iR-ADV C3560i", "DEMO24-002").Branch("NORTH").Rent(450m)
+                          .Bk(0.0250m, 96350m).Cl(0.2500m, 33780m));
+        c24.Machines.Add(M("iR-ADV C3560i", "DEMO24-003").Branch("SOUTH").Rent(450m)
+                          .Bk(0.0250m, 205110m).Cl(0.2500m, 62940m));
+        c24.Machines.Add(M("iR-ADV C3560i", "DEMO24-004").Branch("SOUTH").Rent(450m)
+                          .Bk(0.0250m, 187620m).Cl(0.2500m, 58015m));
+        all.Add(c24);
+
         return all;
     }
 
@@ -549,6 +846,10 @@ static class SeedContracts
         using (SqlConnection cn = new SqlConnection(_conn))
         {
             cn.Open();
+            // Own-ladders first: they hang off the meters and would be orphaned by the delete below.
+            Exec(cn, "DELETE FROM dbo.zSCP2_ItemMeterPrice WHERE ItemMeterKey IN " +
+                "(SELECT ItemMeterKey FROM dbo.zSCP2_ItemMeter WHERE ItemKey IN " +
+                "(SELECT ItemKey FROM dbo.zSCP2_Item WHERE ServiceItemNo LIKE 'DEMO-%'))");
             int meters = Exec(cn, "DELETE FROM dbo.zSCP2_ItemMeter WHERE ItemKey IN " +
                 "(SELECT ItemKey FROM dbo.zSCP2_Item WHERE ServiceItemNo LIKE 'DEMO-%')");
             int machines = Exec(cn, "DELETE FROM dbo.zSCP2_Item WHERE ServiceItemNo LIKE 'DEMO-%'");
@@ -592,6 +893,7 @@ static class SeedContracts
             case "2INV-EACH":      split = "RS";  rMode = 'S'; mMode = 'S'; fname = "2 invoices, rental per machine, BK+CL per machine"; return;
             case "2INV-RMACHINE":  split = "RS";  rMode = 'S'; mMode = 'A'; fname = "2 invoices, rental per machine, BK+CL 1 line each"; return;
             case "PERMACHINE":     split = "PMS"; rMode = 'S'; mMode = 'S'; fname = "One rental + one meter invoice per machine"; return;
+            case "PERMACHINE-ONE": split = "PM";  rMode = 'S'; mMode = 'S'; fname = "One invoice per machine, rental and meters together"; return;
         }
         split = "ONE"; rMode = 'A'; mMode = 'S'; fname = "(legacy - the old rules, nothing grouped)";
     }
@@ -651,6 +953,25 @@ static class SeedContracts
         }
         _meterMade += meters;
 
+        // Tier bands agreed for the copies of the whole group. They live where every agreed group
+        // figure lives -- one row per side per group -- because that is the row the engine reads.
+        if (c.GroupLadderBk.Length > 0 || c.GroupLadderCl.Length > 0)
+        {
+            string grp = GroupFor(mMode, c.Machines[0].Model);
+            using (SqlCommand cmd = new SqlCommand(
+                "DELETE FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey=@ck AND Side='M' AND GroupCode=@g; " +
+                "INSERT INTO dbo.zSCP2_ContractRentalPrice " +
+                "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, LadderBk, LadderCl, LastModified) " +
+                "VALUES (@ck,'M',@g,0,0,0,@lb,@lc,GETDATE());", cn))
+            {
+                cmd.Parameters.AddWithValue("@ck", ck);
+                cmd.Parameters.AddWithValue("@g", grp);
+                cmd.Parameters.AddWithValue("@lb", c.GroupLadderBk);
+                cmd.Parameters.AddWithValue("@lc", c.GroupLadderCl);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         Console.WriteLine();
         Console.WriteLine("  " + c.No + "  " + (c.Format.Length > 0 ? c.Format : "(none)") +
                           "   split=" + split + " rental=" + rMode + " meter=" + mMode +
@@ -668,9 +989,9 @@ static class SeedContracts
         using (SqlCommand cmd = new SqlCommand(
             "INSERT INTO dbo.zSCP2_Item " +
             "(ContractKey, ServiceItemNo, ItemCode, SerialNumber, [Description], Pos, " +
-            " MergeGroupCode, MergeGroupCodeMeter, LineGroupCode, Inactive, IsGroupItem, MachineMode, " +
+            " MergeGroupCode, MergeGroupCodeMeter, BillGroupCode, LineGroupCode, Inactive, IsGroupItem, MachineMode, " +
             " ServiceStartDate, ServiceExpiryDate, LastModified) " +
-            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, @grpm, @label, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
+            "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @grp, @grpm, @bg, @label, 'N', 'N', @mmode, @sd, @ed, GETDATE()); " +
             "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
         {
             cmd.Parameters.AddWithValue("@ck", ck);
@@ -682,6 +1003,7 @@ static class SeedContracts
             cmd.Parameters.AddWithValue("@pos", pos);
             cmd.Parameters.AddWithValue("@grp", rentalGroup ?? "");
             cmd.Parameters.AddWithValue("@grpm", meterGroup ?? "");
+            cmd.Parameters.AddWithValue("@bg", (m.BillGroup ?? "").Trim().ToUpperInvariant());
             cmd.Parameters.AddWithValue("@label", DutyLabel(m.Model));
             cmd.Parameters.AddWithValue("@mmode", m.MachineMode);
             cmd.Parameters.AddWithValue("@sd", START);
@@ -700,8 +1022,9 @@ static class SeedContracts
             " RentalStartDate, RentalMonths, RentalBasis, " +
             " WaiveFirstNMonths, WaiveTargetAmount, WaivePartialPct, WaiveScope, " +
             " WaivePartialThreshold, WaivePartialAmount, CommitScope, LastModified) " +
-            "VALUES (@ik, @type, @desc, @role, '', @min, @rate, '', 0, 0, @init, " +
-            " @rsd, @rm, @rb, @wn, @wt, 100, @ws, @wpt, @wpa, @cs, GETDATE())", cn))
+            "VALUES (@ik, @type, @desc, @role, '', @min, @rate, @mpc, 0, 0, @init, " +
+            " @rsd, @rm, @rb, @wn, @wt, 100, @ws, @wpt, @wpa, @cs, GETDATE()); " +
+            "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn))
         {
             cmd.Parameters.AddWithValue("@ik", ik);
             cmd.Parameters.AddWithValue("@type", mt.Type);
@@ -719,7 +1042,22 @@ static class SeedContracts
             cmd.Parameters.AddWithValue("@wpt", mt.WaivePartialThreshold);
             cmd.Parameters.AddWithValue("@wpa", mt.WaivePartialAmount);
             cmd.Parameters.AddWithValue("@cs", mt.CommitScope);
-            cmd.ExecuteNonQuery();
+            cmd.Parameters.AddWithValue("@mpc", mt.MultiPriceCode);
+            long imk = Convert.ToInt64(cmd.ExecuteScalar());
+
+            if (mt.Tiers == null || mt.Tiers.Count == 0) return;
+            // An own-ladder lives beside the meter, and the engine picks it up under the key
+            // "#<ItemMeterKey>" without the meter naming a code at all.
+            foreach (decimal[] t in mt.Tiers)
+                using (SqlCommand tc = new SqlCommand(
+                    "INSERT INTO dbo.zSCP2_ItemMeterPrice (ItemMeterKey, MeterReading, UnitPrice) " +
+                    "VALUES (@k, @r, @p)", cn))
+                {
+                    tc.Parameters.AddWithValue("@k", imk);
+                    tc.Parameters.AddWithValue("@r", t[0]);
+                    tc.Parameters.AddWithValue("@p", t[1]);
+                    tc.ExecuteNonQuery();
+                }
         }
     }
 }

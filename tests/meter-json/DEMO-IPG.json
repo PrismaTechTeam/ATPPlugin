@@ -1,0 +1,38 @@
+[
+  {
+    "Code": "DEMO-IPG-001",
+    "SerialNumber": "4MD20044",
+    "TotalBK": 7187,
+    "TotalCL": 14747
+  },
+  {
+    "Code": "DEMO-IPG-002",
+    "SerialNumber": "4NL02069",
+    "TotalBK": 30021,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IPG-003",
+    "SerialNumber": "4NL02178",
+    "TotalBK": 188091,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IPG-004",
+    "SerialNumber": "4NL02167",
+    "TotalBK": 54997,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IPG-005",
+    "SerialNumber": "4NL02176",
+    "TotalBK": 57162,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IPG-006",
+    "SerialNumber": "4NL02017",
+    "TotalBK": 33454,
+    "TotalCL": 0
+  }
+]

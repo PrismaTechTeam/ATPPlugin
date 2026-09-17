@@ -1,0 +1,74 @@
+[
+  {
+    "Code": "DEMO-JPJ-001",
+    "SerialNumber": "28B01247",
+    "TotalBK": 597047,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-JPJ-002",
+    "SerialNumber": "4LS03017",
+    "TotalBK": 341016,
+    "TotalCL": 41384
+  },
+  {
+    "Code": "DEMO-JPJ-003",
+    "SerialNumber": "4LS03018",
+    "TotalBK": 205766,
+    "TotalCL": 58723
+  },
+  {
+    "Code": "DEMO-JPJ-004",
+    "SerialNumber": "4LS03019",
+    "TotalBK": 132086,
+    "TotalCL": 13789
+  },
+  {
+    "Code": "DEMO-JPJ-005",
+    "SerialNumber": "4LS03033",
+    "TotalBK": 155581,
+    "TotalCL": 41373
+  },
+  {
+    "Code": "DEMO-JPJ-006",
+    "SerialNumber": "4LS03010",
+    "TotalBK": 139523,
+    "TotalCL": 12738
+  },
+  {
+    "Code": "DEMO-JPJ-007",
+    "SerialNumber": "4MP02932",
+    "TotalBK": 93872,
+    "TotalCL": 8866
+  },
+  {
+    "Code": "DEMO-JPJ-008",
+    "SerialNumber": "4MP02938",
+    "TotalBK": 214752,
+    "TotalCL": 7255
+  },
+  {
+    "Code": "DEMO-JPJ-009",
+    "SerialNumber": "4MP02939",
+    "TotalBK": 38698,
+    "TotalCL": 12180
+  },
+  {
+    "Code": "DEMO-JPJ-010",
+    "SerialNumber": "4MP02582",
+    "TotalBK": 59702,
+    "TotalCL": 7606
+  },
+  {
+    "Code": "DEMO-JPJ-011",
+    "SerialNumber": "4MP02949",
+    "TotalBK": 38792,
+    "TotalCL": 9797
+  },
+  {
+    "Code": "DEMO-JPJ-012",
+    "SerialNumber": "4MP02580",
+    "TotalBK": 26602,
+    "TotalCL": 12524
+  }
+]

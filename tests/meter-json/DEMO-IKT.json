@@ -1,0 +1,26 @@
+[
+  {
+    "Code": "DEMO-IKT-001",
+    "SerialNumber": "4LS20112",
+    "TotalBK": 84746,
+    "TotalCL": 36027
+  },
+  {
+    "Code": "DEMO-IKT-002",
+    "SerialNumber": "36A01664",
+    "TotalBK": 165537,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IKT-003",
+    "SerialNumber": "36A70005",
+    "TotalBK": 168085,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-IKT-004",
+    "SerialNumber": "XYM01741",
+    "TotalBK": 96079,
+    "TotalCL": 0
+  }
+]

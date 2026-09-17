@@ -1,0 +1,38 @@
+[
+  {
+    "Code": "DEMO-PG-001",
+    "SerialNumber": "PG-0001",
+    "TotalBK": 177286,
+    "TotalCL": 51386
+  },
+  {
+    "Code": "DEMO-PG-002",
+    "SerialNumber": "PG-0002",
+    "TotalBK": 115080,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PG-003",
+    "SerialNumber": "PG-0003",
+    "TotalBK": 96098,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PG-004",
+    "SerialNumber": "PG-0004",
+    "TotalBK": 144833,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PG-005",
+    "SerialNumber": "PG-0005",
+    "TotalBK": 89914,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PG-006",
+    "SerialNumber": "PG-0006",
+    "TotalBK": 1020498,
+    "TotalCL": 0
+  }
+]

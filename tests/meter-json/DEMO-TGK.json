@@ -1,0 +1,32 @@
+[
+  {
+    "Code": "DEMO-TGK-001",
+    "SerialNumber": "3MB70006",
+    "TotalBK": 21833,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-TGK-002",
+    "SerialNumber": "3MB70008",
+    "TotalBK": 38011,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-TGK-003",
+    "SerialNumber": "4WE00869",
+    "TotalBK": 18366,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-TGK-004",
+    "SerialNumber": "3MB10304",
+    "TotalBK": 122274,
+    "TotalCL": 13452
+  },
+  {
+    "Code": "DEMO-TGK-005",
+    "SerialNumber": "2GS03078",
+    "TotalBK": 34160,
+    "TotalCL": 5011
+  }
+]

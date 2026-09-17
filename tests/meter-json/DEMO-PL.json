@@ -1,0 +1,44 @@
+[
+  {
+    "Code": "DEMO-PL-001",
+    "SerialNumber": "4MD02040",
+    "TotalBK": 189534,
+    "TotalCL": 15441
+  },
+  {
+    "Code": "DEMO-PL-002",
+    "SerialNumber": "4MD02032",
+    "TotalBK": 213889,
+    "TotalCL": 46451
+  },
+  {
+    "Code": "DEMO-PL-003",
+    "SerialNumber": "4MD02037",
+    "TotalBK": 87634,
+    "TotalCL": 17058
+  },
+  {
+    "Code": "DEMO-PL-004",
+    "SerialNumber": "4MD02034",
+    "TotalBK": 214226,
+    "TotalCL": 32020
+  },
+  {
+    "Code": "DEMO-PL-005",
+    "SerialNumber": "4MD02033",
+    "TotalBK": 270607,
+    "TotalCL": 43529
+  },
+  {
+    "Code": "DEMO-PL-006",
+    "SerialNumber": "4MD02036",
+    "TotalBK": 68261,
+    "TotalCL": 28881
+  },
+  {
+    "Code": "DEMO-PL-007",
+    "SerialNumber": "4MD02038",
+    "TotalBK": 26385,
+    "TotalCL": 2328
+  }
+]

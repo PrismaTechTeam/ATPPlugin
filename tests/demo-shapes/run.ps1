@@ -5,7 +5,9 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $ac  = "C:\Program Files\AutoCount\Accounting 2.2"
 $dll = "C:\Dev\Plugin\ATP\ServiceContractPhotocopier\bin\Debug\ServiceContractPhotocopier.dll"
 & $csc /nologo /target:exe /platform:x64 /out:"$sp\demoshapes.exe" /r:"$dll" `
-       /r:"$ac\AutoCount.dll" /r:"$ac\AutoCount.Accounting.dll" /r:System.Data.dll "$sp\Program.cs"
+       /r:"$ac\AutoCount.dll" /r:"$ac\AutoCount.Accounting.dll" /r:System.Data.dll `
+       /r:"$ac\Newtonsoft.Json.dll" /r:System.Drawing.dll `
+       "$sp\Program.cs" "$sp\ScreenCheck.cs"
 if ($LASTEXITCODE -ne 0) { exit 1 }
 & "$sp\demoshapes.exe" $Like
 exit $LASTEXITCODE

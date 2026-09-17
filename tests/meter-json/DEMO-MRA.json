@@ -1,0 +1,32 @@
+[
+  {
+    "Code": "DEMO-MRA-001",
+    "SerialNumber": "4MU10545",
+    "TotalBK": 128893,
+    "TotalCL": 27280
+  },
+  {
+    "Code": "DEMO-MRA-002",
+    "SerialNumber": "4MU10548",
+    "TotalBK": 56967,
+    "TotalCL": 25290
+  },
+  {
+    "Code": "DEMO-MRA-003",
+    "SerialNumber": "4MU10549",
+    "TotalBK": 103359,
+    "TotalCL": 20066
+  },
+  {
+    "Code": "DEMO-MRA-004",
+    "SerialNumber": "4MU10551",
+    "TotalBK": 67525,
+    "TotalCL": 20178
+  },
+  {
+    "Code": "DEMO-MRA-005",
+    "SerialNumber": "4MU10558",
+    "TotalBK": 44773,
+    "TotalCL": 6242
+  }
+]

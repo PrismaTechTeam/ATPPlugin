@@ -1,0 +1,110 @@
+[
+  {
+    "Code": "DEMO-KEN-001",
+    "SerialNumber": "JWF54420",
+    "TotalBK": 283570,
+    "TotalCL": 34224
+  },
+  {
+    "Code": "DEMO-KEN-002",
+    "SerialNumber": "JWF02526",
+    "TotalBK": 81003,
+    "TotalCL": 6085
+  },
+  {
+    "Code": "DEMO-KEN-003",
+    "SerialNumber": "JWF69666",
+    "TotalBK": 60650,
+    "TotalCL": 4422
+  },
+  {
+    "Code": "DEMO-KEN-004",
+    "SerialNumber": "JWF64879",
+    "TotalBK": 80388,
+    "TotalCL": 22627
+  },
+  {
+    "Code": "DEMO-KEN-005",
+    "SerialNumber": "JWF52552",
+    "TotalBK": 18345,
+    "TotalCL": 3126
+  },
+  {
+    "Code": "DEMO-KEN-006",
+    "SerialNumber": "JWF52099",
+    "TotalBK": 73136,
+    "TotalCL": 5753
+  },
+  {
+    "Code": "DEMO-KEN-007",
+    "SerialNumber": "JWF41255",
+    "TotalBK": 48881,
+    "TotalCL": 11155
+  },
+  {
+    "Code": "DEMO-KEN-008",
+    "SerialNumber": "JWF41877",
+    "TotalBK": 56303,
+    "TotalCL": 8955
+  },
+  {
+    "Code": "DEMO-KEN-009",
+    "SerialNumber": "JWF49995",
+    "TotalBK": 24202,
+    "TotalCL": 22012
+  },
+  {
+    "Code": "DEMO-KEN-010",
+    "SerialNumber": "JWF46037",
+    "TotalBK": 17731,
+    "TotalCL": 8077
+  },
+  {
+    "Code": "DEMO-KEN-011",
+    "SerialNumber": "JWF86425",
+    "TotalBK": 28991,
+    "TotalCL": 2640
+  },
+  {
+    "Code": "DEMO-KEN-012",
+    "SerialNumber": "XYM01450",
+    "TotalBK": 66106,
+    "TotalCL": 7683
+  },
+  {
+    "Code": "DEMO-KEN-013",
+    "SerialNumber": "WSR02066",
+    "TotalBK": 245522,
+    "TotalCL": 862
+  },
+  {
+    "Code": "DEMO-KEN-014",
+    "SerialNumber": "WSR01600",
+    "TotalBK": 69843,
+    "TotalCL": 9987
+  },
+  {
+    "Code": "DEMO-KEN-015",
+    "SerialNumber": "WSR01752",
+    "TotalBK": 39345,
+    "TotalCL": 12224
+  },
+  {
+    "Code": "DEMO-KEN-016",
+    "SerialNumber": "WSR04014",
+    "TotalBK": 34518,
+    "TotalCL": 389
+  },
+  {
+    "Code": "DEMO-KEN-017",
+    "SerialNumber": "WSR01919",
+    "TotalBK": 10196,
+    "TotalCL": 506
+  },
+  {
+    "Code": "DEMO-KEN-018",
+    "SerialNumber": "2GS04044",
+    "TotalBK": 26188,
+    "TotalCL": 6018
+  }
+]

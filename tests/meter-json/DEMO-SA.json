@@ -1,0 +1,38 @@
+[
+  {
+    "Code": "DEMO-SA-001",
+    "SerialNumber": "4NL01863",
+    "TotalBK": 140450,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-SA-002",
+    "SerialNumber": "4NL01864",
+    "TotalBK": 54176,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-SA-003",
+    "SerialNumber": "4NL01865",
+    "TotalBK": 35598,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-SA-004",
+    "SerialNumber": "UMW05916",
+    "TotalBK": 24549,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-SA-005",
+    "SerialNumber": "4NL01860",
+    "TotalBK": 114569,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-SA-006",
+    "SerialNumber": "YAM00870",
+    "TotalBK": 53513,
+    "TotalCL": 0
+  }
+]

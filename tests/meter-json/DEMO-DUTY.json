@@ -1,0 +1,50 @@
+[
+  {
+    "Code": "DEMO-DUTY-001",
+    "SerialNumber": "DUTY-001",
+    "TotalBK": 207000,
+    "TotalCL": 9100
+  },
+  {
+    "Code": "DEMO-DUTY-002",
+    "SerialNumber": "DUTY-002",
+    "TotalBK": 209000,
+    "TotalCL": 9400
+  },
+  {
+    "Code": "DEMO-DUTY-003",
+    "SerialNumber": "DUTY-003",
+    "TotalBK": 211000,
+    "TotalCL": 9700
+  },
+  {
+    "Code": "DEMO-DUTY-004",
+    "SerialNumber": "DUTY-004",
+    "TotalBK": 213000,
+    "TotalCL": 10000
+  },
+  {
+    "Code": "DEMO-DUTY-005",
+    "SerialNumber": "DUTY-005",
+    "TotalBK": 215000,
+    "TotalCL": 10300
+  },
+  {
+    "Code": "DEMO-DUTY-006",
+    "SerialNumber": "DUTY-006",
+    "TotalBK": 218000,
+    "TotalCL": 10600
+  },
+  {
+    "Code": "DEMO-DUTY-007",
+    "SerialNumber": "DUTY-007",
+    "TotalBK": 221000,
+    "TotalCL": 10900
+  },
+  {
+    "Code": "DEMO-DUTY-008",
+    "SerialNumber": "DUTY-008",
+    "TotalBK": 212000,
+    "TotalCL": 9600
+  }
+]

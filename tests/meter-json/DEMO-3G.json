@@ -1,0 +1,164 @@
+[
+  {
+    "Code": "DEMO-3G-001",
+    "SerialNumber": "3G01-001",
+    "TotalBK": 102840,
+    "TotalCL": 5468
+  },
+  {
+    "Code": "DEMO-3G-002",
+    "SerialNumber": "3G01-002",
+    "TotalBK": 103880,
+    "TotalCL": 5576
+  },
+  {
+    "Code": "DEMO-3G-003",
+    "SerialNumber": "3G01-003",
+    "TotalBK": 104920,
+    "TotalCL": 5684
+  },
+  {
+    "Code": "DEMO-3G-004",
+    "SerialNumber": "3G01-004",
+    "TotalBK": 105960,
+    "TotalCL": 5792
+  },
+  {
+    "Code": "DEMO-3G-005",
+    "SerialNumber": "3G01-005",
+    "TotalBK": 107000,
+    "TotalCL": 5900
+  },
+  {
+    "Code": "DEMO-3G-006",
+    "SerialNumber": "3G01-006",
+    "TotalBK": 108040,
+    "TotalCL": 6008
+  },
+  {
+    "Code": "DEMO-3G-007",
+    "SerialNumber": "3G01-007",
+    "TotalBK": 109080,
+    "TotalCL": 6116
+  },
+  {
+    "Code": "DEMO-3G-008",
+    "SerialNumber": "3G01-008",
+    "TotalBK": 110120,
+    "TotalCL": 6224
+  },
+  {
+    "Code": "DEMO-3G-009",
+    "SerialNumber": "3G01-009",
+    "TotalBK": 111160,
+    "TotalCL": 6332
+  },
+  {
+    "Code": "DEMO-3G-010",
+    "SerialNumber": "3G02-010",
+    "TotalBK": 113840,
+    "TotalCL": 6184
+  },
+  {
+    "Code": "DEMO-3G-011",
+    "SerialNumber": "3G02-011",
+    "TotalBK": 114880,
+    "TotalCL": 6288
+  },
+  {
+    "Code": "DEMO-3G-012",
+    "SerialNumber": "3G02-012",
+    "TotalBK": 115920,
+    "TotalCL": 6392
+  },
+  {
+    "Code": "DEMO-3G-013",
+    "SerialNumber": "3G02-013",
+    "TotalBK": 116960,
+    "TotalCL": 6496
+  },
+  {
+    "Code": "DEMO-3G-014",
+    "SerialNumber": "3G02-014",
+    "TotalBK": 118000,
+    "TotalCL": 6600
+  },
+  {
+    "Code": "DEMO-3G-015",
+    "SerialNumber": "3G02-015",
+    "TotalBK": 119040,
+    "TotalCL": 6704
+  },
+  {
+    "Code": "DEMO-3G-016",
+    "SerialNumber": "3G02-016",
+    "TotalBK": 120080,
+    "TotalCL": 6808
+  },
+  {
+    "Code": "DEMO-3G-017",
+    "SerialNumber": "3G02-017",
+    "TotalBK": 121120,
+    "TotalCL": 6912
+  },
+  {
+    "Code": "DEMO-3G-018",
+    "SerialNumber": "3G02-018",
+    "TotalBK": 122160,
+    "TotalCL": 7016
+  },
+  {
+    "Code": "DEMO-3G-019",
+    "SerialNumber": "3G03-019",
+    "TotalBK": 119840,
+    "TotalCL": 6984
+  },
+  {
+    "Code": "DEMO-3G-020",
+    "SerialNumber": "3G03-020",
+    "TotalBK": 120880,
+    "TotalCL": 7088
+  },
+  {
+    "Code": "DEMO-3G-021",
+    "SerialNumber": "3G03-021",
+    "TotalBK": 121920,
+    "TotalCL": 7192
+  },
+  {
+    "Code": "DEMO-3G-022",
+    "SerialNumber": "3G03-022",
+    "TotalBK": 122960,
+    "TotalCL": 7296
+  },
+  {
+    "Code": "DEMO-3G-023",
+    "SerialNumber": "3G03-023",
+    "TotalBK": 124000,
+    "TotalCL": 7400
+  },
+  {
+    "Code": "DEMO-3G-024",
+    "SerialNumber": "3G03-024",
+    "TotalBK": 125040,
+    "TotalCL": 7504
+  },
+  {
+    "Code": "DEMO-3G-025",
+    "SerialNumber": "3G03-025",
+    "TotalBK": 126080,
+    "TotalCL": 7608
+  },
+  {
+    "Code": "DEMO-3G-026",
+    "SerialNumber": "3G03-026",
+    "TotalBK": 127120,
+    "TotalCL": 7712
+  },
+  {
+    "Code": "DEMO-3G-027",
+    "SerialNumber": "3G03-027",
+    "TotalBK": 128160,
+    "TotalCL": 7816
+  }
+]

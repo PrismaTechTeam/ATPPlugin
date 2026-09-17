@@ -1,0 +1,26 @@
+[
+  {
+    "Code": "DEMO-PPM-001",
+    "SerialNumber": "2XP70035",
+    "TotalBK": 52582,
+    "TotalCL": 5971
+  },
+  {
+    "Code": "DEMO-PPM-002",
+    "SerialNumber": "4NL20188",
+    "TotalBK": 33745,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PPM-003",
+    "SerialNumber": "4NL20201",
+    "TotalBK": 50460,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PPM-004",
+    "SerialNumber": "WSG02689",
+    "TotalBK": 12370,
+    "TotalCL": 5
+  }
+]

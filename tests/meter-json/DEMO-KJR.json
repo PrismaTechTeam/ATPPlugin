@@ -1,0 +1,110 @@
+[
+  {
+    "Code": "DEMO-KJR-001",
+    "SerialNumber": "35N02498",
+    "TotalBK": 102297,
+    "TotalCL": 139804
+  },
+  {
+    "Code": "DEMO-KJR-002",
+    "SerialNumber": "35N02556",
+    "TotalBK": 84508,
+    "TotalCL": 100761
+  },
+  {
+    "Code": "DEMO-KJR-003",
+    "SerialNumber": "2YB70267",
+    "TotalBK": 77628,
+    "TotalCL": 118293
+  },
+  {
+    "Code": "DEMO-KJR-004",
+    "SerialNumber": "2YB70268",
+    "TotalBK": 47036,
+    "TotalCL": 55093
+  },
+  {
+    "Code": "DEMO-KJR-005",
+    "SerialNumber": "2YB70261",
+    "TotalBK": 20915,
+    "TotalCL": 83811
+  },
+  {
+    "Code": "DEMO-KJR-006",
+    "SerialNumber": "2YB70270",
+    "TotalBK": 21015,
+    "TotalCL": 53378
+  },
+  {
+    "Code": "DEMO-KJR-007",
+    "SerialNumber": "2YB70274",
+    "TotalBK": 27922,
+    "TotalCL": 50865
+  },
+  {
+    "Code": "DEMO-KJR-008",
+    "SerialNumber": "2YB16783",
+    "TotalBK": 23827,
+    "TotalCL": 50972
+  },
+  {
+    "Code": "DEMO-KJR-009",
+    "SerialNumber": "2YB16805",
+    "TotalBK": 36314,
+    "TotalCL": 39303
+  },
+  {
+    "Code": "DEMO-KJR-010",
+    "SerialNumber": "2YB19825",
+    "TotalBK": 12067,
+    "TotalCL": 19928
+  },
+  {
+    "Code": "DEMO-KJR-011",
+    "SerialNumber": "2YB19840",
+    "TotalBK": 11161,
+    "TotalCL": 39067
+  },
+  {
+    "Code": "DEMO-KJR-012",
+    "SerialNumber": "2YN19779",
+    "TotalBK": 9908,
+    "TotalCL": 25504
+  },
+  {
+    "Code": "DEMO-KJR-013",
+    "SerialNumber": "2YN19842",
+    "TotalBK": 12435,
+    "TotalCL": 15962
+  },
+  {
+    "Code": "DEMO-KJR-014",
+    "SerialNumber": "2YN19852",
+    "TotalBK": 13143,
+    "TotalCL": 23900
+  },
+  {
+    "Code": "DEMO-KJR-015",
+    "SerialNumber": "2YN19853",
+    "TotalBK": 14597,
+    "TotalCL": 32466
+  },
+  {
+    "Code": "DEMO-KJR-016",
+    "SerialNumber": "2YN19848",
+    "TotalBK": 10276,
+    "TotalCL": 21650
+  },
+  {
+    "Code": "DEMO-KJR-017",
+    "SerialNumber": "2YN19836",
+    "TotalBK": 18181,
+    "TotalCL": 29611
+  },
+  {
+    "Code": "DEMO-KJR-018",
+    "SerialNumber": "2YN20436",
+    "TotalBK": 2905,
+    "TotalCL": 4534
+  }
+]

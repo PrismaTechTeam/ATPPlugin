@@ -1,0 +1,38 @@
+[
+  {
+    "Code": "DEMO-PON-001",
+    "SerialNumber": "3MN10250",
+    "TotalBK": 838986,
+    "TotalCL": 42
+  },
+  {
+    "Code": "DEMO-PON-002",
+    "SerialNumber": "3MN10251",
+    "TotalBK": 239483,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PON-003",
+    "SerialNumber": "3MN10261",
+    "TotalBK": 477977,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PON-004",
+    "SerialNumber": "3MN10248",
+    "TotalBK": 151611,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PON-005",
+    "SerialNumber": "3MN10269",
+    "TotalBK": 71614,
+    "TotalCL": 0
+  },
+  {
+    "Code": "DEMO-PON-006",
+    "SerialNumber": "XME03503",
+    "TotalBK": 383163,
+    "TotalCL": 0
+  }
+]

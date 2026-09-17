@@ -1,0 +1,62 @@
+[
+  {
+    "Code": "DEMO-F19-001",
+    "SerialNumber": "4WG01119",
+    "TotalBK": 83724,
+    "TotalCL": 31705
+  },
+  {
+    "Code": "DEMO-F19-002",
+    "SerialNumber": "4WG01529",
+    "TotalBK": 72582,
+    "TotalCL": 41425
+  },
+  {
+    "Code": "DEMO-F19-003",
+    "SerialNumber": "4WG01701",
+    "TotalBK": 63138,
+    "TotalCL": 50886
+  },
+  {
+    "Code": "DEMO-F19-004",
+    "SerialNumber": "4WG01700",
+    "TotalBK": 50506,
+    "TotalCL": 10975
+  },
+  {
+    "Code": "DEMO-F19-005",
+    "SerialNumber": "4WG01597",
+    "TotalBK": 43223,
+    "TotalCL": 16680
+  },
+  {
+    "Code": "DEMO-F19-006",
+    "SerialNumber": "4MD21039",
+    "TotalBK": 12056,
+    "TotalCL": 11071
+  },
+  {
+    "Code": "DEMO-F19-007",
+    "SerialNumber": "4MD21127",
+    "TotalBK": 6490,
+    "TotalCL": 1741
+  },
+  {
+    "Code": "DEMO-F19-008",
+    "SerialNumber": "4PE20298",
+    "TotalBK": 45460,
+    "TotalCL": 3000
+  },
+  {
+    "Code": "DEMO-F19-009",
+    "SerialNumber": "4PE20299",
+    "TotalBK": 13593,
+    "TotalCL": 1200
+  },
+  {
+    "Code": "DEMO-F19-010",
+    "SerialNumber": "35E32717",
+    "TotalBK": 3290,
+    "TotalCL": 0
+  }
+]
