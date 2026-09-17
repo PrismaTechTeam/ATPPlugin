@@ -20,6 +20,10 @@ namespace ServiceContractPhotocopier.Classes
 
             // === Tier 0: shared infrastructure ===
             RunIfTableMissing(dbsetting, "z_SysConfig",                 "01_CreateTable_z_SysConfig.sql", asm);
+            // Who this book is, permanently -- one GUID, issued here on the first load and never
+            // reissued. Inter-billing links name a book by it, so it is written before anything can
+            // be linked, and it is read constantly afterwards.
+            RunIfTableMissing(dbsetting, "zSCP2_BookIdentity",          "02_CreateTable_zSCP2_BookIdentity.sql", asm);
             // (z_SysRef registered just below)
 
             // === Tier 0b: PUMS stock integration tables ===
@@ -55,7 +59,11 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP_MeterType",              "02_CreateTable_zSCP_MeterType.sql", asm);
             RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.3.0.sql", asm);  // adds ACItemCode if missing (idempotent)
             RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.4.0.sql", asm);  // adds IsFlatCharge (rental) + auto-marks RA*
-            RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.5.0.sql", asm);  // broadens rental flat-mark to "01.RA*"/"...RENTAL" codes
+            // v1.5.0 used to run here and cannot: it is a BACKFILL that reads zSCP2_ItemMeter, and
+            // that table is not created until tier 8b. Every existing book already had the table, so
+            // the fault only appeared the first time the plug-in was installed into a brand-new
+            // account book -- the load stopped with "Invalid object name 'dbo.zSCP2_ItemMeter'" and
+            // every migration after it was skipped. It now runs beside the table it reads.
 
             // === Tier 4: service item ===
             RunIfTableMissing(dbsetting, "zSCP_ServiceItem",            "02_CreateTable_zSCP_ServiceItem.sql", asm);
@@ -94,8 +102,10 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_ItemContract_v7_RefAndContext.sql", asm);
             // Seed opening debtor-ownership rows so the history tab isn't blank for existing items.
             RunDDL(dbsetting, "05_Backfill_zSCP2_ItemDebtorHistory.sql", asm);
-            // Serial No column on provided items. Idempotent.
-            RunDDL(dbsetting, "02_Update_zSCP2_ContractSparePart_v2_SerialNo.sql", asm);
+            // The Serial No column on provided items used to be added here, sixty lines before the
+            // table it alters is created. Same fault as v1.5.0 above: harmless on every book that
+            // already had the table, fatal the first time the plug-in met a brand-new account book.
+            // It now runs directly after the create.
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeter",             "02_CreateTable_zSCP2_ItemMeter.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ItemMeterPrice",        "02_CreateTable_zSCP2_ItemMeterPrice.sql", asm);
             RunIfTableMissing(dbsetting, "zSCP2_ContractSnapshot",      "02_CreateTable_zSCP2_ContractSnapshot.sql", asm);
@@ -118,6 +128,11 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_ContractAudit",         "02_CreateTable_zSCP2_ContractAudit.sql", asm);
             // Legacy usage meters tagged NA get BK/CL inferred from their type names (guards inside).
             RunDDL(dbsetting, "05_Backfill_zSCP2_ItemMeter_Roles.sql", asm);
+            // Broadens the rental flat-mark to "01.RA*" / "...RENTAL" codes. It belongs HERE and not
+            // with the other MeterType updates in tier 3, because it decides what to mark by asking
+            // whether a type carries any BK/CL meter -- so it cannot run before zSCP2_ItemMeter
+            // exists. On a new book it marks nothing, which is correct: there is nothing to mark.
+            RunDDL(dbsetting, "02_UpdateTable_zSCP_MeterType_v1.5.0.sql", asm);
             // Ownership: contract-less items are owned by a debtor directly (OwnerDebtorCode).
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v8_OwnerDebtor.sql", asm);
             // Per-item Purchase Date + Service Type (its own lookup list).
@@ -150,6 +165,8 @@ namespace ServiceContractPhotocopier.Classes
             RunIfTableMissing(dbsetting, "zSCP2_DocNoFormat",           "02_CreateTable_zSCP2_DocNoFormat.sql", asm);
             // Spare parts / services provided lines under a contract (contract- or item-bound).
             RunIfTableMissing(dbsetting, "zSCP2_ContractSparePart",     "02_CreateTable_zSCP2_ContractSparePart.sql", asm);
+            // Serial No column on provided items. Idempotent.
+            RunDDL(dbsetting, "02_Update_zSCP2_ContractSparePart_v2_SerialNo.sql", asm);
             // More Header tab fields (extra contact + delivery address block). Idempotent.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v2_MoreHeader.sql", asm);
             // Allow contract-less service items (ContractKey NULL) for attach/detach. Idempotent.
@@ -209,12 +226,35 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v12_MergeGroup.sql", asm);   // which machines print as ONE line
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v13_LineGroupCode_60.sql", asm);  // room for the labels they print
             RunDDL(dbsetting, "02_Update_zSCP2_BillingFormat_v2_MachineLineShows.sql", asm);  // model / label / both
+            // ...and then the model and the serials become two questions, because "model yes,
+            // serials no" is what a thirty-six machine line needs and the one column could not say it.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v16_ShowModelSerial.sql", asm);
+            // ...and the unit count, for the same reason.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v17_ShowUnits.sql", asm);
             // The new rules stop riding on a name: their own switch, their own wording column.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v15_UseNewLayout.sql", asm);
             // Black and colour group on their own, apart from the rental.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v14_MeterGroup.sql", asm);
             // A line carries a price for each charge, plus its minimum and its waive.
             RunDDL(dbsetting, "02_Update_zSCP2_ContractRentalPrice_v3_LineTerms.sql", asm);
+            // v4: a group can carry its OWN tier bands, which are longer than a code.
+            RunDDL(dbsetting, "02_Update_zSCP2_ContractRentalPrice_v4_GroupLadder.sql", asm);
+            // === Tier 8c: inter-billing (two books of the same owner) ===
+            // The other book, as this one reaches it -- and what in this book came from it. Both are
+            // empty in a book nobody has set inter-billing up on, which is every book until somebody
+            // does: the rules that read them then find nothing, and behave exactly as before.
+            RunIfTableMissing(dbsetting, "zSCP2_InterBillBook",         "02_CreateTable_zSCP2_InterBillBook.sql", asm);
+            RunIfTableMissing(dbsetting, "zSCP2_InterBillLink",         "02_CreateTable_zSCP2_InterBillLink.sql", asm);
+            // v2: the margin this book adds to the other book's prices when it takes a contract.
+            RunDDL(dbsetting, "02_Update_zSCP2_InterBillBook_v2_Margin.sql", asm);
+            // A reading taken from another book says so, instead of pretending this book read it.
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v7_SourceInterBill.sql", asm);
+            // The billing sequence: where this book's months of a contract start, and the months
+            // deliberately not billed.
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v18_BillFrom.sql", asm);
+            RunDDL(dbsetting, "02_CreateTable_zSCP2_ContractPeriodSkip.sql", asm);   // guarded throughout; the index is retried if it ever failed
+            RunDDL(dbsetting, "02_CreateTrigger_zSCP2_IV_NoDeleteEarlierBilledMonth.sql", asm);   // a month comes off only after the months behind it
+
             // Repoint zSCP_MeterTrans -> zSCP2_ItemMeter (idempotent; self-guarded on FK existence).
             RunDDL(dbsetting, "02_Update_zSCP_MeterTrans_v2.sql", asm);
             // v3: Demo 28/07 #10 - CN reading-correction linkage (CNDocKey/CNDocNo + filtered index).
@@ -238,6 +278,8 @@ namespace ServiceContractPhotocopier.Classes
                 // ...and the right to see the menu item, mirrored from Meter Type. Declaring a right
                 // does not grant it, so without this the screen is hidden from everyone.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_AccessRight_BillingFormat.sql", asm));
+                // ...same for Inter-Billing Setup, and for the same reason.
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_AccessRight_InterBilling.sql", asm));
                 // The three meter types the new way needs -- RENTAL / BK / CL. The machine form's
                 // "Need rental" tick picks RENTAL by code, so this seed is what makes it work.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard.sql", asm));

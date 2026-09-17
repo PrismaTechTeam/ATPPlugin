@@ -168,6 +168,7 @@
     <Compile Include="Classes\ScpExtraDocs.cs" />
     <Compile Include="Classes\ScpBillingFormat.cs" />
     <Compile Include="Classes\ScpCommittedMin.cs" />
+    <Compile Include="Classes\ScpWaiveMeter.cs" />
     <Compile Include="Classes\ScpSampleInvoiceDocSource.cs" />
     <Compile Include="Classes\ScpSampleInvoiceReport.cs" />
     <Compile Include="Classes\ScpInvoiceBuilder.cs" />
@@ -178,6 +179,20 @@
     <Compile Include="Classes\ScpRentalGroupPrice.cs" />
     <Compile Include="Classes\ScpStrategy.cs" />
     <Compile Include="Classes\ScpMultiPrice.cs" />
+    <Compile Include="Classes\ScpGroupLadder.cs" />
+    <Compile Include="Classes\ScpSecret.cs" />
+    <Compile Include="Classes\ScpBookIdentity.cs" />
+    <Compile Include="Classes\ScpInterBillBook.cs" />
+    <Compile Include="Classes\ScpInterBillLink.cs" />
+    <Compile Include="Classes\ScpInterBillReader.cs" />
+    <Compile Include="Classes\ScpInterBillTake.cs" />
+    <Compile Include="Classes\ScpInterBillGuard.cs" />
+    <Compile Include="Classes\ScpBillingRows.cs" />
+    <Compile Include="Classes\ScpInvoiceJobs.cs" />
+    <Compile Include="Classes\ScpInvoiceDelete.cs" />
+    <Compile Include="Classes\ScpInvoiceRun.cs" />
+    <Compile Include="Classes\ScpInterBillBoard.cs" />
+    <Compile Include="Classes\ScpBillingSequence.cs" />
     <Compile Include="Classes\ScpBillingHistory.cs" />
     <Compile Include="Classes\ScpAutoFetchService.cs" />
     <Compile Include="Classes\ScpDocNo.cs" />
@@ -218,6 +233,12 @@
     </Compile>
     <Compile Include="Classes\CommonForms\WaiveConfig_Form.Designer.cs">
       <DependentUpon>WaiveConfig_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Classes\CommonForms\ScpMaintenance_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Classes\CommonForms\ScpMaintenance_Form.Designer.cs">
+      <DependentUpon>ScpMaintenance_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Classes\CommonForms\MultiPricePicker_Form.cs">
       <SubType>Form</SubType>
@@ -295,8 +316,32 @@
     <Compile Include="Service Contract\Operation Forms\BillGroupAssign_Form.Designer.cs">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Service Contract\Operation Forms\BillingStart_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\BillingStart_Form.Designer.cs">
+      <DependentUpon>BillingStart_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\InterBillBoard_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\InterBillBoard_Form.Designer.cs">
+      <DependentUpon>InterBillBoard_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\InterBilling_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\InterBilling_Form.Designer.cs">
+      <DependentUpon>InterBilling_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Service Contract\Operation Forms\RentalGroupPrice_Form.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\LineTerms_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\LineTerms_Form.Designer.cs">
+      <DependentUpon>LineTerms_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="Service Contract\Operation Forms\RentalGroupPrice_Form.Designer.cs">
       <DependentUpon>RentalGroupPrice_Form.cs</DependentUpon>
@@ -439,6 +484,18 @@
     </Compile>
     <Compile Include="General Setup\Master Forms\DocNoFormat_Form.Designer.cs">
       <DependentUpon>DocNoFormat_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\PickDatabase_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\PickDatabase_Form.Designer.cs">
+      <DependentUpon>PickDatabase_Form.cs</DependentUpon>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\InterBillSetup_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="General Setup\Master Forms\InterBillSetup_Form.Designer.cs">
+      <DependentUpon>InterBillSetup_Form.cs</DependentUpon>
     </Compile>
     <Compile Include="General Setup\Master Forms\ServiceOption_Form.cs">
       <SubType>Form</SubType>
@@ -842,6 +899,12 @@
     <Compile Include="Meter Reading\Operation Forms\MeterReadingSetting_Form.Designer.cs">
       <DependentUpon>MeterReadingSetting_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Meter Reading\Operation Forms\InvoiceRun_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Meter Reading\Operation Forms\InvoiceRun_Form.Designer.cs">
+      <DependentUpon>InvoiceRun_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Meter Reading\Operation Forms\MeterInvoicePreview_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -970,8 +1033,20 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v13_LineGroupCode_60.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_BillingFormat_v2_MachineLineShows.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v15_UseNewLayout.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v16_ShowModelSerial.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v17_ShowUnits.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Item_v14_MeterGroup.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ContractRentalPrice_v3_LineTerms.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ContractRentalPrice_v4_GroupLadder.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BookIdentity.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_InterBillBook.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_InterBillLink.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_InterBillBook_v2_Margin.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v7_SourceInterBill.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v18_BillFrom.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractPeriodSkip.sql" />
+    <EmbeddedResource Include="SQL\02_CreateTrigger_zSCP2_IV_NoDeleteEarlierBilledMonth.sql" />
+    <EmbeddedResource Include="SQL\04_Seed_AccessRight_InterBilling.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v14_LineModes.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_BillingFormat.sql" />
     <EmbeddedResource Include="SQL\04_Seed_zSCP2_BillingFormat.sql" />
@@ -1080,6 +1155,9 @@
     <EmbeddedResource Include="Classes\CommonForms\WaiveConfig_Form.resx">
       <DependentUpon>WaiveConfig_Form.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Classes\CommonForms\ScpMaintenance_Form.resx">
+      <DependentUpon>ScpMaintenance_Form.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Classes\CommonForms\MultiPricePicker_Form.resx">
       <DependentUpon>MultiPricePicker_Form.cs</DependentUpon>
     </EmbeddedResource>
@@ -1097,6 +1175,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\DocNoFormat_Form.resx">
       <DependentUpon>DocNoFormat_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\PickDatabase_Form.resx">
+      <DependentUpon>PickDatabase_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="General Setup\Master Forms\InterBillSetup_Form.resx">
+      <DependentUpon>InterBillSetup_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="General Setup\Master Forms\ServiceOption_Form.resx">
       <DependentUpon>ServiceOption_Form.cs</DependentUpon>
@@ -1185,8 +1269,20 @@
     <EmbeddedResource Include="Service Contract\Operation Forms\BillGroupAssign_Form.resx">
       <DependentUpon>BillGroupAssign_Form.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\BillingStart_Form.resx">
+      <DependentUpon>BillingStart_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\InterBillBoard_Form.resx">
+      <DependentUpon>InterBillBoard_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\InterBilling_Form.resx">
+      <DependentUpon>InterBilling_Form.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\RentalGroupPrice_Form.resx">
       <DependentUpon>RentalGroupPrice_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\LineTerms_Form.resx">
+      <DependentUpon>LineTerms_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\MachineMeters_Form.resx">
       <DependentUpon>MachineMeters_Form.cs</DependentUpon>
@@ -1322,6 +1418,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterReadingSetting_Form.resx">
       <DependentUpon>MeterReadingSetting_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Meter Reading\Operation Forms\InvoiceRun_Form.resx">
+      <DependentUpon>InvoiceRun_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Meter Reading\Operation Forms\MeterInvoicePreview_Form.resx">
       <DependentUpon>MeterInvoicePreview_Form.cs</DependentUpon>

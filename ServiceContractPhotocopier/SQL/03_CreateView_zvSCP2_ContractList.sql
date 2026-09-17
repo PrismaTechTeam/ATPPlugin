@@ -26,6 +26,10 @@ SELECT
 	ISNULL(c.ReferenceNo, '') AS ReferenceNo,
 	ISNULL(c.Description, '') AS Description,
 	c.Inactive,
+	ISNULL(c.CreatedBy, '')  AS CreatedBy,
+	c.Created                AS CreatedDate,
+	ISNULL(c.ModifiedBy, '') AS ModifiedBy,
+	ISNULL(c.Modified, c.LastModified) AS LastModifiedDate,
 	(SELECT COUNT(*) FROM dbo.zSCP2_Item i WHERE i.ContractKey = c.ContractKey) AS ItemCount
 FROM dbo.zSCP2_Contract c
 LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode
