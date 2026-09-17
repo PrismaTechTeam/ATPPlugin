@@ -6,7 +6,7 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.ServiceItem.MasterForms
 {
-    [AutoCount.PlugIn.MenuItem("Service Item Inquiry",
+    [AutoCount.PlugIn.MenuItem("Service Item Inquiry (IN MAINTENANCE)",
     ParentMenuCaption = "Inquiry", MenuOrder = 10, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_ITEM_INQUIRY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_ITEM_INQUIRY)]
@@ -16,6 +16,7 @@ namespace ServiceContractPhotocopier.ServiceItem.MasterForms
         protected override string TableName   { get { return "zvSCP_ServiceItemList"; } }
         protected override string ViewName    { get { return "zvSCP_ServiceItemList"; } }
         protected override string KeyColumn   { get { return "ServiceItemCode"; } }
+        protected override bool UnderMaintenance { get { return true; } }   // reads a v1 view the v2 module never fills
         protected override string FormCaption { get { return "Service Item Inquiry"; } }
         public ServiceItemInquiry_Form() { InitializeComponent(); }
         public ServiceItemInquiry_Form(UserSession userSession) : base(userSession != null ? userSession.DBSetting : null) { InitializeComponent(); }

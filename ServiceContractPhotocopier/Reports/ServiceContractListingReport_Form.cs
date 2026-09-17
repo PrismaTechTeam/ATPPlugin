@@ -4,7 +4,7 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.Reports
 {
-    [AutoCount.PlugIn.MenuItem("Service Contract Listing Report",
+    [AutoCount.PlugIn.MenuItem("Service Contract Listing Report (IN MAINTENANCE)",
     ParentMenuCaption = "Reports", MenuOrder = 140, ParentMenuOrder = 800)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class ServiceContractListingReport_Form : ScpPlaceholder_Form

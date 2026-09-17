@@ -24,7 +24,13 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
         protected virtual string FormCaption { get { return "Not Yet Implemented"; } }
         protected virtual string FormNotice  { get { return "This form is scaffolded. Full UI will land in Slice 2 (/ralph-loop polish)."; } }
 
-        public ScpPlaceholder_Form() { InitializeBaseLayout(); }
+        public ScpPlaceholder_Form()
+        {
+            InitializeBaseLayout();
+            // A scaffold is never shown any more: the one Under Maintenance notice opens in its
+            // place and this form closes itself. The scaffold stays so the menu entry still exists.
+            ServiceContractPhotocopier.Classes.CommonForms.ScpMaintenance_Form.TakeOver(this, FormCaption);
+        }
 
         public ScpPlaceholder_Form(UserSession userSession) : this()
         {

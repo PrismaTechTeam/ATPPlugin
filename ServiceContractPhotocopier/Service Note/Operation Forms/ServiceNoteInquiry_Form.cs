@@ -6,7 +6,7 @@ using ServiceContractPhotocopier.Classes.BaseForms;
 
 namespace ServiceContractPhotocopier.ServiceNote.OperationForms
 {
-    [AutoCount.PlugIn.MenuItem("Service Note Inquiry",
+    [AutoCount.PlugIn.MenuItem("Service Note Inquiry (IN MAINTENANCE)",
     ParentMenuCaption = "Inquiry", MenuOrder = 30, ParentMenuOrder = 700,
     OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_NOTE_INQUIRY,
     VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_NOTE_INQUIRY)]
@@ -16,6 +16,7 @@ namespace ServiceContractPhotocopier.ServiceNote.OperationForms
         protected override string TableName   { get { return "zvSCP_ServiceNoteList"; } }
         protected override string ViewName    { get { return "zvSCP_ServiceNoteList"; } }
         protected override string KeyColumn   { get { return "ServiceNoteCode"; } }
+        protected override bool UnderMaintenance { get { return true; } }   // reads a v1 view the v2 module never fills
         protected override string FormCaption { get { return "Service Note Inquiry"; } }
         public ServiceNoteInquiry_Form() { InitializeComponent(); }
         public ServiceNoteInquiry_Form(UserSession userSession) : base(userSession != null ? userSession.DBSetting : null) { InitializeComponent(); }

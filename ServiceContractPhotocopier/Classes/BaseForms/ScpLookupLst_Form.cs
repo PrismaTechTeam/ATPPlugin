@@ -45,12 +45,20 @@ namespace ServiceContractPhotocopier.Classes.BaseForms
         protected virtual string KeyField    { get { return "Key"; } }
         protected virtual string FormCaption { get { return "Lookup"; } }
         protected virtual string StatusText  { get { return "Lookup"; } }
+        /// <summary>True for a list whose data the current module never writes: the list is not
+        /// shown, the Under Maintenance notice opens instead, and the list closes itself.</summary>
+        protected virtual bool UnderMaintenance { get { return false; } }
 
         public ScpLookupLst_Form() { InitBaseLayout(); }
 
         public ScpLookupLst_Form(DBSetting dbSetting) : this()
         {
             _dbSetting = dbSetting;
+            if (UnderMaintenance)
+            {
+                ServiceContractPhotocopier.Classes.CommonForms.ScpMaintenance_Form.TakeOver(this, FormCaption);
+                return;
+            }
             this.Load += delegate { LoadData(); SetEditMode(false); };
         }
 
