@@ -184,7 +184,7 @@
             this.GridView.OptionsBehavior.Editable = false;
             this.GridView.OptionsFind.AlwaysVisible = true;
             this.GridView.OptionsSelection.EnableAppearanceFocusedRow = true;
-            this.GridView.OptionsView.ColumnAutoWidth = false;
+            this.GridView.OptionsView.ColumnAutoWidth = true;   // the columns share the width; no sideways scrolling
             this.GridView.OptionsView.ShowGroupPanel = true;
             //
             // ColContractNo

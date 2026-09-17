@@ -50,6 +50,35 @@ namespace ServiceContractPhotocopier
             _items = items ?? new List<ItemEditData>();
         }
 
+        /// <summary>The contract's agreed line terms, so this screen can say when a machine's copies
+        /// are already priced by a LINE's tier ladder.
+        ///
+        /// <para>Without it the tier column reads blank on a machine that is being priced by bands
+        /// agreed for its whole group — and giving that machine a ladder of its own pulls it out of
+        /// the group, which changes what the machines LEFT BEHIND pay. Nobody should have to know
+        /// that to use this screen; it says so instead.</para></summary>
+        public System.Collections.Generic.Dictionary<string,
+            ServiceContractPhotocopier.Classes.ScpLineTerms> LineTerms;
+
+        /// <summary>The bands the machine's line has agreed for this colour, described, or "" when
+        /// the line has none.</summary>
+        private string LineLadderFor(ItemEditData d, string role)
+        {
+            if (LineTerms == null || d == null) return "";
+            string grp = (d.MergeGroupCodeMeter ?? "").Trim();
+            if (grp.Length == 0) return "";
+            ServiceContractPhotocopier.Classes.ScpLineTerms t;
+            if (!LineTerms.TryGetValue(ServiceContractPhotocopier.Classes.ScpLineTerms.Key(
+                    ServiceContractPhotocopier.Classes.ScpLineTerms.SIDE_METER, grp), out t) || t == null)
+                return "";
+            string stored = ((role == "CL" ? t.LadderCl : t.LadderBk) ?? "").Trim();
+            if (stored.Length == 0) return "";
+            return stored.IndexOf('|') < 0
+                ? stored
+                : ServiceContractPhotocopier.Classes.ScpMultiPrice.Describe(
+                      ServiceContractPhotocopier.Classes.ScpMultiPrice.ParseTiers(stored));
+        }
+
         // ---- scope: stored as one letter, shown as words ----
         private static string ScopeWords(string code)
         {
@@ -78,9 +107,15 @@ namespace ServiceContractPhotocopier
             _dt.Columns.Add("HasBK", typeof(bool));
             _dt.Columns.Add("BKRate", typeof(decimal));
             _dt.Columns.Add("BKLadder", typeof(string));
+            // The LINE's ladder for this colour, held apart from what the machine carries. The two
+            // are different facts and the screen needs both: a machine can be priced by its own
+            // bands INSIDE a group that has agreed its own, and that is exactly the case where
+            // clearing the machine's bands changes what the other machines pay.
+            _dt.Columns.Add("BKLine", typeof(string));
             _dt.Columns.Add("HasCL", typeof(bool));
             _dt.Columns.Add("CLRate", typeof(decimal));
             _dt.Columns.Add("CLLadder", typeof(string));
+            _dt.Columns.Add("CLLine", typeof(string));
             _dt.Columns.Add("HasMin", typeof(bool));
             _dt.Columns.Add("MinAmount", typeof(decimal));
             _dt.Columns.Add("MinScope", typeof(string));
@@ -105,9 +140,9 @@ namespace ServiceContractPhotocopier
                 r["ServiceItemNo"] = string.IsNullOrWhiteSpace(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
                 r["SerialNumber"] = d.SerialNumber ?? "";
                 r["ItemCode"] = d.ItemCode ?? "";
-                LoadRole(r, d, "RENTAL", "HasRental", "RentalRate", null);
-                LoadRole(r, d, "BK", "HasBK", "BKRate", "BKLadder");
-                LoadRole(r, d, "CL", "HasCL", "CLRate", "CLLadder");
+                LoadRole(r, d, "RENTAL", "HasRental", "RentalRate", null, null);
+                LoadRole(r, d, "BK", "HasBK", "BKRate", "BKLadder", "BKLine");
+                LoadRole(r, d, "CL", "HasCL", "CLRate", "CLLadder", "CLLine");
                 LoadMin(r, d);
                 LoadWaive(r, d);
                 _dt.Rows.Add(r);
@@ -146,14 +181,27 @@ namespace ServiceContractPhotocopier
             if (CmbLadder.Properties.Items.Count > 0) CmbLadder.SelectedIndex = 0;
         }
 
-        private static void LoadRole(DataRow r, ItemEditData d, string role, string hasField,
-            string rateField, string ladderField)
+        private void LoadRole(DataRow r, ItemEditData d, string role, string hasField,
+            string rateField, string ladderField, string lineField)
         {
             DataRow m = zSCP2_Item_Form.FindMeterByRole(d.Meters, role);
             r[hasField] = m != null;
             r[rateField] = m == null ? 0m : RateOf(m);
             if (ladderField == null) return;
-            r[ladderField] = m == null ? "" : LadderOf(m);
+            string own = m == null ? "" : LadderOf(m);
+            string line = LineLadderFor(d, role);
+            r[lineField] = line;
+            // Three states, and the screen has to tell them apart because the buttons do different
+            // damage in each:
+            //   nothing of its own, line has bands   -> the line prices it
+            //   its own bands, line has bands too    -> it is being HELD OUT of a live group deal,
+            //                                           and putting it back changes the others
+            //   its own bands, line has none         -> nobody else is involved at all
+            if (own.Length == 0)
+                own = line.Length > 0 ? "the whole line: " + line : "";
+            else if (line.Length > 0)
+                own = own + "  (priced apart from the line)";
+            r[ladderField] = own;
         }
 
         /// <summary>What the tier column says: the scheme, "(Custom)" for a machine priced on its own
@@ -400,10 +448,74 @@ namespace ServiceContractPhotocopier
         // Setting the scheme must also clear the machine's own tier override, because an override
         // BEATS the scheme at billing time -- leaving it would make this button look like it did
         // nothing at all.
-        private void SetLadder(string hasField, string ladderField, string word, string code)
+        private void SetLadder(string hasField, string ladderField, string lineField,
+            string word, string code)
         {
             List<DataRow> ticked = Ticked();
             if (ticked.Count == 0) { NeedTicks(); return; }
+
+            // Leaving a line's ladder, or rejoining it, changes the volume the WHOLE line is priced
+            // on -- so it changes what the other machines pay, without anyone touching them. Say it
+            // before it happens; the arithmetic is invisible afterwards.
+            List<string> onLine = new List<string>();
+            List<string> ownBands = new List<string>();
+            foreach (DataRow tr in ticked)
+            {
+                bool hasMeter = tr[hasField] != DBNull.Value && Convert.ToBoolean(tr[hasField]);
+                if (!hasMeter) continue;
+                string now = Convert.ToString(tr[ladderField]);
+                // Whether a group ladder is in play AT ALL. Asked of the line, not of the machine --
+                // the machine's own ladder says nothing about whether a group deal exists, and the
+                // first version of this guard confused the two. It warned that "the machines that
+                // stay may move to a different band" on a contract whose line had no ladder and
+                // where nothing could move, which is a warning that teaches people to click Yes.
+                bool lineHasLadder = Convert.ToString(tr[lineField]).Length > 0;
+                bool machineApart = now.IndexOf("(line:", StringComparison.OrdinalIgnoreCase) != 0
+                                 && now.Length > 0;
+                // Bands typed for THIS machine. A scheme set over them replaces them outright, and
+                // they cannot be got back -- so this asks before it happens, the same as any other
+                // irreversible thing on this screen.
+                if (now.IndexOf("(Custom)", StringComparison.OrdinalIgnoreCase) >= 0)
+                    ownBands.Add("   " + Convert.ToString(tr["ServiceItemNo"]));
+                // Leaving the group's total, or rejoining it. Either way the line is priced on a
+                // different number of copies afterwards.
+                bool moves = lineHasLadder && (code.Length > 0 ? !machineApart : machineApart);
+                if (moves) onLine.Add("   " + Convert.ToString(tr["ServiceItemNo"]));
+            }
+
+            if (ownBands.Count > 0)
+            {
+                if (XtraMessageBox.Show(
+                        "These machines are priced on bands typed for them, not on a scheme:" +
+                        Environment.NewLine + Environment.NewLine +
+                        string.Join(Environment.NewLine, ownBands.ToArray()) + Environment.NewLine +
+                        Environment.NewLine +
+                        (code.Length > 0
+                            ? "Setting scheme " + code + " REPLACES those bands. They are not kept " +
+                              "anywhere and cannot be brought back."
+                            : "Going back to a flat rate THROWS those bands away. They cannot be " +
+                              "brought back.") + Environment.NewLine + Environment.NewLine +
+                        "Continue?",
+                        "Tier pricing", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    return;
+            }
+            if (onLine.Count > 0)
+            {
+                string what = code.Length > 0
+                    ? "These machines are priced by their LINE's tier ladder. Giving them one of their " +
+                      "own takes them out of that line's total:"
+                    : "Taking these machines off their own tiers puts them back into their LINE's tier " +
+                      "ladder:";
+                if (XtraMessageBox.Show(
+                        what + Environment.NewLine + Environment.NewLine +
+                        string.Join(Environment.NewLine, onLine.ToArray()) + Environment.NewLine +
+                        Environment.NewLine +
+                        "The line is priced on its machines' copies added up, so the machines that STAY " +
+                        "may move to a different band." + Environment.NewLine + Environment.NewLine +
+                        "Continue?",
+                        "Tier pricing", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    return;
+            }
             int done = 0, skipped = 0, cleared = 0;
             foreach (DataRow r in ticked)
             {
@@ -429,12 +541,12 @@ namespace ServiceContractPhotocopier
             return CmbLadder.EditValue == null ? "" : Convert.ToString(CmbLadder.EditValue).Trim();
         }
 
-        private void BtnLadderBK_Click(object sender, EventArgs e) { SetLadder("HasBK", "BKLadder", "black", LadderCode()); }
-        private void BtnLadderCL_Click(object sender, EventArgs e) { SetLadder("HasCL", "CLLadder", "colour", LadderCode()); }
+        private void BtnLadderBK_Click(object sender, EventArgs e) { SetLadder("HasBK", "BKLadder", "BKLine", "black", LadderCode()); }
+        private void BtnLadderCL_Click(object sender, EventArgs e) { SetLadder("HasCL", "CLLadder", "CLLine", "colour", LadderCode()); }
         private void BtnLadderClear_Click(object sender, EventArgs e)
         {
-            SetLadder("HasBK", "BKLadder", "black", "");
-            SetLadder("HasCL", "CLLadder", "colour", "");
+            SetLadder("HasBK", "BKLadder", "BKLine", "black", "");
+            SetLadder("HasCL", "CLLadder", "CLLine", "colour", "");
         }
 
         // ---- selecting ----
@@ -521,20 +633,6 @@ namespace ServiceContractPhotocopier
         /// nothing at all is applied.</summary>
         private bool Harvest()
         {
-            // A waive with no rent to give back can never fire; refuse before anything is written.
-            foreach (DataRow r in _dt.Rows)
-            {
-                if (r.RowState == DataRowState.Deleted) continue;
-                if (!Flag(r, "HasWaive") || Flag(r, "HasRental")) continue;
-                XtraMessageBox.Show(
-                    "Machine " + Convert.ToString(r["ServiceItemNo"]) + " has a rental waive but no rental." +
-                    Environment.NewLine + Environment.NewLine +
-                    "A waive is the contra that gives the rent back — give the machine a rental, or take " +
-                    "the waive off.",
-                    "Rental waive", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-
             // Two minimums measured against the same set would each top it up, and the shortfall
             // would be billed twice. Say so before writing, not at Generate.
             List<string> clashes = MinimumClashes();
@@ -556,7 +654,6 @@ namespace ServiceContractPhotocopier
                 losing += LosesHistory(d, "RENTAL", Flag(r, "HasRental"));
                 losing += LosesHistory(d, "BK", Flag(r, "HasBK"));
                 losing += LosesHistory(d, "CL", Flag(r, "HasCL"));
-                losing += LosesHistory(d, "COMMIT", Flag(r, "HasMin"));
                 DataRow w = zSCP2_Item_Form.FindWaiveMeter(d.Meters);
                 if (!Flag(r, "HasWaive") && w != null && w.RowState != DataRowState.Added) losing++;
             }
@@ -578,8 +675,12 @@ namespace ServiceContractPhotocopier
                 if (!Set(d, "RENTAL", Flag(r, "HasRental"), Dec(r["RentalRate"]), null)) typeMissing = true;
                 if (!Set(d, "BK", Flag(r, "HasBK"), Dec(r["BKRate"]), Convert.ToString(r["BKLadder"]))) typeMissing = true;
                 if (!Set(d, "CL", Flag(r, "HasCL"), Dec(r["CLRate"]), Convert.ToString(r["CLLadder"]))) typeMissing = true;
-                if (!SetMin(d, r)) typeMissing = true;
-                if (!SetWaive(d, r)) typeMissing = true;
+                // The committed minimum is NOT written from here any more -- see the note on
+                // SetMin. The columns went off this grid when the minimum became a term agreed
+                // for a LINE, but the write stayed behind, so every OK still pushed a value
+                // read out of a column nobody can see back onto the meter.
+                // The waive is NOT written from here any more -- see the note on SetWaive. Calling
+                // it would delete the contract's waive the moment a tick nobody can see reads false.
             }
             if (typeMissing)
                 XtraMessageBox.Show(
@@ -656,6 +757,9 @@ namespace ServiceContractPhotocopier
                 if (m.Table.Columns.Contains("MinimumCharges")) m["MinimumCharges"] = 0m;
             }
             if (ladder == null) return ok;
+            // "(line: ...)" is this screen reporting the LINE's ladder, not something this machine
+            // carries. Writing it back would invent a scheme code out of a sentence.
+            if (ladder.StartsWith("(line:", StringComparison.OrdinalIgnoreCase)) return ok;
             string wasCode = m.Table.Columns.Contains("MeterMultiPriceCode") && m["MeterMultiPriceCode"] != DBNull.Value
                 ? Convert.ToString(m["MeterMultiPriceCode"]).Trim() : "";
             string wantCode = (ladder ?? "").Replace("(Custom)", "").Trim();
@@ -672,6 +776,15 @@ namespace ServiceContractPhotocopier
             return ok;
         }
 
+        /// <summary>
+        /// UNUSED, deliberately — the twin of <see cref="SetWaive"/>. A committed minimum is agreed
+        /// for a LINE and set in Billing Setup, which is the only screen that can express the three
+        /// scopes it has (this machine / this line's machines added up / the whole contract).
+        ///
+        /// <para>It kept running here long after its columns were taken off the grid: it rewrote
+        /// MinimumCharges from whichever of two columns happened to hold a number, and stamped a
+        /// CommitScope read out of a hidden cell. A screen must not write what it does not show.</para>
+        /// </summary>
         private bool SetMin(ItemEditData d, DataRow r)
         {
             bool want = Flag(r, "HasMin");
@@ -696,6 +809,19 @@ namespace ServiceContractPhotocopier
             return ok;
         }
 
+        /// <summary>
+        /// UNUSED, deliberately. A rental waive is agreed for a LINE now, and Billing Setup is where
+        /// it is set — the whole deal in one place: the target, the free window, the consolation
+        /// band, which copies count, and whether it is one waive for the line or one per machine.
+        ///
+        /// <para>This screen could only ever see a meter on a machine, which is half the deal. A
+        /// waive scoped to the group lives on ONE machine and speaks for all of them, so the grid
+        /// showed one row ticked and the rest blank — and ticking the others to "fix" it credited the
+        /// same rental three times. Unticking the one deleted the contract's waive outright.</para>
+        ///
+        /// <para>Kept as code rather than deleted so the shape of what it used to write is still
+        /// readable next to what replaced it.</para>
+        /// </summary>
         private bool SetWaive(ItemEditData d, DataRow r)
         {
             bool want = Flag(r, "HasWaive");

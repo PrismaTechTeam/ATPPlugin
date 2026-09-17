@@ -71,9 +71,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 Grid.DataSource = _dbSetting.GetDataTable(
                     "SELECT ContractKey, ContractNo, ContractTypeCode, DebtorCode, DebtorName, ContractDate, " +
                     "ServiceStartDate, ServiceExpiryDate, ContractValue, BillingDay, BillOnMonthEnd, BillingMode, " +
-                    "Agent, Area, DeptNo, ProjNo, ReferenceNo, Description, ItemCount, Inactive " +
+                    "Agent, Area, DeptNo, ProjNo, ReferenceNo, Description, ItemCount, Inactive, " +
+                    "CreatedBy, CreatedDate, ModifiedBy, LastModifiedDate " +
                     "FROM [dbo].[zvSCP2_ContractList] ORDER BY ContractNo", false);
                 EnsureContractDateColumns();
+                EnsureAuditColumns();
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
         }
@@ -123,6 +125,30 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     : "In this window, you can create, modify, or delete service contracts and their service items.";
             }
             catch { }
+        }
+
+        /// <summary>Who made the contract and who last changed it, with the dates. Created once, after
+        /// the first load; the column chooser can take any of them away again.</summary>
+        private void EnsureAuditColumns()
+        {
+            AuditColumn("CreatedBy", "Created By", 90, "");
+            AuditColumn("CreatedDate", "Created", 110, "dd/MM/yyyy HH:mm");
+            AuditColumn("ModifiedBy", "Modified By", 90, "");
+            AuditColumn("LastModifiedDate", "Last Modified", 110, "dd/MM/yyyy HH:mm");
+        }
+
+        private void AuditColumn(string field, string caption, int width, string dateFormat)
+        {
+            if (GridView.Columns.ColumnByFieldName(field) != null) return;
+            DevExpress.XtraGrid.Columns.GridColumn c = GridView.Columns.AddVisible(field);
+            c.Caption = caption;
+            c.Width = width;
+            c.OptionsColumn.AllowEdit = false;
+            if (dateFormat.Length > 0)
+            {
+                c.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+                c.DisplayFormat.FormatString = dateFormat;
+            }
         }
 
         private void ContractList_ExpiryCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)

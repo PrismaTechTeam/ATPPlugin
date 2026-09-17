@@ -18,10 +18,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
     /// rental on a machine without opening its meter config. Every edit is written to the contract
     /// change audit (source RENTAL).
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Rental Maintenance",
-    MenuOrder = 220, ShowAsDialog = false,
-    OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_RENTAL_MAINT,
-    VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_RENTAL_MAINT)]
+    // Off the menu (2026-09-14, user request). The form and everything behind it stay; put the
+    // attribute back to list it again.
+    // [AutoCount.PlugIn.MenuItem("Rental Maintenance",
+    // MenuOrder = 220, ShowAsDialog = false,
+    // OpenAccessRight = AccessRightsConsts.CMD_OPEN_SCP_RENTAL_MAINT,
+    // VisibleAccessRight = AccessRightsConsts.CMD_SHOW_SCP_RENTAL_MAINT)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class RentalMaintenance_Form : XtraForm
     {

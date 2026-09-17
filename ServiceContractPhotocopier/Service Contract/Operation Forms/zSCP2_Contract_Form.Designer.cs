@@ -574,7 +574,6 @@
             this.barPasteWhole,
             this.barPasteItems,
             this.barDemoFill,
-            this.barRentalPrice,
             this.barSampleInvoice});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
             this.RibbonCtl.MaxItemId = 16;
@@ -702,16 +701,16 @@
             // 
             // barRentalPrice
             // 
-            this.barRentalPrice.Caption = "Lines && Price";
+            this.barRentalPrice.Caption = "Billing Setup";
             this.barRentalPrice.Id = 14;
-            this.barRentalPrice.ImageOptions.ImageUri.Uri = "Currency;Size32x32";
+            this.barRentalPrice.ImageOptions.ImageUri.Uri = "BO_Invoice;Size32x32";
             this.barRentalPrice.Name = "barRentalPrice";
             this.barRentalPrice.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barRentalPrice.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barRentalPrice_ItemClick);
             // 
             // barSampleInvoice
             // 
-            this.barSampleInvoice.Caption = "Sample Invoice";
+            this.barSampleInvoice.Caption = "View Sample Invoice";
             this.barSampleInvoice.Id = 15;
             this.barSampleInvoice.ImageOptions.ImageUri.Uri = "Preview;Size32x32";
             this.barSampleInvoice.Name = "barSampleInvoice";
@@ -746,7 +745,6 @@
             // 
             // grpBillingTools
             // 
-            this.grpBillingTools.ItemLinks.Add(this.barRentalPrice);
             this.grpBillingTools.ItemLinks.Add(this.barSampleInvoice);
             this.grpBillingTools.Name = "grpBillingTools";
             this.grpBillingTools.Text = "Billing";
@@ -1153,11 +1151,13 @@
             this.GrpBillingSchedule.Items.AddRange(new DevExpress.XtraLayout.BaseLayoutItem[] {
             this.layoutControlItem21,
             this.layoutControlItem25,
-            this.layoutControlItem29});
+            this.layoutControlItem29,
+            this.layoutControlItem26,
+            this.layoutControlItem32});
             this.GrpBillingSchedule.Location = new System.Drawing.Point(0, 110);
             this.GrpBillingSchedule.Name = "GrpBillingSchedule";
             this.GrpBillingSchedule.Size = new System.Drawing.Size(531, 93);
-            this.GrpBillingSchedule.Text = "2.  Billing Schedule";
+            this.GrpBillingSchedule.Text = "1.  The invoice";
             // 
             // layoutControlItem21
             // 
@@ -1190,39 +1190,37 @@
             // 
             this.GrpDocGeneration.Items.AddRange(new DevExpress.XtraLayout.BaseLayoutItem[] {
             this.layoutControlItem30,
-            this.layoutControlItem27,
-            this.emptySpaceItem2,
             this.layoutControlItem31,
-            this.layoutControlItem26,
-            this.layoutControlItem32,
-            this.layoutControlItem28});
+            this.layoutControlItem27,
+            this.layoutControlItem28,
+            this.emptySpaceItem2});
             this.GrpDocGeneration.Location = new System.Drawing.Point(531, 0);
             this.GrpDocGeneration.Name = "GrpDocGeneration";
             this.GrpDocGeneration.Size = new System.Drawing.Size(267, 203);
-            this.GrpDocGeneration.Text = "3.  Document Generation";
+            this.GrpDocGeneration.Text = "2.  Extra documents";
             // 
             // layoutControlItem26
             // 
             this.layoutControlItem26.Control = this.SluInvoiceTemplate;
-            this.layoutControlItem26.Location = new System.Drawing.Point(0, 0);
+            this.layoutControlItem26.Location = new System.Drawing.Point(0, 48);
             this.layoutControlItem26.Name = "layoutControlItem26";
-            this.layoutControlItem26.Size = new System.Drawing.Size(243, 24);
+            this.layoutControlItem26.Size = new System.Drawing.Size(507, 24);
             this.layoutControlItem26.Text = "Invoice layout";
             this.layoutControlItem26.TextSize = new System.Drawing.Size(88, 13);
             // 
             // layoutControlItem32
             // 
             this.layoutControlItem32.Control = this.SluEmailTemplate;
-            this.layoutControlItem32.Location = new System.Drawing.Point(0, 24);
+            this.layoutControlItem32.Location = new System.Drawing.Point(0, 72);
             this.layoutControlItem32.Name = "layoutControlItem32";
-            this.layoutControlItem32.Size = new System.Drawing.Size(243, 24);
+            this.layoutControlItem32.Size = new System.Drawing.Size(507, 24);
             this.layoutControlItem32.Text = "Email template";
             this.layoutControlItem32.TextSize = new System.Drawing.Size(88, 13);
             // 
             // layoutControlItem30
             // 
             this.layoutControlItem30.Control = this.ChkGenerateMeterListing;
-            this.layoutControlItem30.Location = new System.Drawing.Point(0, 96);
+            this.layoutControlItem30.Location = new System.Drawing.Point(0, 0);
             this.layoutControlItem30.Name = "layoutControlItem30";
             this.layoutControlItem30.Size = new System.Drawing.Size(243, 24);
             this.layoutControlItem30.TextSize = new System.Drawing.Size(0, 0);
@@ -1231,7 +1229,7 @@
             // layoutControlItem31
             // 
             this.layoutControlItem31.Control = this.SluMeterListingTemplate;
-            this.layoutControlItem31.Location = new System.Drawing.Point(0, 48);
+            this.layoutControlItem31.Location = new System.Drawing.Point(0, 24);
             this.layoutControlItem31.Name = "layoutControlItem31";
             this.layoutControlItem31.Size = new System.Drawing.Size(243, 24);
             this.layoutControlItem31.Text = "Listing layout";
@@ -1240,7 +1238,7 @@
             // layoutControlItem27
             // 
             this.layoutControlItem27.Control = this.ChkGenerateSOA;
-            this.layoutControlItem27.Location = new System.Drawing.Point(0, 120);
+            this.layoutControlItem27.Location = new System.Drawing.Point(0, 48);
             this.layoutControlItem27.Name = "layoutControlItem27";
             this.layoutControlItem27.Size = new System.Drawing.Size(243, 24);
             this.layoutControlItem27.TextSize = new System.Drawing.Size(0, 0);
@@ -1258,7 +1256,7 @@
             // emptySpaceItem2
             // 
             this.emptySpaceItem2.AllowHotTrack = false;
-            this.emptySpaceItem2.Location = new System.Drawing.Point(0, 144);
+            this.emptySpaceItem2.Location = new System.Drawing.Point(0, 96);
             this.emptySpaceItem2.Name = "emptySpaceItem2";
             this.emptySpaceItem2.Size = new System.Drawing.Size(243, 14);
             this.emptySpaceItem2.TextSize = new System.Drawing.Size(0, 0);
@@ -2138,7 +2136,7 @@
             this.GrpMeterCfg.Name = "GrpMeterCfg";
             this.GrpMeterCfg.Size = new System.Drawing.Size(1658, 250);
             this.GrpMeterCfg.TabIndex = 3;
-            this.GrpMeterCfg.Text = "Meter Configuration";
+            this.GrpMeterCfg.Text = "Counters on this machine";
             // 
             // GridMeterCfg
             // 
@@ -2161,12 +2159,18 @@
             this.PnlMeterBar.Controls.Add(this.BtnMeterCfgAdd);
             this.PnlMeterBar.Controls.Add(this.BtnMeterCfgDel);
             this.PnlMeterBar.Controls.Add(this.BtnMeterCfgMaint);
-            this.PnlMeterBar.Controls.Add(this.BtnMeterCfgCopyTo);
+            // DISABLED -- "Copy Meters To..." is not put on the bar. The button is gone; the code
+            // behind it (BtnMeterCfgCopyTo_Click and CopyMetersTo_Form) is kept intact so it can be
+            // brought back once it is safe. Read the note on BtnMeterCfgCopyTo_Click for what it does
+            // today and what has to be fixed first.
+            // this.PnlMeterBar.Controls.Add(this.BtnMeterCfgCopyTo);
             this.PnlMeterBar.Controls.Add(this.LblMeterCfgHint);
             this.PnlMeterBar.Dock = System.Windows.Forms.DockStyle.Top;
             this.PnlMeterBar.Location = new System.Drawing.Point(2, 23);
             this.PnlMeterBar.Name = "PnlMeterBar";
-            this.PnlMeterBar.Size = new System.Drawing.Size(1654, 30);
+            // Tall enough for the two-line hint beside the buttons. The grid below is Dock.Fill, so
+            // it gives up exactly this much and nothing else moves.
+            this.PnlMeterBar.Size = new System.Drawing.Size(1654, 42);
             this.PnlMeterBar.TabIndex = 0;
             // 
             // BtnMeterCfgAdd
@@ -2213,12 +2217,14 @@
             // 
             // LblMeterCfgHint
             // 
-            this.LblMeterCfgHint.Location = new System.Drawing.Point(376, 8);
+            // Two lines of text need room for two lines. It was 13 pixels tall, so the second
+            // sentence -- the one that says where prices are actually set -- was cut in half.
+            this.LblMeterCfgHint.Location = new System.Drawing.Point(376, 5);
             this.LblMeterCfgHint.Name = "LblMeterCfgHint";
-            this.LblMeterCfgHint.Size = new System.Drawing.Size(737, 13);
+            this.LblMeterCfgHint.Size = new System.Drawing.Size(1240, 30);
             this.LblMeterCfgHint.TabIndex = 4;
-            this.LblMeterCfgHint.Text = "Meters of the selected service item. Pick a Meter Type — pricing fills from the t" +
-    "ype and can be overridden per machine. Saved together with the contract.";
+            this.LblMeterCfgHint.Text = "The counters on the selected machine. This is where a counter's IDENTITY lives — its type, its role, and the reading it started at.\r\n" +
+    "Prices, tier pricing, minimums and waives are set in Meters & Pricing; what you see here is what that screen decided.";
             // 
             // PageBillingHistory
             // 
@@ -2289,6 +2295,9 @@
             this.GridViewItems.GridControl = this.GridItems;
             this.GridViewItems.Name = "GridViewItems";
             this.GridViewItems.OptionsBehavior.Editable = false;
+            // The columns share the width they have: the list never scrolls sideways. Billing Day,
+            // Service Start and Expiry start out of it -- the column chooser puts them back.
+            this.GridViewItems.OptionsView.ColumnAutoWidth = true;
             this.GridViewItems.OptionsView.ShowGroupPanel = false;
             this.GridViewItems.RowCellStyle += new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(this.GridViewItems_RowCellStyle);
             this.GridViewItems.DoubleClick += new System.EventHandler(this.GridViewItems_DoubleClick);
@@ -2374,8 +2383,7 @@
             this.ColStart.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
             this.ColStart.FieldName = "ServiceStart";
             this.ColStart.Name = "ColStart";
-            this.ColStart.Visible = true;
-            this.ColStart.VisibleIndex = 9;
+            this.ColStart.Visible = false;
             this.ColStart.Width = 95;
             // 
             // ColDescr
@@ -2392,8 +2400,7 @@
             this.ColBillDay.Caption = "Billing Day";
             this.ColBillDay.FieldName = "BillingDay";
             this.ColBillDay.Name = "ColBillDay";
-            this.ColBillDay.Visible = true;
-            this.ColBillDay.VisibleIndex = 7;
+            this.ColBillDay.Visible = false;
             this.ColBillDay.Width = 80;
             // 
             // ColInact
@@ -2412,8 +2419,7 @@
             this.ColExpiry.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
             this.ColExpiry.FieldName = "Expiry";
             this.ColExpiry.Name = "ColExpiry";
-            this.ColExpiry.Visible = true;
-            this.ColExpiry.VisibleIndex = 10;
+            this.ColExpiry.Visible = false;
             this.ColExpiry.Width = 95;
             // 
             // PnlItemBar
@@ -2489,7 +2495,7 @@
             this.BtnItemMeters.Name = "BtnItemMeters";
             this.BtnItemMeters.Size = new System.Drawing.Size(110, 24);
             this.BtnItemMeters.TabIndex = 7;
-            this.BtnItemMeters.Text = "Meters...";
+            this.BtnItemMeters.Text = "Meters & Pricing...";
             this.BtnItemMeters.ToolTip = "Give the whole fleet its counters at once: tick machines, then add or remove Rent" +
     "al / Black / Colour.";
             this.BtnItemMeters.Click += new System.EventHandler(this.BtnItemMeters_Click);

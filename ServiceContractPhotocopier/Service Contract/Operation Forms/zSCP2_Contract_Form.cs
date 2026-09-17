@@ -388,13 +388,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             catch { }
         }
 
+        /// <summary>Which other book's machines this contract is billed off, or "" for an ordinary
+        /// contract -- which is every contract until somebody sets inter-billing up.</summary>
+        private string _sourceBookName = "";
+
         // Window title tells the mode at a glance: "— NEW" until the first save, then "— EDIT · no".
+        //
+        // ...and, when the machines belong to another company, whose they are. It goes here because
+        // this method owns the title: it runs after every load and every save, so anything written
+        // anywhere else survives until the next keystroke and no longer.
         private void UpdateFormModeTitle()
         {
             string no = TxtContractNo.Text.Trim();
-            this.Text = _isNew
+            string from = _sourceBookName.Length > 0
+                ? "     ·     machines from " + _sourceBookName : "";
+            this.Text = (_isNew
                 ? "Service Contract — NEW" + (no.Length > 0 ? "  (" + no + ")" : "")
-                : "Service Contract — EDIT  ·  " + no;
+                : "Service Contract — EDIT  ·  " + no) + from;
         }
 
         // New machines inherit the contract's dates as their starting Service Start / Expiry —
@@ -1318,6 +1328,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _loading = true;
             try
             {
+            // Where this contract's machines came from, if they came from another book. Read once
+            // here and written into the title by UpdateFormModeTitle, which OWNS the title -- setting
+            // this.Text here instead looked right and was silently overwritten a moment later by that
+            // method's "Service Contract - EDIT" line.
+            _sourceBookName = ServiceContractPhotocopier.Classes.ScpInterBillGuard.SourceName(_db, _contractKey);
+
             DataTable dt = _db.GetDataTable(
                 "SELECT * FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + _contractKey, false);
             if (dt.Rows.Count == 0) { _isNew = true; AutoPickContractNo(); return; }
@@ -1589,26 +1605,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// collapses the selection to the row clicked. Here the ticking and the doing are separate
         /// steps, so a fleet is two clicks however large it is.
         /// </remarks>
+        /// <summary>
+        /// The button that used to open a Meters screen of its own now opens Billing Setup, because
+        /// that screen absorbed it.
+        ///
+        /// <para>The two were always one question asked twice. Meters ended up holding what a machine
+        /// HAS and what it charges; Billing Setup held how those machines print and what the printed
+        /// line charges — and the same facts kept being editable on both, each screen unable to show
+        /// what the other had done. The committed minimum went first, then the rental waive, then
+        /// tier pricing; by the end Meters was three rates and a tick, which is four columns of a
+        /// table Billing Setup already had.</para>
+        ///
+        /// <para>So they are one screen: the machines on top, what the invoice prints underneath.</para>
+        /// </summary>
         private void BtnItemMeters_Click(object sender, EventArgs e)
         {
-            GridViewItems.PostEditor();
-            GridViewItems.CloseEditor();
-            bool any = false;
-            foreach (ItemEditData d in _items) if (!d.IsGroupItem) { any = true; break; }
-            if (!any)
-            {
-                XtraMessageBox.Show("Add machines to the contract first (Quick Add Row / Attach).",
-                    "Meters", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            using (MachineMeters_Form f = new MachineMeters_Form(_db, _items))
-            {
-                if (f.ShowDialog(this) != DialogResult.OK) return;
-            }
-            RebuildItemsView();
-            BindItemMeterPanel();
-            UpdateFormatSummary();
-            if (!_loading) _dirty = true;
+            barRentalPrice_ItemClick(null, null);
         }
 
         private void BtnItemDetach_Click(object sender, EventArgs e)
@@ -1651,8 +1663,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("Inactive", typeof(string));
             _dtItemsView.Columns.Add("MachineMode", typeof(string));
             _dtItemsView.Columns.Add("BillGroupCode", typeof(string));
-            _dtItemsView.Columns.Add("LineGroupCode", typeof(string));
-            _dtItemsView.Columns.Add("OwnInvoice", typeof(bool));
             _dtItemsView.Columns.Add("HasRental", typeof(bool));
             _dtItemsView.Columns.Add("HasBK", typeof(bool));
             _dtItemsView.Columns.Add("HasCL", typeof(bool));
@@ -1683,10 +1693,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["Inactive"] = d.Inactive ? "Y" : "N";
                 r["MachineMode"] = d.MachineMode ?? "";
                 r["BillGroupCode"] = d.BillGroupCode ?? "";
-                r["LineGroupCode"] = d.LineGroupCode ?? "";
-                // "Own invoice" is a view over BillGroupCode: a code nothing else in the contract
-                // shares means this machine bills alone. One idea, one column to store it.
-                r["OwnInvoice"] = IsSoloBillGroup(d);
                 r["HasRental"] = MachineHasRental(d);
                 // Which counters this machine actually has. Not every machine has both, and some
                 // have neither -- a machine nobody reads still bills its rent.
@@ -1897,6 +1903,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (GrpMeterCfg == null) return;
             ItemEditData d = FocusedItemData();
             _meterCfgItem = d;
+            // Asked ONCE per machine, here. The row style below runs per cell per repaint, so it must
+            // not ask the database; and the delete guard must agree with what the style painted.
+            _meterCfgOwned = d == null || d.ItemKey <= 0
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : ServiceContractPhotocopier.Classes.ScpInterBillGuard.OwnedMeterTags(_db, d.ItemKey);
             if (d == null)
             {
                 GrpMeterCfg.Text = "Meter Configuration  (select a service item above)";
@@ -1915,8 +1926,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             foreach (DataRow mrow in d.Meters.Rows) if (mrow.RowState != DataRowState.Deleted) meterCount++;
             // A cloned/pasted <NEW> machine already CARRIES its copied meters — say so, or the old
             // "save first, then add meters" caption reads as "the meters did not copy".
+            // A borrowed machine says so where the counters are, not in a message after the refusal.
+            // Somebody a year from now needs to know why the minus does nothing BEFORE they press it.
+            string borrowedFrom = _meterCfgOwned.Count == 0 ? "" :
+                "   ·   counters from " +
+                ServiceContractPhotocopier.Classes.ScpInterBillGuard.SourceName(_db, _contractKey) +
+                " — they cannot be removed here";
             GrpMeterCfg.Text = saved
-                ? "Meter Configuration — " + d.ServiceItemNo
+                ? "Meter Configuration — " + d.ServiceItemNo + borrowedFrom
                 : (meterCount > 0
                     ? "Meter Configuration — <NEW>  (" + meterCount + " meter(s) copied — they save together with the contract; new number at Save)"
                     : "Meter Configuration — <NEW>  (save the contract first, then add meters here)");
@@ -1940,6 +1957,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewMeterCfg.CloseEditor();
             DataRow r = GridViewMeterCfg.GetFocusedDataRow();
             if (r == null) return;
+            if (RowIsOwnedElsewhere(GridViewMeterCfg.FocusedRowHandle))
+            {
+                XtraMessageBox.Show(
+                    "Tier pricing, the committed minimum and the rental waive are set in " +
+                    "Meters & Pricing." + Environment.NewLine + Environment.NewLine +
+                    "They are agreed for a printed LINE as often as for one machine, so they live on " +
+                    "the screen that shows the lines. What you see here is what that screen decided.",
+                    "Counters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             // On a RENTAL-WAIVE meter the same button opens the WAIVE configuration instead —
             // the engine evaluates these conditions at every Generate (no manual monitoring).
             string mtType = r["MeterTypeCode"] == DBNull.Value ? "" : Convert.ToString(r["MeterTypeCode"]).Trim();
@@ -2031,6 +2059,38 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             int rh = GridViewMeterCfg.FocusedRowHandle;
             if (rh < 0 || _meterCfgItem == null) return;
+
+            // A counter that came from another book is that company's equipment, and this book does
+            // not get to decide it stopped existing. Refused here, at the tick in Meters & Pricing,
+            // and once more at the save -- greying a control has never stopped a save from writing.
+            if (_meterCfgItem.ItemKey > 0)
+            {
+                string tag = ServiceContractPhotocopier.Classes.ScpInterBillGuard.Tag(
+                    Convert.ToString(GridViewMeterCfg.GetRowCellValue(rh, "MeterTypeCode")),
+                    Convert.ToString(GridViewMeterCfg.GetRowCellValue(rh, "MachineSerialNo")));
+                if (_meterCfgOwned.Contains(tag))
+                {
+                    XtraMessageBox.Show(
+                        ServiceContractPhotocopier.Classes.ScpInterBillGuard.RefusalText(
+                            ServiceContractPhotocopier.Classes.ScpInterBillGuard.SourceName(
+                                _db, _contractKey),
+                            "This counter"),
+                        "Counters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+            }
+
+            if (RowIsOwnedElsewhere(rh))
+            {
+                XtraMessageBox.Show(
+                    "Whether a machine HAS a rental, a black or a colour counter is the tick beside " +
+                    "it in Meters & Pricing; the minimum and the waive are the terms on its printed " +
+                    "line." + Environment.NewLine + Environment.NewLine +
+                    "Take it off there \u2014 that route counts what is about to be destroyed and says " +
+                    "so before it does it.",
+                    "Counters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             // Removing a saved meter also removes its reading history on save (cascade) — make sure.
             string code = Convert.ToString(GridViewMeterCfg.GetRowCellValue(rh, "MeterTypeCode"));
             // Deleting the machine's only RENTAL while a WAIVE stays would break the waive rule.
@@ -2079,6 +2139,49 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         // the contract — in memory; the contract Save persists them. Identity never copies:
         // InitialReading resets to 0 and MachineSerialNo clears. Skips per target: duplicate meter
         // type, BK/CL role clash, and waive meters landing on a machine without a rental.
+        /// <summary>
+        /// DISABLED. The button is no longer put on the meter bar (see the commented-out
+        /// <c>PnlMeterBar.Controls.Add</c> in the designer); the code is kept, unchanged, so it can
+        /// come back once the list below is dealt with.
+        ///
+        /// <para><b>What it does.</b> It copies every column the two meter tables share onto N other
+        /// machines, with exactly two exclusions: the machine serial is cleared and the initial
+        /// reading is zeroed. Its only per-target guards are "the target already has this meter type"
+        /// and "the target already has a BK/CL of that role".</para>
+        ///
+        /// <para><b>Why that is not safe.</b> A meter is not only a price. It also carries the terms
+        /// of a deal that was agreed for ONE machine or for ONE printed line, and those ride along
+        /// silently:</para>
+        /// <list type="bullet">
+        /// <item><description><c>CommitScope='C'</c> — a floor measured over the WHOLE contract.
+        /// Copied to four machines, the contract now has five contract-wide floors and the same
+        /// shortfall is billed five times.</description></item>
+        /// <item><description>The waive terms — target, free window, partial band, which colours
+        /// count. "Reach 1,200 and 500 comes off" copied to four machines is 2,500 a month of credit
+        /// nobody agreed.</description></item>
+        /// <item><description><c>CustomTiers</c> — bands negotiated for one machine become the
+        /// fleet's.</description></item>
+        /// <item><description><c>FOCQty</c> on a rental — this is the free months REMAINING, counted
+        /// down by each invoice, not the months promised. Copying it three months in gives the target
+        /// three free months instead of six.</description></item>
+        /// </list>
+        ///
+        /// <para><b>And the target list is wrong.</b> It offers the contract's invisible GROUP machine
+        /// (a meter landed there is forced to contract scope and bills the fleet again) and machines
+        /// marked Inactive (which start billing the day somebody un-ticks that). It pre-ticks every
+        /// meter and offers "All Targets", so the default action is to copy the whole deal to
+        /// everything.</para>
+        ///
+        /// <para><b>And the thing people would actually use it for does not work.</b> "Push my new
+        /// price to the fleet" hits the duplicate-type guard on every machine that already has that
+        /// meter — it copies nothing and reports "N meter(s) copied".</para>
+        ///
+        /// <para><b>To bring it back it needs:</b> copy the PRICE fields only (rate, ladder, free qty,
+        /// rebate) and never the scope or the term fields; filter group and inactive machines out of
+        /// the target list; show each target's current figures so the user sees what is being
+        /// overwritten; and make "the target already has this type" mean UPDATE, not skip — that is
+        /// the operation people want.</para>
+        /// </summary>
         private void BtnMeterCfgCopyTo_Click(object sender, EventArgs e)
         {
             ItemEditData src = _meterCfgItem;
@@ -2236,8 +2339,47 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return false;
         }
 
+        /// <summary>This machine's counters that came from another book, as TYPE|SERIAL. Filled when
+        /// the panel binds; empty for every contract this book owns outright.</summary>
+        private HashSet<string> _meterCfgOwned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Is the counter on this row one of the borrowed ones? Reads the cached set, never
+        /// the database -- this is asked once per cell per repaint.</summary>
+        private bool RowIsBorrowed(int rowHandle)
+        {
+            if (rowHandle < 0 || _meterCfgOwned.Count == 0) return false;
+            return _meterCfgOwned.Contains(
+                ServiceContractPhotocopier.Classes.ScpInterBillGuard.Tag(
+                    AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MeterTypeCode")),
+                    AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MachineSerialNo"))));
+        }
+
         private void ViewMeterCfg_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
+            // A counter that belongs to another company is marked before anybody tries to remove it.
+            // Pale blue, and the panel's own caption above says whose it is -- a colour with no legend
+            // is not a mark, it is decoration.
+            if (RowIsBorrowed(e.RowHandle))
+            {
+                e.Appearance.BackColor = System.Drawing.Color.FromArgb(226, 238, 250);
+                e.Appearance.ForeColor = System.Drawing.Color.Black;
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+                return;
+            }
+
+            // A cell that refuses to open must look like it. Greying says so before the click; the
+            // message on the click says where the pen went.
+            if (e.Column != null && ColumnIsOwnedElsewhere(e.Column.FieldName)
+                && RowIsOwnedElsewhere(e.RowHandle))
+            {
+                e.Appearance.BackColor = System.Drawing.Color.Gainsboro;
+                e.Appearance.ForeColor = System.Drawing.Color.Gray;
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+                return;
+            }
+
             // Unit Price and Free Qty are DEAD while a multi-price ladder is in effect (the ladder
             // prices the copies AND carries the free band) — grey both out; Free Qty shows the
             // ladder's own free quantity via CustomColumnDisplayText.
@@ -2250,6 +2392,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 e.Appearance.Options.UseForeColor = true;
                 return;
             }
+            // A rental keeps no reading, earns no rebate and takes its free months from the deal.
+            if (e.Column != null && MeterCfgRentalLocked(e.RowHandle, e.Column.FieldName))
+            {
+                e.Appearance.BackColor = System.Drawing.Color.Gainsboro;
+                e.Appearance.ForeColor = System.Drawing.Color.Gray;
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+                return;
+            }
+
             string type = Convert.ToString(GridViewMeterCfg.GetRowCellValue(e.RowHandle, "MeterTypeCode"));
             if (!IsFlatType(type)) return;
             // Pin the ForeColor too: on the FOCUSED row DevExpress paints white text, and white on
@@ -2258,6 +2410,55 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             e.Appearance.ForeColor = System.Drawing.Color.Black;
             e.Appearance.Options.UseBackColor = true;
             e.Appearance.Options.UseForeColor = true;
+        }
+
+        /// <summary>
+        /// Is this counter one of the five that Meters &amp; Pricing owns — the rental, the black, the
+        /// colour, the committed minimum, the rental waive?
+        ///
+        /// <para>Asked with the ENGINE's own tests, not by matching the role column, because a
+        /// quarter of the book never got a role: 1,701 rentals and 81 committed minimums carry role
+        /// NA and are recognised by their item code. If this asked the narrow question, those would
+        /// stay editable here while Meters &amp; Pricing was also writing them — which is the split
+        /// ownership this whole panel is being cut away from.</para>
+        ///
+        /// <para>Everything else — the plotter, the A0/A1 counter, the fax, the extra per-serial
+        /// meters, 2,058 rows in all — is nobody else's, and stays fully editable.</para>
+        /// </summary>
+        private bool RowIsOwnedElsewhere(int rowHandle)
+        {
+            if (rowHandle < 0) return false;
+            string role = AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MeterRole")).Trim().ToUpperInvariant();
+            string type = AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MeterTypeCode")).Trim();
+            if (role == "BK" || role == "CL") return true;
+            decimal min = 0m;
+            object mv = GridViewMeterCfg.GetRowCellValue(rowHandle, "MinimumCharges");
+            if (mv != null && mv != DBNull.Value) min = Math.Abs(Convert.ToDecimal(mv));
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(role, type)
+                || ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(role, type, min)
+                || ServiceContractPhotocopier.Classes.ScpStrategy.IsWaiveRole(role, IsWaiveType(type));
+        }
+
+        /// <summary>A RENTAL is a monthly charge, not a counter: nobody reads it, so it has no opening
+        /// reading; there are no copies to give a rebate on; and its free months are part of the deal,
+        /// agreed in Meters &amp; Pricing (Minimum / waive) for every machine on the line at once. Those
+        /// three cells are therefore shut on a rental row, and stay open on a counter.</summary>
+        private bool MeterCfgRentalLocked(int rowHandle, string field)
+        {
+            if (rowHandle < 0 || string.IsNullOrEmpty(field)) return false;
+            if (field != "RebateQtyInPercent" && field != "FOCQty" && field != "InitialReading") return false;
+            string role = AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MeterRole")).Trim().ToUpperInvariant();
+            string type = AsStr(GridViewMeterCfg.GetRowCellValue(rowHandle, "MeterTypeCode")).Trim();
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(role, type);
+        }
+
+        /// <summary>The columns on an owned row that Meters &amp; Pricing writes, and this panel must
+        /// therefore not. The opening reading, the rebate and the free quantity stay open on a counter;
+        /// on a rental they are shut too (see <see cref="MeterCfgRentalLocked"/>).</summary>
+        private static bool ColumnIsOwnedElsewhere(string field)
+        {
+            return field == "MeterTypeCode" || field == "MeterRole"
+                || field == "MinimumCharges" || field == "ChargesRate";
         }
 
         // A ladder governs the row when a scheme code is picked OR per-meter override tiers exist.
@@ -2275,6 +2476,66 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 && (GridViewMeterCfg.FocusedColumn.FieldName == "ChargesRate" || GridViewMeterCfg.FocusedColumn.FieldName == "FOCQty")
                 && RowHasLadder(GridViewMeterCfg.FocusedRowHandle))
                 e.Cancel = true;
+
+            if (GridViewMeterCfg.FocusedColumn != null
+                && MeterCfgRentalLocked(GridViewMeterCfg.FocusedRowHandle, GridViewMeterCfg.FocusedColumn.FieldName))
+            {
+                e.Cancel = true;
+                XtraMessageBox.Show(
+                    "This row is the monthly rental, not a counter. Nobody reads it, so it has no " +
+                    "opening reading and no copies to rebate." + Environment.NewLine + Environment.NewLine +
+                    "Free months are part of the deal: set them in Meters & Pricing, under " +
+                    "Minimum / waive, where they apply to every machine on the line." +
+                    Environment.NewLine + Environment.NewLine +
+                    "The black and colour counters on this machine keep all three.",
+                    "Monthly rental", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // The five counters Meters & Pricing owns are read here and set there. Every other
+            // counter on the machine is this panel's own and stays fully editable.
+            if (GridViewMeterCfg.FocusedColumn != null
+                && ColumnIsOwnedElsewhere(GridViewMeterCfg.FocusedColumn.FieldName)
+                && RowIsOwnedElsewhere(GridViewMeterCfg.FocusedRowHandle))
+            {
+                e.Cancel = true;
+                XtraMessageBox.Show(
+                    "The rental, black, colour, minimum and waive counters are priced in " +
+                    "Meters & Pricing \u2014 one screen for the whole contract, so a figure agreed for " +
+                    "several machines is typed once." + Environment.NewLine + Environment.NewLine +
+                    "Open it from the machine list: Meters & Pricing..." + Environment.NewLine +
+                    Environment.NewLine +
+                    "This machine's own counters \u2014 and its opening readings, rebates and free " +
+                    "quantities \u2014 are still set here.",
+                    "Counters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // A SAVED counter cannot be re-typed. The save matches a meter to its stored row on
+            // (MeterTypeCode, MachineSerialNo) -- change the type and it matches nothing, so the save
+            // INSERTs a new meter and DELETEs the old one, taking its readings and its billing log
+            // with it. That is exactly what the "-" button warns about, and this cell was doing it
+            // without a word.
+            //
+            // Removing and re-adding is the same operation said out loud, so that is where it points.
+            if (GridViewMeterCfg.FocusedColumn != null
+                && GridViewMeterCfg.FocusedColumn.FieldName == "MeterTypeCode")
+            {
+                DataRow mr = GridViewMeterCfg.GetFocusedDataRow();
+                if (mr != null && mr.RowState != DataRowState.Added
+                    && AsStr(mr["MeterTypeCode"]).Trim().Length > 0)
+                {
+                    e.Cancel = true;
+                    XtraMessageBox.Show(
+                        "This counter has been saved, and its readings are filed under the type it " +
+                        "was saved as." + Environment.NewLine + Environment.NewLine +
+                        "Changing the type here would file it under a new one and delete the old " +
+                        "counter with its whole reading history." + Environment.NewLine +
+                        "If that is really what you want, remove it with \u2212 and add it again \u2014 " +
+                        "that route says what it is about to destroy.",
+                        "Counters", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         // Ladder free copies per scheme code (SELECT once, then cached; cleared after the picker runs).
@@ -2350,6 +2611,34 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Picking a Meter Type pre-fills its pricing (same behaviour as the item dialog); any edit dirties.
+        /// <summary>
+        /// Another counter of this type already on the machine, or null.
+        ///
+        /// <para>Matched the way the database matches it -- type AND machine serial -- because a
+        /// CSSI carrying several physical machines really does hold one BK per serial, and refusing
+        /// the second would break the shape it exists for. The row being edited is skipped: a row
+        /// never clashes with itself.</para>
+        /// </summary>
+        private DataRow DuplicateMeterOn(ItemEditData d, int rowHandle, string code)
+        {
+            if (d == null || d.Meters == null || string.IsNullOrEmpty(code)) return null;
+            DataRow me = GridViewMeterCfg.GetDataRow(rowHandle);
+            string mySerial = me != null && me.Table.Columns.Contains("MachineSerialNo")
+                              && me["MachineSerialNo"] != DBNull.Value
+                ? Convert.ToString(me["MachineSerialNo"]).Trim() : "";
+            foreach (DataRow r in d.Meters.Rows)
+            {
+                if (r.RowState == DataRowState.Deleted) continue;
+                if (me != null && ReferenceEquals(r, me)) continue;
+                if (!string.Equals(Convert.ToString(r["MeterTypeCode"]).Trim(), code.Trim(),
+                                   StringComparison.OrdinalIgnoreCase)) continue;
+                string theirs = r.Table.Columns.Contains("MachineSerialNo") && r["MachineSerialNo"] != DBNull.Value
+                    ? Convert.ToString(r["MachineSerialNo"]).Trim() : "";
+                if (string.Equals(theirs, mySerial, StringComparison.OrdinalIgnoreCase)) return r;
+            }
+            return null;
+        }
+
         private void ViewMeterCfg_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             _dirty = true;
@@ -2390,6 +2679,38 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 GridViewMeterCfg.RefreshData();
                 return;
             }
+            // MACHINE INVARIANT: one counter of a type per machine.
+            //
+            // The database says so -- UNIQUE(ItemKey, MeterTypeCode, MachineSerialNo) -- but until
+            // now nothing here did, so picking BK on a machine that already has BK looked accepted,
+            // sat in the grid, and blew up at Save with a raw key-violation message naming an index.
+            // A second RENTAL is worse than an error: it is the rent billed twice.
+            //
+            // Refused the way the waive rule is refused -- a fresh row goes whole, an existing row
+            // snaps back to the type it had, because deleting it would take its readings with it.
+            DataRow dup = DuplicateMeterOn(_meterCfgItem, rh, code);
+            if (dup != null)
+            {
+                XtraMessageBox.Show(
+                    "This machine already has a " + code + " counter." + Environment.NewLine + Environment.NewLine +
+                    "A machine has one counter of each type. To change what that counter charges, " +
+                    "edit the one that is already here -- or set its price in Meters & Pricing." +
+                    Environment.NewLine + Environment.NewLine +
+                    "Rental, black and colour are given to a machine by ticking them in Meters & Pricing; " +
+                    "this panel is for the counter's identity, not for adding the standard three.",
+                    "Meter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DataRow gr2 = GridViewMeterCfg.GetDataRow(rh);
+                if (gr2 != null && gr2.RowState == DataRowState.Added)
+                    GridViewMeterCfg.DeleteRow(rh);
+                else if (gr2 != null)
+                {
+                    gr2["MeterTypeCode"] = gr2["MeterTypeCode", DataRowVersion.Original];
+                    gr2["Description"] = gr2["Description", DataRowVersion.Original];
+                }
+                GridViewMeterCfg.RefreshData();
+                return;
+            }
+
             // Re-picking a type refreshes the Description too — UNLESS the user hand-typed their own
             // (text matching some type's default is stock wording, not a customization).
             object curDesc = GridViewMeterCfg.GetRowCellValue(rh, "Description");
@@ -2621,8 +2942,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineGradeRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineSerialRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineBillGroupRepo;
-        private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineLineGroupRepo;
-        private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineOwnInvoiceRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasRentalRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasBKRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasCLRepo;
@@ -2755,35 +3074,29 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colBillGrp.Width = 80;
             colBillGrp.OptionsColumn.AllowEdit = true;
             colBillGrp.ColumnEdit = _inlineBillGroupRepo;
-            colBillGrp.ToolTip = "Machines with the same group name are billed together as ONE invoice at Generate. " +
-                "Empty = normal billing. Use the \"Bill Group...\" button above for bulk assign.";
-            colBillGrp.Visible = false;   // the "Own invoice" tick below says the same thing in words;
-                                          // the raw code stays available in the column chooser
+            colBillGrp.ToolTip = "Which INVOICE this machine is billed on. Machines sharing a name are " +
+                "billed together; empty = the contract's normal invoice. Give one machine a name " +
+                "nothing else uses and it bills alone.";
+            // Shown, not hidden.
+            //
+            // It used to be hidden behind an "Own invoice" tick, on the note that the tick "says the
+            // same thing in words". It could not: a tick has two states and this column has as many
+            // as there are branches. A contract billing HQ, BRANCH and STORE showed twenty-seven
+            // empty tick boxes -- and ticking one, then unticking it to undo, wrote a blank over
+            // "HQ", because clearing was the only other thing the tick knew how to write. That
+            // machine left the HQ invoice with nothing on screen to show it, since the column that
+            // would have shown it was this one.
+            colBillGrp.Visible = true;
 
-            // "Own invoice": the readable form of a Bill Group nothing else shares. Ticking writes a
-            // code unique to this machine, unticking clears it.
-            _inlineOwnInvoiceRepo = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
-            GridItems.RepositoryItems.Add(_inlineOwnInvoiceRepo);
-            DevExpress.XtraGrid.Columns.GridColumn colOwnInv = GridViewItems.Columns.AddVisible("OwnInvoice");
-            colOwnInv.Caption = "Own invoice";
-            colOwnInv.Width = 70;
-            colOwnInv.OptionsColumn.AllowEdit = true;
-            colOwnInv.ColumnEdit = _inlineOwnInvoiceRepo;
-            colOwnInv.ToolTip = "This machine bills on an invoice of its own, apart from the rest of the contract.";
-
-            // "Line label": the word this machine's line carries on the invoice -- HEAVY DUTY,
-            // MEDIUM DUTY, whatever the contract calls it. Free text on purpose; it is a description,
-            // and only becomes a grouping key when the contract groups its lines by model.
-            _inlineLineGroupRepo = new DevExpress.XtraEditors.Repository.RepositoryItemComboBox();
-            _inlineLineGroupRepo.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.Standard;
-            GridItems.RepositoryItems.Add(_inlineLineGroupRepo);
-            DevExpress.XtraGrid.Columns.GridColumn colLineGrp = GridViewItems.Columns.AddVisible("LineGroupCode");
-            colLineGrp.Caption = "Line label";
-            colLineGrp.Width = 100;
-            colLineGrp.OptionsColumn.AllowEdit = true;
-            colLineGrp.ColumnEdit = _inlineLineGroupRepo;
-            colLineGrp.ToolTip = "The word printed on this machine's invoice line (e.g. HEAVY DUTY). " +
-                "Machines sharing a label also share a line when the contract groups by model.";
+            // "Line label" is not here any more. It is the word PRINTED beside the charge, so it
+            // belongs with the rest of what prints -- Meters & Pricing, next to the bill group and
+            // the merge groups. Editing it in two screens was the same fault "Own invoice" had.
+            //
+            // The tooltip it used to carry was also untrue: it promised that machines sharing a
+            // label share a line "when the contract groups by model". Nothing in the engine has ever
+            // keyed off the label; ScpInvoiceBuilder.LineLabels only lists the labels of whatever
+            // machines a line already holds. And the editor here capped it at 20 characters, which
+            // silently chopped MEDIUM HEAVY DUTY "57 ppm" -- a label 108 machines in this book use.
 
             // Whether this machine has a RENTAL meter -- and the switch that gives it one. It reads
             // as a tick box, so it behaves as one: ticking drops the standard RENTAL meter on the
@@ -2798,7 +3111,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colHasRent.OptionsColumn.AllowEdit = true;
             colHasRent.ColumnEdit = _inlineHasRentalRepo;
             colHasRent.ToolTip = "This machine is rented. Tick it and the RENTAL meter is added with the " +
-                "price left at 0 — set the amount on the machine, or price the whole line in Lines & Price.";
+                "price left at 0 — set the amount on the machine, or price the merged machines in Billing Setup.";
 
             // Black and Colour, the same way. Three ticks now say everything a machine's meters used
             // to need 446 meter types to say: what it is rented for, and which counters get read.
@@ -2908,24 +3221,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     if (!d.IsGroupItem && !string.IsNullOrEmpty(d.BillGroupCode)) codes.Add(d.BillGroupCode);
                 foreach (string c in codes) ed.Properties.Items.Add(c);
                 return;
-            }
-            // Line label: offer the labels already in use here, so a fleet stays spelled one way --
-            // "MEDIUM DUTY" and "Medium Duty" would otherwise print as two different lines under
-            // "same model" grouping.
-            if (field == "LineGroupCode")
-            {
-                ed.Properties.Items.Clear();
-                SortedSet<string> labels = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (ItemEditData d in _items)
-                    if (!string.IsNullOrEmpty(d.LineGroupCode)) labels.Add(d.LineGroupCode);
-                // A contract nobody has labelled yet would open an empty list, which reads as broken
-                // rather than as "type your own". Seed it with the three words the customer's own
-                // invoices use; anything else can still be typed straight over them.
-                if (labels.Count == 0)
-                {
-                    labels.Add("HEAVY DUTY"); labels.Add("MEDIUM DUTY"); labels.Add("LIGHT DUTY");
-                }
-                foreach (string l in labels) ed.Properties.Items.Add(l);
             }
         }
 
@@ -3141,44 +3436,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                     break;
                 }
-                case "LineGroupCode":
-                {
-                    // A description, so it is kept as typed apart from trimming and a length cap.
-                    // Unlike BillGroupCode it never becomes part of a job key, so it has nothing to
-                    // forge and nothing to normalise away.
-                    string lg = (s ?? "").Trim();
-                    if (lg.Length > 20) lg = lg.Substring(0, 20);
-                    d.LineGroupCode = lg;
-                    if (lg != s)
-                    {
-                        int rh = e.RowHandle;
-                        BeginInvoke(new MethodInvoker(delegate
-                        { GridViewItems.SetRowCellValue(rh, "LineGroupCode", lg); }));
-                    }
-                    break;
-                }
                 case "HasRental":
                 case "HasBK":
                 case "HasCL":
                     ToggleStandardMeter(d, e.RowHandle, e.Column.FieldName,
                         s != null && (s == "True" || s == "true" || s == "1"));
                     break;
-                case "OwnInvoice":
-                {
-                    // Ticked -> a Bill Group only this machine can be in; unticked -> back to the
-                    // contract's normal grouping. Written through BillGroupCode so there is still
-                    // exactly one column deciding which invoice a machine lands on.
-                    bool own = s != null && (s == "True" || s == "true" || s == "1");
-                    d.BillGroupCode = own
-                        ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(
-                              "SOLO-" + (d.ServiceItemNo ?? d.ItemKey.ToString()))
-                        : "";
-                    int rhOwn = e.RowHandle;
-                    BeginInvoke(new MethodInvoker(delegate
-                    { GridViewItems.SetRowCellValue(rhOwn, "BillGroupCode", d.BillGroupCode); }));
-                    UpdateFormatSummary();
-                    break;
-                }
                 case "BillingDay":
                 {
                     int bd;
@@ -4383,26 +4646,22 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private bool _loadedInactive;
         private DateTime? _inactiveDate;
         private string _inactiveReason = "";
-        private DevExpress.XtraEditors.LabelControl _lblInactiveInfo;
-
-        // Small red "since dd/MM/yyyy — reason" note beside the Inactive checkbox.
+        /// <summary>The tick says WHETHER this contract is inactive; the caption says since when and
+        /// why. One control, so there is nothing to position.
+        ///
+        /// <para>It was a LabelControl created at run time and parented straight onto the panel next to
+        /// the tick, at coordinates worked out from the tick's own. Inside a LayoutControl that cannot
+        /// hold: the layout engine owns the positions of everything it manages and knows nothing about a
+        /// bare control dropped among them, so the note drifted away from the tick and off the edge of
+        /// the panel, and it was placed once and never moved again when the layout was rearranged.</para>
+        /// </summary>
         private void UpdateInactiveInfoLabel()
         {
-            if (ChkInactive == null || ChkInactive.Parent == null) return;
-            if (_lblInactiveInfo == null)
-            {
-                _lblInactiveInfo = new DevExpress.XtraEditors.LabelControl();
-                _lblInactiveInfo.Appearance.ForeColor = System.Drawing.Color.Firebrick;
-                _lblInactiveInfo.Appearance.Options.UseForeColor = true;
-                _lblInactiveInfo.Location = new System.Drawing.Point(
-                    ChkInactive.Location.X + ChkInactive.Width + 8, ChkInactive.Location.Y + 2);
-                ChkInactive.Parent.Controls.Add(_lblInactiveInfo);
-                _lblInactiveInfo.BringToFront();
-            }
-            _lblInactiveInfo.Text = _inactiveDate.HasValue
-                ? "since " + _inactiveDate.Value.ToString("dd/MM/yyyy") +
-                  (string.IsNullOrEmpty(_inactiveReason) ? "" : " — " + _inactiveReason)
-                : "";
+            if (ChkInactive == null) return;
+            ChkInactive.Properties.Caption = _inactiveDate.HasValue
+                ? "Inactive  —  since " + _inactiveDate.Value.ToString("dd/MM/yyyy") +
+                  (string.IsNullOrEmpty(_inactiveReason) ? "" : ", " + _inactiveReason)
+                : "Inactive";
         }
 
         private void ApplyFocResetToUi()
@@ -4637,6 +4896,103 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
         }
 
+        /// <summary>The contract's committed minimums, described to the detector the way the billing
+        /// engine describes them, so the same arithmetic that would bill twice is what gets judged.
+        /// Only the three fields the check reads are filled in — this is a question about scopes and
+        /// groupings, not about money.</summary>
+        private List<string> ScpMinimumClashes()
+        {
+            List<ServiceContractPhotocopier.Classes.MeterBillLine> lines =
+                new List<ServiceContractPhotocopier.Classes.MeterBillLine>();
+            if (_items == null) return new List<string>();
+            foreach (ServiceContractPhotocopier.ServiceContract.OperationForms.ItemEditData d in _items)
+            {
+                if (d == null || d.Meters == null || d.Inactive) continue;
+                foreach (DataRow mr in d.Meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    decimal amt = mr.Table.Columns.Contains("MinimumCharges") ? AsDec(mr["MinimumCharges"]) : 0m;
+                    if (amt == 0m) continue;                 // a floor of nothing is not a floor
+                    // The same test the billing engine makes. Matching the role string alone missed
+                    // the legacy MIN* meters that never got a role -- the engine tops those up, so a
+                    // clash involving one was waved through by the very check meant to catch it.
+                    if (!ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
+                            AsStr(mr["MeterRole"]), AsStr(mr["MeterTypeCode"]), Math.Abs(amt))) continue;
+                    ServiceContractPhotocopier.Classes.MeterBillLine l =
+                        new ServiceContractPhotocopier.Classes.MeterBillLine();
+                    l.IsCommittedMin = true;
+                    l.ContractKey = _contractKey;
+                    l.ItemKey = d.ItemKey;
+                    l.ItemName = d.ServiceItemNo;
+                    l.IsGroupItem = d.IsGroupItem;
+                    l.MergeGroupCodeMeter = d.MergeGroupCodeMeter ?? "";
+                    l.CommitScope = mr.Table.Columns.Contains("CommitScope")
+                        ? AsStr(mr["CommitScope"]) : "S";
+                    lines.Add(l);
+                }
+            }
+            return ServiceContractPhotocopier.Classes.ScpCommittedMin.FindDoubleCounted(lines);
+        }
+
+        /// <summary>
+        /// Counters this contract borrowed from another book that are no longer on screen -- naming
+        /// the machine each one belongs to.
+        ///
+        /// <para>Empty for every contract that is this book's own, which is all of them until
+        /// somebody sets inter-billing up: one indexed query that finds nothing, and the save carries
+        /// on exactly as it always did.</para>
+        /// </summary>
+        private List<string> VanishedBorrowedMeters()
+        {
+            List<string> gone = new List<string>();
+            if (_contractKey <= 0) return gone;
+
+            Dictionary<long, HashSet<string>> owned =
+                ServiceContractPhotocopier.Classes.ScpInterBillGuard.OwnedMeterTagsByItem(_db, _contractKey);
+            if (owned.Count == 0) return gone;
+
+            List<long> stillHere = new List<long>();
+            foreach (ItemEditData d in _items)
+            {
+                if (d.ItemKey <= 0) continue;
+                stillHere.Add(d.ItemKey);
+                HashSet<string> set;
+                if (!owned.TryGetValue(d.ItemKey, out set)) continue;
+                foreach (string what in
+                         ServiceContractPhotocopier.Classes.ScpInterBillGuard.VanishedOwnedMeters(set, d.Meters))
+                {
+                    gone.Add("   " + (string.IsNullOrEmpty(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo) +
+                             "   " + what);
+                }
+            }
+
+            // A machine taken off the contract takes its counters with it, so the same rule reaches
+            // the machine list. Checked by what is missing rather than by watching the delete, because
+            // this is the gate that stands whatever route the row left by.
+            System.Text.StringBuilder dropped = new System.Text.StringBuilder();
+            foreach (KeyValuePair<long, HashSet<string>> kv in owned)
+            {
+                if (stillHere.Contains(kv.Key)) continue;
+                if (dropped.Length > 0) dropped.Append(",");
+                dropped.Append(kv.Key);
+            }
+            if (dropped.Length > 0)
+            {
+                try
+                {
+                    DataTable t = _db.GetDataTable(
+                        "SELECT ISNULL(ServiceItemNo,'') AS ServiceItemNo, ISNULL(SerialNumber,'') AS SerialNumber " +
+                        "FROM dbo.zSCP2_Item WHERE ItemKey IN (" + dropped + ")", false);
+                    foreach (DataRow r in t.Rows)
+                        gone.Add("   the whole machine   " +
+                                 Convert.ToString(r["ServiceItemNo"]).Trim() + "   " +
+                                 Convert.ToString(r["SerialNumber"]).Trim());
+                }
+                catch { gone.Add("   a machine taken from the other book"); }
+            }
+            return gone;
+        }
+
         private void BtnSave_Click(object sender, EventArgs e)
         {
             bool wasNew = _isNew;   // InsertContract flips _isNew during save; remember the entry state
@@ -4651,6 +5007,41 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             if (string.IsNullOrWhiteSpace(TxtContractNo.Text))
             { XtraMessageBox.Show("Contract No is required.", "Validation"); return; }
+
+            // Two committed minimums over the same charges bill the shortfall twice, and the customer
+            // pays it twice. ScpCommittedMin has been able to find them since it was written, and the
+            // comment on it says "checked on the contract screen" -- but nothing ever called it, so the
+            // check existed and protected nobody. It runs here, before anything is written.
+            List<string> minClash = ScpMinimumClashes();
+            if (minClash.Count > 0)
+            {
+                XtraMessageBox.Show(
+                    "This contract would bill the same shortfall more than once:" + "\r\n" + "\r\n" +
+                    string.Join("\r\n", minClash.ToArray()) + "\r\n" + "\r\n" +
+                    "Open Billing Setup and keep ONE minimum over each set of charges." + "\r\n" +
+                    "Nothing was saved.",
+                    "Minimum counted twice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            // The last gate on the other book's counters. The tick in Meters & Pricing refuses and the
+            // minus on the panel refuses, but neither of those is what WRITES: this save rewrites
+            // every counter of every machine, so a row removed by any route not yet thought of would
+            // be destroyed here without a word. It is checked once more, against what is actually
+            // about to be written.
+            List<string> borrowed = VanishedBorrowedMeters();
+            if (borrowed.Count > 0)
+            {
+                XtraMessageBox.Show(
+                    "These counters came from " +
+                    ServiceContractPhotocopier.Classes.ScpInterBillGuard.SourceName(_db, _contractKey) +
+                    " and would be removed:" + "\r\n" + "\r\n" +
+                    string.Join("\r\n", borrowed.ToArray()) + "\r\n" + "\r\n" +
+                    ServiceContractPhotocopier.Classes.ScpInterBillGuard.RefusalText("", "Each of them") +
+                    "\r\n" + "\r\n" + "Nothing was saved.",
+                    "Counters from another book", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString();
             if (string.IsNullOrWhiteSpace(debtor))
             { XtraMessageBox.Show("Customer (Debtor) is required.", "Validation"); return; }
@@ -4990,9 +5381,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, Inactive, InactiveDate, InactiveReason, Created, LastModified) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@inact,@inactdate,@inactreason,GETDATE(),GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -5010,6 +5401,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private string _billingFormatCode = "";
         private char _rentalLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_ACROSS_MODEL;
         private char _meterLineMode = ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
+
+        /// <summary>Which set of rules this contract bills by. Contracts written before the change
+        /// keep their answer -- it is loaded from the row, and 'N' there means the old path exactly as
+        /// it was. Anything made from now on starts on the new one, because the screen that used to say
+        /// otherwise is no longer there to say it.</summary>
+        private bool _useNewLayout = true;
+
+        /// <summary>What every line on this contract's invoices names under the charge: the model,
+        /// the serial numbers of the machines it covers, or neither. Decided in Meters &amp; Pricing,
+        /// because that is the screen about what the invoice looks like.</summary>
+        private bool _showModel = true, _showSerial = true, _showUnits = true;
+
+        /// <summary>Whether the duty label rides on the charge line -- the contract's own answer,
+        /// which outranks the Billing Format. Empty until a contract is loaded.</summary>
+        private string _machineLineShows = "";
         /// <summary>One price per merged rental line, keyed by ModelCode ('' = the whole
         /// contract). Empty means nobody has priced the groups and every machine still prices its
         /// own rental.</summary>
@@ -5045,6 +5451,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (ChkBillSeparate != null) ChkBillSeparate.Visible = false;
             if (ChkRentalSeparate != null) ChkRentalSeparate.Visible = false;
             HideLayoutItems();
+            // The tick has to say the truth on a brand-new contract too, where nothing has been loaded
+            // to set it. It defaults to the new rules, and the ribbon must show that from the first
+            // second rather than from the first time something else happens to refresh it.
+            UpdateFormatSummary();
             if (true) return;
 #pragma warning disable 0162
             try
@@ -5124,9 +5534,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// rather than showing five gaps where the format used to be.</summary>
         private void HideLayoutItems()
         {
+            // The whole group goes, not just its contents. Everything "1. Invoice Settings" held --
+            // the format picker and its three tick boxes -- is answered in Billing Setup now, and a
+            // titled, numbered, empty box is worse than no box: it reads as a section somebody forgot
+            // to fill in. Hidden rather than deleted, because the items are still wired up and a
+            // contract still on the old rules has values in them.
             DevExpress.XtraLayout.BaseLayoutItem[] gone = new DevExpress.XtraLayout.BaseLayoutItem[] {
                 layoutControlItem33, layoutControlItem34, layoutControlItem22,
-                layoutControlItem23, layoutControlItem24 };
+                layoutControlItem23, layoutControlItem24, GrpInvoiceSettings };
             for (int i = 0; i < gone.Length; i++)
             {
                 if (gone[i] == null) continue;
@@ -5140,6 +5555,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void LoadBillingFormat(DataRow r)
         {
             _billingFormatCode = r.Table.Columns.Contains("BillingFormatCode") ? AsStr(r["BillingFormatCode"]).Trim() : "";
+            _useNewLayout = r.Table.Columns.Contains("UseNewLayout")
+                && AsStr(r["UseNewLayout"]).Trim().ToUpperInvariant() == "Y";
+            _machineLineShows = r.Table.Columns.Contains("MachineLineShows")
+                ? AsStr(r["MachineLineShows"]).Trim() : "";
+            _showModel = !r.Table.Columns.Contains("ShowModelOnLine")
+                || AsStr(r["ShowModelOnLine"]).Trim().ToUpperInvariant() != "N";
+            _showSerial = !r.Table.Columns.Contains("ShowSerialOnLine")
+                || AsStr(r["ShowSerialOnLine"]).Trim().ToUpperInvariant() != "N";
+            _showUnits = !r.Table.Columns.Contains("ShowUnitsOnLine")
+                || AsStr(r["ShowUnitsOnLine"]).Trim().ToUpperInvariant() != "N";
             _rentalLineMode = ModeOf(r, "RentalLineMode", ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_ACROSS_MODEL);
             _meterLineMode = ModeOf(r, "MeterLineMode", ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE);
             if (SluBillingFormat != null)
@@ -5280,19 +5705,91 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <para>Rental only. Black and colour are not a deal — each meter keeps its own rate and the
         /// merged usage line is worth the sum of its machines.</para>
         /// </remarks>
+        /// <summary>
+        /// Opens Meters &amp; Pricing. It is no longer on the ribbon: the screen answers a question
+        /// about the MACHINES on this contract, so it opens from the machine grid, next to the rows
+        /// it is about. Two doors to one screen is two names for one thing.
+        /// </summary>
         private void barRentalPrice_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
             if (_items == null || _items.Count == 0)
             {
                 XtraMessageBox.Show("Add the machines first — the lines are counted off them.",
-                    "Lines & Rental Price", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "Billing Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
-                new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _lineTerms))
+
+            // A contract still on the old rules would have every group it sets here saved and then
+            // ignored, because the old fold merges no usage at all. The question is asked HERE, at the
+            // moment somebody actually wants the screen -- not parked on the ribbon as a switch nobody
+            // would think to look for, next to the very button it turns on.
+            //
+            // Contracts that named a Billing Format were moved across by the migration. The ones asked
+            // here are the ones that never had one: they have always printed a line per machine, and
+            // moving them changes what they bill.
+            if (!_useNewLayout && _billingFormatCode.Length == 0)
             {
+                if (XtraMessageBox.Show(
+                        "This contract bills by the old rules: black and colour never merge, so every " +
+                        "machine prints its own line whatever is grouped here." + Environment.NewLine +
+                        Environment.NewLine +
+                        "On the new rules its machines decide its lines — the ones put together print " +
+                        "as one. That changes the invoice: the same five machines that print eleven " +
+                        "lines today can print three." + Environment.NewLine + Environment.NewLine +
+                        "Move this contract to the new rules and open Billing Setup?",
+                        "Old billing rules", MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+                    != DialogResult.Yes) return;
+                _useNewLayout = true;
+                _dirty = true;
+            }
+            // The two invoice-split flags come from the contract and go back to it. They used to be
+            // three tick boxes beside a format picker; they belong with the rest of "what prints".
+            string split = ChkBillSeparate.Checked
+                ? (ChkRentalSeparate.Checked ? "PMS" : "PM")
+                : (ChkRentalSeparate.Checked ? "RS" : "ONE");
+
+            using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
+                new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _lineTerms, split))
+            {
+                f.Db = _db;
+                f.ResultShowModel = _showModel;
+                f.ResultShowSerial = _showSerial;
+                f.ResultShowUnits = _showUnits;
+                // Sample Invoice from inside the screen: the contract owns the debtor, the templates
+                // and the number, so it draws it; the line screen only says when.
+                f.ShowSample = delegate
+                {
+                    // The sample has to answer for what is on the screen NOW. The dialog's answers only
+                    // reach the contract when it is closed with OK, so without these two the picture
+                    // asked for to CHECK a price would be drawn from the last save -- showing the old
+                    // price, and the old split, while honouring the new grouping (that one rides on the
+                    // machines, which are shared). Half-right is worse than stale: it looks like the
+                    // screen was read.
+                    _sampleTerms = f.Result;
+                    _sampleSplit = f.ResultSplit;
+                    _sampleShowModel = f.ResultShowModel;
+                    _sampleShowSerial = f.ResultShowSerial;
+                    _sampleShowUnits = f.ResultShowUnits;
+                    try { barSampleInvoice_ItemClick(null, null); }
+                    finally
+                    {
+                        _sampleTerms = null; _sampleSplit = null;
+                        _sampleShowModel = null; _sampleShowSerial = null; _sampleShowUnits = null;
+                    }
+                };
                 if (f.ShowDialog(this) != DialogResult.OK) return;
+                _showModel = f.ResultShowModel;
+                _showSerial = f.ResultShowSerial;
+                _showUnits = f.ResultShowUnits;
                 _lineTerms = f.Result;
+                _formatApplying = true;
+                try
+                {
+                    ChkBillSeparate.Checked = f.ResultSplit == "PM" || f.ResultSplit == "PMS";
+                    ChkBillGroup.Checked = !ChkBillSeparate.Checked;
+                    ChkRentalSeparate.Checked = f.ResultSplit == "RS" || f.ResultSplit == "PMS";
+                }
+                finally { _formatApplying = false; }
                 _rentalPricesDirty = true;
                 _dirty = true;
                 RebuildItemsView();
@@ -5326,6 +5823,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // answers are copied because changing them retroactively changes what a signed contract
             // bills; this one only changes the wording on the line, and a house-style decision is
             // meant to reach every invoice at once. Generate reads it the same way.
+            // The CONTRACT's answer first, the format's second -- the same order the billing run
+            // reads them in (ScpBillingRows: ISNULL(NULLIF(c.MachineLineShows,''), bf...)).
+            //
+            // The format was being read on its own, so a contract that had chosen "label only" and
+            // named no format got the hard-coded 'B' here: the preview printed a model and a list of
+            // serials that the real invoice would not. A picture people check a price against has to
+            // be drawn from the same settings the invoice is.
             char machineLine = ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
             if (_billingFormatCode.Length > 0)
             {
@@ -5333,18 +5837,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     ServiceContractPhotocopier.Classes.ScpBillingFormat.Load(_db, _billingFormatCode);
                 if (fmt != null) machineLine = fmt.MachineLineShows;
             }
+            if (_machineLineShows.Length > 0) machineLine = char.ToUpperInvariant(_machineLineShows[0]);
 
             using (SampleInvoice_Form f = new SampleInvoice_Form(
                 _db, _items, TxtContractNo.Text.Trim(),
                 LkDebtorCode == null || LkDebtorCode.EditValue == null ? "" : Convert.ToString(LkDebtorCode.EditValue),
-                formatName, _billingFormatCode.Length > 0,
-                _rentalLineMode, _meterLineMode,
-                ChkRentalSeparate.Checked, ChkBillSeparate.Checked,
+                // The same test ScpInvoiceLayout.LoadLayouts makes. It used to read "is a Billing
+                // Format named?", which was true of every contract back when a format was the only way
+                // to leave the legacy path. Contracts now carry UseNewLayout and no format name at all,
+                // so that question answered NO for all of them -- and the sample quietly fell back to
+                // legacy folding, printing black and colour one line per machine on a contract whose
+                // own screen said one line each.
+                formatName, _useNewLayout || _billingFormatCode.Length > 0,
+                // On the new rules there ARE no line modes -- the machines' grouping is the whole
+                // answer, and ScpInvoiceLayout.LoadLayouts forces both to 'G' before it reads
+                // anything. The preview was still handing over the two columns left on the contract
+                // from the format era, so a contract whose stored mode said "merge everything" showed
+                // a merged invoice while its own screen showed nothing grouped at all.
+                _useNewLayout ? ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_BY_GROUP : _rentalLineMode,
+                _useNewLayout ? ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_BY_GROUP : _meterLineMode,
+                _sampleSplit == null ? ChkRentalSeparate.Checked
+                                     : (_sampleSplit == "RS" || _sampleSplit == "PMS"),
+                _sampleSplit == null ? ChkBillSeparate.Checked
+                                     : (_sampleSplit == "PM" || _sampleSplit == "PMS"),
                 RentalPricesForSample(),
                 SluInvoiceTemplate == null || SluInvoiceTemplate.EditValue == null
                     ? "" : Convert.ToString(SluInvoiceTemplate.EditValue),
                 machineLine))
             {
+                // Whatever is being edited right now, so a group ladder typed a moment ago is priced
+                // in the preview rather than the one that was last saved.
+                f.LineTerms = _sampleTerms ?? _lineTerms;
+                f.ShowModel = _sampleShowModel ?? _showModel;
+                f.ShowSerial = _sampleShowSerial ?? _showSerial;
+                f.ShowUnits = _sampleShowUnits ?? _showUnits;
                 f.ShowDialog(this);
             }
         }
@@ -5353,13 +5879,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>The rental side of the agreed figures, keyed the way the fold engine keys a
         /// rental line. The sample invoice only prices rentals; the copies carry their agreed rate on
         /// the meter line itself.</summary>
+        /// <summary>What Lines &amp; Price is holding while it is open, for the Sample Invoice button
+        /// inside it. Null the rest of the time, and the contract's own saved answers are used.</summary>
+        private System.Collections.Generic.Dictionary<string,
+            ServiceContractPhotocopier.Classes.ScpLineTerms> _sampleTerms;
+        private string _sampleSplit;
+
+        /// <summary>The two ticks as Meters &amp; Pricing is holding them, for the Sample Invoice
+        /// button inside it. Null the rest of the time, and the contract's saved answers are used.</summary>
+        private bool? _sampleShowModel, _sampleShowSerial, _sampleShowUnits;
+
         private System.Collections.Generic.Dictionary<string, decimal> RentalPricesForSample()
         {
             System.Collections.Generic.Dictionary<string, decimal> map =
                 new System.Collections.Generic.Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-            if (_lineTerms == null) return map;
+            System.Collections.Generic.Dictionary<string,
+                ServiceContractPhotocopier.Classes.ScpLineTerms> src = _sampleTerms ?? _lineTerms;
+            if (src == null) return map;
             foreach (System.Collections.Generic.KeyValuePair<string,
-                        ServiceContractPhotocopier.Classes.ScpLineTerms> kv in _lineTerms)
+                        ServiceContractPhotocopier.Classes.ScpLineTerms> kv in src)
             {
                 ServiceContractPhotocopier.Classes.ScpLineTerms t = kv.Value;
                 if (t == null || t.UnitPrice <= 0m) continue;
@@ -5383,10 +5921,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (t == null || t.IsEmpty) continue;   // nothing agreed -- the machines keep their own
                 ExecNonQuery(conn, tx,
                     "INSERT INTO dbo.zSCP2_ContractRentalPrice " +
-                    "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, LastModified) " +
-                    "VALUES (@ck,@sd,@mc,@up,@bk,@cl,GETDATE())",
+                    "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, " +
+                    " LadderBk, LadderCl, LastModified) " +
+                    "VALUES (@ck,@sd,@mc,@up,@bk,@cl,@lb,@lc,GETDATE())",
                     P("@ck", _contractKey), P("@sd", t.Side ?? "R"), P("@mc", t.GroupCode ?? ""),
-                    P("@up", t.UnitPrice), P("@bk", t.BkPrice), P("@cl", t.ClPrice));
+                    P("@up", t.UnitPrice), P("@bk", t.BkPrice), P("@cl", t.ClPrice),
+                    P("@lb", t.LadderBk ?? ""), P("@lc", t.LadderCl ?? ""));
             }
         }
 
@@ -5427,11 +5967,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>What this contract will actually produce, counted from its real machines.</summary>
         private void UpdateFormatSummary()
         {
-            // Pricing a group only means anything once the rental lines merge.
-            if (barRentalPrice != null)
-                barRentalPrice.Enabled =
-                    _rentalLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE ||
-                    _meterLineMode != ServiceContractPhotocopier.Classes.ScpBillingFormat.LINE_PER_MACHINE;
+            // Open whenever the engine will honour what is set there -- which is the same test
+            // ScpInvoiceLayout.LoadLayouts makes, and the same one the Sample Invoice makes.
+            //
+            // It used to close the screen whenever both line modes read "per machine", on the reasoning
+            // that pricing a group means nothing until the lines merge. Under the new rules that is
+            // backwards twice over. There are no modes any more -- a contract on UseNewLayout takes its
+            // shape from how its machines are grouped, and the engine forces both modes to 'G' before
+            // it reads anything -- so the two values still sitting in those columns are dead data
+            // driving a live control. And Lines & Price is the screen where grouping is DECIDED: shutting
+            // it because nothing is grouped yet locks a contract out of ever grouping anything. DEMO-09
+            // is the one contract whose stale values happened to be S and S, so it alone was sealed.
+            // The screen stays open to everyone. A contract still on the old rules is asked at the
+            // door -- see barRentalPrice_ItemClick -- rather than being locked out by a grey button
+            // whose way in is somewhere else on the ribbon.
+            if (barRentalPrice != null) barRentalPrice.Enabled = true;
             if (LblFormatSummary == null) return;
             if (_billingFormatCode.Length == 0)
             {
@@ -5469,21 +6019,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             LblFormatSummary.Appearance.ForeColor = deviation.Length > 0
                 ? System.Drawing.Color.FromArgb(150, 90, 0) : System.Drawing.Color.DimGray;
             LblFormatSummary.Text = words;
-        }
-
-        /// <summary>True when this machine's Bill Group is one nothing else in the contract shares —
-        /// which is what "Own invoice" means.</summary>
-        private bool IsSoloBillGroup(ItemEditData d)
-        {
-            if (d == null || string.IsNullOrEmpty(d.BillGroupCode)) return false;
-            for (int i = 0; i < _items.Count; i++)
-            {
-                ItemEditData o = _items[i];
-                if (o == null || ReferenceEquals(o, d)) continue;
-                if (string.Equals(o.BillGroupCode, d.BillGroupCode, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
-            return true;
         }
 
         /// <summary>Does this machine have a rental meter? One answer, shared with the machine
@@ -5561,9 +6096,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
                 "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
-                "BillingFormatCode=@fmtcode, RentalLineMode=@rlmode, MeterLineMode=@mlmode, " +
+                "BillingFormatCode=@fmtcode, RentalLineMode=@rlmode, MeterLineMode=@mlmode, UseNewLayout=@newlayout, " +
+                "ShowModelOnLine=@showmodel, ShowSerialOnLine=@showserial, ShowUnitsOnLine=@showunits, " +
                 "Inactive=@inact, InactiveDate=@inactdate, InactiveReason=@inactreason, " +
-                "Modified=GETDATE(), LastModified=GETDATE() WHERE ContractKey=@ck";
+                "Modified=GETDATE(), LastModified=GETDATE(), ModifiedBy=@who WHERE ContractKey=@ck";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -5606,6 +6142,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@fmtcode", _billingFormatCode ?? "");
             cmd.Parameters.AddWithValue("@rlmode", _rentalLineMode.ToString());
             cmd.Parameters.AddWithValue("@mlmode", _meterLineMode.ToString());
+            // Without this the column keeps its 'N' default and every contract made on the new screen
+            // bills by the old rules -- the grouping typed into Lines & Price would be collected,
+            // saved, and then ignored by the engine.
+            cmd.Parameters.AddWithValue("@newlayout", _useNewLayout ? "Y" : "N");
+            cmd.Parameters.AddWithValue("@showmodel", _showModel ? "Y" : "N");
+            cmd.Parameters.AddWithValue("@showserial", _showSerial ? "Y" : "N");
+            cmd.Parameters.AddWithValue("@showunits", _showUnits ? "Y" : "N");
             cmd.Parameters.AddWithValue("@rentday", SpnRentalDay != null ? (object)(int)SpnRentalDay.Value : (object)_loadedRentalDay);
             cmd.Parameters.AddWithValue("@invrpt", TplVal(SluInvoiceTemplate, _loadedInvRpt));
             cmd.Parameters.AddWithValue("@gensoa", ChkGenerateSOA != null ? (ChkGenerateSOA.Checked ? "Y" : "N") : (_loadedGenSOA ? "Y" : "N"));
@@ -5622,6 +6165,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@inact", ChkInactive.Checked ? "Y" : "N");
             cmd.Parameters.AddWithValue("@inactdate", _inactiveDate.HasValue ? (object)_inactiveDate.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@inactreason", _inactiveReason ?? "");
+            // Who is saving: the list shows it as Created By / Modified By.
+            cmd.Parameters.AddWithValue("@who", CurrentUserId());
+        }
+
+        private static string CurrentUserId()
+        {
+            try
+            {
+                string u = AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? "";
+                return u.Trim().Length > 30 ? u.Trim().Substring(0, 30) : u.Trim();
+            }
+            catch { return ""; }
         }
 
         private long InsertItem(SqlConnection conn, SqlTransaction tx, ItemEditData d, int pos)

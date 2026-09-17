@@ -45,6 +45,12 @@ namespace ServiceContractPhotocopier
         /// <summary>What the machine line names -- model, duty label, or both. Read live from the
         /// format when the preview is opened, so it matches what Generate will do.</summary>
         private readonly char _machineLineShows = ScpBillingFormat.MACHINE_LINE_BOTH;
+
+        /// <summary>What the line names under the charge. Set by the caller from the contract, so
+        /// the picture shows the same thing the run will print.</summary>
+        public bool ShowModel = true;
+        public bool ShowSerial = true;
+        public bool ShowUnits = true;
         private readonly string _formatName;
         private readonly bool _rentalSeparate;
         private readonly bool _perMachine;
@@ -87,6 +93,11 @@ namespace ServiceContractPhotocopier
             _invoiceTemplate = invoiceTemplate ?? "";
             _machineLineShows = machineLineShows;
         }
+
+        /// <summary>The contract's agreed line terms, handed over so the preview can price a group
+        /// ladder the way the billing run does. Set by the caller before ShowDialog; empty means the
+        /// contract has agreed nothing and every machine keeps its own price.</summary>
+        public Dictionary<string, ScpLineTerms> LineTerms;
 
         private void OnFormLoad(object sender, EventArgs e)
         {
@@ -177,8 +188,16 @@ namespace ServiceContractPhotocopier
 
         private Dictionary<string, string> _chargeItems;
 
+        /// <summary>Every tier ladder in the book, plus the own-ladders the machines on THIS contract
+        /// are carrying. Without it the preview priced tiered meters at their flat rate — which for a
+        /// meter that has only a ladder is nothing, so the sample showed a black line at RM 0.00, and
+        /// two machines on different ladders merged onto it because a line keys on the ladder and both
+        /// were reading as "no ladder". Generate has always loaded this; the preview had not.</summary>
+        private Dictionary<string, List<decimal[]>> _ladders;
+
         private List<MeterBillLine> BuildLines()
         {
+            _ladders = ScpMultiPrice.LoadLadders(_db);
             List<MeterBillLine> lines = new List<MeterBillLine>();
             DateTime period = DateTime.Today;
             int seed = 0;
@@ -203,12 +222,18 @@ namespace ServiceContractPhotocopier
                     l.ModelCode = d.ItemCode ?? "";
                     l.MergeGroupCode = d.MergeGroupCode ?? "";
                     l.MergeGroupCodeMeter = d.MergeGroupCodeMeter ?? "";
+                    // Which INVOICE this machine goes on. Normalised the way the billing run
+                    // normalises it, so the two agree about what counts as the same group.
+                    l.BillGroupCode = ScpStrategy.SanitizeBillGroup(d.BillGroupCode);
                     l.LineGroupCode = d.LineGroupCode ?? "";
                     l.MeterTypeCode = type;
                     l.MeterTypeName = Str(mr, "Description");
                     l.ACItemCode = ChargeItemOf(type);
                     l.NewMoneyRules = _hasFormat;
                     l.MachineLineShows = _machineLineShows;
+                    l.ShowModel = ShowModel;
+                    l.ShowSerial = ShowSerial;
+                    l.ShowUnits = ShowUnits;
                     l.AuditDate = period;
                     l.LastDate = period.AddMonths(-1);
                     l.PeriodEnd = period;
@@ -217,6 +242,20 @@ namespace ServiceContractPhotocopier
                     l.Foc = Dec(mr, "FOCQty");
                     l.RebatePct = Dec(mr, "RebateQtyInPercent");
                     l.MultiPriceCode = Str(mr, "MeterMultiPriceCode");
+
+                    // A meter may carry a ladder of its OWN instead of naming one off the master list.
+                    // It is held on the row as a CSV, so it is read here without going near the database
+                    // -- which also means a ladder typed a minute ago and not yet saved shows up in the
+                    // sample. The key only has to be unique within this preview, and being per-meter is
+                    // exactly what keeps such a machine off anybody else's line.
+                    string ownCsv = Str(mr, "CustomTiers").Trim();
+                    if (ownCsv.Length > 0)
+                    {
+                        string ownKey = "#S" + seed + ":" + type;
+                        _ladders[ownKey] = ServiceContractPhotocopier.ServiceContract.OperationForms
+                                             .zSCP2_Item_Form.ParseTiersCsv(ownCsv);
+                        l.MultiPriceCode = ownKey;
+                    }
                     l.WaiveScope = Str(mr, "WaiveScope");
                     l.CommitScope = Str(mr, "CommitScope");
 
@@ -233,23 +272,60 @@ namespace ServiceContractPhotocopier
                         l.RentalStartDate = period.AddMonths(-12);
                         if (isCommit)
                         {
-                            // A committed minimum bills the shortfall, and the shortfall is not known
-                            // until the copies are in. The line is shown for its shape, priced 0.
+                            // The shortfall IS knowable here -- the copies on this preview are the
+                            // ones being previewed. It used to say "worked out at Generate", which told
+                            // the reader nothing and told the customer less; the arithmetic is done by
+                            // the same class the invoice uses, at the end of BuildLines once every
+                            // copy line has a charge.
                             l.IsCommittedMin = true;
                             l.CommittedAmount = l.MinCharges;
                             l.AlwaysBill = true;
                             l.Charge = 0m;
-                            l.StrategyNote = "COMMITTED MIN " + l.MinCharges.ToString("n2") +
-                                             " — bills the shortfall, worked out at Generate";
                         }
                         else if (isWaive)
                         {
-                            l.Charge = -Math.Abs(l.MinCharges != 0m ? l.MinCharges : l.Rate);
-                            l.StrategyNote = "RENTAL WAIVE — fires on its own terms at Generate";
+                            // Shown for its SHAPE, priced 0 — the same treatment the committed minimum
+                            // gets three lines up, and for the same reason: whether it fires is decided
+                            // against a real month, and this month is invented.
+                            //
+                            // It used to print its full amount, which read as a promise. A contract whose
+                            // deal is "reach 900 and the rental is free" showed −815.00 on a preview whose
+                            // copies came to 429 — money the customer will never be credited, subtracted
+                            // from a total that then did not match the invoice either.
+                            // Priced 0 and saying WHY: a waive turns on what a real month does, and
+                            // this month is invented. The terms are printed as figures rather than as
+                            // a promise, so the reader can check the deal without being shown money
+                            // that may never be credited.
+                            l.Charge = 0m;
+                            l.AlwaysBill = true;
+                            decimal waiveAmt = Math.Abs(l.MinCharges != 0m ? l.MinCharges : l.Rate);
+                            decimal waiveAt = Dec(mr, "WaiveTargetAmount");
+                            int waiveN = (int)Dec(mr, "WaiveFirstNMonths");
+                            string terms = waiveN > 0
+                                ? "free for the first " + waiveN + " month" + (waiveN == 1 ? "" : "s")
+                                : (waiveAt > 0m
+                                    ? "when this month's copies reach " + waiveAt.ToString("n2")
+                                    : "every month");
+                            l.StrategyNote = "RENTAL WAIVE " + waiveAmt.ToString("n2") + " · " + terms;
+
+                            // FREE MONTHS ARE NOT A WAIVE, and the preview has to show which deal
+                            // this is. A free window costs nothing to picture: the rental is simply
+                            // not charged, so the window is carried through and anchored at THIS
+                            // month -- a deal that gives twelve free months should be pictured
+                            // inside them, not after they ran out.
+                            //
+                            // A waive earned by COPIES is the opposite: it turns on what a real
+                            // month does, and this month is invented. Its amount is cleared so the
+                            // engine cannot price it here -- the terms print as figures above, not
+                            // as money the customer may never be credited.
+                            l.WaiveFirstNMonths = waiveN;
+                            l.WaiveTargetAmount = 0m;
+                            if (waiveN > 0) l.RentalStartDate = period;
+                            else { l.MinCharges = 0m; l.Rate = 0m; }
                         }
                         else
                         {
-                            ScpInvoiceBuilder.ComputeCharge(l, null);
+                            ScpInvoiceBuilder.ComputeCharge(l, _ladders);
                         }
                     }
                     else
@@ -259,12 +335,29 @@ namespace ServiceContractPhotocopier
                         l.ColorLabel = role == "CL" ? "Colour" : (role == "BK" ? "Black" : "Usage");
                         l.Last = 100000 + seed * 1000;
                         l.Current = l.Last + usage;
-                        ScpInvoiceBuilder.ComputeCharge(l, null);
+                        ScpInvoiceBuilder.ComputeCharge(l, _ladders);
                     }
                     lines.Add(l);
                 }
             }
             ApplyGroupPrices(lines);
+            // Tier pricing agreed over a group is priced over the group's copies, not machine by
+            // machine -- the preview has to show the same money the run will bill.
+            if (LineTerms != null && LineTerms.Count > 0)
+            {
+                Dictionary<long, Dictionary<string, ScpLineTerms>> termsByCt =
+                    new Dictionary<long, Dictionary<string, ScpLineTerms>>();
+                termsByCt[0L] = LineTerms;
+                ScpGroupLadder.Apply(lines, termsByCt, _ladders);
+            }
+            // Waive first, minimum after — the order the billing run uses. A waive is decided by what
+            // the copies came to, so it reads charges; a minimum then tops those charges up. Reverse
+            // them and a machine topped up to its floor would earn a credit it did not print for.
+            ServiceContractPhotocopier.Classes.ScpWaiveMeter.Apply(
+                lines, DateTime.Today.Year, DateTime.Today.Month);
+            lines.RemoveAll(delegate(MeterBillLine lx) { return lx.Suppressed; });
+            // Last, because a minimum is measured against charges that have to exist first.
+            ScpCommittedMin.ApplyMeterMinimums(lines);
             return lines;
         }
 
@@ -282,7 +375,7 @@ namespace ServiceContractPhotocopier
                 if (!_groupPrices.TryGetValue(key, out price) || price <= 0m) continue;
                 l.Rate = price;
                 l.MinCharges = 0m;
-                ScpInvoiceBuilder.ComputeCharge(l, null);
+                ScpInvoiceBuilder.ComputeCharge(l, _ladders);
             }
         }
 
@@ -294,6 +387,17 @@ namespace ServiceContractPhotocopier
         {
             string who = _perMachine ? l.ItemName : "this contract";
             string what = _rentalSeparate && (l.IsRental || l.IsWaiveMeter) ? "rental" : "";
+
+            // A BILL GROUP is a separate invoice, and it outranks "one invoice" and "rental apart" --
+            // the same rule ScpInvoiceJobs keys a job on. The preview did not ask about it at all, so
+            // Rompin's library copier, which the run puts on a paper of its own, was drawn onto
+            // the same invoice as the other four. A picture that shows one invoice where three
+            // will print is worse than no picture. One invoice per machine outranks the bill group:
+            // every machine is its own paper whatever group it is in.
+            string bg = (l.BillGroupCode ?? "").Trim();
+            if (bg.Length > 0 && !_perMachine)
+                return what.Length > 0 ? "Invoice " + bg + " — rental" : "Invoice " + bg;
+
             if (!_perMachine && what.Length == 0) return "Invoice 1 — " + _debtor;
             if (!_perMachine) return "Invoice — rental";
             return what.Length > 0 ? "Invoice — " + who + " (rental)" : "Invoice — " + who;
@@ -358,7 +462,12 @@ namespace ServiceContractPhotocopier
                     // the posted document uses, so the two cannot say different things.
                     sl.TextRows.AddRange(ScpInvoiceBuilder.ComposeReadingRows(row, DateTime.Today));
                     sl.ItemCode = row.Leader.ACItemCode ?? "";
-                    sl.Uom = "UNIT";
+                    // A rental bills machines, a meter bills copies. Every line used to say UNIT,
+                    // so a black line read "10,239 UNIT" -- ten thousand machines. The customer's
+                    // own invoices print "pcs" there, and the posted document takes the UOM from the
+                    // stock item rather than inventing one; this is the preview's stand-in for it.
+                    sl.Uom = (row.Leader.IsFlat || row.Leader.IsCommittedMin || row.Leader.IsWaiveMeter)
+                        ? "UNIT" : "PCS";
                     sl.Description = head;
                     // The description says what the line is and which models it is for. It does
                     // NOT list the machines: "covers:  5 machines:  DEMO07-001, ..." was a way to
@@ -366,7 +475,11 @@ namespace ServiceContractPhotocopier
                     // the customer reads and no invoice explains itself that way. The MODEL line
                     // and the unit count already say how many machines are on the line.
                     sl.SubDescription = sub;
-                    sl.Note = row.Leader.StrategyNote ?? "";
+                    // A merged minimum has no single member sentence to quote -- the same method the
+                    // posted invoice uses composes it, so the two cannot drift.
+                    sl.Note = row.IsMerged && row.Leader.IsCommittedMin
+                        ? ScpInvoiceBuilder.MergedMinimumNote(row)
+                        : (row.Leader.StrategyNote ?? "");
                     sl.Qty = row.PrintQty;
                     sl.UnitPrice = row.PrintUnitPrice;
                     sl.Amount = row.PrintAmount;

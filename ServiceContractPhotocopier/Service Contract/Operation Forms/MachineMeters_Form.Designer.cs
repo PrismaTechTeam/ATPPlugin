@@ -116,8 +116,9 @@ namespace ServiceContractPhotocopier
             this.LblHint.TabIndex = 0;
             this.LblHint.Text = "Tick the machines, then press what they need. Rent, black and colour are independent — " +
     "a machine can have all three, one, or none at all, and a machine nobody reads still bills its rent.\r\n" +
-    "One model is usually one deal: click a machine, press \"Tick same model\", type the rate once and set it for all of them. " +
-    "Machines that agree on price are also what lets the invoice print ONE line instead of one per machine.";
+    "One model is usually one deal: click a machine, press \"Tick same model\", type the rate once and set it for all of them.\r\n" +
+    "Volume pricing is not set here. A tier ladder is as often a deal about a printed LINE as about "
+    + "one machine, so both are set together in Billing Setup; the tier columns show what is in force.";
             //
             // GridMachines
             //
@@ -133,7 +134,7 @@ namespace ServiceContractPhotocopier
             this.RepoMoney,
             this.RepoRate,
             this.RepoScope});
-            this.GridMachines.Size = new System.Drawing.Size(1080, 300);
+            this.GridMachines.Size = new System.Drawing.Size(1080, 368);
             this.GridMachines.TabIndex = 1;
             this.GridMachines.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
             this.GridViewMachines});
@@ -152,12 +153,7 @@ namespace ServiceContractPhotocopier
             this.ColCL,
             this.ColCLRate,
             this.ColBKLadder,
-            this.ColCLLadder,
-            this.ColMin,
-            this.ColMinAmount,
-            this.ColMinScope,
-            this.ColWaive,
-            this.ColWaiveDeal});
+            this.ColCLLadder});
             this.GridViewMachines.GridControl = this.GridMachines;
             this.GridViewMachines.Name = "GridViewMachines";
             this.GridViewMachines.OptionsBehavior.EditorShowMode = DevExpress.Utils.EditorShowMode.MouseDown;
@@ -405,22 +401,9 @@ namespace ServiceContractPhotocopier
             this.PanelActions.Controls.Add(this.BtnRateRental);
             this.PanelActions.Controls.Add(this.BtnRateBK);
             this.PanelActions.Controls.Add(this.BtnRateCL);
-            this.PanelActions.Controls.Add(this.LblMin);
-            this.PanelActions.Controls.Add(this.TxtMinAmount);
-            this.PanelActions.Controls.Add(this.CmbMinScope);
-            this.PanelActions.Controls.Add(this.BtnAddMin);
-            this.PanelActions.Controls.Add(this.BtnDelMin);
-            this.PanelActions.Controls.Add(this.LblWaive);
-            this.PanelActions.Controls.Add(this.BtnSetWaive);
-            this.PanelActions.Controls.Add(this.BtnDelWaive);
-            this.PanelActions.Controls.Add(this.LblLadder);
-            this.PanelActions.Controls.Add(this.CmbLadder);
-            this.PanelActions.Controls.Add(this.BtnLadderBK);
-            this.PanelActions.Controls.Add(this.BtnLadderCL);
-            this.PanelActions.Controls.Add(this.BtnLadderClear);
-            this.PanelActions.Location = new System.Drawing.Point(12, 379);
+            this.PanelActions.Location = new System.Drawing.Point(12, 447);
             this.PanelActions.Name = "PanelActions";
-            this.PanelActions.Size = new System.Drawing.Size(1080, 214);
+            this.PanelActions.Size = new System.Drawing.Size(1080, 146);
             this.PanelActions.TabIndex = 2;
             //
             // LblGive
@@ -628,7 +611,7 @@ namespace ServiceContractPhotocopier
             //
             // LblLadder
             //
-            this.LblLadder.Location = new System.Drawing.Point(12, 178);
+            this.LblLadder.Location = new System.Drawing.Point(12, 144);
             this.LblLadder.Name = "LblLadder";
             this.LblLadder.Size = new System.Drawing.Size(130, 13);
             this.LblLadder.TabIndex = 21;
@@ -636,7 +619,7 @@ namespace ServiceContractPhotocopier
             //
             // CmbLadder
             //
-            this.CmbLadder.Location = new System.Drawing.Point(160, 174);
+            this.CmbLadder.Location = new System.Drawing.Point(160, 140);
             this.CmbLadder.Name = "CmbLadder";
             this.CmbLadder.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbLadder.Size = new System.Drawing.Size(248, 20);
@@ -645,7 +628,7 @@ namespace ServiceContractPhotocopier
             //
             // BtnLadderBK
             //
-            this.BtnLadderBK.Location = new System.Drawing.Point(416, 173);
+            this.BtnLadderBK.Location = new System.Drawing.Point(416, 139);
             this.BtnLadderBK.Name = "BtnLadderBK";
             this.BtnLadderBK.Size = new System.Drawing.Size(110, 24);
             this.BtnLadderBK.TabIndex = 23;
@@ -654,7 +637,7 @@ namespace ServiceContractPhotocopier
             //
             // BtnLadderCL
             //
-            this.BtnLadderCL.Location = new System.Drawing.Point(534, 173);
+            this.BtnLadderCL.Location = new System.Drawing.Point(534, 139);
             this.BtnLadderCL.Name = "BtnLadderCL";
             this.BtnLadderCL.Size = new System.Drawing.Size(110, 24);
             this.BtnLadderCL.TabIndex = 24;
@@ -663,7 +646,7 @@ namespace ServiceContractPhotocopier
             //
             // BtnLadderClear
             //
-            this.BtnLadderClear.Location = new System.Drawing.Point(652, 173);
+            this.BtnLadderClear.Location = new System.Drawing.Point(652, 139);
             this.BtnLadderClear.Name = "BtnLadderClear";
             this.BtnLadderClear.Size = new System.Drawing.Size(150, 24);
             this.BtnLadderClear.TabIndex = 25;

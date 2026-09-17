@@ -161,6 +161,21 @@ namespace ServiceContractPhotocopier.Classes
             btnOpenCN.ToolTip = "Opens the focused invoice's (latest) correction CN in AutoCount's Credit Note " +
                 "module — amend or delete it there; deleting/cancelling rolls the reading override back automatically.";
             bar.Controls.Add(btnOpenCN);
+            // The back door for a contract carried over from an older system: where this book starts
+            // billing it, and what the old system's last invoice left each counter on. Only on a
+            // CONTRACT's tab -- it is a contract-wide setting, not a machine's.
+            DevExpress.XtraEditors.SimpleButton btnStart = null;
+            if (filterCol == "i.ContractKey")
+            {
+                btnStart = new DevExpress.XtraEditors.SimpleButton();
+                btnStart.Text = "Billing start (old data)...";
+                btnStart.Location = new System.Drawing.Point(248, 5);
+                btnStart.Size = new System.Drawing.Size(170, 24);
+                btnStart.ToolTip = "Contract already running before this system? Say which month this book bills from, " +
+                    "and what each counter stood on when it took over. Earlier months then count as settled " +
+                    "elsewhere: they are never overdue and never hold the next month up.";
+                bar.Controls.Add(btnStart);
+            }
             page.Controls.Add(bar);
 
             // #10: drift watch — a CN whose quantities were changed DIRECTLY in AutoCount no longer
@@ -230,6 +245,25 @@ namespace ServiceContractPhotocopier.Classes
                     DevExpress.XtraEditors.XtraMessageBox.Show("Correct with CN failed:\r\n" + ex.Message, "Error");
                 }
             };
+
+            if (btnStart != null)
+                btnStart.Click += delegate
+                {
+                    try
+                    {
+                        using (BillingStart_Form f = new BillingStart_Form(
+                                   AutoCount.Authentication.UserSession.CurrentUserSession, db, key))
+                        {
+                            f.ShowDialog(page.FindForm());
+                        }
+                        page.BeginInvoke(new System.Windows.Forms.MethodInvoker(delegate
+                        { BuildTab(page, db, filterCol, key); }));
+                    }
+                    catch (Exception ex)
+                    {
+                        DevExpress.XtraEditors.XtraMessageBox.Show("Billing start failed:\r\n" + ex.Message, "Error");
+                    }
+                };
 
             btnOpenCN.Click += delegate
             {

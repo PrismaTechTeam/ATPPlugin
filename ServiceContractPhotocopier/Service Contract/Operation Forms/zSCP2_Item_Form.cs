@@ -2619,7 +2619,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             DataTable existing = new DataTable();
             using (System.Data.SqlClient.SqlCommand q = new System.Data.SqlClient.SqlCommand(
-                "SELECT ItemMeterKey, MeterTypeCode, MeterRole, ISNULL(MachineSerialNo,'') AS MachineSerialNo " +
+                "SELECT ItemMeterKey, MeterTypeCode, MeterRole, ISNULL(MachineSerialNo,'') AS MachineSerialNo, " +
+                // The stored opening comes back so the save can refuse to lose it -- see
+                // KeepOpening below.
+                "       ISNULL(InitialReading,0) AS InitialReading " +
                 "FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=@ik", conn, tx))
             {
                 q.Parameters.AddWithValue("@ik", itemKey);
@@ -2668,7 +2671,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
                             up.Parameters.AddWithValue("@role", role);
-                            AddMeterRowParams(up, r);
+                            AddMeterRowParams(up, r, KeepOpening(r, hitRow));
                             up.Parameters.AddWithValue("@mk", hit);
                             up.ExecuteNonQuery();
                         }
@@ -2761,19 +2764,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>"boundary|price;boundary|price" -&gt; [boundary, price] rows (bad parts skipped).</summary>
         internal static System.Collections.Generic.List<decimal[]> ParseTiersCsv(string csv)
         {
-            System.Collections.Generic.List<decimal[]> rows = new System.Collections.Generic.List<decimal[]>();
-            if (string.IsNullOrEmpty(csv)) return rows;
-            foreach (string part in csv.Split(';'))
-            {
-                string[] ab = part.Split('|');
-                if (ab.Length != 2) continue;
-                decimal mr, up;
-                if (decimal.TryParse(ab[0], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out mr) &&
-                    decimal.TryParse(ab[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out up) &&
-                    mr > 0m)
-                    rows.Add(new decimal[] { mr, up });
-            }
-            return rows;
+            return ServiceContractPhotocopier.Classes.ScpMultiPrice.ParseTiers(csv);
         }
 
         /// <summary>Throws when a meter row's role is not an explicit BK / CL / NA — called by every
@@ -2795,6 +2786,35 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private static void AddMeterRowParams(System.Data.SqlClient.SqlCommand cmd, DataRow r)
         {
+            AddMeterRowParams(cmd, r, r["InitialReading"] == DBNull.Value ? 0m : Convert.ToDecimal(r["InitialReading"]));
+        }
+
+        /// <summary>
+        /// The opening to write for a counter that already exists.
+        ///
+        /// <para>An opening reading is a fact about a PHYSICAL counter -- where it stood the day
+        /// this book started billing it. It is not a setting, and no screen that was asking about
+        /// something else gets to reset it. Several screens hand this save a meter row they built
+        /// for their own purpose, and a row that never carried the opening arrives holding zero;
+        /// written straight through, that turns the next invoice into the machine's whole lifetime
+        /// reading. Seven machines lost 177,500 / 203,445 / 82,080 ... that way, silently, between
+        /// one save and the next.</para>
+        ///
+        /// <para>So zero never wins over a stored figure. Typing a real number still writes it,
+        /// including a smaller one; only "I have nothing to say about this" is refused. A counter
+        /// genuinely starting from zero is already zero and stays zero.</para>
+        /// </summary>
+        private static decimal KeepOpening(DataRow screen, DataRow stored)
+        {
+            decimal fromScreen = screen.Table.Columns.Contains("InitialReading") && screen["InitialReading"] != DBNull.Value
+                ? Convert.ToDecimal(screen["InitialReading"]) : 0m;
+            if (fromScreen != 0m || stored == null) return fromScreen;
+            return stored.Table.Columns.Contains("InitialReading") && stored["InitialReading"] != DBNull.Value
+                ? Convert.ToDecimal(stored["InitialReading"]) : 0m;
+        }
+
+        private static void AddMeterRowParams(System.Data.SqlClient.SqlCommand cmd, DataRow r, decimal opening)
+        {
             cmd.Parameters.AddWithValue("@desc", r.Table.Columns.Contains("Description") && r["Description"] != DBNull.Value
                 ? (object)r["Description"].ToString() : "");
             cmd.Parameters.AddWithValue("@min", r["MinimumCharges"] == DBNull.Value ? (object)0m : r["MinimumCharges"]);
@@ -2802,7 +2822,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@mp", r["MeterMultiPriceCode"] == null || r["MeterMultiPriceCode"] == DBNull.Value ? "" : r["MeterMultiPriceCode"].ToString());
             cmd.Parameters.AddWithValue("@reb", r["RebateQtyInPercent"] == DBNull.Value ? (object)0m : r["RebateQtyInPercent"]);
             cmd.Parameters.AddWithValue("@foc", r["FOCQty"] == DBNull.Value ? (object)0m : r["FOCQty"]);
-            cmd.Parameters.AddWithValue("@init", r["InitialReading"] == DBNull.Value ? (object)0m : r["InitialReading"]);
+            cmd.Parameters.AddWithValue("@init", opening);
             cmd.Parameters.AddWithValue("@wn", r.Table.Columns.Contains("WaiveFirstNMonths") && r["WaiveFirstNMonths"] != DBNull.Value ? Convert.ToInt32(r["WaiveFirstNMonths"]) : 0);
             cmd.Parameters.AddWithValue("@wt", r.Table.Columns.Contains("WaiveTargetAmount") && r["WaiveTargetAmount"] != DBNull.Value ? Convert.ToDecimal(r["WaiveTargetAmount"]) : 0m);
             cmd.Parameters.AddWithValue("@wpt", r.Table.Columns.Contains("WaivePartialThreshold") && r["WaivePartialThreshold"] != DBNull.Value ? Convert.ToDecimal(r["WaivePartialThreshold"]) : 0m);
