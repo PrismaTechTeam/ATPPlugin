@@ -19,7 +19,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 {
     // SingleInstanceThreadForm(..., mergeMainMenu: true) merges AutoCount's main menu bar (File,
     // G/L, A/R, ... Service & Contract) into this window - the native "navbar" look.
-    [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450, ShowAsDialog = false)]
+    // Hidden from the menu (2026-09-14): this screen is the "Meters - fetch & key in" view inside
+    // Meter Invoice Run now. Put the attribute back to list it on its own again.
+    // [AutoCount.PlugIn.MenuItem("Meter Reading Integration", MenuOrder = 450, ShowAsDialog = false)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MeterReadingIntegration_Form : XtraForm
     {
@@ -54,11 +56,42 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         };
         private SimpleButton _btnSetting;
         private SimpleButton _btnViewSetting;    // #2(b): pick which columns the grid shows
-        private ComboBoxEdit _cmbMeterFilter;    // #2(d): All / BK only / CL only / BK + CL
+        /// <summary>False when this screen is hosted as the Meters view of the Meter Invoice Run:
+        /// generating happens over there, so the tick column is out of sight here. Everything the
+        /// ticks drive (Select All, Generate) is untouched -- it is only not shown.</summary>
+        /// <summary>False when hosted in the Meter Invoice Run: a double-click on a row no longer
+        /// opens the machine's key-in detail dialog there (readings are keyed in the grid, or on
+        /// the Invoices view). The contract, invoice and history double-clicks still work.</summary>
+        public bool AllowRowDoubleClickDetail = true;
+        private bool _showSelectColumn = true;
+        public bool ShowSelectColumn
+        {
+            get { return _showSelectColumn; }
+            set { _showSelectColumn = value; ApplySelectColumnVisibility(); }
+        }
+
+        /// <summary>The grids are shaped once and the user's saved layout is restored after every
+        /// load, so a hidden tick column has to be hidden again at the end of each load -- and the
+        /// moment the host turns it off.</summary>
+        private void ApplySelectColumnVisibility()
+        {
+            if (_showSelectColumn) return;
+            foreach (GridView v in _viewByPage.Values)
+            {
+                GridColumn c = v.Columns["SelCssi"];
+                if (c != null && c.Visible) c.Visible = false;
+            }
+        }
+        private ComboBoxEdit _cmbMeterFilter;    // #2(d): All / BK only / CL only / BK + CL -- the STATE (hidden)
+        private CheckButton[] _meterFilterButtons;   // the same five choices as buttons, like the Invoice Run
         private LabelControl _lblLegendMust;     // #2(c): colour legend
         private LabelControl _lblLegendNo;
         private SimpleButton _btnMonthOverview;
         private ComboBoxEdit _cmbYear;   // explicit billing YEAR (defaults to the auto-resolved one)
+        private LabelControl _lblOverdue;   // "July still has 12 rows unbilled" — click to go there
+        private int _overdueYear, _overdueMonth;
+        private Dictionary<int, int> _dayCounts = new Dictionary<int, int>();
+        private LabelControl _lblDaySummary;   // "7th: 1,411 rows due - 467 still open"
         private bool _scopedGenerate;   // detail-dialog "Save & Generate": skip the #3 group guard
         // TEST-ONLY mock fetch (Ctrl+Shift+T reveals the button): a pasted JSON impersonates the
         // meter API so the REAL fetch pipeline can be exercised without the live endpoints.
@@ -295,158 +328,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
 
-            int deleted = 0, failed = 0;
-            System.Text.StringBuilder errs = new System.Text.StringBuilder();
-
-            // #10: correction CNs are wiped FIRST — before the invoices they correct. A CN created
-            // with "knock off against the invoice" puts an AR knock-off on that invoice, and
-            // AutoCount refuses to delete an invoice that carries one ("Can't delete A/R invoice
-            // that has payment"). Deleting the CN releases the knock-off. Order also matters for
-            // correctness: live CNs must never point at a deleted invoice, and their override rows
-            // would keep winning the baseline and corrupt the next test run.
-            try
-            {
-                DataTable cnKeys = _dbSetting.GetDataTable(
-                    "SELECT DISTINCT CNDocKey, ISNULL(CNDocNo,'') AS CNDocNo FROM dbo.zSCP_MeterTrans WHERE CNDocKey IS NOT NULL", false);
-                if (cnKeys.Rows.Count > 0)
-                {
-                    AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand cnCmd =
-                        AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(
-                            AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
-                    ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = true;   // wipe = ours, no per-CN alerts
-                    try
-                    {
-                        foreach (DataRow r in cnKeys.Rows)
-                        {
-                            try { cnCmd.Delete(Convert.ToInt64(r["CNDocKey"])); deleted++; }
-                            catch (Exception ex)
-                            {
-                                failed++;
-                                if (errs.Length < 600) errs.AppendLine(r["CNDocNo"] + ": " + ex.Message);
-                            }
-                        }
-                    }
-                    finally { ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = false; }
-                }
-                // Belt-and-braces: any override row that survived (CN delete failed) is removed so
-                // the wiped book's baselines are clean for the next run.
-                _dbSetting.ExecuteNonQuery("DELETE FROM dbo.zSCP_MeterTrans WHERE CNDocKey IS NOT NULL");
-            }
-            catch { }
-
-            // FORCE: clear every AR document knocked off against these invoices (payment, manual CN,
-            // refund). AutoCount counts a knock-off as payment and blocks the delete otherwise.
-            int blockers = ClearBlockingArDocuments(keys, errs);
-
-            AutoCount.Invoicing.Sales.Invoice.InvoiceCommand cmd =
-                AutoCount.Invoicing.Sales.Invoice.InvoiceCommand.Create(
-                    AutoCount.Authentication.UserSession.CurrentUserSession, _dbSetting);
-            foreach (DataRow r in keys.Rows)
-            {
-                try { cmd.Delete(Convert.ToInt64(r["DocKey"])); deleted++; }
-                catch (Exception ex)
-                {
-                    failed++;
-                    if (errs.Length < 600) errs.AppendLine(r["DocNo"] + ": " + ex.Message);
-                }
-            }
-
-            ReconcileDeletedInvoices();   // clears stamps + billed readings of the now-deleted docs
+            ServiceContractPhotocopier.Classes.ScpDeleteResult res =
+                ServiceContractPhotocopier.Classes.ScpInvoiceDelete.Delete(_dbSetting, keys, true);
             LoadData();
-            XtraMessageBox.Show(
-                "Deleted " + deleted + " invoice(s)." +
-                (blockers > 0 ? "\r\nCleared " + blockers + " blocking payment/CN/refund first." : "") +
-                (failed > 0 ? "\r\nFailed: " + failed + "\r\n" + errs : "") +
-                "\r\nMeter stamps released — you can generate again.",
-                "Dev Wipe", MessageBoxButtons.OK, failed > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
-        }
-
-        /// <summary>
-        /// Dev Wipe force-clear: delete every AR document knocked off against the given sales
-        /// invoices. AutoCount treats ANY knock-off (customer payment, credit note, refund) as
-        /// payment on the invoice and refuses InvoiceCommand.Delete while one exists — which is how
-        /// a wipe ends up reporting "Can't delete A/R invoice that has payment". This is a
-        /// test-data reset, so the whole blocking document goes, even if it also settles other
-        /// invoices. Returns how many blockers were removed; failures are appended to errs.
-        /// </summary>
-        private int ClearBlockingArDocuments(DataTable ivKeys, System.Text.StringBuilder errs)
-        {
-            if (_dbSetting == null || ivKeys == null || ivKeys.Rows.Count == 0) return 0;
-            System.Text.StringBuilder ids = new System.Text.StringBuilder();
-            foreach (DataRow r in ivKeys.Rows)
-            {
-                if (ids.Length > 0) ids.Append(",");
-                ids.Append(Convert.ToInt64(r["DocKey"]));
-            }
-            // dbo.IV and dbo.ARInvoice are separate keyspaces — the AR side points back with
-            // SourceType='IV' + SourceKey = the sales invoice DocKey.
-            string arInv = "SELECT DocKey FROM dbo.ARInvoice WHERE SourceType='IV' AND SourceKey IN (" + ids + ")";
-            DataTable blockers;
-            try
-            {
-                blockers = _dbSetting.GetDataTable(
-                    "SELECT DISTINCT 'CN' AS Kind, k.DocKey FROM dbo.ARCNKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
-                    "UNION ALL SELECT DISTINCT 'PAYMENT', k.DocKey FROM dbo.ARPaymentKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
-                    "UNION ALL SELECT DISTINCT 'REFUND', k.DocKey FROM dbo.ARRefundKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ") " +
-                    "UNION ALL SELECT DISTINCT 'CONTRA', k.DocKey FROM dbo.ARContraKnockOff k WHERE k.KnockOffDocKey IN (" + arInv + ")", false);
-            }
-            catch (Exception ex)
-            {
-                if (errs.Length < 600) errs.AppendLine("Blocker lookup failed: " + ex.Message);
-                return 0;
-            }
-            if (blockers.Rows.Count == 0) return 0;
-
-            AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
-            string userId = us.LoginUserID;
-            int cleared = 0;
-            ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = true;   // wipe = ours, no per-CN alerts
-            try
-            {
-                foreach (DataRow b in blockers.Rows)
-                {
-                    string kind = S(b["Kind"]);
-                    long key = Convert.ToInt64(b["DocKey"]);
-                    try
-                    {
-                        if (kind == "CN")
-                        {
-                            // An AR CN raised from the Invoicing module must die through the sales
-                            // side (SourceType='CN' -> SourceKey = dbo.CN.DocKey); a pure AR CN
-                            // through the AR side.
-                            DataTable src = _dbSetting.GetDataTable(
-                                "SELECT ISNULL(SourceType,'') AS SourceType, ISNULL(SourceKey,0) AS SourceKey " +
-                                "FROM dbo.ARCN WHERE DocKey=" + key, false);
-                            long salesKey = 0;
-                            if (src.Rows.Count > 0 && S(src.Rows[0]["SourceType"]).Trim().ToUpperInvariant() == "CN")
-                                salesKey = Convert.ToInt64(src.Rows[0]["SourceKey"]);
-                            if (salesKey > 0)
-                                AutoCount.Invoicing.Sales.CreditNote.CreditNoteCommand.Create(us, _dbSetting).Delete(salesKey);
-                            else
-                                AutoCount.ARAP.ARCN.ARCNDataAccess.Create(us, _dbSetting).DeleteARCN(key, userId);
-                        }
-                        else if (kind == "PAYMENT")
-                            AutoCount.ARAP.ARPayment.ARPaymentDataAccess.Create(us, _dbSetting).DeleteARPayment(key, userId);
-                        else if (kind == "REFUND")
-                            AutoCount.ARAP.ARRefund.ARRefundDataAccess.Create(us, _dbSetting).DeleteARRefund(key, userId);
-                        else
-                        {
-                            // AR Contra has no public delete API in AutoCount.Accounting — say so
-                            // instead of failing the invoice delete with a mystery message.
-                            if (errs.Length < 600)
-                                errs.AppendLine("AR Contra (DocKey " + key + ") blocks the invoice — delete it in AutoCount first.");
-                            continue;
-                        }
-                        cleared++;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (errs.Length < 600) errs.AppendLine(kind + " " + key + ": " + ex.Message);
-                    }
-                }
-            }
-            finally { ServiceContractPhotocopier.Classes.ScpCnWatcher.Suppress = false; }
-            return cleared;
+            XtraMessageBox.Show(res.Summary, "Dev Wipe", MessageBoxButtons.OK,
+                res.Failed > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }
 
         // Native AutoCount toolbar icons — the SAME family and size the "Maintain Service Contract"
@@ -831,7 +717,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             x += lblMeters.Width + ROW_GAP;
 
             _cmbMeterFilter = new ComboBoxEdit();
-            _cmbMeterFilter.Properties.Items.AddRange(new object[] { "All", "BK only", "CL only", "BK + CL" });
+            _cmbMeterFilter.Properties.Items.AddRange(new object[] { "All", "BK only", "CL only", "BK + CL (meters only)", "Rental only" });
             _cmbMeterFilter.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             _cmbMeterFilter.SelectedIndex = 0;
             _cmbMeterFilter.Size = new Size(110, 22);
@@ -840,8 +726,33 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 "Remembered per user — set it to BK today and it is still BK tomorrow.";
             _cmbMeterFilter.SelectedIndexChanged += new EventHandler(CmbMeterFilter_SelectedIndexChanged);
             this.PanelFilter.Controls.Add(_cmbMeterFilter);
-            _cmbMeterFilter.BringToFront();
-            x += _cmbMeterFilter.Width + ROW_GAP;
+            // The combo stays as the one place the choice lives (saved per user by index, read by
+            // the filter and by the guard messages); it is just not the thing the user presses.
+            // Five buttons press it, the way the Invoice Run shows its filters.
+            _cmbMeterFilter.Visible = false;
+
+            string[] meterCaps = new string[] { "All", "BK only", "CL only", "BK + CL", "Rental only" };
+            int[] meterWidths = new int[] { 44, 62, 62, 68, 78 };
+            _meterFilterButtons = new CheckButton[meterCaps.Length];
+            for (int mi = 0; mi < meterCaps.Length; mi++)
+            {
+                CheckButton mb = new CheckButton();
+                mb.Text = meterCaps[mi];
+                mb.Tag = mi;
+                mb.GroupIndex = 78;
+                mb.Checked = mi == 0;
+                mb.Size = new Size(meterWidths[mi], 28);
+                mb.Location = new Point(x, ROW_Y);
+                mb.ToolTip = mi == 4
+                    ? "Only the rent and the waive that comes off it."
+                    : "Show only these meter rows. Remembered per user - set it to BK today and it is still BK tomorrow.";
+                mb.CheckedChanged += new EventHandler(MeterFilterButton_CheckedChanged);
+                this.PanelFilter.Controls.Add(mb);
+                mb.BringToFront();
+                _meterFilterButtons[mi] = mb;
+                x += mb.Width + 4;
+            }
+            x += ROW_GAP - 4;
 
             _lblLegendMust = MakeLegend("  MUST key in  ", Color.FromArgb(255, 213, 79), Color.FromArgb(102, 60, 0), true,
                 "Current Reading cells in this colour still need a reading before you can invoice.");
@@ -865,6 +776,43 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _btnViewSetting.Click += new EventHandler(BtnViewSetting_Click);
             this.PanelFilter.Controls.Add(_btnViewSetting);
             _btnViewSetting.BringToFront();
+
+            // An earlier month with readings nobody billed. Months do NOT get mixed -- billing a
+            // July row inside an October run would stamp it as October and the baseline chain would
+            // never recover -- so this says where the work is and takes you there instead.
+            //
+            // It goes in the band under the four action buttons (y 58..94, the full width of the
+            // panel), which is the only empty strip on this screen. Its first home was inside the
+            // filter box at y 86, straight on top of the Month row -- a warning that hides the
+            // control you need is worse than no warning.
+            // What the chosen day is holding. It belongs to the STRIP -- last line inside the same
+            // panel -- so it is always directly under the buttons and grows and moves with them.
+            // Its first home was the status band at the top of the screen, where it landed on the
+            // "Grouping: follow contract" line that was already living there.
+            _lblDaySummary = new LabelControl();
+            _lblDaySummary.AutoSizeMode = LabelAutoSizeMode.None;
+            _lblDaySummary.Appearance.ForeColor = Color.FromArgb(60, 68, 74);
+            _lblDaySummary.Appearance.Options.UseForeColor = true;
+            _lblDaySummary.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+
+            _lblOverdue = new LabelControl();
+            _lblOverdue.AutoSizeMode = LabelAutoSizeMode.None;
+            _lblOverdue.Location = new Point(790, 64);
+            _lblOverdue.Size = new Size(480, 22);
+            _lblOverdue.Appearance.BackColor = Color.FromArgb(253, 235, 231);
+            _lblOverdue.Appearance.ForeColor = Color.FromArgb(150, 38, 22);
+            _lblOverdue.Appearance.Options.UseBackColor = true;
+            _lblOverdue.Appearance.Options.UseForeColor = true;
+            _lblOverdue.Appearance.TextOptions.VAlignment = DevExpress.Utils.VertAlignment.Center;
+            _lblOverdue.Cursor = System.Windows.Forms.Cursors.Hand;
+            _lblOverdue.ToolTip = "An earlier month still has readings nobody billed. Click to open "
+                                + "it.\r\n\r\nNothing is billed across months: a reading belongs to the "
+                                + "period it was taken in, and billing it inside another one would "
+                                + "date it wrong for good.";
+            _lblOverdue.Visible = false;
+            _lblOverdue.Click += new EventHandler(LblOverdue_Click);
+            this.PanelFilter.Controls.Add(_lblOverdue);
+            _lblOverdue.BringToFront();
 
             RefreshGroupingInfo();
             BuildDayButtonStrip();
@@ -963,6 +911,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             // Demo 28/07 #3b: double-clicking a row opens THAT machine only — not the whole
             // contract's machines grouped together.
+            if (!AllowRowDoubleClickDetail) return;
             OpenContractDetail(D64(r["ContractKey"]), S(r["ContractNo"]), S(r["Customer"]),
                 D64(r["ItemKey"]), S(r["ServiceItemNo"]));
         }
@@ -1007,7 +956,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column == null || e.Column.FieldName != "FOCQty" || e.ListSourceRowIndex < 0) return;
             DataRow r = GridSourceRow(e.ListSourceRowIndex);
             if (r == null) return;
-            int resetN = FocResetCountFor(r);
+            int resetN = ServiceContractPhotocopier.Classes.ScpInvoiceJobs.FocResetCountFor(r, SelectedYear(), SelectedMonth());
             if (resetN < 1) resetN = 1;
             string code = S(r["MultiPriceCode"]);
             decimal applied;
@@ -1036,6 +985,23 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // Plain white rows (the per-item blue/white zebra shading was removed on request) — only
         // unresolved fetch conflicts still tint their row light red.
+        /// <summary>
+        /// Flags the rows whose day has gone and which still have not been billed.
+        ///
+        /// <para>Only the screen can decide this: the row knows the day it is due, but not the
+        /// day being worked.</para>
+        /// </summary>
+        private void MarkLate(int today)
+        {
+            if (_dtGrid == null || !_dtGrid.Columns.Contains("Late")) return;
+            foreach (DataRow r in _dtGrid.Rows)
+            {
+                int day = r["DueDay"] == DBNull.Value ? 0 : Convert.ToInt32(r["DueDay"]);
+                bool billed = Convert.ToString(r["InvoicedDocNo"]).Trim().Length > 0;
+                r["Late"] = !billed && day > 0 && day < today;
+            }
+        }
+
         private void GridViewMeter_RowStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowStyleEventArgs e)
         {
             if (e.RowHandle < 0) return;   // group rows
@@ -1045,6 +1011,23 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 Color rc = Color.FromArgb(255, 224, 224);   // light red = unresolved conflict
                 e.Appearance.BackColor = rc; e.Appearance.BackColor2 = rc;  // flat (no gradient)
                 e.Appearance.ForeColor = Color.Black;       // focused-row white text vanishes on pale tints
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+                return;
+            }
+            // Its day has gone and it is still not billed. Two different situations wear two
+            // different colours, because only one of them is ours to fix:
+            //
+            //   a rental, or a meter that HAS its reading  ->  red. We owe the customer an invoice.
+            //   a meter still waiting for a reading        ->  amber. Nobody can bill it yet.
+            object lt = V(sender).GetRowCellValue(e.RowHandle, "Late");
+            if (lt != null && lt != DBNull.Value && Convert.ToBoolean(lt))
+            {
+                object nm = V(sender).GetRowCellValue(e.RowHandle, "NeedManual");
+                bool waiting = nm != null && nm != DBNull.Value && Convert.ToBoolean(nm);
+                Color lc = waiting ? Color.FromArgb(255, 243, 214) : Color.FromArgb(255, 226, 222);
+                e.Appearance.BackColor = lc; e.Appearance.BackColor2 = lc;
+                e.Appearance.ForeColor = waiting ? Color.Black : Color.FromArgb(140, 30, 20);
                 e.Appearance.Options.UseBackColor = true;
                 e.Appearance.Options.UseForeColor = true;
                 return;
@@ -1135,9 +1118,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // "Need Manual Key-In" membership is a SNAPSHOT (NeedManual flag, recomputed only at
             // load/fetch): keying a reading keeps the row on this tab so the operator can review what
             // they just typed — it only leaves the tab on the next Refresh / Fetch.
-            // Tabs are PER MACHINE (grouped by the NeedManual flag), so a machine's rental + BK/CL rows
-            // always appear together on the same tab. Ready to Invoice = ready machines (all usage read, or
-            // rental-only) that aren't invoiced yet; Need Manual = machines still missing a reading.
+            // Tabs are PER ROW. Need Manual = the readings somebody still has to type: usage meters
+            // (BK / CL) with nothing keyed yet. Rental, minimum and waive rows have no meter to read,
+            // so they never sit there (asked 2026-09-11) -- they wait on Ready to Invoice, and whether
+            // one may go out before its BK / CL is the Generate guard's question, not this tab's.
             if (page == _pageWith) f = "[NeedManual] = False AND ISNULL([InvoicedDocNo],'') = ''";
             else if (page == _pageNo) f = "[NeedManual] = True";
             else if (page == _pageDone) f = "[InvoicedDocNo] <> ''";   // this month's billed machines
@@ -1145,12 +1129,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // Hide zero-usage meters unless "Include 0 Meter Usage" is ticked. Exceptions that never
             // hide: rows that still BILL (minimum charges -> TotalCharges > 0, or Generate would miss
-            // them), rows ALREADY INVOICED for the selected month (usage reset to 0 on billing), and
-            // the whole "Need Manual Key-In" tab — its rows are 0-usage BY DEFINITION (nothing keyed
-            // yet), so the usage filter would blank the tab out.
+            // them), rows ALREADY INVOICED for the selected month (usage reset to 0 on billing), rows
+            // that are not readings at all (rental, waive, minimum: nothing was ever read, so a usage
+            // of 0 says nothing about them), and the whole "Need Manual Key-In" tab — its rows are
+            // 0-usage BY DEFINITION (nothing keyed yet), so the usage filter would blank the tab out.
             if (_chkInclude0Usage != null && !_chkInclude0Usage.Checked && page != _pageNo)
             {
-                string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0 OR [InvoicedDocNo] <> '' OR [IsFlat] = True)";
+                string usage = "([MeterUsage] <> 0 OR [TotalCharges] <> 0 OR [InvoicedDocNo] <> '' OR [IsFlat] = True OR [IsWaive] = True OR [Role] = 'COMMIT')";
                 f = string.IsNullOrEmpty(f) ? usage : "(" + f + ") AND " + usage;
             }
             // Demo #2(d): "Meters" filter — the operator working a BK-only (or CL-only) run does not
@@ -1306,6 +1291,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (i == 1) return "[Role] = 'BK'";
             if (i == 2) return "[Role] = 'CL'";
             if (i == 3) return "([Role] = 'BK' OR [Role] = 'CL')";
+            // The rental run: the rent, and the waive that comes off it, and nothing else. Appended
+            // rather than slotted in beside "BK only" -- the choice is remembered as a NUMBER, and
+            // reordering the list would silently change what everybody's saved setting means.
+            if (i == 4) return "([Role] = 'RENTAL' OR [Role] = 'WAIVE' OR [IsFlat] = True)";
             return "";
         }
 
@@ -1347,9 +1336,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void CmbMeterFilter_SelectedIndexChanged(object sender, EventArgs e)
         {
+            SyncMeterFilterButtons();   // a restore or a programmatic change shows on the buttons too
             if (_suppressFilterEvent) return;
             SaveMeterFilter();
             ApplyTabFilter();
+        }
+
+        /// <summary>A button pressed = the combo's choice changed; the combo does the rest.</summary>
+        private void MeterFilterButton_CheckedChanged(object sender, EventArgs e)
+        {
+            CheckButton b = sender as CheckButton;
+            if (b == null || !b.Checked || _cmbMeterFilter == null || b.Tag == null) return;
+            int i = Convert.ToInt32(b.Tag);
+            if (_cmbMeterFilter.SelectedIndex != i) _cmbMeterFilter.SelectedIndex = i;
+        }
+
+        private void SyncMeterFilterButtons()
+        {
+            if (_meterFilterButtons == null || _cmbMeterFilter == null) return;
+            int i = _cmbMeterFilter.SelectedIndex;
+            if (i < 0 || i >= _meterFilterButtons.Length) return;
+            if (!_meterFilterButtons[i].Checked) _meterFilterButtons[i].Checked = true;
         }
 
         // #2(b): let the user choose which columns the grid shows. The column chooser can do this
@@ -1423,39 +1430,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// </remarks>
         private void ApplyRentalGroupPrices()
         {
-            if (_dtGrid == null || _dtGrid.Rows.Count == 0) return;
-            System.Collections.Generic.List<long> keys = new System.Collections.Generic.List<long>();
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
-                if (ck > 0 && !keys.Contains(ck)) keys.Add(ck);
-            }
-            if (keys.Count == 0) return;
-
-            System.Collections.Generic.Dictionary<long, System.Collections.Generic.Dictionary<string, decimal>> prices =
-                ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadForContracts(_dbSetting, keys);
-            if (prices.Count == 0) return;
-            System.Collections.Generic.Dictionary<long, char> modes =
-                ServiceContractPhotocopier.Classes.ScpInvoiceLayout.LoadRentalModes(_dbSetting, keys);
-
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                if (r["IsFlat"] == DBNull.Value || !Convert.ToBoolean(r["IsFlat"])) continue;
-                if (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"])) continue;
-                if (r["NewMoneyRules"] == DBNull.Value || !Convert.ToBoolean(r["NewMoneyRules"])) continue;
-                if (!ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(S(r["Role"]), S(r["MeterType"]))) continue;
-                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
-                char mode;
-                if (!modes.TryGetValue(ck, out mode)) continue;
-                decimal? p = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.PriceFor(
-                    prices, ck, mode, S(r["ModelCode"]), S(r["MergeGroupCode"]));
-                if (!p.HasValue) continue;
-                r["UnitPrice"] = p.Value;
-                // The group price IS the rental. A minimum left on the meter would outrank it
-                // (a flat charge is the greater of the two) and quietly bill the old number.
-                r["MinCharges"] = 0m;
-                r["UseMin"] = false;
-            }
+            ServiceContractPhotocopier.Classes.ScpBillingRows.ApplyRentalGroupPrices(_dbSetting, _dtGrid);
         }
 
         /// <summary>
@@ -1468,141 +1443,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// </summary>
         private void ApplyMeterLinePrices()
         {
-            if (_dtGrid == null || _dtGrid.Rows.Count == 0) return;
-            System.Collections.Generic.List<long> keys = new System.Collections.Generic.List<long>();
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
-                if (ck > 0 && !keys.Contains(ck)) keys.Add(ck);
-            }
-            if (keys.Count == 0) return;
-
-            System.Collections.Generic.Dictionary<long,
-                System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>> byContract =
-                new System.Collections.Generic.Dictionary<long,
-                    System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>>();
-            foreach (long ck in keys)
-                byContract[ck] = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(_dbSetting, ck);
-
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                if (r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"])) continue;
-                if (r["NewMoneyRules"] == DBNull.Value || !Convert.ToBoolean(r["NewMoneyRules"])) continue;
-                string role = S(r["Role"]).Trim().ToUpperInvariant();
-                if (role != "BK" && role != "CL") continue;
-
-                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
-                System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms> terms;
-                if (!byContract.TryGetValue(ck, out terms) || terms.Count == 0) continue;
-
-                string grp = S(r["MergeGroupCodeMeter"]).Trim();
-                if (grp.Length == 0) continue;      // its own line -- its own rate, nothing to agree
-
-                ServiceContractPhotocopier.Classes.ScpLineTerms t;
-                if (!terms.TryGetValue(
-                        ServiceContractPhotocopier.Classes.ScpLineTerms.Key(
-                            ServiceContractPhotocopier.Classes.ScpLineTerms.SIDE_METER, grp), out t)) continue;
-
-                decimal agreed = role == "BK" ? t.BkPrice : t.ClPrice;
-                if (agreed <= 0m) continue;
-
-                // A ladder prices the copies by band and outranks a flat figure; leave it alone.
-                if (S(r["MultiPriceCode"]).Trim().Length > 0) continue;
-
-                r["UnitPrice"] = agreed;
-            }
+            ServiceContractPhotocopier.Classes.ScpBillingRows.ApplyMeterLinePrices(_dbSetting, _dtGrid);
         }
 
         /// <summary>Is this grid row a committed minimum? The same test the billing engine makes —
         /// role first, the legacy "MIN..." type name as the OR that keeps old machines working.</summary>
         private static bool IsCommitRow(DataRow r)
         {
-            return ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
-                r.Table.Columns.Contains("Role") ? S(r["Role"]) : "",
-                S(r["MeterType"]),
-                r.Table.Columns.Contains("MinCharges") ? Dec(r["MinCharges"]) : 0m);
+            return ServiceContractPhotocopier.Classes.ScpBillingRows.IsCommitRow(r);
         }
 
         private void AutoFillFlatMeters()
         {
-            if (_dtGrid == null) return;
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                if (r["IsFlat"] == DBNull.Value || !Convert.ToBoolean(r["IsFlat"])) continue;
-                if (S(r["InvoicedDocNo"]).Trim().Length > 0) continue;   // billed this period already
-                if (r.Table.Columns.Contains("IsWaive") && r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]))
-                {
-                    // Waive contra: whether (and how much) it fires is decided at Generate from its
-                    // Waive Configuration — the preview must show 0.00, never a positive amount.
-                    r["CurrentReading"] = 0m;
-                    r["MeterUsage"] = 0m;
-                    r["TotalCharges"] = 0m;
-                    r["EntrySource"] = "WAIVE-AUTO";
-                    continue;
-                }
-                if (r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"])) continue;
-                decimal rate = Dec(r["UnitPrice"]);
-                decimal min = Dec(r["MinCharges"]);
-                decimal foc = Dec(r["FOCQty"]);        // rental FOC Qty = free-rental months remaining
-                decimal charge;
-                if (foc > 0m)
-                {
-                    // Free-rental month: RM0 this period; the FOC-months counter is decremented at
-                    // Generate (per the countdown model), then normal rental resumes at FOC = 0.
-                    charge = 0m;
-                    r["EntrySource"] = "RENTAL FREE";
-                }
-                else if (IsCommitRow(r))
-                {
-                    // A committed minimum bills the SHORTFALL, not the committed amount -- and what
-                    // the shortfall is cannot be known until the print charges are in, at Generate.
-                    // Previewing the full amount was the screen saying 300.00 where the invoice said
-                    // 80.00, which reads as the software being wrong about the money.
-                    charge = 0m;
-                    r["EntrySource"] = "MIN-AUTO";
-                }
-                else
-                {
-                    charge = rate;                     // the flat rental amount (rate, or Min Charges)
-                    if (charge < min) charge = min;
-                    r["EntrySource"] = "RENTAL";
-                }
-                // Rental has NO meter reading — reading + usage stay 0 (still shown), the charge is the
-                // flat rental / minimum payment. It bills as long as that amount > 0.
-                r["CurrentReading"] = 0m;
-                r["MeterUsage"] = 0m;
-                r["TotalCharges"] = charge;
-                // Rental period n/N ("MONTHLY RENTAL (3/12)") — replaces the blank slot in the meter
-                // type name so the grid AND the invoice line both show the current period.
-                if (r["RentalStartDate"] != DBNull.Value && Convert.ToInt32(r["RentalMonths"]) > 0)
-                    r["MeterTypeName"] = ServiceContractPhotocopier.Classes.ScpStrategy.ComposeRentalPeriodText(
-                        S(r["MeterTypeName"]), Convert.ToDateTime(r["RentalStartDate"]),
-                        Convert.ToInt32(r["RentalMonths"]), S(r["RentalBasis"]) == "P" ? 'P' : 'A',
-                        SelectedYear(), SelectedMonth());
-            }
+            ServiceContractPhotocopier.Classes.ScpBillingRows.AutoFillFlatMeters(
+                _dbSetting, _dtGrid, SelectedYear(), SelectedMonth(), _ladders);
+            SyncSelCssi();
         }
 
         private void RecomputeNeedManual()
         {
             if (_dtGrid == null) return;
-            // PER MACHINE: a machine "needs manual key-in" when it still has a USAGE (non-flat) meter
-            // with no reading that isn't invoiced yet. Flat/rental meters (auto-billed) and already-
-            // invoiced meters never require key-in. The whole machine shares ONE flag, so its meters
-            // never split across the Ready-to-Invoice / Need Manual tabs — a rental row always sits in the
-            // SAME tab as its BK/CL siblings (that split was what confused users).
-            Dictionary<long, bool> needManual = new Dictionary<long, bool>();
+            // PER ROW: a row "needs manual key-in" when it is a USAGE meter (BK / CL -- anything that
+            // is read) with no reading and no invoice yet. Rental, minimum and waive rows have no
+            // meter to read, so they are never on the Need Manual Key-In tab: that tab is the list of
+            // readings somebody still has to type, and a rental on it is a row nobody can act on
+            // (asked 2026-09-11). A machine whose BK is unread therefore shows its rental on Ready to
+            // Invoice and its BK on Need Manual Key-In. Whether the rental may go out alone is the
+            // Generate guard's question: same invoice -> it names the missing meter and stops; rental
+            // on its own invoice -> it goes.
             foreach (DataRow r in _dtGrid.Rows)
-            {
-                long ik = D64(r["ItemKey"]);
-                if (!needManual.ContainsKey(ik)) needManual[ik] = false;
-                bool isFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
-                if (isFlat) continue;                                    // rental: auto-billed, never manual
-                if (S(r["InvoicedDocNo"]).Trim().Length > 0) continue;   // already invoiced this period
-                bool hasReading = Dec(r["CurrentReading"]) > 0m || Dec(r["FetchedReading"]) > 0m;
-                if (!hasReading) needManual[ik] = true;                  // a usage meter still needs a reading
-            }
-            foreach (DataRow r in _dtGrid.Rows)
-                r["NeedManual"] = needManual[D64(r["ItemKey"])];
+                r["NeedManual"] = RowNeedsReading(r);
+        }
+
+        /// <summary>A reading somebody still has to type: a usage meter with nothing keyed and nothing
+        /// fetched, not yet invoiced. Rental, waive and minimum rows are money, not readings.</summary>
+        private bool RowNeedsReading(DataRow r)
+        {
+            if (r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"])) return false;     // rental / flat: auto-billed
+            if (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"])) return false;   // the contra off the rent
+            string role = S(r["Role"]).Trim().ToUpperInvariant();
+            if (role == "RENTAL" || role == "WAIVE" || role == "COMMIT") return false;          // minimum: an amount, no meter
+            if (S(r["InvoicedDocNo"]).Trim().Length > 0) return false;                          // already invoiced this period
+            bool hasReading = Dec(r["CurrentReading"]) > 0m || Dec(r["FetchedReading"]) > 0m;
+            return !hasReading;
         }
 
         private void UpdateTabCounts()
@@ -1620,8 +1503,6 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             System.Collections.Generic.HashSet<string> needManualItems = new System.Collections.Generic.HashSet<string>();
             System.Collections.Generic.HashSet<string> invoicedItems = new System.Collections.Generic.HashSet<string>();
             System.Collections.Generic.HashSet<string> contracts = new System.Collections.Generic.HashSet<string>();
-            System.Collections.Generic.Dictionary<string, bool> invByItem = new System.Collections.Generic.Dictionary<string, bool>();
-            System.Collections.Generic.Dictionary<string, bool> nmByItem = new System.Collections.Generic.Dictionary<string, bool>();
             foreach (DataRow r in _dtGrid.Rows)
             {
                 string itemKey = S(r["ItemKey"]);
@@ -1630,21 +1511,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 string ms = S(r["MachineStatus"]);
                 if (ms == "ONLINE") onlineItems.Add(itemKey);
                 else if (ms == "OFFLINE") offlineItems.Add(itemKey);
-                if (S(r["InvoicedDocNo"]).Trim().Length > 0) invByItem[itemKey] = true;
-                if (r["NeedManual"] != DBNull.Value && Convert.ToBoolean(r["NeedManual"])) nmByItem[itemKey] = true;
-                if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflictItems.Add(itemKey);
-                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))
-                { sel++; selCharge += Dec(r["TotalCharges"]); }
-            }
-            // Bucket each MACHINE into exactly one of Invoiced / Need Manual / Ready to Invoice — mirrors the
-            // per-machine tab filters so a machine with mixed rows (e.g. rental + unread BK) counts once.
-            foreach (string itemKey in allItems)
-            {
-                bool inv; invByItem.TryGetValue(itemKey, out inv);
-                bool nm; nmByItem.TryGetValue(itemKey, out nm);
+                // The same three tests the tab filters make, row by row, so each count is the number
+                // of machines that tab actually shows. A machine with its rental ready and its BK
+                // unread is on BOTH Ready to Invoice and Need Manual Key-In, and is counted on both.
+                bool inv = S(r["InvoicedDocNo"]).Trim().Length > 0;
+                bool nm = r["NeedManual"] != DBNull.Value && Convert.ToBoolean(r["NeedManual"]);
                 if (inv) invoicedItems.Add(itemKey);
                 else if (nm) needManualItems.Add(itemKey);
                 else withItems.Add(itemKey);
+                if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflictItems.Add(itemKey);
+                if (r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))
+                { sel++; selCharge += Dec(r["TotalCharges"]); }
             }
             _pageWith.Text = "Ready to Invoice (" + withItems.Count + ")";
             _pageNo.Text = "Need Manual Key-In (" + needManualItems.Count + ")";   // snapshot flag = what the tab actually shows
@@ -1727,14 +1604,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 bool inclInactive = ServiceContractPhotocopier.Data.PumsConfig.GetBool(
                     _dbSetting, ServiceContractPhotocopier.Data.PumsConfig.KEY_INCLUDE_INACTIVE,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INCLUDE_INACTIVE);
-                string sql = "SELECT DISTINCT COALESCE(i.BillingDayOverride, c.BillingDay) AS d " +
-                    "FROM dbo.zSCP2_Item i JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                // The days that exist are the days ROWS are due on -- asked of the meters, not of
+                // the contracts. A contract billing its meters on the 7th and its rental on the 1st
+                // puts BOTH days on the strip; asking the contract alone gives only the 7th, and the
+                // day the rental is due has no button to press.
+                string sql = "SELECT DISTINCT " + ScpBillingRows.RowDueDaySql + " AS d " +
+                    "FROM dbo.zSCP2_ItemMeter m " +
+                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
                     "WHERE " + (inclInactive ? "1=1 " : "i.Inactive='N' AND c.Inactive='N' ") +
-                    // Only machines that can actually appear in the meter list (they HAVE meters) —
-                    // otherwise a meterless test item creates a dead day button showing 0 rows. Any meter
-                    // role counts now (BK/CL usage meters + rental/min/fax NA meters all show).
-                    "AND EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeter m WHERE m.ItemKey = i.ItemKey) " +
-                    "AND COALESCE(i.BillingDayOverride, c.BillingDay) BETWEEN 1 AND 31 ORDER BY d";
+                    "AND " + ScpBillingRows.RowDueDaySql + " BETWEEN 1 AND 31 ORDER BY d";
                 DataTable dt = QueryWithTimeout(sql, 60);
                 if (dt != null && dt.Rows.Count > 0)
                 {
@@ -1764,6 +1643,73 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         //    the value holder, so SelectedDay()/reload logic is completely untouched. ──
         private DevExpress.XtraEditors.PanelControl _pnlDays;
 
+        /// <summary>
+        /// Looks back for a month whose readings were never billed, and says so.
+        ///
+        /// <para>It counts one exact thing: staged readings in an EARLIER period that carry no
+        /// invoice. Not "everything that could have been billed since the contract started" --
+        /// that would flag every month of a three-year contract and mean nothing. A reading was
+        /// keyed or fetched, and no invoice came of it: that is the miss worth chasing.</para>
+        ///
+        /// <para>Six months back, newest first. Older than that is not a reminder, it is an
+        /// audit.</para>
+        /// </summary>
+        private void RefreshOverdueNotice(int year, int month)
+        {
+            if (_lblOverdue == null) return;
+            _lblOverdue.Visible = false;
+            _overdueYear = 0; _overdueMonth = 0;
+            if (_dbSetting == null) return;
+            try
+            {
+                int now = year * 12 + month;
+                DataTable dt = QueryWithTimeout(
+                    "SELECT TOP 1 e.PeriodYear AS y, e.PeriodMonth AS m, COUNT(*) AS n " +
+                    "  FROM dbo.zSCP2_MeterEntry e " +
+                    "  JOIN dbo.zSCP2_ItemMeter im ON im.ItemMeterKey = e.ItemMeterKey " +
+                    "  JOIN dbo.zSCP2_Item i ON i.ItemKey = im.ItemKey " +
+                    "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    " WHERE e.InvoicedDocKey IS NULL AND i.Inactive = 'N' AND c.Inactive = 'N' " +
+                    "   AND (e.PeriodYear * 12 + e.PeriodMonth) < " + now +
+                    "   AND (e.PeriodYear * 12 + e.PeriodMonth) >= " + (now - 6) +
+                    " GROUP BY e.PeriodYear, e.PeriodMonth " +
+                    " ORDER BY e.PeriodYear DESC, e.PeriodMonth DESC", 30);
+                if (dt == null || dt.Rows.Count == 0) return;
+                _overdueYear = Convert.ToInt32(dt.Rows[0]["y"]);
+                _overdueMonth = Convert.ToInt32(dt.Rows[0]["m"]);
+                int n = Convert.ToInt32(dt.Rows[0]["n"]);
+                string name = new CultureInfo("en-US").DateTimeFormat
+                    .GetAbbreviatedMonthName(_overdueMonth) + " " + _overdueYear;
+                _lblOverdue.Text = "   " + name + " still has " + n.ToString("n0") +
+                                   (n == 1 ? " reading" : " readings") +
+                                   " nobody billed        click to open that month  ›";
+                _lblOverdue.Visible = true;
+                _lblOverdue.BringToFront();
+            }
+            catch { }   // a reminder that cannot be worked out is not worth an error box
+        }
+
+        private void LblOverdue_Click(object sender, EventArgs e)
+        {
+            if (_overdueYear <= 0 || _overdueMonth < 1) return;
+            if (_cmbYear != null)
+            {
+                string y = _overdueYear.ToString();
+                if (!_cmbYear.Properties.Items.Contains(y)) _cmbYear.Properties.Items.Add(y);
+                _cmbYear.SelectedItem = y;
+            }
+            this.CmbMonth.SelectedIndex = _overdueMonth - 1;   // fires the reload
+            LoadData();
+        }
+
+        /// <summary>The strip is laid out again once the window exists: only then are the panel and
+        /// the rows measured in the same units. Everything before this is at designer scale.</summary>
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            RebuildDayButtons();
+        }
+
         private void BuildDayButtonStrip()
         {
             _pnlDays = new DevExpress.XtraEditors.PanelControl();
@@ -1772,31 +1718,192 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             _pnlDays.Size = new Size(432, 30);
             this.GrpFilter.Controls.Add(_pnlDays);
             _pnlDays.BringToFront();
+
             this.CmbDay.Visible = false;   // value holder only — the buttons drive it
             RebuildDayButtons();
         }
 
+        /// <summary>
+        /// The day strip: every billing day, and which of them have work.
+        ///
+        /// <para>The buttons stay put. A day that is quiet this month goes pale rather than
+        /// disappearing -- the fifth button is the fifth button in June and in December, and a hand
+        /// that has pressed it forty times should not have to read the row first. Hiding the quiet
+        /// ones shortens the strip and moves everything else, which costs more than it saves.</para>
+        ///
+        /// <para>The counts do not go on the buttons. Fourteen numbers each carrying a second number
+        /// is not something anyone reads; the one that matters -- what the day in front is holding --
+        /// goes underneath in a sentence.</para>
+        /// </summary>
         private void RebuildDayButtons()
         {
             if (_pnlDays == null) return;
             _pnlDays.Controls.Clear();
             int n = this.CmbDay.Properties.Items.Count;
             if (n == 0) return;
-            int w = Math.Max(30, Math.Min(44, (432 / n) - 4));
+
+            int picked = SelectedDay();
+
+            // How many fit on a line, and how many lines that needs. A book where every contract
+            // bills on a different day has THIRTY-ONE of them: they do not fit on one line at any
+            // width a person can hit, so the strip wraps and the box grows to hold it.
+            //
+            // EVERY number here is asked of a real control, never taken from the designer. This
+            // screen runs at 150% on the machine it was built on: the panel the designer drew 432
+            // wide is 648 on screen and a row the designer drew 26 high is 39. Mixing the two -- a
+            // scaled panel measured against unscaled rows -- is what put the second row of days on
+            // top of the Month line and pushed Filter and Reset out of the box.
+            int rowH = Math.Max(24, this.CmbDay.Height + 4);   // a real row, at whatever scale we are
+            int gap = Math.Max(2, rowH / 9);
+            int minW = rowH;                                   // square is the smallest a day reads at
+            int maxW = rowH + rowH / 2;
+            int room = Math.Max(minW, _pnlDays.Width);
+            int w = Math.Max(minW, Math.Min(maxW, ((room + gap) / n) - gap));
+            int perRow = Math.Max(1, (room + gap) / (w + gap));
+            int rows = (n + perRow - 1) / perRow;
+            // Spread the last line's slack over all of them rather than leaving one lonely button:
+            // 31 days at 13 a line is 13/13/5; at 11 a line it is 11/11/9, which reads as a block.
+            if (rows > 1) perRow = (n + rows - 1) / rows;
+
             for (int i = 0; i < n; i++)
             {
                 int day = Convert.ToInt32(this.CmbDay.Properties.Items[i]);
+                int waiting;
+                if (!_dayCounts.TryGetValue(day, out waiting)) waiting = 0;
                 DevExpress.XtraEditors.CheckButton b = new DevExpress.XtraEditors.CheckButton();
                 b.Text = day.ToString();
                 b.GroupIndex = 77;   // radio behaviour across the strip
-                b.Location = new Point(i * (w + 4), 2);
-                b.Size = new Size(w, 26);
+                b.Location = new Point((i % perRow) * (w + gap), 2 + (i / perRow) * (rowH + gap));
+                b.Size = new Size(w, rowH);
                 b.Tag = day;
-                b.Checked = (this.CmbDay.SelectedIndex == i);
-                PaintDayButton(b, b.Checked);
+                b.ToolTip = waiting > 0
+                    ? waiting.ToString("n0") + (waiting == 1 ? " row" : " rows") +
+                      " waiting on the " + Ordinal(day)
+                    : "Nothing waiting on the " + Ordinal(day) + " this month";
+                b.Checked = (day == picked);
+                PaintDayButton(b, b.Checked, waiting > 0);
                 b.CheckedChanged += new EventHandler(DayButton_CheckedChanged);
                 _pnlDays.Controls.Add(b);
             }
+            // The sentence goes on the line under the last row of buttons, inside the same panel.
+            int lineTop = 2 + rows * (rowH + gap);
+            int lineH = Math.Max(15, rowH - 8);
+            if (_lblDaySummary != null)
+            {
+                _lblDaySummary.Location = new Point(2, lineTop);
+                _lblDaySummary.Size = new Size(Math.Max(60, _pnlDays.Width - 4), lineH);
+                _pnlDays.Controls.Add(_lblDaySummary);   // Clear() above dropped it; put it back
+            }
+            GrowForDayStrip(lineTop + lineH + 2);
+            RefreshDaySummary(picked);
+        }
+
+        /// <summary>
+        /// Makes room for a strip that wrapped, and gives it back when it un-wraps.
+        ///
+        /// <para>Everything under the strip moves by the same amount, and so do the two boxes around
+        /// it. The alternative -- leaving the strip to overflow its panel -- hides the second half of
+        /// the month behind the Month row, which is exactly the kind of quiet clipping this screen
+        /// has already been caught doing twice.</para>
+        /// </summary>
+        private void GrowForDayStrip(int wanted)
+        {
+            if (_pnlDays == null) return;
+            // Not until the window exists. Before that every size on the form is still in designer
+            // units and the form has not scaled itself yet -- growing the box now and again after
+            // scaling moves the same controls twice, by two different amounts.
+            if (!this.IsHandleCreated || !this.Visible) return;
+            int delta = wanted - _pnlDays.Height;
+            if (delta == 0) return;
+
+            int below = _pnlDays.Bottom;
+            _pnlDays.Height = wanted;
+            foreach (System.Windows.Forms.Control c in this.GrpFilter.Controls)
+            {
+                if (c == _pnlDays) continue;
+                if (c.Top < below) continue;                       // above or beside the strip: stays
+                c.Location = new Point(c.Left, c.Top + delta);
+            }
+            this.GrpFilter.Height += delta;
+            this.PanelFilter.Height += delta;                      // docked Top, so the grid follows
+        }
+
+        /// <summary>The sentence under the strip: what the chosen day is holding, and what is still
+        /// dragging along behind it from the days before.</summary>
+        private void RefreshDaySummary(int picked)
+        {
+            if (_lblDaySummary == null) return;
+            int due;
+            if (!_dayCounts.TryGetValue(picked, out due)) due = 0;
+            int behind = 0;
+            foreach (KeyValuePair<int, int> kv in _dayCounts)
+                if (kv.Key < picked) behind += kv.Value;
+
+            if (due == 0 && behind == 0)
+            {
+                _lblDaySummary.Text = "Nothing waiting on the " + Ordinal(picked) + " this month.";
+                _lblDaySummary.Appearance.ForeColor = Color.FromArgb(120, 128, 134);
+                return;
+            }
+            string t = Ordinal(picked) + ":  " + due.ToString("n0") +
+                       (due == 1 ? " row due" : " rows due");
+            if (behind > 0)
+                t += "   \u00b7   " + behind.ToString("n0") +
+                     (behind == 1 ? " row" : " rows") + " still open from earlier days";
+            _lblDaySummary.Text = t;
+            _lblDaySummary.Appearance.ForeColor = behind > 0
+                ? Color.FromArgb(150, 38, 22) : Color.FromArgb(60, 68, 74);
+        }
+
+        private static string Ordinal(int d)
+        {
+            if (d >= 11 && d <= 13) return d + "th";
+            switch (d % 10)
+            {
+                case 1: return d + "st";
+                case 2: return d + "nd";
+                case 3: return d + "rd";
+                default: return d + "th";
+            }
+        }
+
+        /// <summary>
+        /// How many rows are still waiting on each day, in the month on screen.
+        ///
+        /// <para>Waiting = the row exists and no invoice has claimed it for this period -- the same
+        /// rule the list itself uses, asked one level up. A button that says 12 opens twelve
+        /// rows.</para>
+        /// </summary>
+        private void LoadDayCounts(int year, int month)
+        {
+            _dayCounts = new Dictionary<int, int>();
+            if (_dbSetting == null) return;
+            try
+            {
+                bool inclInactive = ServiceContractPhotocopier.Data.PumsConfig.GetBool(
+                    _dbSetting, ServiceContractPhotocopier.Data.PumsConfig.KEY_INCLUDE_INACTIVE,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_INCLUDE_INACTIVE);
+                DataTable dt = QueryWithTimeout(
+                    "SELECT " + ScpBillingRows.RowDueDaySql + " AS d, COUNT(*) AS n " +
+                    "  FROM dbo.zSCP2_ItemMeter m " +
+                    "  JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    " WHERE " + (inclInactive ? "1=1 " : "i.Inactive='N' AND c.Inactive='N' ") +
+                    "   AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry me " +
+                    "                    WHERE me.ItemMeterKey = m.ItemMeterKey " +
+                    "                      AND me.PeriodYear = " + year +
+                    "                      AND me.PeriodMonth = " + month +
+                    "                      AND me.InvoicedDocKey IS NOT NULL) " +
+                    " GROUP BY " + ScpBillingRows.RowDueDaySql, 30);
+                if (dt == null) return;
+                foreach (DataRow r in dt.Rows)
+                {
+                    if (r["d"] == DBNull.Value) continue;
+                    int d = Convert.ToInt32(r["d"]);
+                    if (d >= 1 && d <= 31) _dayCounts[d] = Convert.ToInt32(r["n"]);
+                }
+            }
+            catch { }   // no counts is a plain strip, not an error
         }
 
         private void DayButton_CheckedChanged(object sender, EventArgs e)
@@ -1808,7 +1915,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             foreach (System.Windows.Forms.Control c in _pnlDays.Controls)
             {
                 DevExpress.XtraEditors.CheckButton db = c as DevExpress.XtraEditors.CheckButton;
-                if (db != null) PaintDayButton(db, db.Checked);
+                if (db == null) continue;
+                int dw;
+                if (!_dayCounts.TryGetValue(Convert.ToInt32(db.Tag), out dw)) dw = 0;
+                PaintDayButton(db, db.Checked, dw > 0);
             }
             if (!b.Checked) return;
             int day = Convert.ToInt32(b.Tag);
@@ -1818,6 +1928,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private static void PaintDayButton(DevExpress.XtraEditors.CheckButton b, bool on)
         {
+            PaintDayButton(b, on, true);
+        }
+
+        /// <summary>Blue when it is the day in front, pale when the month has nothing on it, plain
+        /// otherwise. Pale is the whole point of keeping the quiet days: they are visibly quiet.</summary>
+        private static void PaintDayButton(DevExpress.XtraEditors.CheckButton b, bool on, bool hasWork)
+        {
             if (on)
             {
                 b.Appearance.BackColor = Color.FromArgb(33, 115, 199);   // selected = blue
@@ -1826,13 +1943,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 b.Appearance.Options.UseForeColor = true;
                 b.Appearance.FontStyleDelta = FontStyle.Bold;
             }
+            else if (!hasWork)
+            {
+                b.Appearance.BackColor = Color.Empty;
+                b.Appearance.ForeColor = Color.FromArgb(168, 176, 182);   // quiet day: still there, visibly empty
+                b.Appearance.Options.UseBackColor = false;
+                b.Appearance.Options.UseForeColor = true;
+                b.Appearance.FontStyleDelta = FontStyle.Regular;
+            }
             else
             {
                 b.Appearance.BackColor = Color.Empty;
                 b.Appearance.ForeColor = Color.Empty;
                 b.Appearance.Options.UseBackColor = false;
                 b.Appearance.Options.UseForeColor = false;
-                b.Appearance.FontStyleDelta = FontStyle.Regular;
+                b.Appearance.FontStyleDelta = FontStyle.Bold;             // has work
             }
         }
 
@@ -1845,41 +1970,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // are touched — the 145k migrated legacy readings carry no DocKey and are never affected.
         private void ReconcileDeletedInvoices()
         {
-            try
-            {
-                // Audit BEFORE the delete: the billed readings about to be un-billed are appended to the
-                // immutable log as INVOICE-DELETED — stamped with WHO ran the reconcile and carrying the
-                // original invoice's baseline/usage over from its INVOICE log row.
-                string who = "";
-                try { who = (AutoCount.Authentication.UserSession.CurrentUserSession.LoginUserID ?? "").Replace("'", "''"); }
-                catch { }
-                _dbSetting.ExecuteNonQuery(
-                    "INSERT INTO dbo.zSCP2_MeterReadingLog (ItemMeterKey, PeriodYear, PeriodMonth, Reading, ReadingDate, Source, DocNo, CreatedBy, LastReading, [Usage], UnitPrice, MinCharges, FOCQty, RebatePct, Charge) " +
-                    "SELECT t.ServiceItemMeterTypeKey, ISNULL(me.PeriodYear,0), ISNULL(me.PeriodMonth,0), " +
-                    "t.MeterTransReading, t.MeterTransDate, 'INVOICE-DELETED', ISNULL(me.InvoicedDocNo,''), N'" + who + "', " +
-                    "orig.LastReading, orig.[Usage], orig.UnitPrice, orig.MinCharges, orig.FOCQty, orig.RebatePct, orig.Charge " +
-                    "FROM dbo.zSCP_MeterTrans t " +
-                    "LEFT JOIN dbo.zSCP2_MeterEntry me ON me.InvoicedDocKey = t.SalesInvoiceDocKey AND me.ItemMeterKey = t.ServiceItemMeterTypeKey " +
-                    "OUTER APPLY (SELECT TOP 1 l.LastReading, l.[Usage], l.UnitPrice, l.MinCharges, l.FOCQty, l.RebatePct, l.Charge FROM dbo.zSCP2_MeterReadingLog l " +
-                    "  WHERE l.ItemMeterKey = t.ServiceItemMeterTypeKey AND l.Source = 'INVOICE' " +
-                    "  AND l.DocNo = ISNULL(me.InvoicedDocNo,'') ORDER BY l.LogKey DESC) orig " +
-                    "WHERE t.SalesInvoiceDocKey IS NOT NULL " +
-                    "AND t.SalesInvoiceDocKey IN (SELECT me2.InvoicedDocKey FROM dbo.zSCP2_MeterEntry me2 WHERE me2.InvoicedDocKey IS NOT NULL) " +
-                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = t.SalesInvoiceDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
-                _dbSetting.ExecuteNonQuery(
-                    "DELETE t FROM dbo.zSCP_MeterTrans t " +
-                    "WHERE t.SalesInvoiceDocKey IS NOT NULL " +
-                    "AND t.SalesInvoiceDocKey IN (SELECT me.InvoicedDocKey FROM dbo.zSCP2_MeterEntry me WHERE me.InvoicedDocKey IS NOT NULL) " +
-                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = t.SalesInvoiceDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
-                _dbSetting.ExecuteNonQuery(
-                    "UPDATE me SET InvoicedDocKey=NULL, InvoicedDocNo='', InvoicedAt=NULL " +
-                    "FROM dbo.zSCP2_MeterEntry me " +
-                    "WHERE me.InvoicedDocKey IS NOT NULL " +
-                    "AND NOT EXISTS (SELECT 1 FROM dbo.IV iv WHERE iv.DocKey = me.InvoicedDocKey AND ISNULL(iv.Cancelled,'F') <> 'T')");
-                // #10: reading overrides whose CN was deleted/cancelled roll back the same way.
-                ServiceContractPhotocopier.Classes.ScpCreditNoteBuilder.ReconcileDeletedCreditNotes(_dbSetting);
-            }
-            catch { }   // reconciliation is best-effort; the load itself must never be blocked
+            ServiceContractPhotocopier.Classes.ScpBillingRows.ReconcileDeletedInvoices(_dbSetting);
         }
 
         private void LoadData()
@@ -1900,9 +1991,22 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // Billing-day filter — with one carve-out: a machine INVOICED in the selected month
                 // always stays in the dataset regardless of its billing day, so the Invoiced tab is
                 // a complete month history.
+                // The row's OWN day, not the contract's: a rental billing apart follows Rental
+                // invoice day, its copies follow the billing due day. The rule is in ScpBillingRows
+                // so the filter and the row cannot drift apart.
+                string due = "(CASE WHEN " + ScpBillingRows.RowDueDaySql + " > " + monthEnd +
+                             " THEN " + monthEnd + " ELSE " + ScpBillingRows.RowDueDaySql + " END)";
+                // "<=", not "=": a row whose day has GONE and which still has not been billed stays
+                // on the list -- in red -- instead of quietly disappearing until someone thinks to
+                // look for it. Money nobody invoiced should not need finding.
+                //
+                // Meter Reading > Setting turns it off for anyone who wants the old behaviour: the
+                // chosen day, and nothing else on it.
+                bool keepOverdue = ServiceContractPhotocopier.Data.PumsConfig.GetBool(
+                    _dbSetting, ServiceContractPhotocopier.Data.PumsConfig.KEY_SHOW_OVERDUE_ROWS,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_SHOW_OVERDUE_ROWS);
                 string dayFilter = this.ChkShowAll.Checked ? "" :
-                    " AND ((CASE WHEN COALESCE(i.BillingDayOverride,c.BillingDay) > " + monthEnd +
-                    " THEN " + monthEnd + " ELSE COALESCE(i.BillingDayOverride,c.BillingDay) END) = " + target +
+                    " AND (" + due + (keepOverdue ? " <= " : " = ") + target +
                     " OR EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry meD WHERE meD.ItemMeterKey = m.ItemMeterKey" +
                     " AND meD.PeriodYear = " + year + " AND meD.PeriodMonth = " + month +
                     " AND meD.InvoicedDocKey IS NOT NULL)) ";
@@ -1938,199 +2042,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 this.GrpFilter.Text = "Filter Options   —   billing period: " +
                     new CultureInfo("en-US").DateTimeFormat.GetAbbreviatedMonthName(month) + " " + year;
 
-                string sql =
-                    // Per-meter machine serial: a multi-machine CSSI assigns meters to provided units
-                    // (m.MachineSerialNo); '' falls back to the CSSI's own header machine serial.
-                    "SELECT i.ItemKey, c.ContractKey, c.ContractNo, i.ServiceItemNo, " +
-                    "ISNULL(i.Description,'') AS ItemDesc, " +
-                    "COALESCE(NULLIF(m.MachineSerialNo,''), i.SerialNumber) AS SerialNumber, " +
-                    "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
-                    "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
-                    "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
-                    // What the machine line names -- model, duty label, or both. From the contract's
-                    // format; 'B' for a contract that has none, which is what it printed before.
-                    // The contract carries its own answer now; the format is only a fallback for
-                    // the contracts that have not been moved across yet.
-                    "ISNULL(NULLIF(c.MachineLineShows,''), ISNULL(bf.MachineLineShows,'B')) AS MachineLineShows, " +
-                    "ISNULL(c.RentalBillingDay,0) AS RentalBillingDay, " +
-                    "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
-                    "COALESCE(i.BillingDayOverride, c.BillingDay) AS EffBillingDay, " +
-                    "ISNULL(i.IsGroupItem,'N') AS IsGroupItem, ISNULL(i.MachineMode,'') AS MachineMode, " +
-                    // BillGroupCode picks the INVOICE; LineGroupCode picks the LINE and is the word
-                    // ("HEAVY DUTY") the line prints. ItemCode is the machine's model — the bucket
-                    // when a contract groups its lines by model (v11 / v14).
-                    "ISNULL(i.BillGroupCode,'') AS BillGroupCode, ISNULL(i.LineGroupCode,'') AS LineGroupCode, " +
-                    "ISNULL(i.MergeGroupCodeMeter,'') AS MergeGroupCodeMeter, " +
-                    // MergeGroupCode says which LINE this machine prints on when the contract merges
-                    // -- a hand-made group beats the line mode's own bucket (v12).
-                    "ISNULL(i.MergeGroupCode,'') AS MergeGroupCode, " +
-                    "ISNULL(i.ItemCode,'') AS ModelCode, ISNULL(c.BillingFormatCode,'') AS BillingFormatCode, " +
-                    "m.ItemMeterKey, m.MeterRole, m.MeterTypeCode, ISNULL(mt.Description,'') AS MeterTypeName, " +
-                    // Invoice line Item Code = the meter type's stock code (master convention: metertype.stockcode
-                    // goes on the charge row); ACItemCode is an explicit override when set.
-                    "ISNULL(NULLIF(mt.ACItemCode,''), ISNULL(mt.StockCode,'')) AS ACItemCode, ISNULL(m.MinimumCharges,0) AS MinCharges, " +
-                    "ISNULL(m.ChargesRate,0) AS UnitPrice, ISNULL(m.FOCQty,0) AS FOCQty, " +
-                    // Per-meter tier override (zSCP2_ItemMeterPrice) beats the scheme code; its ladder is
-                    // keyed '#<ItemMeterKey>' in the loaded ladder map (ScpMultiPrice.MeterLadderKey).
-                    // Joined (pm), NOT a correlated EXISTS — the correlated form ballooned this query's
-                    // memory grant and stalled it on RESOURCE_SEMAPHORE when the server was memory-squeezed.
-                    "CASE WHEN pm.ItemMeterKey IS NOT NULL " +
-                    "     THEN '#' + CAST(m.ItemMeterKey AS varchar(20)) " +
-                    "     ELSE ISNULL(NULLIF(m.MeterMultiPriceCode,''), ISNULL(mt.MeterMultiPriceCode,'')) END AS MultiPriceCode, " +
-                    "ISNULL(m.RebateQtyInPercent,0) AS RebatePct, ISNULL(m.InitialReading,0) AS InitReading, " +
-                    "ISNULL(mt.IsFlatCharge,'N') AS IsFlatCharge, ISNULL(mt.IsRentalWaive,'N') AS IsRentalWaive, " +
-                    // WaiveScope says WHICH charges count (black / colour / both); CommitScope says
-                    // WHOSE (this machine / its merge group / the whole contract).
-                    "ISNULL(m.CommitScope,'S') AS CommitScope, " +
-                    "ISNULL(m.WaiveFirstNMonths,0) AS WaiveFirstNMonths, ISNULL(m.WaiveTargetAmount,0) AS WaiveTargetAmount, " +
-                    "ISNULL(m.WaivePartialThreshold,0) AS WaivePartialThreshold, " +
-                    "ISNULL(m.WaivePartialAmount,0) AS WaivePartialAmount, ISNULL(m.WaiveScope,'BKCL') AS WaiveScope, " +
-                    "m.RentalStartDate, ISNULL(m.RentalMonths,0) AS RentalMonths, ISNULL(m.RentalBasis,'A') AS RentalBasis, " +
-                    "COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS EffExpiry, " +
-                    "COALESCE(i.ServiceStartDate, c.ServiceStartDate) AS EffStart, " +
-                    "lr.LastReading, lr.LastDate, " +
-                    "ISNULL(li.LastInvNo,'') AS LastInvNo, li.LastInvAt, ISNULL(li.LastInvTotal,0) AS LastInvTotal " +
-                    "FROM dbo.zSCP2_ItemMeter m " +
-                    "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
-                    "JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
-                    "LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
-                    "LEFT JOIN dbo.zSCP2_BillingFormat bf ON bf.FormatCode = c.BillingFormatCode " +
-                    "LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = m.MeterTypeCode " +
-                    "LEFT JOIN (SELECT DISTINCT ItemMeterKey FROM dbo.zSCP2_ItemMeterPrice) pm ON pm.ItemMeterKey = m.ItemMeterKey " +
-                    // Latest reading per meter in ONE pass over zSCP_MeterTrans (window function),
-                    // instead of a correlated TOP-1 OUTER APPLY per row (which timed out on 145k rows).
-                    "LEFT JOIN (SELECT z.ServiceItemMeterTypeKey, z.MeterTransReading AS LastReading, z.MeterTransDate AS LastDate " +
-                    "  FROM (SELECT t.ServiceItemMeterTypeKey, t.MeterTransReading, t.MeterTransDate, " +
-                    // A row BILLED in the selected period ALWAYS becomes the baseline (Last Reading +
-                    // Last Read Date follow the just-billed reading), even if stray legacy rows carry
-                    // out-of-order dates — then normal latest-date ordering.
-                    "        ROW_NUMBER() OVER (PARTITION BY t.ServiceItemMeterTypeKey ORDER BY " +
-                    "          CASE WHEN t.SalesInvoiceDocKey IS NOT NULL AND t.MeterTransDate >= DATEFROMPARTS(" + year + "," + month + ",1) THEN 1 ELSE 0 END DESC, " +
-                    "          t.MeterTransDate DESC, t.MeterTransKey DESC) AS rn " +
-                    // Last reading baseline = latest MeterTrans STRICTLY BEFORE the selected billing
-                    // month, PLUS any BILLED reading inside the month (SalesInvoiceDocKey set): once a
-                    // meter is invoiced, its Last Reading moves to the billed value so the remaining
-                    // usage shows 0 — and reverts automatically if that invoice is later deleted
-                    // (ReconcileDeletedInvoices removes the billed row).
-                    "        FROM dbo.zSCP_MeterTrans t WHERE t.MeterTransDate < DATEFROMPARTS(" + year + "," + month + ",1) " +
-                    "           OR (t.SalesInvoiceDocKey IS NOT NULL AND t.MeterTransDate < DATEADD(MONTH, 1, DATEFROMPARTS(" + year + "," + month + ",1)))) z WHERE z.rn = 1) lr ON lr.ServiceItemMeterTypeKey = m.ItemMeterKey " +
-                    // Last invoice ever generated for this meter (from the zSCP2_MeterEntry stamps) —
-                    // lets the operator tell "0 usage because ALREADY INVOICED" apart from "no reading".
-                    "LEFT JOIN (SELECT z2.ItemMeterKey, z2.InvoicedDocNo AS LastInvNo, z2.InvoicedAt AS LastInvAt, " +
-                    "         ivh.NetTotal AS LastInvTotal " +
-                    "  FROM (SELECT me.ItemMeterKey, me.InvoicedDocNo, me.InvoicedAt, me.InvoicedDocKey, " +
-                    "        ROW_NUMBER() OVER (PARTITION BY me.ItemMeterKey ORDER BY me.InvoicedAt DESC) AS rn " +
-                    "        FROM dbo.zSCP2_MeterEntry me WHERE me.InvoicedDocKey IS NOT NULL) z2 " +
-                    "  LEFT JOIN dbo.IV ivh ON ivh.DocKey = z2.InvoicedDocKey " +
-                    "  WHERE z2.rn = 1) li " +
-                    "ON li.ItemMeterKey = m.ItemMeterKey " +
-                    // ALL meters of the item are shown — BK/CL usage meters AND the non-reading ones
-                    // (rental RA-*, minimum MIN-*, fax, etc., role NA). Previously only BK/CL showed,
-                    // which made the item's other meters look "missing".
-                    "WHERE " + inactiveFilter + " " + dayFilter + searchFilter + expiryFilter +
-                    "ORDER BY c.DebtorCode, c.ContractNo, i.ServiceItemNo, m.MeterRole " +   // customers cluster together
-                    // Memory-squeeze armour. On this dev box Windows pressure shrank SQL's query-workspace
-                    // pool to ~18MB and the PARALLEL plan's REQUIRED grant (~50MB, scales with DOP) could
-                    // never fit -> permanent RESOURCE_SEMAPHORE queue -> timeout. MAXDOP 1 cuts the required
-                    // minimum to a few MB (fits any pool); MAX_GRANT_PERCENT makes oversized asks spill to
-                    // tempdb instead of queuing. ~4k result rows — serial is fast anyway.
-                    "OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 20)";
-                DataTable src = QueryWithTimeout(sql, 180);
-
-                _dtGrid = NewGridTable();
-                _ladders = ServiceContractPhotocopier.Classes.ScpMultiPrice.LoadLadders(_dbSetting);   // tiered pricing
-                Dictionary<long, int> shadeByContract = new Dictionary<long, int>();
-                foreach (DataRow r in src.Rows)
-                {
-                    DataRow g = _dtGrid.NewRow();
-                    long ck = D64(r["ContractKey"]);
-                    int shade;
-                    if (!shadeByContract.TryGetValue(ck, out shade))
-                    {
-                        shade = shadeByContract.Count % 2;   // alternate per contract → clean colour bands
-                        shadeByContract[ck] = shade;
-                    }
-                    g["Shade"] = shade;
-                    g["SelCssi"] = false;
-                    g["ContractNo"] = S(r["ContractNo"]);
-                    g["ServiceItemNo"] = S(r["ServiceItemNo"]);
-                    g["SerialNo"] = S(r["SerialNumber"]);
-                    g["ItemDesc"] = S(r["ItemDesc"]);
-                    g["Customer"] = S(r["DebtorCode"]) + " - " + S(r["DebtorName"]);
-                    g["Mode"] = S(r["BillingMode"]) == "S" ? "Separate" : "Group";
-                    if (r["EffBillingDay"] != DBNull.Value) g["BillingDay"] = Convert.ToInt32(r["EffBillingDay"]);
-                    g["MeterType"] = S(r["MeterTypeCode"]);
-                    g["MeterTypeName"] = S(r["MeterTypeName"]);
-                    g["MinCharges"] = Dec(r["MinCharges"]);
-                    g["UnitPrice"] = Dec(r["UnitPrice"]);
-                    g["FOCQty"] = Dec(r["FOCQty"]);
-                    g["MultiPriceCode"] = S(r["MultiPriceCode"]);
-                    g["FOCResetUnit"] = S(r["FOCResetUnit"]);
-                    g["FOCResetN"] = r["FOCResetN"] == DBNull.Value ? 0 : Convert.ToInt32(r["FOCResetN"]);
-                    g["RebatePct"] = Dec(r["RebatePct"]);
-                    if (r["LastDate"] != DBNull.Value) g["LastReadDate"] = Convert.ToDateTime(r["LastDate"]);
-                    g["LastReading"] = (r["LastReading"] == DBNull.Value) ? Dec(r["InitReading"]) : Dec(r["LastReading"]);
-                    g["CurrentReading"] = 0m;
-                    g["MeterUsage"] = 0m;
-                    g["TotalCharges"] = 0m;
-                    // "Use Min" means "this flat meter bills its minimum". A committed minimum does
-                    // NOT -- it bills the shortfall, worked out at Generate -- so it must not claim to.
-                    g["UseMin"] = Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m &&
-                                  !ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
-                                      S(r["MeterRole"]), S(r["MeterTypeCode"]), Dec(r["MinCharges"]));
-                    g["LastInvNo"] = S(r["LastInvNo"]);
-                    if (r["LastInvAt"] != DBNull.Value) g["LastInvDate"] = Convert.ToDateTime(r["LastInvAt"]);
-                    g["InvTotal"] = Dec(r["LastInvTotal"]);
-                    g["Sel"] = false;
-                    g["Status"] = "";
-                    g["ItemKey"] = D64(r["ItemKey"]);
-                    g["ContractKey"] = D64(r["ContractKey"]);
-                    g["DebtorCode"] = S(r["DebtorCode"]);
-                    g["BillingMode"] = S(r["BillingMode"]);
-                    g["ItemMeterKey"] = D64(r["ItemMeterKey"]);
-                    g["ACItemCode"] = S(r["ACItemCode"]);
-                g["MachineLineShows"] = S(r["MachineLineShows"]);
-                g["MergeGroupCodeMeter"] = S(r["MergeGroupCodeMeter"]);
-                    g["Role"] = S(r["MeterRole"]);
-                    g["EntrySource"] = "";
-                    g["FetchedReading"] = 0m;
-                    g["HasConflict"] = false;
-                    // A waive meter is flat BY DEFINITION (it has no reading) even if the type's
-                    // rental flag was left unticked in the master. Recognised by ROLE first, with the
-                    // type's own flag as the OR that keeps the legacy (W) family working untouched.
-                    g["IsWaive"] = ServiceContractPhotocopier.Classes.ScpStrategy.IsWaiveRole(
-                        S(r["MeterRole"]), S(r["IsRentalWaive"]) == "Y");
-                    g["IsGroupItem"] = S(r["IsGroupItem"]) == "Y";
-                    g["MachineMode"] = S(r["MachineMode"]);
-                    g["BillGroupCode"] = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
-                    g["LineGroupCode"] = S(r["LineGroupCode"]);
-                    g["MergeGroupCode"] = S(r["MergeGroupCode"]);
-                    g["ModelCode"] = S(r["ModelCode"]);
-                    g["NewMoneyRules"] = S(r["BillingFormatCode"]).Length > 0;
-                    g["IsFlat"] = S(r["IsFlatCharge"]) == "Y" || S(r["IsRentalWaive"]) == "Y";
-                    g["WaiveFirstNMonths"] = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
-                    g["WaiveTargetAmount"] = Dec(r["WaiveTargetAmount"]);
-                    g["WaivePartialThreshold"] = Dec(r["WaivePartialThreshold"]);
-                    g["WaivePartialAmount"] = Dec(r["WaivePartialAmount"]);
-                    g["WaiveScope"] = S(r["WaiveScope"]);
-                    g["CommitScope"] = S(r["CommitScope"]);
-                    // Expired = effective expiry BEFORE the billing month's 1st (still billable IN its
-                    // final month — this only flags machines whose last billable month is already over).
-                    g["IsExpired"] = r["EffExpiry"] != DBNull.Value &&
-                        Convert.ToDateTime(r["EffExpiry"]).Date < new DateTime(year, month, 1);
-                    if (r["EffStart"] != DBNull.Value) g["EffStart"] = Convert.ToDateTime(r["EffStart"]);
-                    if (r["ContractStart"] != DBNull.Value) g["ContractStart"] = Convert.ToDateTime(r["ContractStart"]);
-                    g["StrategyCode"] = S(r["StrategyCode"]);
-                    g["RentSep"] = S(r["RentSep"]) == "Y";
-                    g["PeriodByContract"] = S(r["PeriodByContract"]) == "Y";
-                    g["RentalBillingDay"] = r["RentalBillingDay"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalBillingDay"]);
-                    if (r["RentalStartDate"] != DBNull.Value) g["RentalStartDate"] = Convert.ToDateTime(r["RentalStartDate"]);
-                    g["RentalMonths"] = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
-                    g["RentalBasis"] = S(r["RentalBasis"]) == "P" ? "P" : "A";
-                    _dtGrid.Rows.Add(g);
-                }
+                // The rows to bill come from ScpBillingRows, which inter-billing also uses. Only
+                // the four filter clauses above are this screen's -- everything after the WHERE
+                // is shared, so both screens see the same row for the same counter.
+                _dtGrid = ServiceContractPhotocopier.Classes.ScpBillingRows.Load(
+                    _dbSetting, year, month, inactiveFilter, dayFilter, searchFilter, expiryFilter,
+                    out _ladders);
 
                 PrefillFromStaging(SelectedMonth(), SelectedYear());
+                MarkLate(target);
                 ApplyRentalGroupPrices();
                 ApplyMeterLinePrices();   // the contract's own price for a merged rental line, if set
                 AutoFillFlatMeters();
@@ -2152,6 +2072,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 WireNativeGridLayout();   // #1a: AutoCount-native layout restore + header menu, per tab
                 UpdateTabCounts();
                 ApplyTabFilter();
+                RefreshOverdueNotice(year, month);
+                LoadDayCounts(year, month);
+                RebuildDayButtons();   // the strip follows the month it is showing
+                ApplySelectColumnVisibility();
             }
             catch (Exception ex)
             {
@@ -2339,92 +2263,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private static DataTable NewGridTable()
         {
-            DataTable dt = new DataTable();
-            // ---- visible: item columns (these merge), then meter columns ----
-            dt.Columns.Add("SelCssi", typeof(bool));   // ONE merged checkbox per CSSI — ticks/unticks the whole machine (both meters)
-            dt.Columns.Add("ContractNo", typeof(string));
-            dt.Columns.Add("ServiceItemNo", typeof(string));
-            dt.Columns.Add("SerialNo", typeof(string));
-            dt.Columns.Add("ItemDesc", typeof(string));        // item description (invoice line text; hidden)
-            dt.Columns.Add("MachineStatus", typeof(string));   // ONLINE / OFFLINE (set on fetch, per item)
-            dt.Columns.Add("Customer", typeof(string));
-            dt.Columns.Add("Mode", typeof(string));
-            dt.Columns.Add("BillingDay", typeof(int));   // effective billing day = COALESCE(item override, contract day)
-            dt.Columns.Add("MeterType", typeof(string));
-            dt.Columns.Add("MeterTypeName", typeof(string));
-            dt.Columns.Add("MinCharges", typeof(decimal));
-            dt.Columns.Add("UnitPrice", typeof(decimal));
-            dt.Columns.Add("FOCQty", typeof(decimal));
-            dt.Columns.Add("MultiPriceCode", typeof(string));   // tiered-pricing ladder code (hidden; drives the tier price)
-            dt.Columns.Add("FOCResetUnit", typeof(string));     // contract FOC reset period M/W/D (hidden)
-            dt.Columns.Add("FOCResetN", typeof(int));           // N for 'D' (hidden)
-            dt.Columns.Add("RebatePct", typeof(decimal));
-            dt.Columns.Add("LastReadDate", typeof(DateTime));
-            dt.Columns.Add("LastAuditDate", typeof(DateTime));   // API audit date of the CURRENT fetched reading
-            dt.Columns.Add("LastFetchDate", typeof(DateTime));   // when the reading was last fetched/saved into staging
-            dt.Columns.Add("LastReading", typeof(decimal));
-            dt.Columns.Add("CurrentReading", typeof(decimal));
-            dt.Columns.Add("MeterUsage", typeof(decimal));
-            dt.Columns.Add("TotalCharges", typeof(decimal));
-            dt.Columns.Add("LastInvNo", typeof(string));      // last invoice generated for this meter (any period)
-            dt.Columns.Add("LastInvDate", typeof(DateTime));  // its date — GREEN when it falls in the selected billing period (= already invoiced now)
-            dt.Columns.Add("InvTotal", typeof(decimal));      // that invoice's NetTotal (shown on the Invoiced tab only)
-            dt.Columns.Add("UseMin", typeof(bool));
-            dt.Columns.Add("Sel", typeof(bool));
-            dt.Columns.Add("Status", typeof(string));
-            // ---- hidden keys ----
-            dt.Columns.Add("ItemKey", typeof(long));
-            dt.Columns.Add("ContractKey", typeof(long));
-            dt.Columns.Add("DebtorCode", typeof(string));
-            dt.Columns.Add("BillingMode", typeof(string));
-            dt.Columns.Add("ItemMeterKey", typeof(long));
-            dt.Columns.Add("ACItemCode", typeof(string));
-            dt.Columns.Add("MachineLineShows", typeof(string));
-            dt.Columns.Add("MergeGroupCodeMeter", typeof(string));
-            dt.Columns.Add("Role", typeof(string));
-            dt.Columns.Add("Shade", typeof(int));   // 0/1 per-item zebra shade (hidden)
-            dt.Columns.Add("EntrySource", typeof(string));    // where CurrentReading came from: MANUAL/ONLINE/OFFLINE/'' (hidden)
-            dt.Columns.Add("TrackingId", typeof(string));     // offline report id ("MR-yymmdd-nnn"); '' = none (hidden)
-            dt.Columns.Add("FetchedReading", typeof(decimal)); // last value the API returned for this meter (hidden)
-            dt.Columns.Add("IsFlat", typeof(bool));            // flat/rental meter: auto-billed qty 1 x price, no reading
-            dt.Columns.Add("IsWaive", typeof(bool));           // Rental-Waive contra meter (engine decides firing)
-            dt.Columns.Add("IsGroupItem", typeof(bool));       // the contract's GROUP machine (fleet-total deals)
-            dt.Columns.Add("MachineMode", typeof(string));     // DEFINED online/offline ('' = use fetch status)
-            dt.Columns.Add("BillGroupCode", typeof(string));   // #6 bill-group split ('' = none)
-            dt.Columns.Add("LineGroupCode", typeof(string));   // the word printed on the line ("HEAVY DUTY")
-            dt.Columns.Add("MergeGroupCode", typeof(string));  // which LINE it merges onto ('' = follow the mode)
-            dt.Columns.Add("ModelCode", typeof(string));       // the machine's model — bucket when grouping by model
-            dt.Columns.Add("NewMoneyRules", typeof(bool));     // contract has a Billing Format -> bills like the
-                                                              // customer's own invoices (rebate as copies, etc.)
-            dt.Columns.Add("WaiveFirstNMonths", typeof(int));
-            dt.Columns.Add("WaiveTargetAmount", typeof(decimal));
-            dt.Columns.Add("WaivePartialThreshold", typeof(decimal));
-            dt.Columns.Add("WaivePartialAmount", typeof(decimal));
-            dt.Columns.Add("WaiveScope", typeof(string));
-            dt.Columns.Add("CommitScope", typeof(string));    // S machine / G merge group / C contract
-            dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
-            dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
-            dt.Columns.Add("PeriodByContract", typeof(bool));  // #16: invoice display dates follow the contract cycle (hidden)
-            dt.Columns.Add("RentalBillingDay", typeof(int));   // rental-separate invoice's own day; 0 = follow meter date (hidden)
-            dt.Columns.Add("RentalStartDate", typeof(DateTime)); // rental period anchor (hidden; n/N)
-            dt.Columns.Add("RentalMonths", typeof(int));       // rental total periods N (hidden)
-            dt.Columns.Add("RentalBasis", typeof(string));     // A accrual / P prepayment (hidden)
-            dt.Columns.Add("NeedManual", typeof(bool));        // SNAPSHOT tab membership: set at load/fetch, NOT live —
-                                                               // keying a reading must not make the row vanish mid-work (hidden)
-            dt.Columns.Add("Locked", typeof(bool));            // billing-day auto-fetch snapshot lock — reading frozen (hidden)
-            dt.Columns.Add("HasConflict", typeof(bool));       // saved-manual value differs from a fresh API value (hidden)
-            dt.Columns.Add("IsExpired", typeof(bool));         // effective expiry BEFORE the billing month (row tinted; Generate warns)
-            dt.Columns.Add("EffStart", typeof(DateTime));      // effective service start (RENTAL-FREE-N month anchor; hidden)
-            dt.Columns.Add("ContractStart", typeof(DateTime)); // CONTRACT service start (#16 period anchor - one period per invoice; hidden)
-            dt.Columns.Add("InvoicedDocNo", typeof(string));   // non-empty = this meter+period is already invoiced (hidden)
-            return dt;
+            // The shape lives with the rows -- see ScpBillingRows.
+            return ServiceContractPhotocopier.Classes.ScpBillingRows.NewTable();
         }
 
         // Columns the user may never see (data drivers / plumbing) — never offered in View Setting.
-        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart" };
+        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart", "Late" };
 
         // Hidden by DEFAULT but user-selectable (column chooser / View Setting).
-        private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role" };
+        private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role", "DueDay" };
 
         // Everything View Setting lets the operator toggle — now including the reading and pricing
         // columns. They used to be excluded because ApplyTabColumnLayout re-forced them on every tab
@@ -2516,6 +2363,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             GridColumn selc = ActiveView.Columns["SelCssi"];
             if (selc != null)
             {
+                if (!ShowSelectColumn) selc.Visible = false;   // hosted in the Invoice Run: no ticking here
                 // Sorting by the checkbox makes ticked rows jump position mid-click — disable it.
                 selc.OptionsColumn.AllowSort = DevExpress.Utils.DefaultBoolean.False;
                 selc.SortOrder = DevExpress.Data.ColumnSortOrder.None;
@@ -2763,6 +2611,40 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // Picking a specific billing day means "show only that day" — uncheck Show All (which would
         // otherwise override the day filter) and reload. Programmatic changes are guarded.
+        /// <summary>Which side of the rental split a row is on: "R" when it will ride the
+        /// rental-only invoice, "" when it goes with the copies. A WAIVE follows the rental, because
+        /// it is the credit against it.</summary>
+        private static string RentalSideOf(DataRow r)
+        {
+            if (!r.Table.Columns.Contains("RentSep")) return "";
+            bool sep = r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]);
+            if (!sep) return "";
+            bool flat = r.Table.Columns.Contains("IsFlat")
+                        && r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
+            if (!flat) return "";
+            string role = S(r["Role"]).Trim().ToUpperInvariant();
+            if (role == "RENTAL" || role == "WAIVE") return "R";
+            return ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]))
+                ? "R" : "";
+        }
+
+        /// <summary>The invoice a row belongs to: contract, bill group, rental side. Mirrors the key
+        /// ScpInvoiceJobs builds, because a guard that groups differently from the generator will
+        /// eventually block a run the generator would have handled perfectly.</summary>
+        private static string JobKeyOf(DataRow r)
+        {
+            string bg = r.Table.Columns.Contains("BillGroupCode")
+                ? ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]))
+                : "";
+            bool groupItem = r.Table.Columns.Contains("IsGroupItem")
+                             && r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"]);
+            if (groupItem) bg = "";
+            // One invoice per machine: the machine is the invoice, whatever its bill group.
+            if (r.Table.Columns.Contains("BillingMode") && S(r["BillingMode"]).Trim().ToUpperInvariant() == "S")
+                return D64(r["ContractKey"]) + "|I" + D64(r["ItemKey"]) + "|" + RentalSideOf(r);
+            return D64(r["ContractKey"]) + "|" + bg + "|" + RentalSideOf(r);
+        }
+
         private void CmbDay_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_suppressFilterEvent || _dbSetting == null) return;
@@ -3179,51 +3061,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // (and previously accepted API overrides) survive a restart and reappear as "saved".
         private void PrefillFromStaging(int month, int year)
         {
-            if (_dtGrid == null) return;
-            Dictionary<long, DataRow> byMeter = new Dictionary<long, DataRow>();
-            string sql = "SELECT ItemMeterKey, CurrentReading, ReadingDate, Source, InvoicedDocNo, InvoicedAt, LockedAt, LastModified, " +
-                         "ISNULL(TrackingId,'') AS TrackingId " +
-                         "FROM dbo.zSCP2_MeterEntry WHERE PeriodYear=" + year + " AND PeriodMonth=" + month;
-            DataTable saved = QueryWithTimeout(sql, 60);
-            foreach (DataRow s in saved.Rows) byMeter[D64(s["ItemMeterKey"])] = s;
-            if (byMeter.Count == 0) return;
-
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                DataRow s;
-                if (!byMeter.TryGetValue(D64(r["ItemMeterKey"]), out s)) continue;
-                string src = S(s["Source"]).Trim().ToUpperInvariant();
-                r["CurrentReading"] = Dec(s["CurrentReading"]);
-                r["EntrySource"] = src;
-                r["TrackingId"] = S(s["TrackingId"]).Trim();
-                if (s["ReadingDate"] != DBNull.Value) r["LastAuditDate"] = Convert.ToDateTime(s["ReadingDate"]);
-                if (s["LastModified"] != DBNull.Value) r["LastFetchDate"] = Convert.ToDateTime(s["LastModified"]);
-                Recalc(r);   // restored but NOT auto-selected — user picks rows before generating
-                string dt = (s["ReadingDate"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["ReadingDate"]).ToString("dd/MM/yyyy") : "";
-                if (src == "ONLINE") { r["MachineStatus"] = "ONLINE"; r["Status"] = "Online (saved)" + dt; }
-                else if (src == "OFFLINE") { r["MachineStatus"] = "OFFLINE"; r["Status"] = "Offline (saved)" + dt; }
-                else { r["Status"] = "Manual (saved)" + dt; }
-
-                // Billing-day auto-fetch snapshot: frozen — no fetch/manual override until invoiced.
-                if (s["LockedAt"] != DBNull.Value)
-                {
-                    r["Locked"] = true;
-                    r["Status"] = "🔒 AUTO-FETCHED (locked " +
-                        Convert.ToDateTime(s["LockedAt"]).ToString("dd/MM/yyyy HH:mm") + ")" + dt;
-                }
-
-                // Billing-period guard: already invoiced for this period -> show it and lock out of Generate.
-                string invNo = S(s["InvoicedDocNo"]).Trim();
-                if (invNo.Length > 0)
-                {
-                    r["InvoicedDocNo"] = invNo;
-                    r["LastInvNo"] = invNo;
-                    if (s["InvoicedAt"] != DBNull.Value) r["LastInvDate"] = Convert.ToDateTime(s["InvoicedAt"]);
-                    string invAt = (s["InvoicedAt"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["InvoicedAt"]).ToString("dd/MM/yyyy") : "";
-                    r["Status"] = "INVOICED " + invNo + invAt;
-                }
-            }
-            SyncSelCssi();
+            ServiceContractPhotocopier.Classes.ScpBillingRows.PrefillFromStaging(
+                _dbSetting, _dtGrid, month, year, _ladders);
         }
 
         // One fetched reading queued for staging (persisted so a reopen shows it without re-fetching).
@@ -3510,7 +3349,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 d["ItemMeterKey"] = D64(r["ItemMeterKey"]);
                 d["UseMin"] = r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]);
                 d["MultiPriceCode"] = S(r["MultiPriceCode"]);
-                d["FocResetCount"] = FocResetCountFor(r);
+                d["FocResetCount"] = ServiceContractPhotocopier.Classes.ScpInvoiceJobs.FocResetCountFor(r, SelectedYear(), SelectedMonth());
                 bool dIsFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
                 bool dIsWaive = r.Table.Columns.Contains("IsWaive") && r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
                 d["IsFlat"] = dIsFlat;
@@ -3779,33 +3618,24 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // FOC-reset accrual multiplier for a row: how many of the contract's reset periods fall in the
         // billed (monthly) span. 'M'/default = 1; 'W' ≈ 4; 'D' N ≈ daysInMonth/N. Applied to the FOC allowance.
-        private int FocResetCountFor(DataRow r)
-        {
-            string unit = r.Table.Columns.Contains("FOCResetUnit") ? S(r["FOCResetUnit"]) : "M";
-            int n = r.Table.Columns.Contains("FOCResetN") && r["FOCResetN"] != DBNull.Value ? Convert.ToInt32(r["FOCResetN"]) : 0;
-            int periodDays = System.DateTime.DaysInMonth(SelectedYear(), SelectedMonth());
-            return ServiceContractPhotocopier.Classes.ScpMultiPrice.FocResetCount(unit, n, periodDays);
-        }
-
+        
         // Grid preview charge = the SAME engine the invoice uses (ScpInvoiceBuilder.ComputeCharge), so grid
         // and invoice can never diverge: NET (FOC copies + rebate deducted) + multi-price tier + min floor.
         private void Recalc(DataRow r)
         {
-            MeterBillLine ln = new MeterBillLine();
-            ln.IsFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
-            ln.Current = Dec(r["CurrentReading"]);
-            ln.Last = Dec(r["LastReading"]);
-            ln.Rate = Dec(r["UnitPrice"]);
-            ln.MinCharges = Dec(r["MinCharges"]);
-            ln.Foc = Dec(r["FOCQty"]);
-            ln.RebatePct = Dec(r["RebatePct"]);
-            ln.MultiPriceCode = S(r["MultiPriceCode"]);
-            ln.FocResetCount = FocResetCountFor(r);
-            ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
-            // Honour the user's "Use Min." tick (force the minimum charge) without clobbering their input.
-            if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) ln.Charge = ln.MinCharges;
-            r["MeterUsage"] = ln.Usage;
-            r["TotalCharges"] = ln.Charge;
+            ServiceContractPhotocopier.Classes.ScpBillingRows.Recalc(r, _ladders, SelectedYear(), SelectedMonth());
+        }
+
+        /// <summary>Which merged row this meter prints on, or null when it prints on its own.
+        /// Rental merges on MergeGroupCode and copies on MergeGroupCodeMeter -- the two columns the
+        /// contract's Billing Setup writes and the fold engine reads.</summary>
+        private string MergeKeyOf(DataRow r)
+        {
+            if (r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"])) return null;
+            bool flat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
+            string g = S(r[flat ? "MergeGroupCode" : "MergeGroupCodeMeter"]).Trim();
+            if (g.Length == 0) return null;
+            return D64(r["ContractKey"]) + "|" + (flat ? "rental " : "copies ") + g.ToUpperInvariant();
         }
 
         private void BtnGenerateInvoice_Click(object sender, EventArgs e)
@@ -3815,10 +3645,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ActiveView.UpdateCurrentRow();
 
             // Group the selected meter lines: Group mode = one invoice per contract; Separate = per item.
-            Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs =
-                new Dictionary<string, MeterInvoiceGenerator.InvoiceJob>();
+            Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs;
             int genMonth = SelectedMonth(), genYear = SelectedYear();
-            int alreadyInvoiced = 0;
+            int alreadyInvoiced;
             string monthName = new CultureInfo("en-US").DateTimeFormat.GetMonthName(genMonth) + " " + genYear;
 
             // Only rows on the CURRENT TAB (the grid's active filter) are considered.
@@ -3834,6 +3663,33 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             string grpMode = GroupingMode();
             bool guardOn = GroupGuardOn();
 
+            // Which INVOICE a row would land on. The completeness guards below ask "is anything
+            // missing from this invoice", and until now they asked "is anything missing from this
+            // contract" -- which is the same question only while a contract makes one invoice.
+            //
+            // It stopped being the same question the day a rental could bill apart from its copies.
+            // Billing the rent on the 1st and the copies on the 7th is not a half-finished contract;
+            // it is two invoices, each complete, a week apart. The old guard called the second half
+            // "not ticked" and refused to generate the first.
+            //
+            // Keyed the way ScpInvoiceJobs keys a job: the contract, its bill group, and which side
+            // of the rental split the row is on.
+
+            // (helpers live below; this comment sits where the guards start)
+            // The Meters filter drops RENTAL, WAIVE and COMMIT rows from the view whenever it is not
+            // "All" -- deliberately, so a BK-only run is not cluttered by them. The cost is that the
+            // operator cannot tick what is not on screen, and the completeness guards below then
+            // report those rows "not ticked" without saying why they could not be ticked. Every guard
+            // message carries this line while the filter is narrowing the view.
+            string hiddenByFilter = _cmbMeterFilter == null ? ""
+                : (_cmbMeterFilter.SelectedIndex == 4 ? "black, colour and minimum rows"
+                : (MeterRoleFilter().Length == 0 ? "" : "rental, minimum and waive rows"));
+            string filterNote = hiddenByFilter.Length == 0 ? ""
+                : "\r\n" + "\r\n" +
+                  "NOTE: the Meters filter is set to \"" + _cmbMeterFilter.Text + "\", so " +
+                  hiddenByFilter + " are hidden from this list and cannot be ticked. " +
+                  "Set it to All to see them.";
+
             // Demo 28/07 #3: "one invoice per customer" must be COMPLETE — if any of a ticked
             // customer's machines would MISS the grouped invoice (not ticked, or a usage meter
             // without a reading), abort with the exact list instead of quietly billing a partial
@@ -3845,11 +3701,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 foreach (DataRow dr in visibleRows)
                     if (dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"])
                         && S(dr["InvoicedDocNo"]).Trim().Length == 0)
-                        tickedDebtors.Add(S(dr["DebtorCode"]));
+                        tickedDebtors.Add(S(dr["DebtorCode"]) + "|" + RentalSideOf(dr));
                 List<string> problems = new List<string>();
                 foreach (DataRow dr in visibleRows)
                 {
-                    if (!tickedDebtors.Contains(S(dr["DebtorCode"]))) continue;
+                    if (!tickedDebtors.Contains(S(dr["DebtorCode"]) + "|" + RentalSideOf(dr))) continue;
                     if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
                     bool gTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
                     bool gExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
@@ -3884,19 +3740,19 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // list. Only in FOLLOW mode (DEBTOR mode has the stronger customer-level guard above).
             if (guardOn && grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_FOLLOW && !_scopedGenerate)
             {
-                HashSet<long> tickedContracts = new HashSet<long>();
+                HashSet<string> tickedJobs = new HashSet<string>();
                 foreach (DataRow dr in visibleRows)
                     if (dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"])
                         && S(dr["InvoicedDocNo"]).Trim().Length == 0
                         && S(dr["BillingMode"]).Trim().ToUpperInvariant() != "S")
-                        tickedContracts.Add(D64(dr["ContractKey"]));
-                if (tickedContracts.Count > 0)
+                        tickedJobs.Add(JobKeyOf(dr));
+                if (tickedJobs.Count > 0)
                 {
                     List<string> problems = new List<string>();
                     foreach (DataRow dr in visibleRows)
                     {
                         if (S(dr["BillingMode"]).Trim().ToUpperInvariant() == "S") continue;
-                        if (!tickedContracts.Contains(D64(dr["ContractKey"]))) continue;
+                        if (!tickedJobs.Contains(JobKeyOf(dr))) continue;
                         if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
                         bool cTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
                         bool cExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
@@ -3919,8 +3775,69 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                             string.Join("\r\n", problems.ToArray()) + "\r\n\r\n" +
                             "Key the readings / tick the machines first, or set the contract's Billing Mode " +
                             "to \"Separate invoice per service item\".\r\n" +
-                            "Nothing was generated.",
+                            filterNote + "\r\n" + "Nothing was generated.",
                             "Incomplete contract group", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+            }
+
+            // A MERGED line must be billed whole. Machines put together in Billing Setup print as ONE
+            // row -- "2 UNIT x 250.00" -- and that row's quantity, its price and its readings are the
+            // members added up. Bill half of it and the customer gets a row that names a group and
+            // charges for part of one, with no way to tell from the paper that anything is missing.
+            //
+            // This guard reads the SAME columns the fold engine reads, so it protects whatever the
+            // contract's own screen was set to. The three guards below it are about which INVOICE a
+            // machine lands on; this one is about which printed ROW, which is a different promise and
+            // was the one nothing checked -- a contract billed per machine could still carry a merge.
+            //
+            // Rental and copies group separately (a fleet can share one rental and still bill its own
+            // copies), so each side is checked against its own column and only against rows of its
+            // own kind.
+            if (guardOn && !_scopedGenerate)
+            {
+                HashSet<string> tickedMerges = new HashSet<string>();
+                foreach (DataRow dr in visibleRows)
+                {
+                    if (dr["Sel"] == DBNull.Value || !Convert.ToBoolean(dr["Sel"])) continue;
+                    if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;
+                    string k = MergeKeyOf(dr);
+                    if (k != null) tickedMerges.Add(k);
+                }
+                if (tickedMerges.Count > 0)
+                {
+                    List<string> problems = new List<string>();
+                    foreach (DataRow dr in visibleRows)
+                    {
+                        string k = MergeKeyOf(dr);
+                        if (k == null || !tickedMerges.Contains(k)) continue;
+                        if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
+                        bool mTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
+                        bool mExpired = dr["IsExpired"] != DBNull.Value && Convert.ToBoolean(dr["IsExpired"]);
+                        if (!mTicked && mExpired) continue;   // an unticked EXPIRED machine is a choice
+                        bool mFlat = dr["IsFlat"] != DBNull.Value && Convert.ToBoolean(dr["IsFlat"]);
+                        string why = null;
+                        if (!mTicked) why = "not ticked";
+                        else if (!mFlat && Dec(dr["CurrentReading"]) <= 0m) why = "no reading keyed";
+                        if (why == null) continue;
+                        if (problems.Count < 25)
+                            problems.Add(S(dr["ContractNo"]) + "   " + S(dr["ServiceItemNo"]) + "   " +
+                                         S(dr["MeterType"]) + "   (" + k.Substring(k.IndexOf('|') + 1) +
+                                         ")   -   " + why);
+                        else { problems.Add("..."); break; }
+                    }
+                    if (problems.Count > 0)
+                    {
+                        XtraMessageBox.Show(
+                            "These machines are merged onto ONE printed row in Billing Setup, so they " +
+                            "have to be billed together. Some of them would be left out:" +
+                            "\r\n" + "\r\n" +
+                            string.Join("\r\n", problems.ToArray()) +
+                            "\r\n" + "\r\n" +
+                            "Key the readings / tick the machines first, or un-merge them in the " +
+                            "contract's Billing Setup." + "\r\n" + "Nothing was generated.",
+                            "Incomplete merged row", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
                 }
@@ -3928,7 +3845,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
             // Demo 28/07 #6: bill-group completeness — a Bill Group is billed as ONE invoice, so a
             // partially ticked / partially keyed group must not slip out as a partial invoice. Runs
-            // regardless of the grouping setting (the Bill Group overrides it).
+            // regardless of the grouping setting (the Bill Group overrides it) -- except on a contract
+            // billed one invoice per machine, where each machine is its own invoice anyway.
             if (guardOn && !_scopedGenerate)
             {
                 HashSet<string> tickedGroups = new HashSet<string>();
@@ -3939,6 +3857,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     string bg = S(dr["BillGroupCode"]).Trim();
                     if (bg.Length == 0) continue;
                     if (dr["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(dr["IsGroupItem"])) continue;
+                    if (S(dr["BillingMode"]).Trim().ToUpperInvariant() == "S") continue;   // per machine: the group is not one invoice
                     tickedGroups.Add(D64(dr["ContractKey"]) + "_" + bg);
                 }
                 if (tickedGroups.Count > 0)
@@ -3949,6 +3868,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         string bg = S(dr["BillGroupCode"]).Trim();
                         if (bg.Length == 0) continue;
                         if (dr["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(dr["IsGroupItem"])) continue;
+                        if (S(dr["BillingMode"]).Trim().ToUpperInvariant() == "S") continue;
                         if (!tickedGroups.Contains(D64(dr["ContractKey"]) + "_" + bg)) continue;
                         if (S(dr["InvoicedDocNo"]).Trim().Length > 0) continue;   // already billed = fine
                         bool gTicked = dr["Sel"] != DBNull.Value && Convert.ToBoolean(dr["Sel"]);
@@ -3978,285 +3898,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 }
             }
 
-            foreach (DataRow r in visibleRows)
-            {
-                if (!(r["Sel"] != DBNull.Value && Convert.ToBoolean(r["Sel"]))) continue;
-                // Billing-period guard: this meter + period already has an invoice — never bill twice.
-                if (S(r["InvoicedDocNo"]).Trim().Length > 0) { alreadyInvoiced++; continue; }
-                // Usage meters need a reading > 0 to bill; flat/rental meters bill on their flat amount
-                // even with reading 0 (that is the whole point — no meter to read).
-                bool rowFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
-                if (!rowFlat && Dec(r["CurrentReading"]) <= 0m) continue;
-                // Invoice grouping (SETTING, 2026-08-04 — closes ISSUES.md D-2):
-                //   FOLLOW  = the contract's own Billing Mode decides: G -> ONE invoice per CONTRACT
-                //             ("Group Services into One Invoice"), S -> one per machine.
-                //   DEBTOR  = legacy override: ONE invoice per CUSTOMER across all their contracts.
-                //   MACHINE = force one invoice per machine.
-                long contractKey = D64(r["ContractKey"]);
-                long itemKey = D64(r["ItemKey"]);
-                string mode;
-                if (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR) mode = "G";
-                else if (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_MACHINE) mode = "S";
-                else mode = S(r["BillingMode"]).Trim().ToUpperInvariant() == "S" ? "S" : "G";
-                string groupKey = mode == "S"
-                    ? ("C" + contractKey + "_I" + itemKey)
-                    : (grpMode == ServiceContractPhotocopier.Data.PumsConfig.METER_GROUPING_DEBTOR
-                        ? ("D" + S(r["DebtorCode"]))
-                        : ("C" + contractKey));
-                // Demo 28/07 #6: an explicit Bill Group on the machine OVERRIDES the grouping setting
-                // (same philosophy as the per-contract template #9c): same contract + same code = ONE
-                // invoice. Bill Group splits INVOICES only — never the deal scope (strategy passes stay
-                // contract-wide). Fleet group machines (IsGroupItem) never carry a code -> legacy key,
-                // so their fleet-total MIN/WAIVE lines stay on the invoice that has the prints.
-                string billGroup = ServiceContractPhotocopier.Classes.ScpStrategy.SanitizeBillGroup(S(r["BillGroupCode"]));
-                bool rowIsGroupItem = r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"]);
-                if (rowIsGroupItem) billGroup = "";
-                // Contract flag "Rental separate invoice": flat (rental/min) lines split into their own
-                // job — one extra invoice per group ("Rental- [ref]") instead of riding the meter invoice.
-                bool rentSep = r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]);
-                // Only actual RENTAL meters split onto the rental-separate invoice — a committed-minimum
-                // ("MIN ...") meter is a print charge and must stay on the meter invoice with BK/CL.
-                bool rentalJob = rowFlat && rentSep && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalMeterCode(S(r["MeterType"]));
-                string refNo = mode == "S" ? S(r["ServiceItemNo"]) : S(r["ContractNo"]);
-                if (billGroup.Length > 0) { groupKey = "C" + contractKey + "_G" + billGroup; refNo = S(r["ContractNo"]); }
-                if (rentalJob) groupKey += "_R";   // rental suffix composes: 2 groups x rentSep = 4 jobs
-
-                MeterBillLine ln = new MeterBillLine();
-                ln.ItemKey = itemKey;
-                ln.ContractKey = contractKey;
-                ln.ItemMeterKey = D64(r["ItemMeterKey"]);
-                ln.ContractNo = S(r["ContractNo"]);
-                ln.ItemNo = S(r["ServiceItemNo"]);
-                ln.DebtorCode = S(r["DebtorCode"]);
-                ln.SerialNumber = S(r["SerialNo"]);
-                ln.ItemName = S(r["ServiceItemNo"]);
-                ln.ItemDesc = S(r["ItemDesc"]);
-                ln.MeterTypeCode = S(r["MeterType"]);
-                ln.MeterTypeName = S(r["MeterTypeName"]);
-                ln.ACItemCode = S(r["ACItemCode"]);
-                // Role-aware label: NA meters (scan/plotter/other usage) must NOT masquerade as "Black" —
-                // that folded them into committed-min print sums and BK-scoped strategy passes.
-                string roleUp = S(r["Role"]).Trim().ToUpperInvariant();
-                ln.ColorLabel = roleUp == "CL" ? "Colour" : (roleUp == "BK" ? "Black" : "Usage");
-                ln.Last = Dec(r["LastReading"]);
-                ln.Current = Dec(r["CurrentReading"]);
-                ln.Usage = Dec(r["MeterUsage"]);
-                ln.Rate = Dec(r["UnitPrice"]);
-                ln.MinCharges = Dec(r["MinCharges"]);
-                ln.Foc = Dec(r["FOCQty"]);
-                ln.RebatePct = Dec(r["RebatePct"]);
-                ln.MultiPriceCode = S(r["MultiPriceCode"]);
-                ln.FocResetCount = FocResetCountFor(r);
-                ln.IsFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
-                // Charge via the SAME engine the grid used, so the invoice matches the preview exactly
-                // (NET: FOC copies + rebate deducted, multi-price tier, min floor). Sets BillCopies / EffUnitPrice.
-                // Must be set BEFORE ComputeCharge — it decides how the rebate is taken and how the
-                // cents are rounded.
-                ln.NewMoneyRules = r["NewMoneyRules"] != DBNull.Value && Convert.ToBoolean(r["NewMoneyRules"]);
-                ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
-                if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
-                ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
-                    S(r["Role"]), S(r["MeterType"]));
-                // The machine's DEFINED mode beats the live fetch status (deterministic numbering).
-                string mmode = S(r["MachineMode"]).Trim().ToUpperInvariant();
-                ln.MachineStatus = mmode.Length > 0 ? mmode : S(r["MachineStatus"]);
-                ln.TrackingId = S(r["TrackingId"]).Trim();
-                ln.IsGroupItem = r["IsGroupItem"] != DBNull.Value && Convert.ToBoolean(r["IsGroupItem"]);
-                // Which printed line this machine belongs on, when its contract folds lines together.
-                ln.ModelCode = S(r["ModelCode"]);
-                ln.LineGroupCode = S(r["LineGroupCode"]);
-                string mls = S(r["MachineLineShows"]).Trim();
-                ln.MachineLineShows = mls.Length > 0 ? char.ToUpperInvariant(mls[0])
-                    : ServiceContractPhotocopier.Classes.ScpBillingFormat.MACHINE_LINE_BOTH;
-                ln.MergeGroupCode = S(r["MergeGroupCode"]);
-                ln.MergeGroupCodeMeter = S(r["MergeGroupCodeMeter"]);
-                ln.IsWaiveMeter = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
-                // Scope is shared: waive meters use it for the target sum, MIN meters for the
-                // committed-minimum printed sum (BK only / CL only / both).
-                string wsc = S(r["WaiveScope"]).Trim().ToUpperInvariant();
-                ln.WaiveScope = wsc == "BK" || wsc == "CL" ? wsc : "BKCL";
-                if (ln.IsWaiveMeter)
-                {
-                    ln.WaiveFirstNMonths = r["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["WaiveFirstNMonths"]);
-                    ln.WaiveTargetAmount = Dec(r["WaiveTargetAmount"]);
-                    ln.WaivePartialThreshold = Dec(r["WaivePartialThreshold"]);
-                    ln.WaivePartialAmount = Dec(r["WaivePartialAmount"]);
-                }
-                // Committed-minimum meter: bill the TOP-UP to the committed amount over the print
-                // charges it is measured against (computed in ApplyCommittedMin), and always show it
-                // even at zero, so the customer sees the arithmetic.
-                //
-                // Recognised by its ROLE. It used to be recognised by its meter type being NAMED
-                // "MIN something", which is why the old book has forty-odd of them -- one per amount.
-                // The code prefix stays as an OR so every existing machine keeps billing exactly as
-                // it did; without it, a type called COMMIT would have shown the committed-minimum UI
-                // and then quietly billed the whole minimum every month as an ordinary flat meter.
-                if (ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsCommittedMinRole(
-                        S(r["Role"]), ln.MeterTypeCode, ln.MinCharges))
-                {
-                    ln.IsCommittedMin = true;
-                    ln.CommittedAmount = ln.MinCharges;
-                    ln.AlwaysBill = true;
-                }
-
-                // Whose charges a term is measured over -- read for EVERY flat meter, not only the
-                // committed minimum. A waive asks the same question ("print this much and the rent is
-                // on us"), and reading the column only for one of them is how a line-scoped waive gets
-                // stored, displayed, and then quietly measured per machine anyway.
-                if (ln.IsFlat)
-                {
-                    ln.CommitScope = S(r["CommitScope"]).Trim().ToUpperInvariant();
-                    if (ln.CommitScope != "G" && ln.CommitScope != "C") ln.CommitScope = "S";
-                }
-                ln.StrategyCode = S(r["StrategyCode"]);
-                if (r["RentalStartDate"] != DBNull.Value) ln.RentalStartDate = Convert.ToDateTime(r["RentalStartDate"]);
-                ln.RentalMonths = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
-                ln.RentalBasis = S(r["RentalBasis"]) == "P" ? 'P' : 'A';
-                if (r["EffStart"] != DBNull.Value) ln.EffStartDate = Convert.ToDateTime(r["EffStart"]);
-                if (S(r["EntrySource"]) == "RENTAL FREE") { ln.StrategyNote = "RENTAL FREE - FOC month"; ln.AlwaysBill = true; }
-                if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
-                if (r["LastAuditDate"] != DBNull.Value) ln.AuditDate = Convert.ToDateTime(r["LastAuditDate"]);
-                // #16: contract-cycle billing period for the invoice DISPLAY (flag on the contract).
-                // Anchor day = the CONTRACT's service start day (contract-level on purpose: one
-                // invoice shows ONE period even when items carry their own start-date overrides);
-                // fallback billing day, then 1. The period is the cycle window that ENDS in the
-                // billed month — the one this month's reading actually measured (user-verified):
-                //   day-1 contract, July run  -> 01/07 - 31/07 (the billed month itself)
-                //   day-25 contract, Aug run  -> 25/07 - 24/08
-                if (r["PeriodByContract"] != DBNull.Value && Convert.ToBoolean(r["PeriodByContract"]))
-                {
-                    int anchorDay = r["ContractStart"] != DBNull.Value ? Convert.ToDateTime(r["ContractStart"]).Day
-                        : (r["BillingDay"] != DBNull.Value && Convert.ToInt32(r["BillingDay"]) >= 1 ? Convert.ToInt32(r["BillingDay"]) : 1);
-                    if (anchorDay <= 1)
-                    {
-                        ln.PeriodStart = new DateTime(genYear, genMonth, 1);
-                        ln.PeriodEnd = new DateTime(genYear, genMonth, DateTime.DaysInMonth(genYear, genMonth));
-                    }
-                    else
-                    {
-                        int dimB = DateTime.DaysInMonth(genYear, genMonth);
-                        ln.PeriodEnd = new DateTime(genYear, genMonth, (anchorDay - 1) > dimB ? dimB : (anchorDay - 1));
-                        int py = genYear, pm = genMonth - 1;
-                        if (pm < 1) { pm = 12; py--; }
-                        int dimP = DateTime.DaysInMonth(py, pm);
-                        ln.PeriodStart = new DateTime(py, pm, anchorDay > dimP ? dimP : anchorDay);
-                    }
-                }
-
-                MeterInvoiceGenerator.InvoiceJob job;
-                if (!jobs.TryGetValue(groupKey, out job))
-                {
-                    job = new MeterInvoiceGenerator.InvoiceJob();
-                    job.DebtorCode = ln.DebtorCode;
-                    job.RefDocNo = refNo;
-                    // Invoice date = the BILLED PERIOD's billing day (row's effective day, clamped),
-                    // so a May run dated 28/05 lands in the MR2605.* number series — never "today".
-                    int effDay = r["BillingDay"] == DBNull.Value ? 28 : Convert.ToInt32(r["BillingDay"]);
-                    int dim = DateTime.DaysInMonth(genYear, genMonth);
-                    job.DocDate = new DateTime(genYear, genMonth, effDay > dim ? dim : (effDay < 1 ? 1 : effDay));
-                    // Demo 28/07 #18: the rental-separate job gets its OWN invoice day when the
-                    // contract sets one ("rental 是跟头标的,meter 是跟尾标的"): accrual rentals date
-                    // in the billing month, prepayment rentals in the NEXT month (June run -> July 1).
-                    if (rentalJob)
-                    {
-                        int rentDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
-                            ? Convert.ToInt32(r["RentalBillingDay"]) : 0;
-                        if (rentDay >= 1 && rentDay <= 28)
-                        {
-                            int ry = genYear, rm = genMonth;
-                            if (S(r["RentalBasis"]) == "P") { rm++; if (rm > 12) { rm = 1; ry++; } }
-                            int rdim = DateTime.DaysInMonth(ry, rm);
-                            job.DocDate = new DateTime(ry, rm, rentDay > rdim ? rdim : rentDay);
-                        }
-                    }
-                    // Legacy header text (verified against the customer's V8 meter invoices);
-                    // rental-only invoices get their own header so the two are distinguishable.
-                    job.Description = (rentalJob ? "Rental- [" : "Billing- [") + refNo
-                        + (billGroup.Length > 0 ? " / " + billGroup : "") + "]";
-                    job.Label = refNo + (billGroup.Length > 0 ? " / " + billGroup : "") + (rentalJob ? " (rental)" : "");
-                    job.Lines = new List<MeterBillLine>();
-                    jobs[groupKey] = job;
-                }
-                job.Lines.Add(ln);
-            }
-
-            // Strategy passes over the whole run (cross-machine — cannot live in the per-row grid preview).
-            // ALL rule kinds act LIVE here — no "Apply to Meters" push step exists any more:
-            //   1) GROUP FOC LIMIT   — pools a shared free-copy quota across the group's machines,
-            //   2) RENTAL-FREE-N     — stateless: billing month number vs the rental's start month,
-            //   3) WAIVE-TARGET      — waives rental when the (net-of-pool) usage charges reach the target,
-            //   4) COMMITTED MIN     — MIN meters AND COMMIT-MIN rules top up the item's print charges.
-            // A failure here ABORTS the run: silently billing WITHOUT the strategy would produce a wrong
-            // invoice with no error — worse than no invoice.
-            Dictionary<long, StrategyDef> runStrats;
+            // Every figure of money is decided in one place, by one method, for every screen that
+            // bills anything. See BuildInvoiceJobs.
             Dictionary<long, string> runSnapshots;
-            try
+            string blockTitle, blockMessage;
+            jobs = ServiceContractPhotocopier.Classes.ScpInvoiceJobs.Build(
+                _dbSetting, _dtGrid, visibleRows, _ladders, genYear, genMonth, grpMode,
+                out alreadyInvoiced, out runSnapshots, out blockTitle, out blockMessage);
+            if (jobs == null)
             {
-                HashSet<long> runCks = new HashSet<long>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb0 in jobs.Values)
-                    foreach (MeterBillLine l0 in jb0.Lines)
-                        if (l0.ContractKey > 0) runCks.Add(l0.ContractKey);
-                runStrats = ServiceContractPhotocopier.Classes.ScpStrategy.LoadForContracts(_dbSetting, runCks);
-                runSnapshots = BuildContractSnapshots(runCks, runStrats, genYear, genMonth);
-                ApplyGroupLimit(jobs, runStrats);
-                ApplyRentalFreeN(jobs, runStrats, genYear, genMonth);
-                ApplyWaiveMeters(jobs, genYear, genMonth);   // waive METERS (master-style contra, engine-decided)
-                ApplyWaiveTarget(jobs, runStrats);
-                ApplyCommittedMin(jobs, runStrats);
-            }
-            catch (Exception stratEx)
-            {
-                XtraMessageBox.Show("Strategy evaluation failed — generation ABORTED, no invoice was created.\r\n\r\n" +
-                    stratEx.Message + "\r\n\r\nFix the cause (or clear the contract's strategy rules) and Generate again.",
-                    "Generate Invoice", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                XtraMessageBox.Show(blockMessage, blockTitle,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
-            }
-
-            // Offline readings reference their monthly report by TrackingId — when any line in a job
-            // has one, the invoice's Reference No becomes the job's DISTINCT ids, comma-joined in line
-            // order ("MR-260724-041, MR-260724-052"). IV.RefDocNo is nvarchar(30): only as many WHOLE
-            // ids as fit are joined — an id is never cut in half. No ids -> the usual CSSI/contract ref.
-            // Demo 28/07 #4: only BK/CL rows are staged with a TrackingId, so a rental-separate
-            // ("_R") or flat-only job carried none even when the SAME machine's offline report id
-            // was sitting on its usage rows — every line falls back to its MACHINE's id.
-            Dictionary<long, string> tidByItem = new Dictionary<long, string>();
-            foreach (DataRow tidRow in _dtGrid.Rows)
-            {
-                string tidCell = S(tidRow["TrackingId"]).Trim();
-                if (tidCell.Length == 0) continue;
-                long tidItem = D64(tidRow["ItemKey"]);
-                if (!tidByItem.ContainsKey(tidItem)) tidByItem[tidItem] = tidCell;
-            }
-            foreach (MeterInvoiceGenerator.InvoiceJob jbT in jobs.Values)
-            {
-                List<string> tids = new List<string>();
-                foreach (MeterBillLine lT in jbT.Lines)
-                {
-                    string tid = (lT.TrackingId ?? "").Trim();
-                    if (tid.Length == 0) tidByItem.TryGetValue(lT.ItemKey, out tid);
-                    tid = (tid ?? "").Trim();
-                    if (tid.Length > 0 && !tids.Contains(tid)) tids.Add(tid);
-                }
-                if (tids.Count == 0) continue;
-                string joined = "";
-                foreach (string tid in tids)
-                {
-                    string next = joined.Length == 0 ? tid : joined + ", " + tid;
-                    if (next.Length > 30) break;
-                    joined = next;
-                }
-                if (joined.Length > 0) jbT.RefDocNo = joined;
-            }
-
-            // Progress dialog shows WHICH MACHINE(S) are being billed — service item nos, not the contract.
-            foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-            {
-                List<string> nos = new List<string>();
-                foreach (MeterBillLine l2 in jb.Lines)
-                    if (!string.IsNullOrEmpty(l2.ItemNo) && !nos.Contains(l2.ItemNo)) nos.Add(l2.ItemNo);
-                string lbl = string.Join(", ", nos.ToArray());
-                if (lbl.Length > 70) lbl = lbl.Substring(0, 67) + "…(" + nos.Count + " items)";
-                if (lbl.Length > 0) jb.Label = lbl;
             }
 
             if (jobs.Count == 0)
@@ -4307,6 +3960,25 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LoadData();
         }
 
+        /// <summary>
+        /// Turns the rows to be billed into invoice jobs -- the whole of the money decision, and
+        /// nothing else.
+        ///
+        /// <para>Group FOC pools, rental free months, waive targets, committed minimums, group
+        /// tier pricing, the fold into printed lines: all of it happens here, and this is the ONLY
+        /// place it happens. Any screen that bills something calls this. A second copy of it
+        /// elsewhere would be a second set of answers about the same money, and the two would
+        /// drift apart the first time a rule changed.</para>
+        ///
+        /// <para>It shows nothing and asks nothing. Where it must refuse -- two minimums over the
+        /// same charges, a strategy that will not evaluate -- it returns null and says why in
+        /// <paramref name="blockMessage"/>, leaving the caller to put that in front of somebody.
+        /// That is what lets more than one screen call it.</para>
+        ///
+        /// <para>What it deliberately does NOT do is the completeness guards. Those are about what
+        /// the operator ticked on this grid, so they stay with the grid.</para>
+        /// </summary>
+        
         // WAIVE-TARGET strategy (two-pass): once every selected line is grouped into jobs, sum each
         // CONTRACT's usage (non-flat) charges for this run; rental lines of contracts whose strategy
         // target is met bill RM0 ("RENTAL WAIVED"), PartialPct gives the proportional variant
@@ -4322,78 +3994,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // Allocated PROPORTIONALLY by each machine's usage (fair + order-independent); rebate still applies.
         // Runs at generation (cross-machine — can't live in the per-row grid). Flat-rate meters; a machine
         // on a multi-price ladder keeps its ladder's own FOC (don't put those in a group pool).
-        private void ApplyGroupLimit(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs,
-            Dictionary<long, StrategyDef> strats)
-        {
-            {
-                HashSet<long> cks = new HashSet<long>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                        if (!l.IsFlat && l.ContractKey > 0) cks.Add(l.ContractKey);
-                if (cks.Count == 0 || strats == null || strats.Count == 0) return;
-
-                foreach (long ck in cks)
-                {
-                    StrategyDef sd;
-                    if (!strats.TryGetValue(ck, out sd)) continue;
-                    foreach (StrategyRule rule in sd.RulesOfKind(ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_LIMIT))
-                    {
-                        // LIMIT is ALWAYS group-pooled now (the builder forces 'G'); legacy 'S' rows are
-                        // pooled too rather than silently doing nothing.
-                        if (rule.LimitQty <= 0m) continue;
-                        // Gather this contract's covered usage lines (scope + item set), deterministic order.
-                        // Only BK/CL print meters join the pool ("BK+CL usage" scope means exactly that —
-                        // NA meters like scan/plotter stay out). Ladder meters stay out too: their FOC lives
-                        // in the ladder's own 0.00 band and ComputeCharge ignores ln.Foc for them, so a pool
-                        // share allocated there would be silently DISCARDED (the group would lose free copies).
-                        List<MeterBillLine> members = new List<MeterBillLine>();
-                        foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                            foreach (MeterBillLine l in jb.Lines)
-                            {
-                                if (l.IsFlat || l.ContractKey != ck) continue;
-                                if (l.ColorLabel != "Black" && l.ColorLabel != "Colour") continue;
-                                if (ServiceContractPhotocopier.Classes.ScpMultiPrice.HasLadder(_ladders, l.MultiPriceCode)) continue;
-                                if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(l.ItemKey)) continue;
-                                if (rule.Scope == "BK" && l.ColorLabel != "Black") continue;
-                                if (rule.Scope == "CL" && l.ColorLabel != "Colour") continue;
-                                members.Add(l);
-                            }
-                        members.Sort(delegate (MeterBillLine a, MeterBillLine b)
-                        {
-                            int c = a.ItemKey.CompareTo(b.ItemKey);
-                            return c != 0 ? c : a.ItemMeterKey.CompareTo(b.ItemMeterKey);
-                        });
-
-                        if (members.Count == 0) continue;
-                        // Total RAW usage of the group; the pool frees min(LimitQty, total usage).
-                        decimal totalUsage = 0m;
-                        foreach (MeterBillLine l in members) totalUsage += l.Usage;
-                        if (totalUsage <= 0m) continue;
-                        decimal poolUsed = Math.Min(rule.LimitQty, totalUsage);
-
-                        // Proportional share per machine (whole copies; remainder to the last so the shares
-                        // sum EXACTLY to poolUsed). The share REPLACES the machine's per-meter FOC.
-                        decimal allocated = 0m;
-                        for (int i = 0; i < members.Count; i++)
-                        {
-                            MeterBillLine l = members[i];
-                            decimal share = (i == members.Count - 1)
-                                ? poolUsed - allocated
-                                : Math.Round(poolUsed * l.Usage / totalUsage, 0, MidpointRounding.AwayFromZero);
-                            if (share < 0m) share = 0m;
-                            if (share > l.Usage) share = l.Usage;   // never free more than this machine printed
-                            allocated += share;
-                            l.Foc = share;   // REPLACE per-meter FOC with the group pool share
-                            ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(l, _ladders);
-                            l.StrategyNote = "GROUP FOC: " + share.ToString("0") + " free (pool " +
-                                             poolUsed.ToString("0") + "/" + totalUsage.ToString("0") +
-                                             " of " + rule.LimitQty.ToString("0") + ")";
-                        }
-                    }
-                }
-            }
-        }
-
+        
         // COMMITTED MINIMUM ("MIN ...") meters: the master convention puts the committed minimum print charge
         // on its own meter (rate 0, minimum = committed). It should bill only the TOP-UP that brings the item's
         // print charges up to the committed minimum — not the full minimum every month. It is ALWAYS shown on
@@ -4406,45 +4007,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // months 1..N bill the rental at RM 0. No countdown to push, decrement or corrupt — re-running,
         // skipping or re-generating a month can never lose track of which months were free.
         // Anchor: the meter's RentalStartDate, else the machine's effective Service Start.
-        private void ApplyRentalFreeN(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs,
-            Dictionary<long, StrategyDef> strats, int genYear, int genMonth)
-        {
-            if (strats == null || strats.Count == 0) return;
-            HashSet<long> waiveOwners = ItemsWithWaiveMeters(jobs);
-            foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                foreach (MeterBillLine l in jb.Lines)
-                {
-                    if (!l.IsRental || l.ContractKey <= 0 || l.Charge <= 0m) continue;
-                    // A machine with a WAIVE METER owns its rental deal there — the strategy rule
-                    // must not zero the rent too (double waive). Waive lines themselves never apply.
-                    if (l.IsWaiveMeter || waiveOwners.Contains(l.ItemKey)) continue;
-                    StrategyDef sd;
-                    if (!strats.TryGetValue(l.ContractKey, out sd)) continue;
-                    foreach (StrategyRule rule in sd.RulesOfKind(ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_RENTAL_FREE_N))
-                    {
-                        if (rule.FreeMonths <= 0) continue;
-                        if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(l.ItemKey)) continue;
-                        DateTime? anchor = l.RentalStartDate ?? l.EffStartDate;
-                        if (!anchor.HasValue)
-                        {
-                            l.StrategyNote = "RENTAL FREE rule skipped - no rental start / service start date to count from";
-                            continue;
-                        }
-                        int monthNo = (genYear * 12 + genMonth) - (anchor.Value.Year * 12 + anchor.Value.Month) + 1;
-                        if (monthNo >= 1 && monthNo <= rule.FreeMonths)
-                        {
-                            l.Charge = 0m;
-                            l.UseMin = false;
-                            l.StrategyNote = "RENTAL FREE month " + monthNo + "/" + rule.FreeMonths + " (strategy)";
-                            // User rule: every meter SHOWS on the invoice — a freed rental prints as a
-                            // 0.00 line with this note, never silently vanishes into a NO-CHARGE stamp.
-                            l.AlwaysBill = true;
-                        }
-                        break;   // one free-N rule per rental line
-                    }
-                }
-        }
-
+        
         /// <summary>Does this usage line count towards that waive's target?
         ///
         /// <para>A waive is "print this much and the rent is on us". Which copies count is the whole
@@ -4453,307 +4016,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// deal agreed over a merged line means, and without it a five-machine line whose members
         /// each print RM 200 against a line target of RM 800 fires nothing -- silently, because a
         /// waive that does not fire prints exactly like a quiet month.</para></summary>
-        private static bool WaiveCounts(MeterBillLine waive, MeterBillLine usageLine)
-        {
-            if (waive.IsGroupItem) return usageLine.ContractKey == waive.ContractKey;
 
-            string grp = (waive.MergeGroupCode ?? "").Trim();
-            bool byGroup = grp.Length > 0 &&
-                string.Equals((waive.CommitScope ?? "").Trim(), "G", StringComparison.OrdinalIgnoreCase);
-            if (byGroup)
-            {
-                return usageLine.ContractKey == waive.ContractKey &&
-                       string.Equals((usageLine.MergeGroupCode ?? "").Trim(), grp,
-                                     StringComparison.OrdinalIgnoreCase);
-            }
-            return usageLine.ItemKey == waive.ItemKey;
-        }
 
-        // ═══ WAIVE METERS (master-style contra, engine-decided) ═══
-        // A Rental-Waive meter (its own item code, e.g. RA-MONTH(W)-13MTH) bills NEGATIVE when its
-        // per-meter Waive Configuration says so — replacing the master's manual monthly decision:
-        //   window : FirstN > 0  -> fires only in months 1..N (anchor RentalStartDate, else the
-        //            machine's effective service start)
-        //   target : Target > 0  -> the MACHINE's scoped BK/CL charges must reach it; the partial %
-        //            band gives a partial contra (amount x partial%)
-        //   neither             -> ALWAYS fires (legacy master behavior)
-        // Fired  -> Charge = -amount (AlwaysBill: the contra PRINTS with its note).
-        // Silent -> Charge = 0 (NO-CHARGE stamp closes the meter's period, no invoice line).
-        private void ApplyWaiveMeters(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs, int genYear, int genMonth)
-        {
-            List<MeterBillLine> usage = new List<MeterBillLine>();
-            foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                foreach (MeterBillLine l in jb.Lines)
-                    if (!l.IsFlat) usage.Add(l);
-
-            foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                foreach (MeterBillLine l in jb.Lines)
-                {
-                    if (!l.IsWaiveMeter) continue;
-                    // The waive amount is stored NEGATIVE on the meter row (master convention, user
-                    // rule 2026-07-27) — the engine is sign-agnostic and the fired contra always
-                    // bills MINUS the magnitude, whatever sign was keyed.
-                    decimal amount = l.MinCharges != 0m ? Math.Abs(l.MinCharges) : Math.Abs(l.Rate);
-                    if (amount <= 0m) { l.Charge = 0m; l.UseMin = false; continue; }
-
-                    // SEQUENTIAL semantics (user decision): months 1..N = free window, ALWAYS waived;
-                    // AFTER the window the target condition (when set) takes over. Window-only = waive
-                    // stops after N months; target-only = by usage from day one; neither = always.
-                    bool fire = true;
-                    bool inWindow = false;
-                    string note = "RENTAL WAIVE";
-                    if (l.WaiveFirstNMonths > 0)
-                    {
-                        DateTime? anchor = l.RentalStartDate ?? l.EffStartDate;
-                        if (!anchor.HasValue) { l.Charge = 0m; l.UseMin = false; continue; }   // no date to count from
-                        int monthNo = (genYear * 12 + genMonth) - (anchor.Value.Year * 12 + anchor.Value.Month) + 1;
-                        if (monthNo >= 1 && monthNo <= l.WaiveFirstNMonths)
-                        {
-                            inWindow = true;
-                            note = "RENTAL WAIVE month " + monthNo + "/" + l.WaiveFirstNMonths;
-                        }
-                        else if (l.WaiveTargetAmount <= 0m)
-                            fire = false;   // window over and no usage condition -> the waive retires
-                    }
-                    decimal waiveAmt = amount;
-                    if (fire && !inWindow && l.WaiveTargetAmount > 0m)
-                    {
-                        decimal total = 0m;
-                        foreach (MeterBillLine u in usage)
-                        {
-                            // Whose copies count towards the target. Per MACHINE normally; the fleet
-                            // machine counts the WHOLE contract; and a waive scoped 'G' counts the
-                            // machines that share its rental line -- because the deal was struck over
-                            // that line, not over one of the machines on it. Same scope column the
-                            // committed minimum uses, for the same question.
-                            if (!WaiveCounts(l, u)) continue;
-                            if (u.ColorLabel != "Black" && u.ColorLabel != "Colour") continue;
-                            if (l.WaiveScope == "BK" && u.ColorLabel != "Black") continue;
-                            if (l.WaiveScope == "CL" && u.ColorLabel != "Colour") continue;
-                            total += u.Charge;
-                        }
-                        if (total >= l.WaiveTargetAmount)
-                            note += " - charges " + total.ToString("0.00") + " >= target " + l.WaiveTargetAmount.ToString("0.00");
-                        // Partial band in RM (demo 28/07 #24): charges reach RM X -> waive RM Y
-                        // (was a % of the target — the customer agrees deals in RM, not %).
-                        else if (l.WaivePartialThreshold > 0m && l.WaivePartialAmount > 0m
-                                 && total >= l.WaivePartialThreshold)
-                        {
-                            waiveAmt = Math.Min(l.WaivePartialAmount, amount);
-                            note += " - PARTIAL: charges " + total.ToString("0.00") +
-                                    " >= " + l.WaivePartialThreshold.ToString("0.00") +
-                                    " -> waive " + waiveAmt.ToString("0.00");
-                        }
-                        else fire = false;
-                    }
-                    if (fire)
-                    {
-                        l.Charge = -Math.Round(waiveAmt, 2);   // the CONTRA line (negative)
-                        l.UseMin = false;
-                        l.AlwaysBill = true;                              // negative lines must print
-                        l.StrategyNote = note;
-                    }
-                    else
-                    {
-                        l.Charge = 0m;   // not this month -> no line; NO-CHARGE stamp closes the period
-                        l.UseMin = false;
-                        l.StrategyNote = "";
-                    }
-                }
-        }
-
-        private static HashSet<long> ItemsWithWaiveMeters(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs)
-        {
-            HashSet<long> set = new HashSet<long>();
-            foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                foreach (MeterBillLine l in jb.Lines)
-                    if (l.IsWaiveMeter) set.Add(l.ItemKey);
-            return set;
-        }
-
+        
         // The per-invoice contract snapshot text: header billing flags + the strategy rules AS OF
         // this run. Stored in zSCP2_ContractSnapshot next to every generated invoice so a later
         // strategy edit can never rewrite what THIS invoice was computed from.
-        private Dictionary<long, string> BuildContractSnapshots(HashSet<long> cks,
-            Dictionary<long, StrategyDef> strats, int genYear, int genMonth)
-        {
-            Dictionary<long, string> map = new Dictionary<long, string>();
-            // Header flags from the loaded grid rows (first row per contract carries them).
-            Dictionary<long, string> header = new Dictionary<long, string>();
-            foreach (DataRow r in _dtGrid.Rows)
-            {
-                long ck = D64(r["ContractKey"]);
-                if (ck <= 0 || header.ContainsKey(ck)) continue;
-                header[ck] = "Contract " + S(r["ContractNo"]) + "  |  Customer " + S(r["DebtorCode"]) +
-                    "  |  Strategy '" + S(r["StrategyCode"]) + "'  |  FOC Reset " + S(r["FOCResetUnit"]) +
-                    (S(r["FOCResetUnit"]) == "D" ? "/" + S(r["FOCResetN"]) : "") +
-                    "  |  RentalSeparate " + (r["RentSep"] != DBNull.Value && Convert.ToBoolean(r["RentSep"]) ? "Y" : "N") +
-                    "  |  PeriodFollowContract " + (r["PeriodByContract"] != DBNull.Value && Convert.ToBoolean(r["PeriodByContract"]) ? "Y" : "N");
-            }
-            foreach (long ck in cks)
-            {
-                StrategyDef sd;
-                strats.TryGetValue(ck, out sd);
-                string head;
-                if (!header.TryGetValue(ck, out head)) head = "Contract key " + ck;
-                map[ck] = "Billing period " + genYear + "-" + genMonth.ToString("00") + "\r\n" + head + "\r\n" +
-                          ServiceContractPhotocopier.Classes.ScpStrategy.SerializeRules(sd);
-            }
-            return map;
-        }
-
-        private void ApplyCommittedMin(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs,
-            Dictionary<long, StrategyDef> strats)
-        {
-            {
-                // The arithmetic lives in ScpCommittedMin so it can be tested without a screen. It
-                // sums across ALL jobs on purpose: a rental-separate or Bill Group split spreads one
-                // machine's lines over several jobs, and a per-job sum would read zero on the job
-                // with no usage and bill the whole minimum there.
-                List<MeterBillLine> everything = new List<MeterBillLine>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines) everything.Add(l);
-
-                // Items already carrying a committed meter — the COMMIT-MIN rule must not top those
-                // up a second time.
-                ServiceContractPhotocopier.Classes.ScpCommittedMin.PrintedSums printed;
-                HashSet<long> minMeterItems =
-                    ServiceContractPhotocopier.Classes.ScpCommittedMin.ApplyMeterMinimums(everything, out printed);
-
-                // COMMIT-MIN RULES act LIVE too (no meter push): for every covered item WITHOUT a MIN
-                // meter, a top-up line is synthesized when its scoped print charges fall short.
-                if (strats == null || strats.Count == 0) return;
-                // ONE top-up per item per RUN (not per job): with rental-separate ("_R") or Bill Group
-                // splits an item's lines can span jobs — the old per-job dedup synthesized a SECOND
-                // full-amount top-up on the rental-only job (printed=0 there). The top-up prints once,
-                // on the job carrying the item's usage charges, and counts printed across ALL jobs.
-                Dictionary<long, MeterInvoiceGenerator.InvoiceJob> hostByItem =
-                    new Dictionary<long, MeterInvoiceGenerator.InvoiceJob>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                        if (l.ItemKey > 0 && !l.IsFlat && !hostByItem.ContainsKey(l.ItemKey))
-                            hostByItem[l.ItemKey] = jb;
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                        if (l.ItemKey > 0 && !hostByItem.ContainsKey(l.ItemKey))
-                            hostByItem[l.ItemKey] = jb;   // flat-only item: any job carrying it
-                HashSet<long> doneItems = new HashSet<long>();
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                {
-                    List<MeterBillLine> extra = new List<MeterBillLine>();
-                    foreach (MeterBillLine l in jb.Lines)
-                    {
-                        if (l.ItemKey <= 0 || l.ContractKey <= 0) continue;
-                        if (hostByItem[l.ItemKey] != jb) continue;   // synthesize only on the host job
-                        if (!doneItems.Add(l.ItemKey)) continue;
-                        if (minMeterItems.Contains(l.ItemKey)) continue;   // MIN meter already rules this item
-                        StrategyDef sd;
-                        if (!strats.TryGetValue(l.ContractKey, out sd)) continue;
-                        foreach (StrategyRule rule in sd.RulesOfKind(ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_COMMIT_MIN))
-                        {
-                            if (rule.CommitAmount <= 0m) continue;
-                            if (rule.ServiceItemKeys.Count > 0 && !rule.ServiceItemKeys.Contains(l.ItemKey)) continue;
-                            // Scoped print charges of THIS item across ALL jobs (run-wide buckets built
-                            // above — identical filter to the old inner loop, but complete after splits).
-                            decimal ruleprinted = printed.ForItem(l.ItemKey, rule.Scope);
-                            decimal topUp = rule.CommitAmount - ruleprinted;
-                            if (topUp < 0m) topUp = 0m;
-                            MeterBillLine minLn = new MeterBillLine();
-                            minLn.ItemKey = l.ItemKey;
-                            minLn.ContractKey = l.ContractKey;
-                            minLn.ContractNo = l.ContractNo;
-                            minLn.ItemNo = l.ItemNo;
-                            minLn.ItemName = l.ItemName;
-                            minLn.ItemDesc = l.ItemDesc;
-                            minLn.DebtorCode = l.DebtorCode;
-                            minLn.SerialNumber = l.SerialNumber;
-                            minLn.MeterTypeCode = "COMMIT-MIN";
-                            minLn.MeterTypeName = "MINIMUM COMMITTED PRINT CHARGES";
-                            minLn.IsFlat = true;
-                            minLn.IsCommittedMin = true;
-                            minLn.AlwaysBill = true;   // transparency: shown even at RM 0
-                            minLn.CommittedAmount = rule.CommitAmount;
-                            minLn.PrintedAmount = ruleprinted;
-                            minLn.Charge = topUp;
-                            minLn.StrategyCode = l.StrategyCode;
-                            minLn.StrategyNote = "COMMITTED MIN (rule) " + rule.CommitAmount.ToString("0.00") +
-                                                 ": printed " + ruleprinted.ToString("0.00") + " -> top-up " + topUp.ToString("0.00");
-                            extra.Add(minLn);
-                            break;   // one committed-min line per item
-                        }
-                    }
-                    foreach (MeterBillLine x in extra) jb.Lines.Add(x);
-                }
-            }
-        }
-
-        private void ApplyWaiveTarget(Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs,
-            Dictionary<long, StrategyDef> strats)
-        {
-            {
-                HashSet<long> cks = new HashSet<long>();
-                List<MeterBillLine> usage = new List<MeterBillLine>();   // all non-flat (BK/CL) usage lines
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                    {
-                        if (l.ContractKey > 0) cks.Add(l.ContractKey);
-                        if (!l.IsFlat && l.ContractKey > 0) usage.Add(l);
-                    }
-                if (cks.Count == 0 || strats == null || strats.Count == 0) return;
-                HashSet<long> waiveOwners = ItemsWithWaiveMeters(jobs);
-
-                foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
-                    foreach (MeterBillLine l in jb.Lines)
-                    {
-                        if (!l.IsRental || l.Foc > 0m || l.Charge <= 0m) continue;
-                        // Machines with a WAIVE METER: the deal lives there (see ApplyWaiveMeters).
-                        if (l.IsWaiveMeter || waiveOwners.Contains(l.ItemKey)) continue;
-                        StrategyDef sd;
-                        if (!strats.TryGetValue(l.ContractKey, out sd)) continue;
-                        // The strategy is a bundle of rules — pick the WAIVE-TARGET rule that applies to THIS
-                        // rental line: an item-specific rule (its ServiceItemKeys set contains this item) wins
-                        // over a contract-wide rule (empty ServiceItemKeys = all items).
-                        StrategyRule wr = null;
-                        foreach (StrategyRule cand in sd.RulesOfKind(ServiceContractPhotocopier.Classes.ScpStrategy.TYPE_WAIVE_TARGET))
-                        {
-                            if (cand.ServiceItemKeys.Count > 0 && cand.ServiceItemKeys.Contains(l.ItemKey)) { wr = cand; break; }
-                            if (cand.ServiceItemKeys.Count == 0 && wr == null) wr = cand;
-                        }
-                        if (wr == null || wr.TargetAmount <= 0m) continue;
-                        // Target total = usage charges of the SAME contract, filtered by the rule's Service
-                        // Item set (empty = all) and its Scope ("BK"=Black only / "CL"=Colour only / else both).
-                        decimal total = 0m;
-                        foreach (MeterBillLine u in usage)
-                        {
-                            if (u.ContractKey != l.ContractKey) continue;
-                            // Only BK/CL PRINT charges count toward the target — the scope choices are
-                            // "Black / Colour / BK+CL usage", so NA meters (scan/plotter) never count.
-                            if (u.ColorLabel != "Black" && u.ColorLabel != "Colour") continue;
-                            if (wr.ServiceItemKeys.Count > 0 && !wr.ServiceItemKeys.Contains(u.ItemKey)) continue;
-                            if (wr.Scope == "BK" && u.ColorLabel != "Black") continue;
-                            if (wr.Scope == "CL" && u.ColorLabel != "Colour") continue;
-                            total += u.Charge;
-                        }
-                        if (total >= wr.TargetAmount)
-                        {
-                            l.Charge = 0m;
-                            l.WaivedRental = true;
-                            l.StrategyNote = "WAIVED: meter charges " + total.ToString("0.00") +
-                                             " >= target " + wr.TargetAmount.ToString("0.00");
-                            l.AlwaysBill = true;   // waived = still printed at 0.00 with the note (user rule)
-                        }
-                        else if (wr.PartialPct > 0m && total >= wr.TargetAmount * wr.PartialPct / 100m)
-                        {
-                            l.Charge = Math.Round(l.Charge * (1m - wr.PartialPct / 100m), 2);
-                            l.StrategyNote = "PARTIAL WAIVE " + wr.PartialPct.ToString("0.##") + "%: meter charges " +
-                                             total.ToString("0.00") + " >= " +
-                                             (wr.TargetAmount * wr.PartialPct / 100m).ToString("0.00") +
-                                             " (" + wr.PartialPct.ToString("0.##") + "% of target " + wr.TargetAmount.ToString("0.00") + ")";
-                        }
-                    }
-            }
-        }
-
+        
+        
+        
         // Runs a query on a direct connection with an explicit command timeout (AutoCount's
         // GetDataTable uses a short default that the 145k-row meter join can exceed).
         private DataTable QueryWithTimeout(string sql, int seconds)
