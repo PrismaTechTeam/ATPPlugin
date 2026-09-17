@@ -9,35 +9,45 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.4.6.0</Version>
+    <Version>1.5.0.0</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.4.6.0 (2026-06-27):
-1. New "Select All Request" button — toggles selection of every request with no generated document yet (both grids) for one-click bulk Generate.
-2. Stock Request Task toolbar migrated into the WinForms designer (renders in Visual Studio Design view).
+    <WhatsNew>v1.5.0.0 (2026-09-17) — Service &amp; Contract billing:
+1. Billing engine: a month's readings, prices and free copies become the invoices they should — one per machine, per bill group, per customer, or the rental billed apart. One invoice per machine and rental-apart outrank a bill group.
+2. Meter Invoice Run: every invoice the day would produce, what each is waiting for, and "Show all overdue" for every billing date already gone by, this month and the five before it.
+3. The months go out in order. A month cannot be billed while an earlier month of the same contract has never been invoiced, and cannot be deleted while a later month still stands — enforced in the plugin AND by a trigger in the account book, so it holds even when the invoice is deleted inside AutoCount.
+4. Deleting an invoice takes the readings back with it: the payments and credit notes knocked off it are cleared first, the meters are released, and the month can be run again.
+5. Summary Sales Invoice Meter Listing (the customer's Appendix A): one row per machine, a total row per contract, the rebate printed as the copies it comes to, and figures that tie to the invoices standing in the book.
+6. Inter-Billing: a branch book can take a contract from head office and raise the invoice locally, with the readings read across.
+7. Billing Start: a contract carried over from an older system says which month this book starts billing and what each counter stood on when it took over.
+8. Contract screens: Meters &amp; Pricing shows what each invoice line will print per bill group; the contract list gained Created By / Modified By and stopped scrolling sideways.
+
+v1.4.6.0 (2026-06-27):
+1. New "Select All Request" toolbar button — toggles selection of every request with no generated document yet (across both grids), for one-click bulk Generate.
+2. The Stock Request Task toolbar (all buttons, Hide Ignore, colour legend) is now defined in the WinForms designer so it renders in Visual Studio Design view.
 
 v1.4.5.0 (2026-06-27):
-1. Bulk "Select All Update" / "Select All Cancel" + "Approve Change" applies all selected updates/cancels (both grids).
-2. Ctrl+Shift+Delete → password-gated (atp09) hard delete of the row + its generated AutoCount document.
-3. Full DevExpress grid right-click menu + Export to Excel / PDF / CSV / Text.
-4. UI: uniform button size + aligned toolbar; clearer row-colour legend.
+1. Bulk actions: "Select All Update" / "Select All Cancel" tick every matching row across both grids; "Approve Change" then applies them in one go (update + cancel, both Stock Issue and Stock Transfer).
+2. Ctrl+Shift+Delete on a focused row → password-gated (atp09) hard delete of the row, and its generated AutoCount document if any.
+3. Full DevExpress grid right-click menu (sort / group / column chooser / best fit / filter editor / find panel) plus Export to Excel / PDF / CSV / Text and Save/Load/Reset Layout.
+4. UI: uniform button size + aligned two-row toolbar; clearer one-line row-colour legend.
 
 v1.4.4.0 (2026-06-26):
-1. Stock Transfer change/update: a re-sent RequestId still approved (Yes) with a different qty is flagged "Update" and "Approve Change" updates the existing transfer document (approval=No remains "Cancel").
-2. UI: colourful toolbar icons; flat (non-gradient) row highlighting; row-colour legend (Normal / Update / Cancel); "Hide Ignore" filter.
+1. Stock Transfer change/update: a re-sent RequestId still approved (Yes) but with a different qty is flagged "Update" and "Approve Change" updates the existing transfer document (approval=No remains "Cancel"). Mirrors the Stock Issue change/cancel flow.
+2. UI: colourful toolbar icons; flat (non-gradient) row highlighting; a row-colour legend (Normal / Update / Cancel); a "Hide Ignore" filter option.
 
 v1.4.3.0 (2026-06-19):
-1. Stock Issue change/cancel: a re-sent StockIssueId with a different quantity is flagged "Update" and the new "Approve Change" button applies the new qty to the existing AutoCount document; quantity 0 flags "Cancel" and approving cancels the document. A re-sent id can no longer generate a duplicate via Generate.
+1. Stock Issue change/cancel: when the same StockIssueId is received again with a different quantity, the row is flagged "Update" (yellow); an "Approve Change" button applies the new quantity to the existing AutoCount Stock Issue document. If the re-sent quantity is 0, the row is flagged "Cancel" (red) and approving cancels the document. A re-sent id can no longer generate a duplicate document via Generate.
 
 v1.4.2.0 (2026-06-19):
-1. Stock Transfer revoke/cancel: a re-sent RequestId with approval=No after a transfer was generated is flagged "Cancel Requested"; the new "Cancel Transfer" button cancels the AutoCount document (marks it Cancelled, reverses stock). An approval=No row can never generate a transfer.
+1. Stock Transfer revoke/cancel: when the same RequestId is received again with approval=No after a transfer was already generated, the row is flagged "Cancel Requested" (red). A new "Cancel Transfer" button cancels the AutoCount Stock Transfer document (marks it Cancelled, reverses stock) and sets the rows to Cancelled. An approval=No row can never generate a transfer.
 
 v1.4.1.0 (2026-06-19):
-1. Customer release: menu trimmed to Stock Request Task + About / Check for Updates. Other modules are hidden (menu only - all code remains).
+1. Customer release: menu trimmed to Stock Request Task + About / Check for Updates. Other modules are hidden (menu only — all code remains; re-enable by uncommenting the [MenuItem] attribute).
 
 v1.4.0.0 (2026-06-19):
 1. Combined Service Contract module v2 (zSCP2_*) — one contract per customer with service items inline; native AutoCount list + ribbon editor with debtor auto-fill.
@@ -45,11 +55,11 @@ v1.4.0.0 (2026-06-19):
 3. Manual key-in + staging (zSCP2_MeterEntry): type readings for machines with no API data and Save; values persist per billing period and survive restart.
 4. Re-fetch conflict handling: saved manual readings are kept and flagged when the API later returns a value; double-click a contract to review Manual vs Fetched and accept the override.
 5. Billing-day-driven invoice generation (group per contract or separate per item) reusing the AutoCount invoice pipeline.
-6. Stock Request — webhooks now capture the PUMS "Serial Number" on Stock Issue; unknown items are clearly flagged (no silent master-data changes); technician names missing from Stock Location can be auto-created from a one-click banner; View Log timestamps fixed to local time.
+6. Stock Request — webhooks now capture the PUMS "Serial Number" on Stock Issue; unknown items are clearly flagged (Item OK? column + clear error, no silent master-data changes); technician names missing from Stock Location can be auto-created from a one-click banner; View Log timestamps fixed to local time.
 
 v1.3.0.0 (2026-05-04):
 1. Meter Type Transaction Entry — Invoice No Format combo now reads from AutoCount's standard DocNoFormat table (DocType "IV") using the [Name] column and auto-selects the IsDefault='T' format on load.
-2. New ellipsis (...) button next to Invoice No Format opens AutoCount's standard FormDocumentNoMaintenance for in-place format management; combo refreshes on close.
+2. New ellipsis (…) button next to Invoice No Format opens AutoCount's standard FormDocumentNoMaintenance for in-place format management; combo refreshes on close.
 3. The chosen format name is now stamped onto Invoice.DocNoFormatName before the Invoice Entry dialog opens, so AutoCount uses that format's running number for DocNo (matching FormInvoiceEntry behavior).
 4. New ATPShadowMain dev launcher — a NavBar-driven home form replaces the hard-coded single-form launch in Program.cs; lists every plugin form grouped by module so dev iteration no longer requires editing Program.cs.
 
@@ -65,7 +75,9 @@ v1.1.0.0 (2026-04-16):
 1. Maintain Service Item &amp; Maintain Service Contract brought to V8 layout parity — full header, More Header tab, Tab 1 (Department / Job / Location + Next Service Date), and 10-column Meter Type grid.
 2. Full CRUD lifecycle with transactional save/delete, optimistic concurrency via LastModified, dirty tracking, OnClosing save prompt.
 3. Audit columns (Created/Modified/CreatedBy/ModifiedBy) via migrations v1.2.0 and v1.3.0.
-4. ATPCli (atp.exe) CRUD CLI for headless testing; 52-case regression suite under tests/.</WhatsNew>
+4. ATPCli (atp.exe) CRUD CLI for headless testing; 52-case regression suite under tests/.
+
+## Build</WhatsNew>
     <AssemblyFile>ServiceContractPhotocopier.dll</AssemblyFile>
     <MinimumAccountingVersion>2.0.2</MinimumAccountingVersion>
     <ScriptLanguage>C#</ScriptLanguage>

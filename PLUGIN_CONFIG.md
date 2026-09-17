@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.4.6.0
+- **Version:** 1.5.0.0
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,16 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.0 (2026-09-17) — Service & Contract billing:
+    1. Billing engine: a month's readings, prices and free copies become the invoices they should — one per machine, per bill group, per customer, or the rental billed apart. One invoice per machine and rental-apart outrank a bill group.
+    2. Meter Invoice Run: every invoice the day would produce, what each is waiting for, and "Show all overdue" for every billing date already gone by, this month and the five before it.
+    3. The months go out in order. A month cannot be billed while an earlier month of the same contract has never been invoiced, and cannot be deleted while a later month still stands — enforced in the plugin AND by a trigger in the account book, so it holds even when the invoice is deleted inside AutoCount.
+    4. Deleting an invoice takes the readings back with it: the payments and credit notes knocked off it are cleared first, the meters are released, and the month can be run again.
+    5. Summary Sales Invoice Meter Listing (the customer's Appendix A): one row per machine, a total row per contract, the rebate printed as the copies it comes to, and figures that tie to the invoices standing in the book.
+    6. Inter-Billing: a branch book can take a contract from head office and raise the invoice locally, with the readings read across.
+    7. Billing Start: a contract carried over from an older system says which month this book starts billing and what each counter stood on when it took over.
+    8. Contract screens: Meters & Pricing shows what each invoice line will print per bill group; the contract list gained Created By / Modified By and stopped scrolling sideways.
+
     v1.4.6.0 (2026-06-27):
     1. New "Select All Request" toolbar button — toggles selection of every request with no generated document yet (across both grids), for one-click bulk Generate.
     2. The Stock Request Task toolbar (all buttons, Hide Ignore, colour legend) is now defined in the WinForms designer so it renders in Visual Studio Design view.
