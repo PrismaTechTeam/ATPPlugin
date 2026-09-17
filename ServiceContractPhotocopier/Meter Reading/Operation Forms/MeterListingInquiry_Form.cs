@@ -20,7 +20,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
     /// AutoCount report design saved in dbo.Report — the same designs the contract's "Listing
     /// Template" picker offers and the bulk email prints.
     /// </summary>
-    [AutoCount.PlugIn.MenuItem("Summary Sales Invoice Meter Listing", MenuOrder = 460, ShowAsDialog = false)]
+    [AutoCount.PlugIn.MenuItem("Summary Sales Invoice Meter Listing",
+    ParentMenuCaption = "Inquiry", MenuOrder = 10, ParentMenuOrder = 700, ShowAsDialog = false)]
     [AutoCount.Application.SingleInstanceThreadForm(System.Windows.Forms.FormWindowState.Maximized, true)]
     public partial class MeterListingInquiry_Form : XtraForm
     {
@@ -33,6 +34,53 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             InitializeComponent();
             try { this.PanelHeaderTop.HintCtrl.Visible = false; } catch { }
+            ApplyButtonIcons();
+        }
+
+        /// <summary>The same AutoCount toolbar images the rest of the module wears, so this screen
+        /// reads as part of it. Report Design and the two filter buttons have no AutoCount icon of
+        /// their own and take the matching DevExpress one.</summary>
+        private void ApplyButtonIcons()
+        {
+            try
+            {
+                float dpi = 96f;
+                try { dpi = this.DeviceDpi; } catch { }
+                AutoCount.Images.IAutoCountImage img =
+                    AutoCount.Images.ImageHelper.GetAutoCountImage(new System.Drawing.SizeF(dpi, dpi));
+                SetBtnAcIcon(this.BtnInquiry, img.GetLargeImage_Inquiry());
+                SetBtnAcIcon(this.BtnPreview, img.GetLargeImage_Preview());
+                SetBtnAcIcon(this.BtnDesign, img.GetLargeImage_Edit());
+            }
+            catch { }   // icons are cosmetic -- never block the form over an image lookup
+            // AutoCount's own "Export" image is a barcode, which says nothing about a spreadsheet.
+            SetBtnSvgIcon(this.BtnExport, "svgimages/export/exporttoxlsx.svg", 24);
+            SetBtnSvgIcon(this.BtnAdvFilter, "svgimages/spreadsheet/showfilterdialog.svg", 16);
+            SetBtnSvgIcon(this.BtnReset, "svgimages/spreadsheet/clearfilter.svg", 16);
+        }
+
+        private static void SetBtnAcIcon(SimpleButton btn, System.Drawing.Image image)
+        {
+            if (btn == null || image == null) return;
+            btn.ImageOptions.Image = image;
+            btn.ImageOptions.ImageToTextIndent = 6;
+            btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+        }
+
+        private static void SetBtnSvgIcon(SimpleButton btn, string svgName, int size)
+        {
+            if (btn == null) return;
+            try
+            {
+                DevExpress.Utils.Svg.SvgImage svg =
+                    DevExpress.Images.ImageResourceCache.Default.GetSvgImage(svgName);
+                if (svg == null) return;
+                btn.ImageOptions.SvgImage = svg;
+                btn.ImageOptions.SvgImageSize = new System.Drawing.Size(size, size);
+                btn.ImageOptions.ImageToTextIndent = 6;
+                btn.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            }
+            catch { }
         }
 
         public MeterListingInquiry_Form(DBSetting dbSetting) : this()
