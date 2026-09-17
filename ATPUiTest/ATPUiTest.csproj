@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ATPUiTest</AssemblyName>
+    <!-- UIA pattern-only driver: no mouse, no keyboard, no foreground focus needed. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="FlaUI.Core">
+      <HintPath>C:\Dev\tools\FlaUI-MCP\FlaUI.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="FlaUI.UIA3">
+      <HintPath>C:\Dev\tools\FlaUI-MCP\FlaUI.UIA3.dll</HintPath>
+    </Reference>
+    <Reference Include="Interop.UIAutomationClient">
+      <HintPath>C:\Dev\tools\FlaUI-MCP\Interop.UIAutomationClient.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
