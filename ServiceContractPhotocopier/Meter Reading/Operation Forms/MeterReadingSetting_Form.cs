@@ -36,6 +36,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_INCLUDE_INACTIVE, PumsConfig.DEFAULT_INCLUDE_INACTIVE);
                 this.ChkIncludeLate.Checked =
                     PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_INCLUDE_LATE_READINGS, PumsConfig.DEFAULT_INCLUDE_LATE_READINGS);
+                this.ChkShowOverdue.Checked =
+                    PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_SHOW_OVERDUE_ROWS, PumsConfig.DEFAULT_SHOW_OVERDUE_ROWS);
                 this.ChkAutoFetch.Checked =
                     PumsConfig.GetBool(_dbSetting, PumsConfig.KEY_AUTO_FETCH_ENABLED, PumsConfig.DEFAULT_AUTO_FETCH_ENABLED);
                 string cutDay = PumsConfig.Get(_dbSetting, PumsConfig.KEY_AUTO_FETCH_CUTOFF_DAY, PumsConfig.DEFAULT_AUTO_FETCH_CUTOFF_DAY);
@@ -146,6 +148,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_INCLUDE_EXPIRED_ITEMS, this.ChkIncludeExpired.Checked);
                 PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_INCLUDE_INACTIVE, this.ChkIncludeInactive.Checked);
+                PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_SHOW_OVERDUE_ROWS, this.ChkShowOverdue.Checked);
                 PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_INCLUDE_LATE_READINGS, this.ChkIncludeLate.Checked);
                 PumsConfig.SetBool(_dbSetting, PumsConfig.KEY_AUTO_FETCH_ENABLED, this.ChkAutoFetch.Checked);
                 PumsConfig.Set(_dbSetting, PumsConfig.KEY_AUTO_FETCH_CUTOFF_DAY,

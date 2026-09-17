@@ -196,6 +196,17 @@ namespace ServiceContractPhotocopier.Classes
         private static readonly Regex SlotParen = new Regex(@"\(\s*(XX|xx)?\s*/\s*(\d+)\s*\)", RegexOptions.Compiled);
         private static readonly Regex SlotXx = new Regex(@"\b(XX|xx)\s*/\s*20XX\b|\bMM/YYYY\b|\bXX/202X\b", RegexOptions.Compiled);
 
+        /// <summary>How many months a term runs, counting both ends: 01/08/2026 to 31/07/2029 is 36.
+        /// 0 when either date is missing or the end falls before the start (an open-ended deal).</summary>
+        public static int TermMonths(object start, object end)
+        {
+            if (start == null || start == DBNull.Value || end == null || end == DBNull.Value) return 0;
+            DateTime s = Convert.ToDateTime(start);
+            DateTime e = Convert.ToDateTime(end);
+            int n = (e.Year - s.Year) * 12 + (e.Month - s.Month) + 1;
+            return n > 0 ? n : 0;
+        }
+
         /// <summary>Injects "n/N" into a rental meter description: replaces the first blank period
         /// slot ("( /60)" -> "(3/60)"; "XX/202X" -> "3/12"); appends " (n/N)" when no slot exists.
         /// Months &lt;= 0 returns the name unchanged (open-ended rental).</summary>

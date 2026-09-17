@@ -158,6 +158,16 @@ namespace ServiceContractPhotocopier.Data
         public const string DEFAULT_REBATE_MODE = REBATE_MODE_PCT;
         // Show meters of INACTIVE contracts/items on the Meter Reading list (off by default) — used
         // to review, and if needed bill, the leftover un-invoiced readings of a stopped contract.
+        /// <summary>Keep a row on the list after its billing day has gone, until something bills
+        /// it. ON by default: a rental nobody invoiced does not stop being owed just because the day
+        /// it was due has passed, and a list that drops it is the reason nobody notices for a month.
+        /// OFF gives the older behaviour -- the chosen day and nothing else.</summary>
+        /// <summary>Which Inter-Billing connection (zSCP2_InterBillBook.BookKey) is HQ. Chosen once in
+        /// Inter-Billing Setup; the Inter-Billing board reads from that book and offers no choice.</summary>
+        public const string KEY_INTERBILL_HQ_BOOK = "INTERBILL_HQ_BOOK";
+        public const string KEY_SHOW_OVERDUE_ROWS = "SHOW_OVERDUE_ROWS";
+        public const bool DEFAULT_SHOW_OVERDUE_ROWS = true;
+
         public const string KEY_INCLUDE_INACTIVE = "INCLUDE_INACTIVE";
         public const bool DEFAULT_INCLUDE_INACTIVE = false;
 

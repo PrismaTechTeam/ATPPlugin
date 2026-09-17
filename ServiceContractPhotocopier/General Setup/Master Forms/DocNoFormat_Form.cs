@@ -16,7 +16,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
     /// The Auto buttons on the Contract / Service Item editors draw from here via ScpDocNo.Next().
     /// </summary>
     // Plain single-instance window: NO merged AutoCount menu bar, opens at normal size.
-    [AutoCount.PlugIn.MenuItem("Document Numbering Format", MenuOrder = 890, ShowAsDialog = false)]
+    [AutoCount.PlugIn.MenuItem("Document Numbering Format",
+    ParentMenuCaption = "General Setup", MenuOrder = 890, ParentMenuOrder = 600, ShowAsDialog = false)]
     [AutoCount.Application.SingleInstanceThreadForm(FormWindowState.Normal, false)]
     public partial class DocNoFormat_Form : XtraForm
     {

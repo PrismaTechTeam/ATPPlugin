@@ -28,6 +28,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ChkIncludeExpired = new DevExpress.XtraEditors.CheckEdit();
             this.ChkIncludeInactive = new DevExpress.XtraEditors.CheckEdit();
             this.ChkIncludeLate = new DevExpress.XtraEditors.CheckEdit();
+            this.ChkShowOverdue = new DevExpress.XtraEditors.CheckEdit();
             this.GrpAutoFetch = new DevExpress.XtraEditors.GroupControl();
             this.ChkAutoFetch = new DevExpress.XtraEditors.CheckEdit();
             this.LblCutoffDay = new DevExpress.XtraEditors.LabelControl();
@@ -55,6 +56,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeInactive.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeLate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkShowOverdue.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkAutoFetch.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbCutoffDay.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.TimeCutoff.Properties)).BeginInit();
@@ -77,9 +79,10 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpShow.Controls.Add(this.ChkIncludeExpired);
             this.GrpShow.Controls.Add(this.ChkIncludeInactive);
             this.GrpShow.Controls.Add(this.ChkIncludeLate);
+            this.GrpShow.Controls.Add(this.ChkShowOverdue);
             this.GrpShow.Location = new System.Drawing.Point(12, 36);
             this.GrpShow.Name = "GrpShow";
-            this.GrpShow.Size = new System.Drawing.Size(536, 116);
+            this.GrpShow.Size = new System.Drawing.Size(536, 144);
             this.GrpShow.TabIndex = 1;
             this.GrpShow.Text = "What the list shows";
             //
@@ -101,9 +104,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // ChkIncludeLate
             //
+            this.ChkShowOverdue.Location = new System.Drawing.Point(14, 112);
+            this.ChkShowOverdue.Name = "ChkShowOverdue";
+            this.ChkShowOverdue.Properties.Caption = "LATE INVOICE - the billing day has passed and nothing billed it. Keep those rows.";
+            this.ChkShowOverdue.Size = new System.Drawing.Size(508, 20);
+            this.ChkShowOverdue.TabIndex = 3;
             this.ChkIncludeLate.Location = new System.Drawing.Point(14, 84);
             this.ChkIncludeLate.Name = "ChkIncludeLate";
-            this.ChkIncludeLate.Properties.Caption = "Show late readings - audited after the billing day (shown in red)";
+            this.ChkIncludeLate.Properties.Caption = "LATE READING - the meter was read after the billing day. Show those rows.";
             this.ChkIncludeLate.Size = new System.Drawing.Size(508, 22);
             this.ChkIncludeLate.TabIndex = 2;
             //
@@ -114,7 +122,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpAutoFetch.Controls.Add(this.CmbCutoffDay);
             this.GrpAutoFetch.Controls.Add(this.LblCutoffTime);
             this.GrpAutoFetch.Controls.Add(this.TimeCutoff);
-            this.GrpAutoFetch.Location = new System.Drawing.Point(12, 162);
+            this.GrpAutoFetch.Location = new System.Drawing.Point(12, 190);
             this.GrpAutoFetch.Name = "GrpAutoFetch";
             this.GrpAutoFetch.Size = new System.Drawing.Size(536, 92);
             this.GrpAutoFetch.TabIndex = 2;
@@ -178,7 +186,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GrpInvoice.Controls.Add(this.CmbGrouping);
             this.GrpInvoice.Controls.Add(this.ChkGroupGuard);
             this.GrpInvoice.Controls.Add(this.ChkGroupRental);
-            this.GrpInvoice.Location = new System.Drawing.Point(12, 264);
+            this.GrpInvoice.Location = new System.Drawing.Point(12, 292);
             this.GrpInvoice.Name = "GrpInvoice";
             this.GrpInvoice.Size = new System.Drawing.Size(536, 120);
             this.GrpInvoice.TabIndex = 3;
@@ -225,7 +233,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             this.GrpMaintenance.Controls.Add(this.BtnClearStaging);
             this.GrpMaintenance.Controls.Add(this.LblClearHint);
-            this.GrpMaintenance.Location = new System.Drawing.Point(12, 394);
+            this.GrpMaintenance.Location = new System.Drawing.Point(12, 422);
             this.GrpMaintenance.Name = "GrpMaintenance";
             this.GrpMaintenance.Size = new System.Drawing.Size(536, 88);
             this.GrpMaintenance.TabIndex = 4;
@@ -297,6 +305,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.CmbCutoffDay.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkAutoFetch.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeLate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.ChkShowOverdue.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeInactive.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkIncludeExpired.Properties)).EndInit();
             this.GrpMaintenance.ResumeLayout(false);
@@ -322,6 +331,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.CheckEdit ChkIncludeExpired;
         private DevExpress.XtraEditors.CheckEdit ChkIncludeInactive;
         private DevExpress.XtraEditors.CheckEdit ChkIncludeLate;
+        private DevExpress.XtraEditors.CheckEdit ChkShowOverdue;
         private DevExpress.XtraEditors.GroupControl GrpAutoFetch;
         private DevExpress.XtraEditors.CheckEdit ChkAutoFetch;
         private DevExpress.XtraEditors.LabelControl LblCutoffDay;

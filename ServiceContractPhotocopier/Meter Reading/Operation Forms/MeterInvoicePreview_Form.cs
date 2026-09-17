@@ -150,9 +150,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     {
                         DataRow g = _dt.NewRow();
                         g["Level"] = 2;
-                        g["What"] = "            " + Label(m) +
-                                    (m.IsFlat ? "" : "   " + Num(m.Last) + " → " + Num(m.Current) +
-                                                     " = " + Num(m.Usage));
+                        // A merged minimum's members carry money, not readings: what each was owed,
+                        // what its copies came to, what it is short. Printing a meter arithmetic here
+                        // would show 0 → 0 = 0 for every one of them.
+                        string detail = m.IsCommittedMin
+                            ? "   minimum " + m.CommittedAmount.ToString("n2") +
+                              ", copies " + m.PrintedAmount.ToString("n2") +
+                              (m.Charge > 0m ? ", short " + m.Charge.ToString("n2") : ", over the minimum")
+                            : (m.IsFlat ? "" : "   " + Num(m.Last) + " → " + Num(m.Current) +
+                                               " = " + Num(m.Usage));
+                        g["What"] = "            " + Label(m) + detail;
                         g["Blocked"] = m.Current < m.Last;
                         _dt.Rows.Add(g);
                     }
@@ -176,9 +183,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LblNote.Text = blocked > 0
                 ? "Blocked customers are skipped — fix the reading and Generate again. " + _note
                 : _note;
-            BtnCreate.Text = ready == 0
-                ? "Nothing to create"
-                : "Create " + ready + (ready == 1 ? " invoice" : " invoices") + " (not yet submitted to LHDN)";
+            // The heading above already says how many are ready and what they come to; the button
+            // only has to say what pressing it does.
+            BtnCreate.Text = ready == 0 ? "Nothing to create" : "Generate Invoice";
             BtnCreate.Enabled = ready > 0;
         }
 
@@ -193,7 +200,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (row.IsMerged) what += "  (" + row.Units + " machines)";
             else what += "  " + Label(ln);
             if (ln.IsFlat && ln.Charge == 0m) what += "  · FOC";
-            if (!string.IsNullOrEmpty(ln.StrategyNote)) what += "  · " + ln.StrategyNote;
+            // A merged minimum has no member sentence worth quoting -- the leader's floor is true of
+            // one machine and wrong about the rest. Same method the posted invoice and the sample use.
+            string note = row.IsMerged && ln.IsCommittedMin
+                ? ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.MergedMinimumNote(row)
+                : ln.StrategyNote;
+            if (!string.IsNullOrEmpty(note)) what += "  · " + note;
             return what;
         }
 

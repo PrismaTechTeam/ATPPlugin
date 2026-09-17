@@ -94,6 +94,12 @@ namespace ServiceContractPhotocopier.Classes
         public const string CMD_SHOW_SCP_SETUP_BILLING_FORMAT = nameof(CMD_SHOW_SCP_SETUP_BILLING_FORMAT);
         public const string CMD_OPEN_SCP_SETUP_BILLING_FORMAT = nameof(CMD_OPEN_SCP_SETUP_BILLING_FORMAT);
 
+        // Where the other company's account book is, for inter-billing. Its own right because the
+        // screen holds a database password, and because a book nobody has set it up on should not
+        // show a menu item nobody there will ever use.
+        public const string CMD_SHOW_SCP_SETUP_INTERBILL = nameof(CMD_SHOW_SCP_SETUP_INTERBILL);
+        public const string CMD_OPEN_SCP_SETUP_INTERBILL = nameof(CMD_OPEN_SCP_SETUP_INTERBILL);
+
         // ---- General Setup — strategy ----
         public const string CMD_SHOW_SCP_SETUP_STRATEGY = nameof(CMD_SHOW_SCP_SETUP_STRATEGY);
         public const string CMD_OPEN_SCP_SETUP_STRATEGY = nameof(CMD_OPEN_SCP_SETUP_STRATEGY);

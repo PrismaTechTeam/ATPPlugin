@@ -23,6 +23,7 @@ namespace ServiceContractPhotocopier
         private string _debtorCode = "";
         private DataTable _dt;
         private bool _recalc;   // guard against re-entrant CellValueChanged during recompute
+        private Dictionary<string, List<decimal[]>> _ladders = new Dictionary<string, List<decimal[]>>();
 
         public MeterCN_Form()
         {
@@ -91,6 +92,16 @@ namespace ServiceContractPhotocopier
                 "ISNULL(me.PeriodYear, YEAR(t.MeterTransDate)) AS PeriodYear, " +
                 "ISNULL(me.PeriodMonth, MONTH(t.MeterTransDate)) AS PeriodMonth, " +
                 "lg.LastReading, lg.[Usage] AS BilledUsage, lg.UnitPrice AS BilledRate, lg.Charge AS BilledCharge, " +
+                // The rest of what the line was priced by, as it was priced. The credit is worked
+                // out by re-running the billing engine, not by multiplying, so it needs all of it.
+                "ISNULL(lg.FOCQty,0) AS BilledFoc, ISNULL(lg.RebatePct,0) AS BilledRebate, " +
+                "ISNULL(lg.MinCharges,0) AS BilledMin, " +
+                "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
+                // The ladder key, resolved exactly as ScpBillingRows resolves it: a per-meter
+                // override beats the scheme code and is keyed '#<ItemMeterKey>'.
+                "CASE WHEN pm.ItemMeterKey IS NOT NULL " +
+                "     THEN '#' + CAST(m.ItemMeterKey AS varchar(20)) " +
+                "     ELSE ISNULL(NULLIF(m.MeterMultiPriceCode,''), ISNULL(mt.MeterMultiPriceCode,'')) END AS MultiPriceCode, " +
                 "ISNULL(m.ChargesRate,0) AS CurrentRate, pc.PrevCorrectReading, " +
                 "ISNULL(pi.PrevInvNo,'') AS PrevInvNo, ISNULL(nn.NextInvNo,'') AS NextInvNo " +
                 "FROM dbo.zSCP_MeterTrans t " +
@@ -98,11 +109,14 @@ namespace ServiceContractPhotocopier
                 "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                 "LEFT JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
                 "LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = t.MeterTypeCode " +
+                "LEFT JOIN (SELECT DISTINCT ItemMeterKey FROM dbo.zSCP2_ItemMeterPrice) pm " +
+                "       ON pm.ItemMeterKey = m.ItemMeterKey " +
                 // TOP 1 per meter: an invoice spanning two stamped periods must not duplicate the line.
                 "OUTER APPLY (SELECT TOP 1 e.PeriodYear, e.PeriodMonth FROM dbo.zSCP2_MeterEntry e " +
                 "  WHERE e.InvoicedDocKey = t.SalesInvoiceDocKey AND e.ItemMeterKey = t.ServiceItemMeterTypeKey " +
                 "  ORDER BY e.PeriodYear DESC, e.PeriodMonth DESC) me " +
-                "OUTER APPLY (SELECT TOP 1 l.LastReading, l.[Usage], l.UnitPrice, l.Charge " +
+                "OUTER APPLY (SELECT TOP 1 l.LastReading, l.[Usage], l.UnitPrice, l.Charge, " +
+                "                    l.FOCQty, l.RebatePct, l.MinCharges " +
                 "  FROM dbo.zSCP2_MeterReadingLog l " +
                 "  WHERE l.ItemMeterKey = t.ServiceItemMeterTypeKey AND l.Source='INVOICE' " +
                 "    AND l.DocNo='" + _invoiceDocNo.Replace("'", "''") + "' ORDER BY l.LogKey DESC) lg " +
@@ -143,7 +157,16 @@ namespace ServiceContractPhotocopier
             // Working columns: rate resolution + editable correction values. BaseReading = the value
             // the credit is measured FROM: the previous CN's corrected reading when one exists (a
             // second CN must not re-credit copies the first one already credited), else the billed.
+            // The tier tables, loaded once. A rate can be a band rather than a number, and the
+            // credit has to be worked out the way the invoice was.
+            try { _ladders = ScpMultiPrice.LoadLadders(_db); }
+            catch { _ladders = new Dictionary<string, List<decimal[]>>(); }
+
             _dt.Columns.Add("Rate", typeof(decimal));
+            // Set when re-running the engine over the BILLED reading does not reproduce the
+            // amount actually billed -- the pricing has been changed since, so nothing here can
+            // honestly derive the credit and the figure has to be keyed by hand.
+            _dt.Columns.Add("CannotDerive", typeof(bool));
             _dt.Columns.Add("BaseReading", typeof(decimal));
             _dt.Columns.Add("CorrectReading", typeof(decimal));
             _dt.Columns.Add("CreditCopies", typeof(decimal));
@@ -155,9 +178,22 @@ namespace ServiceContractPhotocopier
             // The Max term stops us crediting copies a LATER invoice charged for; the current-reading
             // term stops a second CN un-crediting what an earlier one already gave back.
             _dt.Columns.Add("MaxAllowed", typeof(decimal));
+            int cannot = 0;
             foreach (DataRow r in _dt.Rows)
             {
-                r["Rate"] = r["BilledRate"] == DBNull.Value ? Dec(r["CurrentRate"]) : Dec(r["BilledRate"]);
+                // What the invoice CHARGED per copy, which is not always the number in the
+                // meter's rate column. A metered line priced by a ladder bills the band -- the
+                // rate column underneath it can be an older flat price nobody cleared, and
+                // crediting at that price short-changes the customer on every corrected copy.
+                decimal effRate;
+                decimal rebuilt = ChargeAt(r, Dec(r["BilledReading"]), out effRate);
+                bool derivable = Math.Abs(rebuilt - Dec(r["BilledCharge"])) <= 0.01m
+                                 && Dec(r["BilledCharge"]) > 0m;
+                r["CannotDerive"] = !derivable;
+                if (!derivable) cannot++;
+                r["Rate"] = derivable && effRate > 0m
+                    ? effRate
+                    : (r["BilledRate"] == DBNull.Value ? Dec(r["CurrentRate"]) : Dec(r["BilledRate"]));
                 r["BaseReading"] = r["PrevCorrectReading"] == DBNull.Value
                     ? Dec(r["BilledReading"]) : Dec(r["PrevCorrectReading"]);
                 decimal invMax = Dec(r["BilledReading"]), baseRd = Dec(r["BaseReading"]);
@@ -166,6 +202,14 @@ namespace ServiceContractPhotocopier
                 r["CreditCopies"] = 0m;
                 r["CreditAmount"] = 0m;
                 r["AmountOverridden"] = false;
+            }
+            if (cannot > 0)
+            {
+                this.LblExistingCN.Text =
+                    (this.LblExistingCN.Visible ? this.LblExistingCN.Text + "   " : "") +
+                    cannot + " line" + (cannot == 1 ? " has" : "s have") + " been re-priced since this " +
+                    "invoice -- their credit cannot be worked out and must be keyed by hand.";
+                this.LblExistingCN.Visible = true;
             }
             this.GridLines.DataSource = _dt;
             this.GridViewLines.CellValueChanged +=
@@ -180,6 +224,66 @@ namespace ServiceContractPhotocopier
             return v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v);
         }
 
+        /// <summary>
+        /// What this line would have been charged if the meter had read <paramref name="reading"/>.
+        ///
+        /// <para>The billing engine, run again over the pricing the log froze at invoice time. Not
+        /// a multiplication: a metered line is a ladder band, a free allowance, a rebate and a
+        /// minimum floor before it is a rate, and only three lines in four are actually
+        /// <c>copies x rate</c>.</para>
+        /// </summary>
+        private decimal ChargeAt(DataRow r, decimal reading, out decimal effUnitPrice)
+        {
+            MeterBillLine ln = new MeterBillLine();
+            ln.IsFlat = false;   // flat lines never reach this screen -- the query excludes them
+            ln.Last = Dec(r["LastReading"]);
+            ln.Current = reading;
+            ln.Rate = r["BilledRate"] == DBNull.Value ? Dec(r["CurrentRate"]) : Dec(r["BilledRate"]);
+            ln.MinCharges = Dec(r["BilledMin"]);
+            ln.Foc = Dec(r["BilledFoc"]);
+            ln.RebatePct = Dec(r["BilledRebate"]);
+            ln.MultiPriceCode = r["MultiPriceCode"] == DBNull.Value ? "" : Convert.ToString(r["MultiPriceCode"]);
+            ln.FocResetCount = ScpMultiPrice.FocResetCount(
+                Convert.ToString(r["FOCResetUnit"]),
+                r["FOCResetN"] == DBNull.Value ? 0 : Convert.ToInt32(r["FOCResetN"]),
+                DaysInBilledMonth(r));
+            ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
+            effUnitPrice = ln.EffUnitPrice;
+            return ln.Charge;
+        }
+
+        private static int DaysInBilledMonth(DataRow r)
+        {
+            int y = r["PeriodYear"] == DBNull.Value ? 0 : Convert.ToInt32(r["PeriodYear"]);
+            int mo = r["PeriodMonth"] == DBNull.Value ? 0 : Convert.ToInt32(r["PeriodMonth"]);
+            if (y < 1 || mo < 1 || mo > 12) return 30;
+            return DateTime.DaysInMonth(y, mo);
+        }
+
+        /// <summary>
+        /// The credit for giving <paramref name="copies"/> copies back.
+        ///
+        /// <para>What the line billed, less what it would have billed at the corrected reading.
+        /// Multiplying the copies by a rate answers a different question and gets it wrong a
+        /// quarter of the time: a line sitting on its minimum charge does not get cheaper when
+        /// copies come off it, copies that fall back inside a free allowance were never charged
+        /// for, and a ladder charges the band, not the number in the rate column.</para>
+        ///
+        /// <para>A line whose pricing has changed since the invoice cannot be derived at all --
+        /// there the old multiplication is kept, the row is flagged, and the amount is the
+        /// operator's to key.</para>
+        /// </summary>
+        private decimal CreditFor(DataRow r, decimal copies)
+        {
+            if (copies <= 0m) return 0m;
+            if (r["CannotDerive"] != DBNull.Value && Convert.ToBoolean(r["CannotDerive"]))
+                return Math.Round(copies * Dec(r["Rate"]), 2);
+            decimal ignored;
+            decimal after = ChargeAt(r, Dec(r["CorrectReading"]), out ignored);
+            decimal credit = Dec(r["BilledCharge"]) - after;
+            return credit > 0m ? Math.Round(credit, 2) : 0m;
+        }
+
         private void GridViewLines_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (_recalc || e.Column == null || e.RowHandle < 0) return;
@@ -192,7 +296,7 @@ namespace ServiceContractPhotocopier
                 {
                     decimal copies = Dec(r["BaseReading"]) - Dec(r["CorrectReading"]);
                     r["CreditCopies"] = copies;
-                    r["CreditAmount"] = copies > 0m ? Math.Round(copies * Dec(r["Rate"]), 2) : 0m;
+                    r["CreditAmount"] = CreditFor(r, copies);
                     r["AmountOverridden"] = false;
                 }
                 else if (e.Column.FieldName == "CreditAmount")
