@@ -1,6 +1,6 @@
 # Billing scenarios — settings and what they print
 
-Twelve demo contracts, one per shape. Open any of them, press **Sample Invoice**, compare.
+Thirteen demo contracts, one per shape. Open any of them, press **Sample Invoice**, compare.
 
 ---
 
@@ -36,6 +36,7 @@ Codes used in the tables below: **A** = merge all · **M** = per model · **S** 
 | 10 | DEMO-10 | `2INV-RMACHINE` | Rental apart | S | A | 5 | 2 invoices, **5 + 2** |
 | 11 | DEMO-11 | `PERMACHINE` | Per machine, rental apart | S | S | 3 | **5 invoices**, 6 lines |
 | 12 | DEMO-12 | *(none)* | — | — | — | 5 | 1 invoice, **11 lines** |
+| 13 | DEMO-13 | `PERMACHINE-ONE` | One per machine | S | S | 3 | **3 invoices**, 3 + 3 + 3 |
 
 ---
 
@@ -212,6 +213,26 @@ The third machine has **no rental meter**, so it gets no rental invoice. Invoice
 | Money | same | same |
 
 Without a format the old rules apply: rental still merges (same type, same price, same contract), **usage never merges**. Existing contracts print exactly as they did before the plugin.
+
+---
+
+## 13 · DEMO-13 — one machine, one invoice, everything on it
+
+`PERMACHINE-ONE` · One invoice per machine · Rental **S** · BK+CL **S**
+
+Three machines → **3 invoices**, each carrying that machine's whole month:
+
+| Invoice | Contents |
+|---|---|
+| DEMO-13-001 | RENTAL 495.00 · BK 4,813 @ 0.0250 · CL 1,037 @ 0.2500 |
+| DEMO-13-002 | RENTAL 815.00 · BK 5,426 @ 0.0230 · CL 1,174 @ 0.2300 |
+| DEMO-13-003 | RENTAL 1,180.00 · BK 6,039 @ 0.0210 · CL 1,311 @ 0.2100 |
+
+The difference from #11: there the rental goes to a second invoice, so a machine's month
+arrives on two pages. Here the rental sits above its own black and colour, and one page is
+the whole answer for one machine.
+
+Three rentals, three rates — nothing could merge even if the split allowed it.
 
 ---
 
