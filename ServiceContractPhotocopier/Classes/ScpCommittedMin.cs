@@ -26,7 +26,12 @@ namespace ServiceContractPhotocopier.Classes
         /// means that machine — never the whole contract by accident.</summary>
         public static string GroupKey(MeterBillLine l)
         {
-            string g = (l.MergeGroupCode ?? "").Trim();
+            // The COPIES grouping, not the rental one. A committed minimum is measured against black
+            // and colour, and those merge on MergeGroupCodeMeter -- the two columns exist precisely
+            // because "one agreed rental across the fleet, every machine billing its own copies" is
+            // the commonest deal here. Reading the rental column measured the floor over a set the
+            // copies never belonged to.
+            string g = (l.MergeGroupCodeMeter ?? "").Trim();
             return g.Length > 0
                 ? l.ContractKey + "|#" + g.ToUpperInvariant()
                 : l.ContractKey + "|@" + l.ItemKey;
@@ -35,7 +40,7 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>What the invoice calls the set a minimum is measured over.</summary>
         public static string GroupWords(MeterBillLine l)
         {
-            string g = (l.MergeGroupCode ?? "").Trim();
+            string g = (l.MergeGroupCodeMeter ?? "").Trim();
             return g.Length > 0 ? "group " + g.ToUpperInvariant() : "this machine";
         }
 
@@ -156,9 +161,18 @@ namespace ServiceContractPhotocopier.Classes
                 l.Charge = topUp;
                 l.Foc = 0m;
                 l.UseMin = false;
-                l.StrategyNote = "COMMITTED MIN " + l.CommittedAmount.ToString("0.00") + whoWords +
-                                 ": printed " + charged.ToString("0.00") +
-                                 " -> top-up " + topUp.ToString("0.00");
+                // The whole arithmetic, in the order it happened, on the line the customer is being
+                // asked to pay. "printed" was ambiguous next to a money figure -- it reads as a count
+                // of copies -- and a top-up of 0.00 states a charge that is not being made. Both are
+                // said plainly instead, so a line that charges nothing explains itself as clearly as
+                // one that charges.
+                // Kept inside 100 characters: IVDTL.Description rejects anything longer and takes
+                // the whole billing run down with it, and a group name can be long on its own.
+                l.StrategyNote = "MINIMUM " + l.CommittedAmount.ToString("0.00") + whoWords +
+                                 " · copies " + charged.ToString("0.00") +
+                                 (topUp > 0m
+                                    ? " · short " + topUp.ToString("0.00")
+                                    : " · over the minimum");
             }
             return minMeterItems;
         }
@@ -175,25 +189,60 @@ namespace ServiceContractPhotocopier.Classes
         {
             List<string> problems = new List<string>();
             if (allLines == null) return problems;
+            // Two floors over the SAME set, and a floor over a set that CONTAINS another floor's set,
+            // are the same mistake wearing different clothes: a machine's shortfall is made up twice
+            // and the customer pays it twice.
+            //
+            // The second shape is the one the screens actually produce. Two group floors take a
+            // deliberate double entry; a group floor plus a machine floor inside that group takes one
+            // person setting the deal in Billing Setup and another adding a figure in Machine Meters,
+            // which is two ordinary actions that were never told about each other. Only the first
+            // shape was checked, so the realistic accident went straight through.
             Dictionary<string, int> seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, string> words = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> groupOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            List<MeterBillLine> perMachine = new List<MeterBillLine>();
+            bool contractWide = false;
+            string contractWords = "the whole contract";
+
             foreach (MeterBillLine l in allLines)
             {
                 if (!l.IsCommittedMin) continue;
                 string who = (l.CommitScope ?? "S").Trim().ToUpperInvariant();
                 if (l.IsGroupItem) who = "C";
-                if (who != "G" && who != "C") continue;      // per-machine minimums cannot collide
+                if (who == "C") contractWide = true;
+                if (who != "G" && who != "C")
+                {
+                    perMachine.Add(l);                       // may sit inside a wider floor -- checked below
+                    continue;
+                }
                 string key = who == "C" ? "C|" + l.ContractKey : "G|" + GroupKey(l);
                 int n;
                 seen.TryGetValue(key, out n);
                 seen[key] = n + 1;
                 words[key] = who == "C" ? "the whole contract" : GroupWords(l);
+                if (who == "G") groupOf[GroupKey(l)] = GroupWords(l);
             }
+
             foreach (KeyValuePair<string, int> kv in seen)
                 if (kv.Value > 1)
                     problems.Add(kv.Value + " committed minimums are measured against " + words[kv.Key] +
                                  " — each would top it up, so the shortfall would be billed " +
                                  kv.Value + " times. Keep one.");
+
+            // A machine floor inside a wider floor: the machine's own shortfall is counted once on its
+            // own and again inside the wider sum.
+            foreach (MeterBillLine l in perMachine)
+            {
+                string gk = GroupKey(l);
+                string inside = null;
+                if (groupOf.ContainsKey(gk)) inside = groupOf[gk];
+                else if (contractWide) inside = contractWords;
+                if (inside == null) continue;
+                problems.Add((string.IsNullOrEmpty(l.ItemName) ? "A machine" : l.ItemName) +
+                             " has its own committed minimum AND is inside a minimum measured over " +
+                             inside + " — its shortfall would be billed twice. Keep one of them.");
+            }
             return problems;
         }
     }

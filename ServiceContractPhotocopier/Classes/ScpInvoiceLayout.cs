@@ -28,21 +28,59 @@ namespace ServiceContractPhotocopier.Classes
         /// invoices print (Rompin's AMR2607.0087 shows 349,707, the four machines added up).</summary>
         public decimal Current, Last;
         public decimal FocApplied, Usage;
+        /// <summary>The allowance the deal GIVES, which is what the invoice prints. Not the same
+        /// number as <see cref="FocApplied"/>: a machine allowed 5,000 free copies that printed
+        /// 4,813 used 4,813 of them, and a line reading "Meter FOC Qty : 4813" tells the customer
+        /// their allowance is whatever they happened to print. A meter with no allowance of its
+        /// own -- a ladder, whose free band is worked out from the bands -- contributes what it
+        /// actually took, because that is the only free quantity it has.</summary>
+        public decimal FocAllowed;
         /// <summary>Copies the rebate removed, floored per machine then added up — which is how the
         /// customer's own merged lines read (Pontian prints 1,522, where 2% of the merged 76,244
         /// would have been 1,524).</summary>
         public decimal RebateQty;
+
+        /// <summary>What the members charge, added up. A merged usage row is Qty x one rate, so its
+        /// money falls out of the quantity — but a merged MINIMUM is a sum of separate shortfalls that
+        /// no single rate describes, and multiplying one member's top-up by the count would only be
+        /// right when every machine happened to be short by the same amount.</summary>
+        public decimal ChargeTotal;
         /// <summary>Newest and oldest reading dates in the group. Equal on an unmerged line; a merged
         /// line prints the range rather than inventing a single date the readings never shared.</summary>
         public DateTime? CurDate, PrevDate;
+
+        /// <summary>The machines a GROUP-scoped term speaks for — one entry each — even though only
+        /// one of them carries the meter.
+        ///
+        /// <para>A waive scoped to a rental line is ONE meter on ONE machine, and it takes the whole
+        /// line's rental off. Printing that row with the serial of the machine the meter happens to
+        /// sit on says the credit belongs to that machine, and the customer is left asking about the
+        /// other two. The same is true of a minimum measured over a group. So the row carries the
+        /// machines it covers, and prints them the way the rental line does.</para>
+        ///
+        /// <para>Null on every other row, and on a term that really is about one machine — those
+        /// name their machine and nothing else. It never touches Qty or price: a group waive is
+        /// still ONE amount, not one per machine.</para></summary>
+        public List<MeterBillLine> Covers;
 
         /// <summary>The quantity this row prints — machines for a rental, copies for usage.</summary>
         public decimal PrintQty
         {
             get
             {
-                if (Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m)
+                // A merged minimum is a SUM of separate shortfalls, so it has no count and no rate.
+                // Three machines short by 150, 200 and 250 owe 600; printing "3 x 200" is arithmetic
+                // that happens to land on the same total and says something false about every one of
+                // them -- and the moment the floors differ it lands somewhere else entirely.
+                // A merged minimum or waive is a SUM of separate amounts -- no count, no rate.
+                if (IsMerged && (Leader.IsCommittedMin || Leader.IsWaiveMeter)) return 1m;
+                if (Leader.UseMin || Leader.IsFlat)
                     return Units > 1m ? Units : 1m;
+                // A copy line with nothing left to bill prints nothing to bill. It used to fall
+                // into the flat case and print the MACHINE COUNT: SINGLE ADVERTISING has two
+                // machines, 557 copies between them and 1,000 free, and the black line read
+                // "2 @ 0.00" -- which on a copy line says two copies, not two machines. Their
+                // own invoice prints the line with no quantity at all and the allowance below it.
                 return IsMerged ? BillCopies : Leader.BillCopies;
             }
         }
@@ -61,19 +99,15 @@ namespace ServiceContractPhotocopier.Classes
         {
             get
             {
+                if (IsMerged && (Leader.IsCommittedMin || Leader.IsWaiveMeter))
+                    return PrintAmount;                                     // qty is 1; see PrintQty
                 bool flat = Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m;
                 if (!IsMerged) return flat ? Leader.Charge : Leader.EffUnitPrice;
 
-                decimal money = 0m;
-                bool uniform = true;
                 decimal first = flat ? Leader.Charge : Leader.EffUnitPrice;
-                foreach (MeterBillLine m in Members)
-                {
-                    money += m.Charge;
-                    decimal p = flat ? m.Charge : m.EffUnitPrice;
-                    if (p != first) uniform = false;
-                }
-                if (uniform) return first;
+                if (OneRate) return first;
+                decimal money = 0m;
+                foreach (MeterBillLine m in Members) money += m.Charge;
                 decimal qty = PrintQty;
                 return qty > 0m ? Math.Round(money / qty, 6, MidpointRounding.AwayFromZero) : first;
             }
@@ -99,8 +133,12 @@ namespace ServiceContractPhotocopier.Classes
         /// a half. 5,693 colour copies at 0.285 is 1,622.505: the machine was charged 1,622.50 and
         /// that is the number that must print.
         ///
-        /// <para>Since a merged line is now always one rate, its sum equals qty x rate anyway, bar
-        /// that same rounding half. The reader's arithmetic checks out and the books still hold.</para>
+        /// <para>The one exception is a MERGED row whose machines all share a rate. There the line
+        /// prints a quantity and a price, and the customer multiplies them -- so the row is worth
+        /// exactly that product. HOSPITAL SULTAN ISMAIL is the case: thirteen machines at 0.0285
+        /// cost 3,048.37 added up one at a time, while the line reads "106,960 @ 0.0285" and comes
+        /// to 3,048.36. Their own invoice prints 3,048.36. A cent that cannot be reproduced from
+        /// the figures on the paper is a cent the customer phones about.</para>
         /// </remarks>
         public decimal PrintAmount
         {
@@ -108,9 +146,33 @@ namespace ServiceContractPhotocopier.Classes
             {
                 if (Members == null || Members.Count == 0)
                     return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero);
+                // One rate across the row: the line must multiply out, because the reader will do it.
+                if (IsMerged && OneRate
+                    && !(Leader.IsCommittedMin || Leader.IsWaiveMeter))
+                    return Math.Round(PrintQty * PrintUnitPrice, 2, MidpointRounding.AwayFromZero);
                 decimal money = 0m;
                 foreach (MeterBillLine m in Members) money += m.Charge;
                 return Math.Round(money, 2, MidpointRounding.AwayFromZero);
+            }
+        }
+
+        /// <summary>
+        /// Whether every machine on this row was charged at the same rate.
+        ///
+        /// <para>It decides both what the row prints as its price and how it reaches its total, and
+        /// the two answers have to come from the same question or the line stops multiplying
+        /// out.</para>
+        /// </summary>
+        private bool OneRate
+        {
+            get
+            {
+                if (Members == null || Members.Count < 2) return true;
+                bool flat = Leader.UseMin || Leader.IsFlat || Leader.BillCopies <= 0m;
+                decimal first = flat ? Leader.Charge : Leader.EffUnitPrice;
+                foreach (MeterBillLine m in Members)
+                    if ((flat ? m.Charge : m.EffUnitPrice) != first) return false;
+                return true;
             }
         }
 
@@ -192,8 +254,45 @@ namespace ServiceContractPhotocopier.Classes
                 result.Add(grp);
             }
             foreach (ScpFoldedLine g in result) Aggregate(g);
+            MarkCovers(result, lines);
             SortForPrint(result);
             return result;
+        }
+
+        /// <summary>Work out, for every group-scoped minimum and waive, which machines it is about.
+        /// See <see cref="ScpFoldedLine.Covers"/>.</summary>
+        private static void MarkCovers(List<ScpFoldedLine> rows, List<MeterBillLine> lines)
+        {
+            foreach (ScpFoldedLine g in rows)
+            {
+                MeterBillLine ln = g.Leader;
+                if (!ln.IsCommittedMin && !ln.IsWaiveMeter) continue;
+                string scope = (ln.CommitScope ?? "").Trim().ToUpperInvariant();
+                if (scope != "G" && scope != "C") continue;   // 'S' really is about one machine
+
+                // A waive credits the RENT, so its set is the machines sharing the rental line; a
+                // minimum floors the COPIES, so its set is the machines sharing the copies. Same
+                // question the engine asks when it decides whether the term fires.
+                string grp = ((ln.IsWaiveMeter ? ln.MergeGroupCode : ln.MergeGroupCodeMeter) ?? "").Trim();
+                if (scope == "G" && grp.Length == 0) continue;
+
+                List<long> seen = new List<long>();
+                List<MeterBillLine> covers = new List<MeterBillLine>();
+                foreach (MeterBillLine m in lines)
+                {
+                    if (m.ContractKey != ln.ContractKey) continue;
+                    if (m.IsCommittedMin || m.IsWaiveMeter) continue;   // a term is not a machine
+                    if (scope == "G")
+                    {
+                        string mg = ((ln.IsWaiveMeter ? m.MergeGroupCode : m.MergeGroupCodeMeter) ?? "").Trim();
+                        if (!string.Equals(mg, grp, StringComparison.OrdinalIgnoreCase)) continue;
+                    }
+                    if (m.ItemKey <= 0 || seen.Contains(m.ItemKey)) continue;
+                    seen.Add(m.ItemKey);
+                    covers.Add(m);
+                }
+                if (covers.Count > 1) g.Covers = covers;
+            }
         }
 
         /// <summary>
@@ -230,6 +329,7 @@ namespace ServiceContractPhotocopier.Classes
             }
 
             foreach (ScpFoldedLine g in result) Aggregate(g);
+            MarkCovers(result, lines);
             SortForPrint(result);
             return result;
         }
@@ -352,9 +452,37 @@ namespace ServiceContractPhotocopier.Classes
         private static string FoldKey(MeterBillLine ln, ContractLayout lay, bool legacyRentalFold)
         {
             if (ln == null) return null;
-            // A committed minimum or a waive explains ONE machine on its own line; merging would
-            // throw the explanation away.
-            if (ln.IsCommittedMin || ln.IsWaiveMeter) return null;
+            // A waive follows its RENTAL. Machines sharing a rental line print one rental row, so the
+            // credits against that rental print one row too -- three machines each freeing their own
+            // 450 read as one 1,350 off the line they are on, which is the line the customer is looking
+            // at. The set is the RENTAL group, not the copies group: a waive is a credit against rent,
+            // and the machines that share the rent are the ones whose credits belong together.
+            //
+            // A machine on no rental line keeps its own credit row, because it has no row to share.
+            if (ln.IsWaiveMeter)
+            {
+                if (!lay.HasFormat) return null;
+                string wg = (ln.MergeGroupCode ?? "").Trim();
+                if (wg.Length == 0) return null;
+                return "WV|" + ln.ContractKey + "|" + wg.ToUpperInvariant();
+            }
+
+            // A committed minimum follows its COPIES. When the machines it measures print as one row,
+            // their top-ups print as one row too -- the customer sees "3 machines, this much printed,
+            // this much short", which is the same shape whether the floor was agreed per machine or
+            // for the group. Only the arithmetic differs, and that is settled long before the fold:
+            // a per-machine floor tops each machine up against its own copies and the row prints the
+            // sum; a group floor is ONE meter scoped 'G' and arrives here as a single line already.
+            //
+            // Ungrouped machines keep a line each, exactly as before -- there is no row for them to
+            // share, and a merged explanation would name machines the invoice never showed.
+            if (ln.IsCommittedMin)
+            {
+                if (!lay.HasFormat) return null;
+                string cg = (ln.MergeGroupCodeMeter ?? "").Trim();
+                if (cg.Length == 0) return null;
+                return "MIN|" + ln.ContractKey + "|" + cg.ToUpperInvariant();
+            }
 
             if (ln.IsRental || ln.IsFlat)
             {
@@ -465,11 +593,13 @@ namespace ServiceContractPhotocopier.Classes
         private static void Aggregate(ScpFoldedLine g)
         {
             g.BillCopies = 0m; g.Current = 0m; g.Last = 0m; g.FocApplied = 0m; g.Usage = 0m;
-            g.RebateQty = 0m; g.CurDate = null; g.PrevDate = null;
+            g.FocAllowed = 0m;
+            g.RebateQty = 0m; g.CurDate = null; g.PrevDate = null; g.ChargeTotal = 0m;
             foreach (MeterBillLine m in g.Members)
             {
                 g.BillCopies += m.BillCopies;
                 g.RebateQty += m.RebateQty;
+                g.ChargeTotal += m.Charge;
                 g.Current += m.Current;
                 g.Last += m.Last;
                 g.Usage += m.Usage;
@@ -478,6 +608,7 @@ namespace ServiceContractPhotocopier.Classes
                 decimal foc = m.IsFlat ? m.Foc : (m.Usage - m.BillCopies - m.RebateQty);
                 if (foc < 0m) foc = 0m;
                 g.FocApplied += foc;
+                g.FocAllowed += m.Foc > 0m ? m.Foc : foc;
 
                 if (m.AuditDate.HasValue && (!g.CurDate.HasValue || m.AuditDate.Value > g.CurDate.Value))
                     g.CurDate = m.AuditDate;

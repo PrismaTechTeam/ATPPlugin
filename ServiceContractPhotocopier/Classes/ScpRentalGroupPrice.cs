@@ -38,9 +38,23 @@ namespace ServiceContractPhotocopier.Classes
         public decimal BkPrice;        // copies: per black copy
         public decimal ClPrice;        // copies: per colour copy
 
+        /// <summary>Tier pricing agreed over the whole group, black and colour. Either a master
+        /// ladder code from the price list, or this group's own "boundary|price;..." bands.
+        ///
+        /// <para>A ladder outranks the flat figure beside it: where there are bands there is no
+        /// single rate to agree. See <see cref="ScpGroupLadder"/> for what it does to the money —
+        /// the group's copies climb it ONCE, which is the whole reason a customer asks for it.</para>
+        /// </summary>
+        public string LadderBk = "";
+        public string LadderCl = "";
+
         public bool IsEmpty
         {
-            get { return UnitPrice <= 0m && BkPrice <= 0m && ClPrice <= 0m; }
+            get
+            {
+                return UnitPrice <= 0m && BkPrice <= 0m && ClPrice <= 0m
+                    && (LadderBk ?? "").Trim().Length == 0 && (LadderCl ?? "").Trim().Length == 0;
+            }
         }
 
         public static string Key(string side, string groupCode)
@@ -91,7 +105,8 @@ namespace ServiceContractPhotocopier.Classes
             {
                 DataTable t = db.GetDataTable(
                     "SELECT ISNULL(Side,'R') AS Side, GroupCode, ISNULL(UnitPrice,0) AS UnitPrice, " +
-                    "ISNULL(BkPrice,0) AS BkPrice, ISNULL(ClPrice,0) AS ClPrice " +
+                    "ISNULL(BkPrice,0) AS BkPrice, ISNULL(ClPrice,0) AS ClPrice, " +
+                    "ISNULL(LadderBk,'') AS LadderBk, ISNULL(LadderCl,'') AS LadderCl " +
                     "FROM dbo.zSCP2_ContractRentalPrice WHERE ContractKey = " + contractKey, false);
                 foreach (DataRow r in t.Rows)
                 {
@@ -101,6 +116,8 @@ namespace ServiceContractPhotocopier.Classes
                     x.UnitPrice = Convert.ToDecimal(r["UnitPrice"]);
                     x.BkPrice = Convert.ToDecimal(r["BkPrice"]);
                     x.ClPrice = Convert.ToDecimal(r["ClPrice"]);
+                    x.LadderBk = Convert.ToString(r["LadderBk"]).Trim();
+                    x.LadderCl = Convert.ToString(r["LadderCl"]).Trim();
                     map[ScpLineTerms.Key(x.Side, x.GroupCode)] = x;
                 }
             }
@@ -163,8 +180,19 @@ namespace ServiceContractPhotocopier.Classes
                         inner = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
                         map[ck] = inner;
                     }
-                    inner[Convert.ToString(r["GroupCode"]).Trim()] =
-                        r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                    // Stored under BOTH names GroupKeyFor can ask for, because the column serves two
+                    // different things and the caller cannot tell them apart from here.
+                    //
+                    // Under "per model" the GroupCode column holds a MODEL, and GroupKeyFor returns the
+                    // model as-is. Under a hand-made group it holds a GROUP, and GroupKeyFor returns it
+                    // prefixed with '#' -- that prefix arrived with the rule "a group always wins over
+                    // the mode", and this loader was never taught it. The lookup therefore missed every
+                    // hand-made group, so an agreed rental price on a merged line was loaded, ignored,
+                    // and every machine quietly billed its own rate instead.
+                    string gc = Convert.ToString(r["GroupCode"]).Trim();
+                    decimal up = r["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(r["UnitPrice"]);
+                    inner[gc] = up;
+                    if (gc.Length > 0) inner["#" + gc.ToUpperInvariant()] = up;
                 }
             }
             catch { }   // older book without the table -> nothing is overridden

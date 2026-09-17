@@ -7,15 +7,79 @@ namespace ServiceContractPhotocopier.Classes
 {
     /// <summary>
     /// Multiple-pricing (tiered unit price) evaluator. A tier ladder is a code -> ascending list of
-    /// (MeterReading boundary, UnitPrice) rows from zSCP_MeterMultiPriceItem, where each boundary is the
-    /// UPPER edge of that band. Semantics = MARGINAL (incremental): each slice of usage is priced at its
-    /// own band's rate. This is what the customer's real ladders need — they encode the free-copy allowance
-    /// as a first band priced 0.00 (e.g. "FOC2.5K" = (2500 -> 0.00), (∞ -> 0.025) = first 2500 free, the
-    /// rest at 0.025), so a usage of 3000 costs 2500x0 + 500x0.025 = RM12.50 (NOT 3000x0.025). Decreasing
-    /// bands still give "print more, cheaper unit price". Never throws; no ladder -> flat rate.
+    /// (MeterReading boundary, UnitPrice) rows, where each boundary is the UPPER edge of that band.
+    ///
+    /// <para><b>Semantics = THRESHOLD.</b> The month's copies decide WHICH band applies, and then the
+    /// whole bill is at that band's rate. Print 12,000 against 10,000 -> 0.025 -> above -> 0.020, and
+    /// every billed copy is 0.020. This is the deal as it is struck and as the customer reads it:
+    /// "print more and the rate comes down", one rate, one line, a figure they can multiply.</para>
+    ///
+    /// <para>It is not incremental. Slicing the copies and charging each slice its own band's rate
+    /// leaves the line with no single price — an invoice then has to print a blended figure nobody
+    /// agreed to (15,000 copies coming to 335.00 reads as 0.0223), or split one charge into a row per
+    /// band. Both describe arithmetic the customer never signed.</para>
+    ///
+    /// <para><b>The 0.00 band is different, and stays an allowance.</b> "First 2,500 free, then 0.025"
+    /// is how every real ladder in the book writes its free copies: those copies come off the top and
+    /// the rest is billed. 97 of the 99 ladders in the customer's book are exactly this shape — one
+    /// free band and one price — for which threshold and incremental are the same number anyway.</para>
+    ///
+    /// <para>Never throws; no ladder -> flat rate.</para>
     /// </summary>
     public static class ScpMultiPrice
     {
+        /// <summary>The bands written as text: "boundary|price;boundary|price;...". Ascending, and a
+        /// boundary of nothing is not a band. This is how a ladder travels when it is not a row in a
+        /// table — a meter's own override, or a group's agreed tiers.</summary>
+        public static List<decimal[]> ParseTiers(string csv)
+        {
+            List<decimal[]> rows = new List<decimal[]>();
+            if (string.IsNullOrEmpty(csv)) return rows;
+            foreach (string part in csv.Split(';'))
+            {
+                string[] ab = part.Split('|');
+                if (ab.Length != 2) continue;
+                decimal mr, up;
+                if (decimal.TryParse(ab[0], System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture, out mr) &&
+                    decimal.TryParse(ab[1], System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture, out up) && mr > 0m)
+                    rows.Add(new decimal[] { mr, up });
+            }
+            return rows;
+        }
+
+        /// <summary>
+        /// What a ladder reads as on a screen, in the words of the deal rather than the words of the
+        /// data: <c>3,000 free, then 0.0250 \u2192 0.0200</c>.
+        ///
+        /// <para>It used to say "3 bands". A band is our word for a row in a table; nobody agreeing a
+        /// contract has ever said it. What the customer wants to see is the free copies and what the
+        /// price comes down to, which is the whole of what they signed.</para>
+        /// </summary>
+        public static string Describe(List<decimal[]> tiers)
+        {
+            if (tiers == null || tiers.Count == 0) return "";
+            decimal free = LadderFreeCopies(tiers);
+
+            // The prices actually charged, in the order the copies meet them. Repeats collapse: a
+            // ladder written as three rows at one price is one price.
+            List<decimal> prices = new List<decimal>();
+            foreach (decimal[] t in tiers)
+                if (t[1] > 0m && !prices.Contains(t[1])) prices.Add(t[1]);
+
+            string rate = "";
+            if (prices.Count == 1) rate = prices[0].ToString("0.0000");
+            else if (prices.Count > 1)
+                rate = prices[0].ToString("0.0000") + " \u2192 " +
+                       prices[prices.Count - 1].ToString("0.0000");
+
+            if (free > 0m && rate.Length > 0)
+                return free.ToString("#,##0") + " free, then " + rate;
+            if (free > 0m) return free.ToString("#,##0") + " free";
+            return rate.Length > 0 ? rate + " by volume" : "";
+        }
+
         /// <summary>Ladder-map key for a meter's own per-meter tier override (zSCP2_ItemMeterPrice).</summary>
         public static string MeterLadderKey(long itemMeterKey) { return "#" + itemMeterKey; }
 
@@ -59,42 +123,60 @@ namespace ServiceContractPhotocopier.Classes
             return map;
         }
 
-        /// <summary>MARGINAL charge for a usage quantity over the tier ladder: each band (prevBound..bound]
-        /// is priced at that band's UnitPrice. Returns the gross charge and, via <paramref name="freeCopies"/>,
-        /// how many copies fell in bands priced 0.00 (the FOC allowance) — the caller uses that to show the
-        /// billed (non-free) quantity on the invoice. Beyond the last boundary the last band's price applies.</summary>
-        public static decimal MarginalCharge(Dictionary<string, List<decimal[]>> ladders,
-            string code, decimal usage, int boundaryScale, out decimal freeCopies)
+        /// <summary>
+        /// What a usage costs on a tier ladder, and at what rate.
+        ///
+        /// <para>The copies decide the band; the band's rate then applies to every billed copy.
+        /// <paramref name="freeCopies"/> comes back holding the copies that fell in 0.00-priced bands
+        /// — the allowance, which comes off before anything is charged — and
+        /// <paramref name="rate"/> the price the line prints. Beyond the last boundary the last
+        /// band's rate applies.</para>
+        /// </summary>
+        public static decimal LadderCharge(Dictionary<string, List<decimal[]>> ladders,
+            string code, decimal usage, int boundaryScale, out decimal freeCopies, out decimal rate)
         {
             freeCopies = 0m;
+            rate = 0m;
             List<decimal[]> tiers;
             if (usage <= 0m || ladders == null || string.IsNullOrEmpty(code)
                 || !ladders.TryGetValue(code, out tiers) || tiers.Count == 0) return 0m;
             if (boundaryScale < 1) boundaryScale = 1;   // FOC reset accrual: bands are per reset period
 
-            decimal charge = 0m, remaining = usage, prevBound = 0m, lastPrice = 0m;
-            foreach (decimal[] t in tiers)   // ascending by boundary
+            // The allowance first: copies sitting in a 0.00 band are free wherever that band is.
+            decimal remaining = usage, prevBound = 0m;
+            foreach (decimal[] t in tiers)
             {
-                decimal bound = t[0] * boundaryScale, price = t[1];
-                lastPrice = price;
-                decimal bandWidth = bound - prevBound;
-                if (bandWidth < 0m) bandWidth = 0m;
-                decimal take = remaining < bandWidth ? remaining : bandWidth;
-                if (take > 0m)
-                {
-                    charge += take * price;
-                    if (price == 0m) freeCopies += take;
-                    remaining -= take;
-                }
+                decimal bound = t[0] * boundaryScale;
+                decimal width = bound - prevBound;
+                if (width < 0m) width = 0m;
+                decimal take = remaining < width ? remaining : width;
+                if (take > 0m && t[1] == 0m) freeCopies += take;
+                remaining -= take > 0m ? take : 0m;
                 prevBound = bound;
                 if (remaining <= 0m) break;
             }
-            if (remaining > 0m)   // usage exceeds the last boundary — price the tail at the last band's rate
+
+            // Then the rate: the band the month's copies REACHED. Not the band each slice sits in --
+            // the customer prints 12,000 and expects the 12,000 rate on the lot.
+            rate = PriceAt(tiers, usage, boundaryScale);
+            decimal billed = usage - freeCopies;
+            if (billed < 0m) billed = 0m;
+            return billed * rate;
+        }
+
+        /// <summary>The rate a given quantity earns: the band it lands in, or the last band's rate
+        /// once it is past the ladder's top boundary.</summary>
+        public static decimal PriceAt(List<decimal[]> tiers, decimal usage, int boundaryScale)
+        {
+            if (tiers == null || tiers.Count == 0) return 0m;
+            if (boundaryScale < 1) boundaryScale = 1;
+            decimal last = 0m;
+            foreach (decimal[] t in tiers)   // ascending by boundary
             {
-                charge += remaining * lastPrice;
-                if (lastPrice == 0m) freeCopies += remaining;
+                last = t[1];
+                if (usage <= t[0] * boundaryScale) return t[1];
             }
-            return charge;
+            return last;
         }
 
         /// <summary>Total FREE copies a tier ladder grants: the summed width of its 0.00-priced

@@ -48,6 +48,11 @@ namespace ServiceContractPhotocopier.Classes
                                            // committed amount over the item's print charges, always shown
         public decimal CommittedAmount;    // the committed minimum (the MIN meter's Minimum Charges)
         public decimal PrintedAmount;      // the item's actual print (BK/CL) charges the top-up was measured against
+        /// <summary>Which INVOICE this machine is billed on — the branch or department the
+        /// customer settles separately. A bill group splits invoices and nothing else: the deal,
+        /// its prices and its terms stay contract-wide.</summary>
+        public string BillGroupCode = "";
+
         public bool AlwaysBill;            // keep this line on the invoice even when its charge is 0 (transparency)
         public DateTime? RentalStartDate;  // n/N anchor
         public int RentalMonths;           // N (0 = open-ended, no n/N text)
@@ -64,6 +69,20 @@ namespace ServiceContractPhotocopier.Classes
         /// both. From the contract's Billing Format; 'B' when it has none, which is what every
         /// contract printed before the setting existed.</summary>
         public char MachineLineShows = ScpBillingFormat.MACHINE_LINE_BOTH;
+
+        /// <summary>Does the line name the MODEL under the charge, and does it name the SERIALS?
+        ///
+        /// <para>Two questions, because they have different answers. A fleet line covering
+        /// thirty-six machines wants its model named and does not want thirty-six serial numbers
+        /// printed underneath it -- and the single three-valued setting these replace could not say
+        /// that. Default to true so a contract nobody has answered for prints what it always
+        /// printed.</para></summary>
+        public bool ShowModel = true;
+        public bool ShowSerial = true;
+
+        /// <summary>Does the line say how many machines it covers -- "(2 UNIT)"? Only where the
+        /// Qty column does not already say it: a rental bills machines, a meter bills copies.</summary>
+        public bool ShowUnits = true;
 
         /// <summary>Which line this machine's BLACK and COLOUR print on. Separate from the rental's
         /// group because the two questions have different answers: one agreed rental across the
@@ -86,6 +105,15 @@ namespace ServiceContractPhotocopier.Classes
         public decimal RebateQty;
         // --- Rental-Waive contra meter (master-style; the engine decides firing at Generate) ---
         public bool IsWaiveMeter;
+        /// <summary>This rental is FREE this month, because a free-months deal covers it — not
+        /// credited back afterwards. FOC and a waive are two different things and the customer
+        /// can tell them apart: a free month prints ONE line with nothing to pay; a waive prints
+        /// the rent and then a credit against it.</summary>
+        public bool FreeThisMonth;
+        /// <summary>Kept out of the invoice altogether. A free-months waive meter has nothing to
+        /// contra: it made the rental free instead, and its own row would be a second line saying
+        /// so.</summary>
+        public bool Suppressed;
         public int WaiveFirstNMonths;      // 0 = no window condition
         public decimal WaiveTargetAmount;  // 0 = no usage condition (0 & 0 = ALWAYS waive)
         public decimal WaivePartialThreshold;  // partial band (RM, demo 28/07 #24): charges reach RM X...
@@ -165,12 +193,15 @@ namespace ServiceContractPhotocopier.Classes
             decimal billed, effUnit;
             if (ScpMultiPrice.HasLadder(ladders, ln.MultiPriceCode))
             {
-                decimal freeCopies;
+                decimal freeCopies, bandRate;
                 // Scale the ladder's boundaries (its FOC bands + tier breaks are "per reset period").
-                decimal gross = ScpMultiPrice.MarginalCharge(ladders, ln.MultiPriceCode, usage, resetN, out freeCopies);
+                ScpMultiPrice.LadderCharge(ladders, ln.MultiPriceCode, usage, resetN,
+                                           out freeCopies, out bandRate);
                 billed = usage - freeCopies;
                 if (billed < 0m) billed = 0m;
-                effUnit = billed > 0m ? Math.Round(gross / billed, 6) : 0m;
+                // The band's own rate, not a figure derived from the total. A ladder line prints a
+                // price the customer agreed to and can multiply back to the amount.
+                effUnit = bandRate;
             }
             else
             {
@@ -369,32 +400,60 @@ namespace ServiceContractPhotocopier.Classes
                 // per-copy price (multi-price tier or flat rate), Rebate % as a line discount — so the line
                 // total = ComputeCharge's NET charge and the invoice matches the grid exactly. Minimum-floor
                 // and flat/rental lines bill 1 x the (already-final) charge.
-                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
-                if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
                 string itemMasterDesc;
                 // The meter's own wording, then which machines the line covers — see
                 // ComposeFoldedDescription. Without the second part a per-machine layout prints
                 // several identical lines and the customer cannot tell them apart.
-                dtl.Description = ComposeFoldedDescription(row,
+                string composed = ComposeFoldedDescription(row,
                     descFromItem && !string.IsNullOrEmpty(ln.ACItemCode)
                         && itemDescByCode.TryGetValue(ln.ACItemCode, out itemMasterDesc)
                         && itemMasterDesc.Length > 0
                     ? itemMasterDesc                    // master convention: the stock item's description
                     : ComposeLineDescription(ln));      // fallback / option OFF: meter type name
-                if (minBilled || ln.IsFlat || ln.BillCopies <= 0m)
+                // IVDTL.Description is nvarchar(100) and AutoCount rejects anything longer outright --
+                // Generate dies with "The value violates the MaxLength limit of this column" and no
+                // invoice is written at all. A merged row is exactly what overflows it: the charge
+                // name, then the models, then a serial for every machine on the row.
+                //
+                // The extra lines were only ever newlines inside one field, and the document already
+                // prints text-only rows underneath a charge. So the first line stays the charge's own
+                // description and the rest become those rows -- nothing is lost, nothing is truncated,
+                // and no number of machines can break the run.
+                string[] descLines = composed.Split(new string[] { BREAK }, StringSplitOptions.None);
+                List<string> extraDescRows = new List<string>();
+                for (int di = 1; di < descLines.Length; di++)
+                    if (descLines[di].Trim().Length > 0) extraDescRows.Add(descLines[di]);
+
+                // ---- one row per BAND, where the copies climbed a ladder -------------------------
+                //
+                // A ladder charges each slice at its own rate, so the line has no single price. It
+                // used to print charge-over-copies -- 335.00 over 15,000 copies came out as 0.0223,
+                // a rate that appears nowhere in the deal and that the reader cannot multiply back
+                // to the amount. Now each band is its own row at the rate that was agreed, and
+                // Qty x Unit Price = Amount holds on every one of them.
+                //
+                // Only where it is needed. One priced band means the blended rate IS that band's
+                // rate -- the free-copies ladders every old contract uses -- and those keep printing
+                // as they always have.
+                AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
+                if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
+                dtl.Description = Fit(descLines[0]);
+                // What the row prints is ScpFoldedLine's decision, in ONE place. This used to be a
+                // second copy of the same three cases, and the copies drifted: a merged WAIVE is
+                // flat, so it fell into the rental case and printed "3 machines x the leader's -450"
+                // = -1,350 on a row whose own note said 900.00 came off -- crediting the customer
+                // 450 for a machine that never reached its target. The preview, which reads these
+                // properties, was right; only the posted document was wrong, which is the worst
+                // place for the two to disagree.
+                //
+                //   merged minimum / waive : a SUM of separate amounts -> qty 1, price = the sum
+                //   flat (rental, min)     : qty = machines sharing the row, price = per-unit
+                //   usage                  : qty = billable copies, priced once at the shared rate
+                dtl.Qty = row.PrintQty;
+                dtl.UnitPrice = row.PrintUnitPrice;
+                if (!(row.IsMerged && (ln.IsCommittedMin || ln.IsWaiveMeter))
+                    && !(minBilled || ln.IsFlat || ln.BillCopies <= 0m))
                 {
-                    // Grouped rental: Qty = how many machines share this row, UnitPrice stays the
-                    // PER-UNIT rental, so the line reads "3 UNIT x 300.00" and totals correctly.
-                    dtl.Qty = row.Units > 1m ? row.Units : 1m;
-                    dtl.UnitPrice = ln.Charge;
-                }
-                else
-                {
-                    // Merged usage: Qty is the members' billable copies added up, priced once at the
-                    // rate they share. Rounding the row once is what the customer's own invoices do —
-                    // HSI prints 3,048.36 where the per-machine charges add to 3,048.37.
-                    dtl.Qty = row.IsMerged ? row.BillCopies : ln.BillCopies;
-                    dtl.UnitPrice = row.IsMerged ? row.PrintUnitPrice : ln.EffUnitPrice;
                     // Under the new rules the rebate is already out of BillCopies as copies, so a
                     // line discount here would take it a second time.
                     if (ln.RebatePct > 0m && !ln.NewMoneyRules)
@@ -416,6 +475,7 @@ namespace ServiceContractPhotocopier.Classes
                     if (focCol < 0m) focCol = 0m;
                     if (focCol > 0m) dtl.FOCQty = focCol;
                 }
+
                 dtl.FurtherDescription = block;
                 // Department + Project = the billed contract's (per line, since a grouped invoice can
                 // span several contracts). Empty contract values leave the detail's defaults untouched.
@@ -425,8 +485,14 @@ namespace ServiceContractPhotocopier.Classes
                 // Strategy outcome ("RENTAL FREE month 1/1 (strategy)", "WAIVED: charges >= target",
                 // "PARTIAL WAIVE 90%: ...") — its own text row directly under the charge row, so the
                 // CUSTOMER sees why a rental is 0.00 or reduced (user transparency rule).
-                if (!string.IsNullOrEmpty(ln.StrategyNote))
-                    AddTextRow(doc, ln.StrategyNote, block);
+                foreach (string extraRow in extraDescRows)
+                    AddTextRow(doc, extraRow, block);
+
+
+                string note = row.IsMerged && ln.IsCommittedMin ? MergedMinimumNote(row)
+                            : (row.IsMerged && ln.IsWaiveMeter ? MergedWaiveNote(row) : ln.StrategyNote);
+                if (!string.IsNullOrEmpty(note))
+                    AddTextRow(doc, note, block);
 
                 // Reading text rows -- Current / Previous / (S/N when merged) / (FOC) / (rebate)
                 // / Usage, each carrying the same More Description block, composed by the method the
@@ -440,6 +506,59 @@ namespace ServiceContractPhotocopier.Classes
                 AddTextRow(doc, "", "");
             }
             return doc;
+        }
+
+        /// <summary>The sentence a MERGED waive prints. Each member was judged on its own terms, so
+        /// the row says how many of them actually fired — a row reading −450 across three machines is
+        /// otherwise indistinguishable from one where all three were waived at 150 each.</summary>
+        public static string MergedWaiveNote(ScpFoldedLine row)
+        {
+            int fired = 0;
+            decimal off = 0m;
+            foreach (MeterBillLine m in row.Members)
+                if (m.Charge < 0m) { fired++; off += -m.Charge; }
+            return fired == 0
+                ? "RENTAL WAIVE · none of the " + row.Units.ToString("0") + " machines reached its target"
+                : "RENTAL WAIVE · " + fired + " of " + row.Units.ToString("0") +
+                  " machines reached its target · " + off.ToString("n2") + " off the rental";
+        }
+
+        /// <summary>How a machine is named in a breakdown row: its service item number and serial
+        /// where both exist, otherwise whichever it has.</summary>
+        private static string NameOf(MeterBillLine m)
+        {
+            string n = (m.ItemName ?? "").Trim();
+            string sn = (m.SerialNumber ?? "").Trim();
+            if (n.Length > 0 && sn.Length > 0) return n + " " + sn;
+            return n.Length > 0 ? n : sn;
+        }
+
+        /// <summary>The sentence a MERGED minimum prints. Each member kept its own arithmetic — its own
+        /// floor against its own copies — and this row is their shortfalls added up.
+        ///
+        /// <para>It cannot reuse a member's sentence: three machines with floors of 350, 400 and 450
+        /// have no single "MINIMUM 350.00" to quote, and quoting one would be wrong about the other two.
+        /// It states what the row IS instead: how many machines, what their copies came to, what the
+        /// shortfalls came to. A machine that met its own floor contributes nothing and is simply not
+        /// part of the shortfall — which is why the total is never "floors minus copies".</para></summary>
+        public static string MergedMinimumNote(ScpFoldedLine row)
+        {
+            decimal floors = 0m, printed = 0m, shortfall = 0m;
+            int shortCount = 0;
+            foreach (MeterBillLine m in row.Members)
+            {
+                floors += m.CommittedAmount;
+                printed += m.PrintedAmount;
+                shortfall += m.Charge;
+                if (m.Charge > 0m) shortCount++;
+            }
+            // Written short on purpose: this lands in a 100-character column, and the machine count
+            // and every figure have to survive.
+            return "MIN per machine · floors " + floors.ToString("n2") +
+                   " · copies " + printed.ToString("n2") +
+                   (shortfall > 0m
+                        ? " · " + shortCount + " of " + row.Units.ToString("0") + " short " + shortfall.ToString("n2")
+                        : " · all over their minimum");
         }
 
         /// <summary>
@@ -483,8 +602,13 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>The serials on a merged row, in the order the machines were billed.</summary>
         private static string SerialList(ScpFoldedLine row)
         {
+            return SerialsOf(row.Members);
+        }
+
+        private static string SerialsOf(List<MeterBillLine> machines)
+        {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            foreach (MeterBillLine m in row.Members)
+            foreach (MeterBillLine m in machines)
             {
                 string s = (m.SerialNumber ?? "").Trim();
                 if (s.Length == 0) continue;
@@ -494,11 +618,24 @@ namespace ServiceContractPhotocopier.Classes
             return sb.ToString();
         }
 
+        /// <summary>The most this column takes. AutoCount types it d_ItemDescription = nvarchar(100)
+        /// and throws rather than truncating, so a single long line kills a whole billing run.</summary>
+        private const int DESC_MAX = 100;
+
+        /// <summary>A description trimmed to what the column accepts, with an ellipsis so a reader can
+        /// tell it was cut. Everything composed here is written to fit; this is the backstop for what
+        /// comes from the book itself -- an item description or a duty label nobody here controls.</summary>
+        private static string Fit(string text)
+        {
+            string t = text ?? "";
+            return t.Length <= DESC_MAX ? t : t.Substring(0, DESC_MAX - 1) + "\u2026";
+        }
+
         private static void AddTextRow(AutoCount.Invoicing.Sales.Invoice.Invoice doc,
             string description, string furtherDescription)
         {
             AutoCount.Invoicing.Sales.Invoice.InvoiceDetail d = doc.AddDetail();
-            d.Description = description;
+            d.Description = Fit(description);
             if (!string.IsNullOrEmpty(furtherDescription)) d.FurtherDescription = furtherDescription;
             d.AccNo = null;
             d.AddToSubTotal = false;
@@ -571,10 +708,35 @@ namespace ServiceContractPhotocopier.Classes
             List<string> rows = new List<string>();
             if (row == null || row.Leader == null) return rows;
             MeterBillLine ln = row.Leader;
-            if (ln.IsCommittedMin) return rows;
+            if (ln.IsWaiveMeter)
+            {
+                // Which machines earned the credit and which did not. Without it a merged contra is a
+                // single negative figure covering several separate deals, and nobody can check it.
+                if (!row.IsMerged) return rows;
+                foreach (MeterBillLine m in row.Members)
+                    rows.Add(NameOf(m) + " : " +
+                             (m.Charge < 0m
+                                ? "waived " + (-m.Charge).ToString("n2")
+                                : "target not reached, rental charged"));
+                return rows;
+            }
+            if (ln.IsCommittedMin)
+            {
+                // A minimum on ONE machine explains itself on the line above. A merged one cannot --
+                // its figure is several machines' shortfalls added up, and a customer asked to pay it
+                // is entitled to see which machine contributed what. One row each, the same shape the
+                // meter rows use: what was owed, what was printed, what is left to pay.
+                if (!row.IsMerged) return rows;
+                foreach (MeterBillLine m in row.Members)
+                    rows.Add(NameOf(m) + " : minimum " + m.CommittedAmount.ToString("n2") +
+                             ", copies " + m.PrintedAmount.ToString("n2") +
+                             (m.Charge > 0m ? ", short " + m.Charge.ToString("n2")
+                                            : ", over the minimum"));
+                return rows;
+            }
             if (ln.IsFlat)
             {
-                decimal freeMonths = row.IsMerged ? row.FocApplied : ln.Foc;
+                decimal freeMonths = row.IsMerged ? row.FocAllowed : ln.Foc;
                 if (freeMonths > 0m) rows.Add("Meter FOC Qty : " + Num(freeMonths));
                 return rows;
             }
@@ -601,14 +763,19 @@ namespace ServiceContractPhotocopier.Classes
                 ? "Current Meter Reading : " + Num(showCurrent)
                 : "Current Meter Reading (" + curDateStr + ") : " + Num(showCurrent));
 
-            rows.Add(periodMode
+            rows.Add(periodMode || lastDateStr.Length == 0
                 ? "Previous Meter Reading : " + Num(showLast)
                 : "Previous Meter Reading (" + lastDateStr + ") : " + Num(showLast));
 
             // Which machines are on this row. A single-machine row already says so on the charge
             // line, so only a merged one needs the list -- Pontian prints exactly this, all six
             // serials against one BK line of 74,722.
-            if (row.IsMerged)
+            //
+            // The SAME tick governs it. There are two serial blocks on a meter line -- this one,
+            // inside the reading breakdown, and the one under the model -- and turning the tick off
+            // silenced only the second, so a thirty-six machine line still printed thirty-six
+            // serials three lines further down. One question, one answer, both places.
+            if (row.IsMerged && ln.ShowSerial)
                 rows.Add("S/N : " + SerialList(row));
 
             // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free band
@@ -616,11 +783,19 @@ namespace ServiceContractPhotocopier.Classes
             // raw column here used to show a FOC that was never deducted.
             // A ladder meter's FOC is the ladder's own free band (usage - billed copies), since the
             // engine ignores its FOCQty column -- printing the raw column showed a FOC never deducted.
-            decimal focApplied = row.IsMerged ? row.FocApplied
-                                              : (ln.Usage - ln.BillCopies - ln.RebateQty);
-            if (focApplied < 0m) focApplied = 0m;
-            if (focApplied > 0m)
-                rows.Add("Meter FOC Qty : " + Num(focApplied));
+            // The ALLOWANCE, not what this month happened to use. A machine allowed 5,000 free
+            // copies that printed 4,813 was printing "Meter FOC Qty : 4813" -- which reads as if
+            // the allowance were 4,813, and would say something different every month. The
+            // customer's own invoice prints 5000, because that is the term of the deal.
+            //
+            // A ladder meter has no allowance column of its own -- its free band comes out of the
+            // bands -- so there the applied figure IS the allowance and is still what prints.
+            decimal focShow = row.IsMerged
+                ? row.FocAllowed
+                : (ln.Foc > 0m ? ln.Foc : ln.Usage - ln.BillCopies - ln.RebateQty);
+            if (focShow < 0m) focShow = 0m;
+            if (focShow > 0m)
+                rows.Add("Meter FOC Qty : " + Num(focShow));
 
             // The copies the rebate removed, shown the way Kastam and Tangkak show them
             // ("Meter Rebate Qty (3%) : 141") so the arithmetic on the line is followable.
@@ -652,6 +827,11 @@ namespace ServiceContractPhotocopier.Classes
         /// <para>Opt-in with the rest: a contract with no Billing Format keeps the bare meter-type
         /// description it has always had.</para>
         /// </summary>
+        /// <summary>A line break inside one printed description. Spelled out here because the escape
+        /// is easy to lose in an edit and a literal backslash-r on an invoice is not a typo anyone
+        /// spots until a customer does.</summary>
+        private static readonly string BREAK = "\r\n";
+
         public static string ComposeFoldedDescription(ScpFoldedLine row, string baseText)
         {
             if (row == null || row.Leader == null) return baseText;
@@ -663,14 +843,31 @@ namespace ServiceContractPhotocopier.Classes
             if (ln.IsRental && ln.RentalMonths > 0)
                 head += " (" + ScpInvoiceLayout.RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
 
+            // A rental the deal gives free this month says so ON THE LINE. The amount column
+            // prints 0.00 -- writing the word "FOC" there is the report layout's decision, and
+            // the book has no layout of its own -- but the description is ours, and a customer
+            // reading "MONTHLY RENTAL (3/36) - FOC" over a zero needs nothing explained.
+            if (ln.FreeThisMonth) head += " - FOC";
+
             // The duty labels the machines carry. The old system had them baked into the item code --
             // MEDIUM DUTY "30-50 ppm" - IRADX4935I was an item, and a customer with three duty classes
             // needed three item codes -- so the words are familiar to the customer and belong on the
             // line. Where they go depends on what the format says the machine line names.
             char shows = ln.MachineLineShows;
             string duty = LineLabels(row);
+            // The duty words ride on the charge name, the way the customer's own invoices print
+            // them -- but only while the two together still fit the 100-character column. A row
+            // covering three duty classes runs to 107 and would be cut off mid-word; there the
+            // words take a line of their own, which the document prints as its own row underneath.
+            // Nothing is lost either way, and the common case still reads as one sentence.
+            string dutyOwnLine = "";
+            bool dutyAlreadySaid = false;
             if (duty.Length > 0 && shows == ScpBillingFormat.MACHINE_LINE_BOTH)
-                head += "  " + duty;
+            {
+                if (head.Length + 2 + duty.Length <= DESC_MAX) head += "  " + duty;
+                else dutyOwnLine = duty;
+                dutyAlreadySaid = true;
+            }
 
             // "Label only" means the line names the CLASS of machine and not the machine: no model
             // and no serial. That is how this business printed before ATP -- MEDIUM HEAVY DUTY
@@ -683,24 +880,72 @@ namespace ServiceContractPhotocopier.Classes
             // what is being billed -- and a line gone blank is indistinguishable from a bug.
             bool labelOnly = shows == ScpBillingFormat.MACHINE_LINE_LABEL && duty.Length > 0;
 
+            // The two ticks. "Label only" still means neither, so an old contract prints exactly what
+            // it printed; a contract that has answered the ticks answers for itself.
+            //
+            // Nothing at all is not an option. A line that names neither its class, its model nor
+            // its machines says only "MONTHLY RENTAL" over a number, and the customer has no way to
+            // ask about it -- so when the ticks would leave it blank, the model still prints. It is
+            // the same reason "label only" falls back to the model on an unlabelled machine: a line
+            // gone blank is indistinguishable from a bug.
+            //
+            // "Already said" matters. When the format puts the duty words on the charge sentence,
+            // repeating them underneath printed the class TWICE on every line -- MONTHLY RENTAL
+            // (13/36) HEAVY DUTY "105 cpm" over HEAVY DUTY "105 cpm" (2 UNIT). The fallback is for
+            // a line that would otherwise say nothing, not for one that has already said it.
+            bool haveSpareDuty = duty.Length > 0 && !dutyAlreadySaid;
+            // Blank means the line names NOTHING -- no class anywhere (charge sentence included),
+            // no serials. A class already on the charge sentence is still a name, so turning both
+            // ticks off there leaves the unit count and nothing more, which is what was asked for.
+            bool wouldSayNothing = !ln.ShowSerial && duty.Length == 0;
+            bool wantModel = !labelOnly && (ln.ShowModel || wouldSayNothing);
+            bool wantSerial = !labelOnly && ln.ShowSerial;
+
             System.Text.StringBuilder tail = new System.Text.StringBuilder();
             if (labelOnly)
             {
                 tail.Append(duty);
             }
+            else if (!wantModel && haveSpareDuty)
+            {
+                // Model turned off and the class has not been named yet -- name it here.
+                tail.Append(duty);
+            }
+            else if (!wantModel)
+            {
+                // Model off, class already on the charge sentence: the unit count alone follows.
+            }
             else
             {
                 List<string> models = new List<string>();
-                foreach (MeterBillLine m in row.Members)
+                foreach (MeterBillLine m in (row.Covers != null && !row.IsMerged ? row.Covers : row.Members))
                 {
                     string mc = (m.ModelCode ?? "").Trim();
                     if (mc.Length > 0 && !models.Contains(mc)) models.Add(mc);
                 }
                 if (models.Count > 0)
-                    tail.Append("MODEL:").Append(string.Join(", ", models.ToArray()));
+                    tail.Append("Model: ").Append(string.Join(", ", models.ToArray()));
             }
 
-            if (!row.IsMerged)
+            if (!row.IsMerged && row.Covers != null)
+            {
+                // A group-scoped term is one meter on one machine, but it is ABOUT the whole group --
+                // DEMO-19's single waive takes the rental off all three. Naming only the machine the
+                // meter sits on reads as a credit for that machine, and the customer asks about the
+                // other two. So it names them the way the rental line above it does.
+                // Same rule as the merged row below: say it only where the Qty column does not.
+                if (ln.ShowUnits && row.PrintQty != row.Covers.Count)
+                {
+                    if (tail.Length > 0) tail.Append("  ");
+                    tail.Append("(").Append(row.Covers.Count).Append(" UNIT)");
+                }
+                if (wantSerial)
+                {
+                    string cs = SerialsOf(row.Covers);
+                    if (cs.Length > 0) tail.Append(BREAK).Append("S/N: ").Append(cs);
+                }
+            }
+            else if (!row.IsMerged)
             {
                 // A row that stands for ONE machine names it, whatever the format says about models.
                 // "Label only" drops the serial from a merged row because that row is about a group
@@ -709,27 +954,37 @@ namespace ServiceContractPhotocopier.Classes
                 string sn = (ln.SerialNumber ?? "").Trim();
                 if (sn.Length > 0)
                 {
-                    if (tail.Length > 0) tail.Append("  ");
-                    tail.Append("S/N:").Append(sn);
+                    if (tail.Length > 0) tail.Append("    ");
+                    tail.Append("S/N: ").Append(sn);
                 }
             }
             else
             {
-                if (tail.Length > 0) tail.Append("  ");
-                tail.Append("(").Append(row.Units).Append(" UNIT)");
+                // The unit count, unless the Qty column already IS it.
+                //
+                // A merged RENTAL bills one row of N machines, so Qty prints N and UOM prints UNIT
+                // -- and "(2 UNIT)" underneath said the same thing a third time. A merged METER row
+                // bills COPIES, so its Qty is 69,393 and the machine count appears nowhere else;
+                // there it is the only thing on the line that answers "how many machines".
+                if (ln.ShowUnits && row.PrintQty != row.Units)
+                {
+                    if (tail.Length > 0) tail.Append("  ");
+                    tail.Append("(").Append(row.Units).Append(" UNIT)");
+                }
 
                 // Which machines those units ARE. A meter line already lists them under its readings
                 // ("S/N : ..." in the breakdown block), but a flat line has no breakdown block at all
                 // -- so a merged rental printed "5 UNIT" and never said which five, and the customer
                 // could not tell one 5-unit rental line from another. Its own line, because a list of
                 // serials run onto the end of the model list reads as one more model.
-                if (ln.IsFlat && !labelOnly)
+                if (ln.IsFlat && wantSerial)
                 {
                     string serials = SerialList(row);
-                    if (serials.Length > 0) tail.Append("\r\n").Append("S/N:").Append(serials);
+                    if (serials.Length > 0) tail.Append(BREAK).Append("S/N: ").Append(serials);
                 }
             }
-            return tail.Length == 0 ? head : head + "\r\n" + tail;
+            if (dutyOwnLine.Length > 0) head += BREAK + dutyOwnLine;
+            return tail.Length == 0 ? head : head + BREAK + tail;
         }
 
         /// <summary>The duty labels on a printed row, each one once, in the order the machines appear:

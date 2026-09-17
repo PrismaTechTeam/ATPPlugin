@@ -193,12 +193,21 @@ namespace ServiceContractPhotocopier.Classes
 
                             // Billing-period guard: stamp the staging row so this meter + period can
                             // never be invoiced twice (Generate skips stamped rows).
+                            // A meter + period another run stamped in the meantime (two PCs, one preview
+                            // each) is refused: the error rolls this stamp back and the caller deletes the
+                            // invoice just saved, instead of overwriting the first invoice's stamp.
                             SqlCommand st = new SqlCommand(
                                 "UPDATE dbo.zSCP2_MeterEntry SET InvoicedDocKey=@dk, InvoicedDocNo=@dn, InvoicedAt=GETDATE(), StrategyCode=@sc " +
-                                "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo; " +
-                                "IF @@ROWCOUNT=0 INSERT INTO dbo.zSCP2_MeterEntry " +
+                                "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
+                                "  AND InvoicedDocKey IS NULL AND ISNULL(InvoicedDocNo,'') = ''; " +
+                                "IF @@ROWCOUNT=0 " +
+                                "BEGIN " +
+                                "  IF EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
+                                "    RAISERROR('This meter and period was invoiced by another run.', 16, 1); " +
+                                "  ELSE INSERT INTO dbo.zSCP2_MeterEntry " +
                                 "  (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,InvoicedDocKey,InvoicedDocNo,InvoicedAt,StrategyCode) " +
-                                "  VALUES (@imk,@yr,@mo,@rd2,@dt2,@src,@dk,@dn,GETDATE(),@sc)", cn, tx);
+                                "  VALUES (@imk,@yr,@mo,@rd2,@dt2,@src,@dk,@dn,GETDATE(),@sc) " +
+                                "END", cn, tx);
                             st.Parameters.AddWithValue("@dk", invoiceDocKey);
                             st.Parameters.AddWithValue("@dn", docNo ?? "");
                             st.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
@@ -274,6 +283,17 @@ namespace ServiceContractPhotocopier.Classes
                         {
                             // Synthesized lines (COMMIT-MIN rule top-up) have no physical meter to stamp.
                             if (ln.ItemMeterKey <= 0) continue;
+                            // Already stamped by another run since the rows were read: leave it alone -- no
+                            // second roll-forward, no second free month used, no overwriting its invoice.
+                            using (SqlCommand already = new SqlCommand(
+                                "SELECT COUNT(*) FROM dbo.zSCP2_MeterEntry WITH (UPDLOCK, HOLDLOCK) WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
+                                "  AND (InvoicedDocKey IS NOT NULL OR ISNULL(InvoicedDocNo,'') <> '')", cn, tx))
+                            {
+                                already.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
+                                already.Parameters.AddWithValue("@yr", _periodYear);
+                                already.Parameters.AddWithValue("@mo", _periodMonth);
+                                if (Convert.ToInt32(already.ExecuteScalar()) > 0) continue;
+                            }
                             // A flat/rental meter with FOC months remaining is FREE this period (RM0) —
                             // the free-months counter is decremented so rent resumes when it hits 0.
                             bool freeRental = ln.IsFlat && ln.Foc > 0m;
