@@ -1,4 +1,4 @@
-# Service Contract Photocopier — 1.5.0.0 (UAT)
+# Service Contract Photocopier — 1.5.0.1 (UAT)
 
 The AutoCount plug-in for photocopier service, rental and meter billing.
 This build is for **user acceptance testing**: use it on a test copy of the account book,
@@ -6,11 +6,14 @@ not on the live one.
 
 | | |
 |---|---|
-| Version | **1.5.0.0** |
-| File | `ATP-ServiceContract-1.5.0.0-uat.app` |
-| Built | 17 September 2026 |
+| Version | **1.5.0.1** |
+| File | `ATP-ServiceContract-1.5.0.1-uat.app` |
+| Built | 18 September 2026 |
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
-| Source | git tag `v1.0.0-uat` |
+| Source | git tag `v1.0.1-uat` |
+
+**1.5.0.1 replaces 1.5.0.0**, which would not install on an account book that had never had the
+plug-in. Nothing else changed. If 1.5.0.0 was already tried on this book, install 1.5.0.1 over it.
 
 Four documents sit beside this one:
 
@@ -32,5 +35,5 @@ Four documents sit beside this one:
    every other recipient is skipped and the send log says so. This is so a test run against a book
    full of real addresses cannot mail them. If bulk email looks like it "did nothing", this is why.
 
-**Report a problem with the version on it.** `1.5.0.0` — please include it in any screenshot,
+**Report a problem with the version on it.** `1.5.0.1` — please include it in any screenshot,
 along with the contract number and the month.

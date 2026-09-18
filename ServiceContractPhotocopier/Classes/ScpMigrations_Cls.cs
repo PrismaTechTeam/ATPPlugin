@@ -226,13 +226,16 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v12_MergeGroup.sql", asm);   // which machines print as ONE line
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v13_LineGroupCode_60.sql", asm);  // room for the labels they print
             RunDDL(dbsetting, "02_Update_zSCP2_BillingFormat_v2_MachineLineShows.sql", asm);  // model / label / both
+            // The new rules stop riding on a name: their own switch, their own wording column.
+            // BEFORE v16: v15 is what creates zSCP2_Contract.MachineLineShows, and v16 reads it. They
+            // used to run the other way round, which only ever worked on a book that already had the
+            // column -- a new book failed here and the plugin would not load (18/9).
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v15_UseNewLayout.sql", asm);
             // ...and then the model and the serials become two questions, because "model yes,
             // serials no" is what a thirty-six machine line needs and the one column could not say it.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v16_ShowModelSerial.sql", asm);
             // ...and the unit count, for the same reason.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v17_ShowUnits.sql", asm);
-            // The new rules stop riding on a name: their own switch, their own wording column.
-            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v15_UseNewLayout.sql", asm);
             // Black and colour group on their own, apart from the rental.
             RunDDL(dbsetting, "02_Update_zSCP2_Item_v14_MeterGroup.sql", asm);
             // A line carries a price for each charge, plus its minimum and its waive.

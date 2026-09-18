@@ -94,5 +94,5 @@ month's copies rather than the machine's whole life.
 
 ## What to send back
 
-The version (`1.5.0.0`), the contract number, the month, and what you expected against what you got.
+The version (`1.5.0.1`), the contract number, the month, and what you expected against what you got.
 A screenshot of the screen you were on says more than a description.

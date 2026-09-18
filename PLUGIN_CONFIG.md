@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.0
+- **Version:** 1.5.0.1
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.1 (2026-09-18) — install fix:
+    1. The plug-in now installs on an account book that has never had it. 1.5.0.0 stopped while preparing the database ("Invalid column name 'MachineLineShows'") and would not load. A book where 1.5.0.0 already stopped half-way is finished off by this version; nothing has to be cleaned up first.
+
     v1.5.0.0 (2026-09-17) — Service & Contract billing:
     1. Billing engine: a month's readings, prices and free copies become the invoices they should — one per machine, per bill group, per customer, or the rental billed apart. One invoice per machine and rental-apart outrank a bill group.
     2. Meter Invoice Run: every invoice the day would produce, what each is waiting for, and "Show all overdue" for every billing date already gone by, this month and the five before it.

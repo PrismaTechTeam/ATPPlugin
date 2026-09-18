@@ -1,4 +1,4 @@
-# Installing 1.5.0.0
+# Installing 1.5.0.1
 
 ## Before you start
 
@@ -7,11 +7,21 @@
   (see below), and uninstalling the plug-in does not remove them.
 - Close AutoCount on every other machine that opens the same book.
 
+## If 1.5.0.0 was installed and would not load
+
+1.5.0.0 stopped while preparing a new account book with:
+
+> Invalid column name 'MachineLineShows'
+
+and the plug-in refused to load. **Install 1.5.0.1 straight over it** — there is nothing to
+uninstall or clean up first. 1.5.0.1 picks up exactly where 1.5.0.0 stopped and finishes the job;
+it was tested on a book left in that half-done state, and on a book that never had the plug-in.
+
 ## Steps
 
-1. Double-click **`ATP-ServiceContract-1.5.0.0-uat.app`**.
+1. Double-click **`ATP-ServiceContract-1.5.0.1-uat.app`**.
    AutoCount opens its Plug-in Manager install dialog.
-2. Check it reads **Service Contract Photocopier, version 1.5.0.0**, then press **Install**.
+2. Check it reads **Service Contract Photocopier, version 1.5.0.1**, then press **Install**.
 3. Start AutoCount and log in to the book you are testing.
 4. The first load does the database work by itself — this takes a few seconds on a large book.
    If anything fails here the plug-in refuses to load and tells you why, rather than half-installing.
@@ -36,7 +46,7 @@ installing a later version — repeats the check and changes nothing that is alr
 ## Check it worked
 
 - The **Service & Contract** menu is on the menu bar.
-- **Help → About** (or the module's About) reads **1.5.0.0**.
+- **Help → About** (or the module's About) reads **1.5.0.1**.
 - **Service & Contract → Maintain Service Contract** opens a list, even if it is empty.
 
 If the menu is missing, the plug-in did not load: AutoCount's Plug-in Manager will say whether it

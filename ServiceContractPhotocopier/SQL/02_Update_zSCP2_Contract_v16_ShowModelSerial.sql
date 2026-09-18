@@ -35,13 +35,25 @@ GO
 
 -- One-time backfill from the old three-value column. Guarded on the marker below so re-running the
 -- migration cannot undo a choice somebody has since made on the screen.
+--
+-- The UPDATE is inside EXEC on purpose. SQL Server compiles a whole batch before it runs any of it,
+-- so a plain UPDATE naming MachineLineShows fails on a book where that column does not exist yet --
+-- even though the IF around it would have skipped it. That is exactly a NEW book: MachineLineShows
+-- is created by v15, and on a fresh install nothing has created it by the time this line is read.
+-- Every book we develop against has had the column for months, which is why this never showed
+-- until the plugin went on to a customer's book and refused to load (18/9).
+--
+-- No column means no contract ever chose "label only", so there is nothing to carry across: the
+-- defaults above ('Y', 'Y') are already the right answer, and the marker is still set so this
+-- never runs again.
 IF NOT EXISTS (SELECT 1 FROM sys.extended_properties
                 WHERE major_id = OBJECT_ID(N'[dbo].[zSCP2_Contract]')
                   AND name = N'ATP_ShowModelSerial_Backfilled')
 BEGIN
-    UPDATE dbo.zSCP2_Contract
-       SET ShowModelOnLine  = CASE WHEN UPPER(ISNULL(MachineLineShows,'B')) = 'L' THEN 'N' ELSE 'Y' END,
-           ShowSerialOnLine = CASE WHEN UPPER(ISNULL(MachineLineShows,'B')) = 'L' THEN 'N' ELSE 'Y' END;
+    IF COL_LENGTH(N'dbo.zSCP2_Contract', N'MachineLineShows') IS NOT NULL
+        EXEC(N'UPDATE dbo.zSCP2_Contract
+                  SET ShowModelOnLine  = CASE WHEN UPPER(ISNULL(MachineLineShows,''B'')) = ''L'' THEN ''N'' ELSE ''Y'' END,
+                      ShowSerialOnLine = CASE WHEN UPPER(ISNULL(MachineLineShows,''B'')) = ''L'' THEN ''N'' ELSE ''Y'' END');
 
     EXEC sys.sp_addextendedproperty
          @name = N'ATP_ShowModelSerial_Backfilled', @value = N'v16',

@@ -1,4 +1,4 @@
-# Taking 1.5.0.0 back out
+# Taking 1.5.0.1 back out
 
 ## The quick way — stop it loading
 
@@ -42,11 +42,11 @@ needs the current one uninstalled first.
 
 ## Rebuilding this exact build
 
-Source is at git tag **`v1.0.0-uat`** on `main`. The file you were given is:
+Source is at git tag **`v1.0.1-uat`** on `main`. The file you were given is:
 
 ```
-ATP-ServiceContract-1.5.0.0-uat.app
-SHA256  87117F48DB49D872BADCD0729FC897F2BDAA5A5189B9EB0085FD84D60E1930CB
+ATP-ServiceContract-1.5.0.1-uat.app
+SHA256  376F22131E3454ACC6166F9BD9FC8D1D71BB33D7E7E60A8B9129A27840C76E9C
 ```
 
 Check it with `Get-FileHash <file> -Algorithm SHA256` before installing if it reached you by e-mail
