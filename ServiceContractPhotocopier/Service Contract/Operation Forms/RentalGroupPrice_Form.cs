@@ -1500,9 +1500,13 @@ namespace ServiceContractPhotocopier
         private void RgSplit_Changed(object sender, EventArgs e)
         {
             string want = ((RgSplit.EditValue == null) ? "ONE" : Convert.ToString(RgSplit.EditValue));
-            if (want != "ONE" && CountWaives() > 0)
+            // Only the splits that put the rental on an invoice of its own break a waive -- the same test
+            // as WaiveFits. "One invoice per machine" keeps each machine's rental and copies together, so
+            // it used to take the waive away for nothing.
+            bool rentalApart = want == "RS" || want == "PMS";
+            if (rentalApart && CountWaives() > 0)
             {
-                if (XtraMessageBox.Show("A rental waive only works when everything is on one invoice — it takes money off the rental because of what the copies came to, and the two have to be on the same page." + Environment.NewLine + Environment.NewLine + "Splitting the invoice removes the waive on this contract. Continue?", "Rental waive", MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation) != DialogResult.Yes)
+                if (XtraMessageBox.Show("A rental waive only works when the rental and its copies are on the same invoice — it takes money off the rental because of what the copies came to." + Environment.NewLine + Environment.NewLine + "Sending the rental on an invoice of its own removes the waive on this contract. Continue?", "Rental waive", MessageBoxButtons.YesNo, MessageBoxIcon.Exclamation) != DialogResult.Yes)
                 {
                     _suppressSplit = true;
                     try

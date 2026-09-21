@@ -1,4 +1,4 @@
-# Service Contract Photocopier — 1.5.0.1 (UAT)
+# Service Contract Photocopier — 1.5.0.2 (UAT)
 
 The AutoCount plug-in for photocopier service, rental and meter billing.
 This build is for **user acceptance testing**: use it on a test copy of the account book,
@@ -6,13 +6,15 @@ not on the live one.
 
 | | |
 |---|---|
-| Version | **1.5.0.1** |
-| File | `ATP-ServiceContract-1.5.0.1-uat.app` |
-| Built | 18 September 2026 |
+| Version | **1.5.0.2** |
+| File | `ATP-ServiceContract-1.5.0.2-uat.app` |
+| Built | 21 September 2026 |
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
-| Source | git tag `v1.0.1-uat` |
+| Source | git tag `v1.0.2-uat` |
 
-**1.5.0.1 replaces 1.5.0.0**, which would not install on an account book that had never had the
+**1.5.0.2 replaces 1.5.0.1**: on a contract that sends the rental on its own invoice, "Waive the rental" can no longer be ticked (it used to waive the rental every month). Install it straight over 1.5.0.1.
+
+**1.5.0.1 replaced 1.5.0.0**, which would not install on an account book that had never had the
 plug-in. Nothing else changed. If 1.5.0.0 was already tried on this book, install 1.5.0.1 over it.
 
 Four documents sit beside this one:

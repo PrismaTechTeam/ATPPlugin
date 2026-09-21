@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.1
+- **Version:** 1.5.0.2
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,10 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.2 (2026-09-21) — rental waive fix:
+    1. On a contract that sends the rental on an invoice of its own, "Waive the rental" can no longer be ticked: it says why instead. It used to switch on a waive with no copy threshold at all, which waived the rental every month. Free months still work there.
+    2. Changing a contract to "one invoice per machine" no longer takes its rental waive away: each machine's rental and copies are still on the same invoice. Only "a rental invoice and a meter invoice" and "per machine, rental apart" remove it, and they still ask first.
+
     v1.5.0.1 (2026-09-18) — install fix:
     1. The plug-in now installs on an account book that has never had it. 1.5.0.0 stopped while preparing the database ("Invalid column name 'MachineLineShows'") and would not load. A book where 1.5.0.0 already stopped half-way is finished off by this version; nothing has to be cleaned up first.
 

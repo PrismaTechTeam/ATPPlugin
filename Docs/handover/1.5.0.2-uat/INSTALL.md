@@ -19,7 +19,7 @@ it was tested on a book left in that half-done state, and on a book that never h
 
 ## Steps
 
-1. Double-click **`ATP-ServiceContract-1.5.0.1-uat.app`**.
+1. Double-click **`ATP-ServiceContract-1.5.0.2-uat.app`**.
    AutoCount opens its Plug-in Manager install dialog.
 2. Check it reads **Service Contract Photocopier, version 1.5.0.1**, then press **Install**.
 3. Start AutoCount and log in to the book you are testing.

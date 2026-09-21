@@ -9,14 +9,18 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.5.0.1</Version>
+    <Version>1.5.0.2</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.5.0.1 (2026-09-18) — install fix:
+    <WhatsNew>v1.5.0.2 (2026-09-21) — rental waive fix:
+1. On a contract that sends the rental on an invoice of its own, "Waive the rental" can no longer be ticked: it says why instead. It used to switch on a waive with no copy threshold at all, which waived the rental every month. Free months still work there.
+2. Changing a contract to "one invoice per machine" no longer takes its rental waive away: each machine's rental and copies are still on the same invoice. Only "a rental invoice and a meter invoice" and "per machine, rental apart" remove it, and they still ask first.
+
+v1.5.0.1 (2026-09-18) — install fix:
 1. The plug-in now installs on an account book that has never had it. 1.5.0.0 stopped while preparing the database ("Invalid column name 'MachineLineShows'") and would not load. A book where 1.5.0.0 already stopped half-way is finished off by this version; nothing has to be cleaned up first.
 
 v1.5.0.0 (2026-09-17) — Service &amp; Contract billing:

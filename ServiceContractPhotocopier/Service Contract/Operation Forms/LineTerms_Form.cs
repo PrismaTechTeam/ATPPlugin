@@ -130,6 +130,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// re-type a figure printed two inches above is asking them to make a typo.</summary>
         private readonly decimal _lineRental;
         private readonly bool _allowMin;
+        /// <summary>This rental goes out on an invoice of its own ("a rental invoice and a meter
+        /// invoice", or per machine with the rental apart), so a waive has nothing to be judged by.</summary>
+        private readonly bool _rentalApart;
         private bool _oneMachine;
 
         public LineTerms_Form(string lineName, int machines, decimal minCharge,
@@ -158,6 +161,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _allowWaive = allowWaive;
             _allowUsageWaive = allowUsageWaive;
             _lineRental = lineRental;
+            // The caller hands over a reason only when the rental sits on its own invoice.
+            _rentalApart = allowWaive && !string.IsNullOrEmpty(whyNoWaive);
             LblWhyNot.Text = allowWaive ? "" : (whyNoWaive ?? "");
             MinCharge = minCharge;
             WaiveAt = waiveAt;
@@ -224,6 +229,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             OneUp();
 
             ChkMin.CheckedChanged += new EventHandler(Gate);
+            // Refused before it lands, so the box never flickers on and off.
+            ChkWaive.EditValueChanging += new DevExpress.XtraEditors.Controls.ChangingEventHandler(RefuseWaiveWhenRentalApart);
             ChkWaive.CheckedChanged += new EventHandler(WaiveSwitchedOn);
             ChkWaive.CheckedChanged += new EventHandler(Gate);
             BtnOK.Click += new EventHandler(BtnOK_Click);
@@ -287,6 +294,33 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// screen refuse at OK ("a waive with nothing coming off the rental does nothing") over a
         /// figure it already knew. Typed over the moment it is wrong; never touched again after
         /// that, so a deal that waives half the rent stays as it was keyed.</para></summary>
+        /// <summary>
+        /// A waive credits the rental because of what the copies came to, so the two have to be on the
+        /// same invoice. Where the rental goes out on an invoice of its own the tick is refused here,
+        /// before it lands.
+        ///
+        /// <para>Left alone it did land: the copy thresholds are shut on a split contract, so the waive
+        /// went on with no condition at all -- "Nothing set above: the rental is waived EVERY month",
+        /// found by the user on the client's book (21/9). Free months stay open: they read a calendar,
+        /// not a meter. Switching a contract that already has a waive to a split is guarded from the
+        /// other side, in RentalGroupPrice_Form.RgSplit_Changed.</para>
+        /// </summary>
+        private void RefuseWaiveWhenRentalApart(object sender, DevExpress.XtraEditors.Controls.ChangingEventArgs e)
+        {
+            if (!_rentalApart) return;
+            if (!(e.NewValue is bool) || !(bool)e.NewValue) return;   // only switching it ON is refused
+            e.Cancel = true;
+            XtraMessageBox.Show(this,
+                "This contract sends the rental on an invoice of its own, so the rental cannot be waived here." +
+                Environment.NewLine + Environment.NewLine +
+                "A waive takes money off the rental because of what the copies came to, and the two have to be " +
+                "on the same invoice. To waive the rental, first set \"This contract sends\" to one invoice for " +
+                "everything, or one invoice per machine." +
+                Environment.NewLine + Environment.NewLine +
+                "Free months still work: they read a calendar, not a meter.",
+                "Waive the rental", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
         private void WaiveSwitchedOn(object sender, EventArgs e)
         {
             if (!ChkWaive.Checked || _lineRental <= 0m) return;
