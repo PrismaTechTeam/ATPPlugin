@@ -12,9 +12,14 @@ Everything is under **Service & Contract**.
 3. **Meters & Pricing** — this is the deal. Each line says what the invoice will print and which
    machines it covers. The heading above tells you **how many invoices this contract sends**.
 4. **View Sample Invoice** — the real invoice layout, with no reading and no posting.
+5. **Calculation Test** — key in each meter's initial and current reading and see what the contract
+   charges: the copies, FOC, tier price, rebate, minimum charge, the amount of every meter, which
+   invoice it goes on and the total, with the working written out. Change a price, the FOC or the
+   minimum there to try another deal. Nothing is saved.
 
 **Look for:** does the sample match what you agreed with this customer — one invoice or several,
 the rental together or apart, black and colour on one line or two?
+Does Calculation Test give the amount you would work out by hand for the same readings?
 
 ---
 

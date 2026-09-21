@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.2
+- **Version:** 1.5.0.3
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.3 (2026-09-21) — Calculation Test:
+    1. A contract now has a Calculation Test button (ribbon, Billing group). Key in each meter's initial and current reading and it shows what the contract bills: the copies, FOC, tier price, rebate and minimum charge, the amount of every meter, the invoice each line goes on and the total, with the working written out step by step. Price, tier price, FOC, rebate and minimum charge can be changed there to try another deal. Nothing is saved and no invoice is created.
+
     v1.5.0.2 (2026-09-21) — rental waive fix:
     1. On a contract that sends the rental on an invoice of its own, "Waive the rental" can no longer be ticked: it says why instead. It used to switch on a waive with no copy threshold at all, which waived the rental every month. Free months still work there.
     2. Changing a contract to "one invoice per machine" no longer takes its rental waive away: each machine's rental and copies are still on the same invoice. Only "a rental invoice and a meter invoice" and "per machine, rental apart" remove it, and they still ask first.
