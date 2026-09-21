@@ -147,8 +147,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblHint.Size = new System.Drawing.Size(1288, 20);
             this.LblHint.TabIndex = 1;
             this.LblHint.Text = "Key in each meter\'s initial and current reading. The price, tier price, FOC and m" +
-                "inimum charge come from this contract - change any of them to try another deal." +
-                " Nothing here is saved and no invoice is created.";
+                "inimum charge are the ones set on this contract, saved or not - change any of th" +
+                "em to try another deal. Nothing here is saved and no invoice is created.";
             //
             // LblMonth
             //

@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.3
+- **Version:** 1.5.0.4
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.4 (2026-09-21) — Calculation Test uses the screen's prices:
+    1. Calculation Test uses the prices set on the contract screen, saved or not: each meter's price, tier price, FOC, rebate and minimum charge, Billing Setup's agreed line prices, and the invoice split. Machines and meters added but not saved yet are included; ones taken off are left out. Every figure can still be changed in the test to try another deal. 1.5.0.3 read only the saved contract, so a contract priced but not yet saved tested at 0.00.
+
     v1.5.0.3 (2026-09-21) — Calculation Test:
     1. A contract now has a Calculation Test button (ribbon, Billing group). Key in each meter's initial and current reading and it shows what the contract bills: the copies, FOC, tier price, rebate and minimum charge, the amount of every meter, the invoice each line goes on and the total, with the working written out step by step. Price, tier price, FOC, rebate and minimum charge can be changed there to try another deal. Nothing is saved and no invoice is created.
 

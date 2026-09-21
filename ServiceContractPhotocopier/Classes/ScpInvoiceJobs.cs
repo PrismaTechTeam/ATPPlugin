@@ -29,6 +29,23 @@ public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
             out int alreadyInvoiced, out Dictionary<long, string> runSnapshots,
             out string blockTitle, out string blockMessage)
         {
+            return Build(db, allRows, visibleRows, ladders, genYear, genMonth, grpMode, null,
+                out alreadyInvoiced, out runSnapshots, out blockTitle, out blockMessage);
+        }
+
+        /// <summary>
+        /// The same, with the contracts' line terms handed in rather than read. Only Calculation Test
+        /// does this: it prices agreed terms that are still on the contract screen and not yet saved.
+        /// A contract missing from <paramref name="termsOverride"/> reads its saved terms as usual.
+        /// </summary>
+        public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
+            DBSetting db, DataTable allRows, List<DataRow> visibleRows,
+            Dictionary<string, List<decimal[]>> ladders,
+            int genYear, int genMonth, string grpMode,
+            Dictionary<long, Dictionary<string, ScpLineTerms>> termsOverride,
+            out int alreadyInvoiced, out Dictionary<long, string> runSnapshots,
+            out string blockTitle, out string blockMessage)
+        {
             Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs =
                 new Dictionary<string, MeterInvoiceGenerator.InvoiceJob>();
             alreadyInvoiced = 0;
@@ -283,7 +300,9 @@ public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
                         System.Collections.Generic.Dictionary<string,
                             ServiceContractPhotocopier.Classes.ScpLineTerms>>();
                 foreach (long ckl in runCks)
-                    termsL[ckl] = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(db, ckl);
+                    termsL[ckl] = termsOverride != null && termsOverride.ContainsKey(ckl)
+                        ? termsOverride[ckl]
+                        : ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(db, ckl);
                 ServiceContractPhotocopier.Classes.ScpGroupLadder.Apply(everyLineL, termsL, ladders);
 
                 ApplyGroupLimit(jobs, runStrats, ladders);

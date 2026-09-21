@@ -199,6 +199,27 @@ namespace ServiceContractPhotocopier.Classes
             return map;
         }
 
+        /// <summary>One contract's rental prices from terms held in memory, in exactly the shape
+        /// <see cref="LoadForContracts"/> builds from the table -- rental rows only, each group under
+        /// both names <see cref="GroupKeyFor"/> can ask for. For a screen testing prices that have
+        /// not been saved yet.</summary>
+        public static Dictionary<string, decimal> RentalPricesFromTerms(Dictionary<string, ScpLineTerms> terms)
+        {
+            Dictionary<string, decimal> inner = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            if (terms == null) return inner;
+            foreach (KeyValuePair<string, ScpLineTerms> kv in terms)
+            {
+                ScpLineTerms t = kv.Value;
+                if (t == null) continue;
+                if (!string.Equals((t.Side ?? ScpLineTerms.SIDE_RENTAL).Trim(), ScpLineTerms.SIDE_RENTAL,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                string gc = (t.GroupCode ?? "").Trim();
+                inner[gc] = t.UnitPrice;
+                if (gc.Length > 0) inner["#" + gc.ToUpperInvariant()] = t.UnitPrice;
+            }
+            return inner;
+        }
+
         /// <summary>The price this machine's rental should bill at, or null when the group has not
         /// been priced. A zero price is NOT an override -- a group priced at nothing is a group
         /// nobody has filled in yet, and the machines keep their own rates.</summary>

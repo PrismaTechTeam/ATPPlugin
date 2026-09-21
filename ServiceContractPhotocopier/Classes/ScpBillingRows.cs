@@ -454,7 +454,16 @@ namespace ServiceContractPhotocopier.Classes
         if (prices.Count == 0) return;
         System.Collections.Generic.Dictionary<long, char> modes =
             ServiceContractPhotocopier.Classes.ScpInvoiceLayout.LoadRentalModes(db, keys);
+        ApplyRentalGroupPrices(rows, prices, modes);
+        }
 
+        /// <summary>The same, with the prices handed in rather than read -- for a screen testing
+        /// agreed prices that have not been saved yet (Calculation Test).</summary>
+        public static void ApplyRentalGroupPrices(DataTable rows,
+            System.Collections.Generic.Dictionary<long, System.Collections.Generic.Dictionary<string, decimal>> prices,
+            System.Collections.Generic.Dictionary<long, char> modes)
+        {
+        if (rows == null || prices == null || modes == null || prices.Count == 0) return;
         foreach (DataRow r in rows.Rows)
         {
             if (r["IsFlat"] == DBNull.Value || !Convert.ToBoolean(r["IsFlat"])) continue;
@@ -492,7 +501,16 @@ namespace ServiceContractPhotocopier.Classes
                 System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>>();
         foreach (long ck in keys)
             byContract[ck] = ServiceContractPhotocopier.Classes.ScpRentalGroupPrice.LoadTerms(db, ck);
+        ApplyMeterLinePrices(rows, byContract);
+        }
 
+        /// <summary>The same, with the terms handed in rather than read -- for a screen testing
+        /// agreed prices that have not been saved yet (Calculation Test).</summary>
+        public static void ApplyMeterLinePrices(DataTable rows,
+            System.Collections.Generic.Dictionary<long,
+                System.Collections.Generic.Dictionary<string, ServiceContractPhotocopier.Classes.ScpLineTerms>> byContract)
+        {
+        if (rows == null || byContract == null) return;
         foreach (DataRow r in rows.Rows)
         {
             if (r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"])) continue;

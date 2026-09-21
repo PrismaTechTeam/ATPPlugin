@@ -5802,9 +5802,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         /// <summary>Calculation Test — key in readings and see what this contract bills.</summary>
         /// <remarks>
-        /// The test reads the SAVED contract, because that is what billing reads: a test of what is
-        /// on the screen but not yet saved would answer a question billing never asks. So a new
-        /// contract is saved first, and unsaved changes are offered a save.
+        /// Tests the prices as they stand on this screen, saved or not: a price is set up here and
+        /// checked here, before anyone commits to it (user, 21/09 — the first version read only the
+        /// saved contract, and a contract priced but not yet saved tested at 0.00). The readings,
+        /// billing days and the contract's own answers still come from the saved contract, so it
+        /// has to have been saved once.
         /// </remarks>
         private void barCalcTest_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
@@ -5812,25 +5814,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewItems.CloseEditor();
             if (_isNew || _contractKey == 0)
             {
-                XtraMessageBox.Show("Save the contract first — the test works the money out the way billing does, " +
-                    "from the saved contract.", "Calculation Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                XtraMessageBox.Show("Save the contract once first. After that the test uses the prices on this " +
+                    "screen, saved or not.", "Calculation Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (_dirty)
-            {
-                DialogResult ans = XtraMessageBox.Show(
-                    "This contract has changes that are not saved yet. The test reads the saved contract, " +
-                    "the same as billing does." + Environment.NewLine + Environment.NewLine +
-                    "Save the changes first?", "Calculation Test",
-                    MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (ans == DialogResult.Cancel) return;
-                if (ans == DialogResult.Yes)
-                {
-                    BtnSave_Click(this, EventArgs.Empty);
-                    if (_dirty) return;   // the save did not go through; its own message said why
-                }
-            }
-            using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey))
+            CalcTestScreen screen = new CalcTestScreen();
+            screen.Items = _items;
+            screen.Terms = _lineTerms;
+            screen.BillSeparate = ChkBillSeparate.Checked;
+            screen.RentalSeparate = ChkRentalSeparate.Checked;
+            using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey, screen))
                 f.ShowDialog(this);
         }
 

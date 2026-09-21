@@ -62,15 +62,30 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private readonly Dictionary<long, string> _invoiceOf = new Dictionary<long, string>();
         private long _tierKey;
 
+        /// <summary>The contract as its screen holds it; null = the saved contract.</summary>
+        private readonly CalcTestScreen _screen;
+        /// <summary>Meters on the screen that are not saved yet, added to the test.</summary>
+        private int _unsavedMeters;
+        /// <summary>Meters on the screen that could not be placed: the contract has no saved
+        /// machine to take the contract's own settings from.</summary>
+        private int _leftOut;
+
         public CalculationTest_Form()
         {
             InitializeComponent();
         }
 
-        public CalculationTest_Form(DBSetting db, long contractKey) : this()
+        public CalculationTest_Form(DBSetting db, long contractKey) : this(db, contractKey, null)
+        {
+        }
+
+        /// <summary>Opened from the contract screen: <paramref name="screen"/> is the contract as the
+        /// screen holds it, saved or not, and its prices are the ones tested.</summary>
+        public CalculationTest_Form(DBSetting db, long contractKey, CalcTestScreen screen) : this()
         {
             _db = db;
             _contractKey = contractKey;
+            _screen = screen;
             _year = DateTime.Today.Year;
             _month = DateTime.Today.Month;
 
@@ -191,6 +206,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 Dictionary<string, List<decimal[]>> ladders;
                 _rows = ScpBillingRows.ForContract(_db, _contractKey, _year, _month, out ladders);
                 _ladders = ladders ?? new Dictionary<string, List<decimal[]>>(StringComparer.OrdinalIgnoreCase);
+                ApplyScreen(_rows, _ladders);
             }
             catch (Exception ex)
             {
@@ -261,6 +277,226 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (_ladders != null && !string.IsNullOrEmpty(multiPriceCode) && _ladders.TryGetValue(multiPriceCode, out bands))
                 return bands;
             return new List<decimal[]>();
+        }
+
+        // ------------------------------------------------------------------ the contract screen
+
+        /// <summary>
+        /// Puts the contract screen's settings on the month's rows, so the test prices what the user
+        /// set up -- saved or not -- instead of what was last saved.
+        ///
+        /// <para>The rows still come from the database, because that is where the readings, the
+        /// billing days and the contract's own answers are. What the screen can hold unsaved is laid
+        /// over them: every meter's price, minimum, FOC, rebate, tiers and waive terms, which machine
+        /// merges onto which line, the invoice split, and Billing Setup's agreed line prices. A meter
+        /// or machine that is on the screen but not saved yet is added; one taken off is left out.</para>
+        /// </summary>
+        private void ApplyScreen(DataTable rows, Dictionary<string, List<decimal[]>> ladders)
+        {
+            _unsavedMeters = 0;
+            _leftOut = 0;
+            if (_screen == null || _screen.Items == null || rows == null) return;
+
+            Dictionary<string, DataRow> types = LoadTypes();
+            Dictionary<long, DataRow> rowByMeter = new Dictionary<long, DataRow>();
+            foreach (DataRow r in rows.Rows) rowByMeter[D64(r["ItemMeterKey"])] = r;
+            Dictionary<long, ItemEditData> itemByKey = new Dictionary<long, ItemEditData>();
+            foreach (ItemEditData d in _screen.Items)
+                if (d != null && d.ItemKey > 0) itemByKey[d.ItemKey] = d;
+
+            // The saved meters in the order the screen loaded them, to pair each with its screen row.
+            DataTable saved = _db.GetDataTable(
+                "SELECT m.ItemMeterKey, m.ItemKey, ISNULL(m.MeterTypeCode,'') AS MeterTypeCode, " +
+                "ISNULL(m.MeterRole,'') AS MeterRole, ISNULL(m.MachineSerialNo,'') AS MachineSerialNo " +
+                "FROM dbo.zSCP2_ItemMeter m JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                "WHERE i.ContractKey = " + _contractKey + " ORDER BY m.ItemKey, m.ItemMeterKey", false);
+
+            HashSet<DataRow> placed = new HashSet<DataRow>();
+            List<DataRow> drop = new List<DataRow>();
+            foreach (DataRow s in saved.Rows)
+            {
+                DataRow row;
+                if (!rowByMeter.TryGetValue(D64(s["ItemMeterKey"]), out row)) continue;
+                ItemEditData d;
+                if (!itemByKey.TryGetValue(D64(s["ItemKey"]), out d)) { drop.Add(row); continue; }   // machine taken off
+                DataRow m = ScreenMeterFor(d, s, placed);
+                if (m == null) { drop.Add(row); continue; }                                           // meter taken off
+                placed.Add(m);
+                PutScreenMeter(row, d, m, types, ladders, D64(s["ItemMeterKey"]));
+            }
+            foreach (DataRow r in drop) rows.Rows.Remove(r);
+
+            // On the screen but not saved: a new meter on a machine, or a new machine. It takes the
+            // contract's own settings from a saved row -- they are the same on every row -- and its
+            // meter and machine from the screen.
+            DataRow anyRow = rows.Rows.Count > 0 ? rows.Rows[0] : null;
+            long newMeterKey = -1L;
+            long newItemKey = 9000000000L;
+            foreach (ItemEditData d in _screen.Items)
+            {
+                if (d == null || d.Meters == null) continue;
+                long itemKey = d.ItemKey > 0 ? d.ItemKey : newItemKey++;
+                DataRow template = anyRow;
+                if (d.ItemKey > 0)
+                    foreach (DataRow r in rows.Rows)
+                        if (D64(r["ItemKey"]) == d.ItemKey) { template = r; break; }
+                foreach (DataRow m in d.Meters.Rows)
+                {
+                    if (m.RowState == DataRowState.Deleted || m.RowState == DataRowState.Detached) continue;
+                    if (placed.Contains(m)) continue;
+                    string code = S(m["MeterTypeCode"]).Trim();
+                    if (code.Length == 0) continue;
+                    if (template == null) { _leftOut++; continue; }
+
+                    DataRow nr = rows.NewRow();
+                    nr.ItemArray = template.ItemArray;
+                    long meterKey = newMeterKey--;
+                    nr["ItemMeterKey"] = meterKey;
+                    nr["ItemKey"] = itemKey;
+                    nr["ServiceItemNo"] = d.ServiceItemNo ?? "";
+                    nr["SerialNo"] = d.SerialNumber ?? "";
+                    nr["ItemDesc"] = d.Description ?? "";
+                    nr["IsGroupItem"] = d.IsGroupItem;
+                    string role = S(m["MeterRole"]).Trim().ToUpperInvariant();
+                    DataRow t;
+                    types.TryGetValue(code, out t);
+                    bool typeFlat = t != null && S(t["IsFlatCharge"]) == "Y";
+                    bool typeWaive = t != null && S(t["IsRentalWaive"]) == "Y";
+                    nr["MeterType"] = code;
+                    nr["MeterTypeName"] = t != null ? S(t["Description"]) : code;
+                    nr["ACItemCode"] = t != null ? S(t["ACItemCode"]) : "";
+                    nr["Role"] = role;
+                    nr["IsFlat"] = typeFlat || typeWaive;
+                    nr["IsWaive"] = ScpStrategy.IsWaiveRole(role, typeWaive);
+                    // Never read: it starts where the screen says it starts.
+                    nr["LastReadDate"] = DBNull.Value;
+                    nr["CurrentReading"] = 0m;
+                    nr["TrackingId"] = "";
+                    nr["InvoicedDocNo"] = "";
+                    nr["LastInvNo"] = "";
+                    rows.Rows.Add(nr);
+                    PutScreenMeter(nr, d, m, types, ladders, meterKey);
+                    _unsavedMeters++;
+                }
+            }
+
+            // The contract's split, as the screen has it.
+            foreach (DataRow r in rows.Rows)
+            {
+                r["RentSep"] = _screen.RentalSeparate;
+                r["BillingMode"] = _screen.BillSeparate ? "S" : "G";
+            }
+
+            // Billing Setup's agreed line prices, as the screen has them -- through the same two
+            // passes billing runs on the saved ones.
+            Dictionary<long, Dictionary<string, decimal>> prices = new Dictionary<long, Dictionary<string, decimal>>();
+            prices[_contractKey] = ScpRentalGroupPrice.RentalPricesFromTerms(_screen.Terms);
+            List<long> keys = new List<long>();
+            keys.Add(_contractKey);
+            ScpBillingRows.ApplyRentalGroupPrices(rows, prices, ScpInvoiceLayout.LoadRentalModes(_db, keys));
+            ScpBillingRows.ApplyMeterLinePrices(rows, ScreenTerms());
+        }
+
+        /// <summary>The screen row for a saved meter: same type, role and machine, first one free.</summary>
+        private static DataRow ScreenMeterFor(ItemEditData d, DataRow saved, HashSet<DataRow> placed)
+        {
+            if (d.Meters == null) return null;
+            string code = S(saved["MeterTypeCode"]).Trim();
+            string role = S(saved["MeterRole"]).Trim();
+            string serial = S(saved["MachineSerialNo"]).Trim();
+            foreach (DataRow m in d.Meters.Rows)
+            {
+                if (m.RowState == DataRowState.Deleted || m.RowState == DataRowState.Detached) continue;
+                if (placed.Contains(m)) continue;
+                if (!string.Equals(S(m["MeterTypeCode"]).Trim(), code, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(S(m["MeterRole"]).Trim(), role, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(S(m["MachineSerialNo"]).Trim(), serial, StringComparison.OrdinalIgnoreCase)) continue;
+                return m;
+            }
+            return null;
+        }
+
+        /// <summary>One meter's terms from the screen onto its row, in the form the billing query
+        /// would have read them once saved.</summary>
+        private void PutScreenMeter(DataRow row, ItemEditData d, DataRow m,
+            Dictionary<string, DataRow> types, Dictionary<string, List<decimal[]>> ladders, long meterKey)
+        {
+            string code = S(row["MeterType"]).Trim();
+            row["UnitPrice"] = Dec(m["ChargesRate"]);
+            row["MinCharges"] = Dec(m["MinimumCharges"]);
+            row["FOCQty"] = Dec(m["FOCQty"]);
+            row["RebatePct"] = Dec(m["RebateQtyInPercent"]);
+
+            // The meter's own bands beat its price code, which beats its type's -- the billing
+            // query's order. Own bands go under a key of their own.
+            string bands = S(m["CustomTiers"]).Trim();
+            if (bands.Length > 0)
+            {
+                string key = "#SCREEN" + meterKey;
+                ladders[key] = ScpMultiPrice.ParseTiers(bands);
+                row["MultiPriceCode"] = key;
+            }
+            else
+            {
+                string own = S(m["MeterMultiPriceCode"]).Trim();
+                DataRow t;
+                string typeCode = types.TryGetValue(code, out t) ? S(t["MeterMultiPriceCode"]).Trim() : "";
+                row["MultiPriceCode"] = own.Length > 0 ? own : typeCode;
+            }
+
+            // No reading yet: the first bill counts from the screen's initial reading.
+            if (row["LastReadDate"] == DBNull.Value) row["LastReading"] = Dec(m["InitialReading"]);
+
+            row["WaiveFirstNMonths"] = m["WaiveFirstNMonths"] == DBNull.Value ? 0 : Convert.ToInt32(m["WaiveFirstNMonths"]);
+            row["WaiveTargetAmount"] = Dec(m["WaiveTargetAmount"]);
+            row["WaivePartialThreshold"] = Dec(m["WaivePartialThreshold"]);
+            row["WaivePartialAmount"] = Dec(m["WaivePartialAmount"]);
+            string ws = S(m["WaiveScope"]).Trim();
+            row["WaiveScope"] = ws.Length > 0 ? ws : "BKCL";
+            string cs = S(m["CommitScope"]).Trim().ToUpperInvariant();
+            row["CommitScope"] = cs == "G" || cs == "C" ? cs : "S";
+
+            row["MergeGroupCode"] = d.MergeGroupCode ?? "";
+            row["MergeGroupCodeMeter"] = d.MergeGroupCodeMeter ?? "";
+            row["BillGroupCode"] = ScpStrategy.SanitizeBillGroup(d.BillGroupCode ?? "");
+            row["LineGroupCode"] = d.LineGroupCode ?? "";
+            row["ModelCode"] = d.ItemCode ?? "";
+
+            // The billing query's own tests, asked of the screen's values.
+            row["UseMin"] = Dec(row["UnitPrice"]) == 0m && Dec(row["MinCharges"]) > 0m &&
+                            !ScpStrategy.IsCommittedMinRole(S(row["Role"]), code, Dec(row["MinCharges"]));
+            if (Bool(row["IsFlat"]))
+            {
+                if (Bool(row["IsWaive"])) row["EntrySource"] = "WAIVE-AUTO";
+                else if (ScpBillingRows.IsCommitRow(row)) row["EntrySource"] = "MIN-AUTO";
+                else row["EntrySource"] = Dec(row["FOCQty"]) > 0m ? "RENTAL FREE" : "RENTAL";
+            }
+        }
+
+        private Dictionary<string, DataRow> LoadTypes()
+        {
+            Dictionary<string, DataRow> map = new Dictionary<string, DataRow>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                DataTable t = _db.GetDataTable(
+                    "SELECT MeterTypeCode, ISNULL([Description],'') AS [Description], " +
+                    "ISNULL(NULLIF(ACItemCode,''), ISNULL(StockCode,'')) AS ACItemCode, " +
+                    "ISNULL(MeterMultiPriceCode,'') AS MeterMultiPriceCode, " +
+                    "ISNULL(IsFlatCharge,'N') AS IsFlatCharge, ISNULL(IsRentalWaive,'N') AS IsRentalWaive " +
+                    "FROM dbo.zSCP_MeterType", false);
+                foreach (DataRow r in t.Rows) map[S(r["MeterTypeCode"]).Trim()] = r;
+            }
+            catch { }
+            return map;
+        }
+
+        /// <summary>Billing Setup's terms as the screen holds them, for the engine; null = saved ones.</summary>
+        private Dictionary<long, Dictionary<string, ScpLineTerms>> ScreenTerms()
+        {
+            if (_screen == null) return null;
+            Dictionary<long, Dictionary<string, ScpLineTerms>> map = new Dictionary<long, Dictionary<string, ScpLineTerms>>();
+            map[_contractKey] = _screen.Terms ?? new Dictionary<string, ScpLineTerms>(StringComparer.OrdinalIgnoreCase);
+            return map;
         }
 
         // ------------------------------------------------------------------ the calculation
@@ -337,7 +573,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 int alreadyInvoiced;
                 Dictionary<long, string> snapshots;
                 jobs = ScpInvoiceJobs.Build(_db, rows, all, ladders, _year, _month,
-                    ScpBillingRows.GroupingMode(_db),
+                    ScpBillingRows.GroupingMode(_db), ScreenTerms(),
                     out alreadyInvoiced, out snapshots, out blockTitle, out blockMessage);
             }
             catch (Exception ex)
@@ -385,10 +621,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             LblTotal.Text = "Total  " + total.ToString("n2");
             if (jobs == null) ShowProblem(blockTitle + ": " + blockMessage);
-            else if (jobs.Count == 0) ShowNote("Nothing bills yet - key in a current reading.");
-            else ShowNote(jobs.Count == 1
+            else if (jobs.Count == 0) ShowNote("Nothing bills yet - key in a current reading." + ScreenWords());
+            else ShowNote((jobs.Count == 1
                 ? "Worked out by the billing engine. This contract bills on one invoice."
-                : "Worked out by the billing engine. This contract bills on " + jobs.Count + " invoices.");
+                : "Worked out by the billing engine. This contract bills on " + jobs.Count + " invoices.") + ScreenWords());
             ShowWorking();
         }
 
@@ -789,6 +1025,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return GridViewMeters.GetDataRow(GridViewMeters.FocusedRowHandle);
         }
 
+        private string ScreenWords()
+        {
+            if (_screen == null) return "";
+            string s = " Prices as set on the contract screen, saved or not.";
+            if (_unsavedMeters > 0)
+                s += " " + _unsavedMeters + " meter" + (_unsavedMeters == 1 ? "" : "s") + " not saved yet included.";
+            if (_leftOut > 0)
+                s += " " + _leftOut + " meter" + (_leftOut == 1 ? "" : "s") + " left out - save the contract once with a machine.";
+            return s;
+        }
+
         private void ShowProblem(string text)
         {
             LblFoot.Appearance.ForeColor = System.Drawing.Color.FromArgb(192, 0, 0);
@@ -807,5 +1054,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private static decimal Dec(object o) { decimal d; return (o != null && o != DBNull.Value && decimal.TryParse(o.ToString(), out d)) ? d : 0m; }
         private static long D64(object o) { long l; return (o != null && o != DBNull.Value && long.TryParse(o.ToString(), out l)) ? l : 0L; }
         private static bool Bool(object o) { return o != null && o != DBNull.Value && Convert.ToBoolean(o); }
+    }
+
+    /// <summary>
+    /// The contract as its screen holds it -- saved or not -- handed to Calculation Test so the
+    /// prices tested are the ones the user is looking at. Read only: the test never writes to it.
+    /// </summary>
+    public class CalcTestScreen
+    {
+        /// <summary>The machines and their meters (price, minimum, FOC, rebate, tiers, waive terms).</summary>
+        public List<ItemEditData> Items;
+        /// <summary>Billing Setup's agreed line prices and group tiers.</summary>
+        public Dictionary<string, ScpLineTerms> Terms;
+        /// <summary>One invoice per machine.</summary>
+        public bool BillSeparate;
+        /// <summary>The rental on an invoice of its own.</summary>
+        public bool RentalSeparate;
     }
 }

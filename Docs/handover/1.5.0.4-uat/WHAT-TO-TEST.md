@@ -15,7 +15,8 @@ Everything is under **Service & Contract**.
 5. **Calculation Test** — key in each meter's initial and current reading and see what the contract
    charges: the copies, FOC, tier price, rebate, minimum charge, the amount of every meter, which
    invoice it goes on and the total, with the working written out. Change a price, the FOC or the
-   minimum there to try another deal. Nothing is saved.
+   minimum there to try another deal. It uses the prices as they are on the contract screen,
+   saved or not, so a deal can be checked before it is saved. Nothing is saved.
 
 **Look for:** does the sample match what you agreed with this customer — one invoice or several,
 the rental together or apart, black and colour on one line or two?
