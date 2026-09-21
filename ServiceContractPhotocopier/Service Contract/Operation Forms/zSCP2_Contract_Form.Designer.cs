@@ -30,6 +30,7 @@
         private DevExpress.XtraBars.BarButtonItem barCopyFrom;
         private DevExpress.XtraBars.BarButtonItem barRentalPrice;
         private DevExpress.XtraBars.BarButtonItem barSampleInvoice;
+        private DevExpress.XtraBars.BarButtonItem barCalcTest;
         private DevExpress.XtraBars.BarButtonItem barCopyToNew;
         private DevExpress.XtraBars.BarButtonItem barCopyWhole;
         private DevExpress.XtraBars.BarButtonItem barCopySelected;
@@ -203,6 +204,7 @@
             this.barDemoFill = new DevExpress.XtraBars.BarButtonItem();
             this.barRentalPrice = new DevExpress.XtraBars.BarButtonItem();
             this.barSampleInvoice = new DevExpress.XtraBars.BarButtonItem();
+            this.barCalcTest = new DevExpress.XtraBars.BarButtonItem();
             this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
             this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
@@ -574,9 +576,10 @@
             this.barPasteWhole,
             this.barPasteItems,
             this.barDemoFill,
-            this.barSampleInvoice});
+            this.barSampleInvoice,
+            this.barCalcTest});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 16;
+            this.RibbonCtl.MaxItemId = 17;
             this.RibbonCtl.Name = "RibbonCtl";
             this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
             this.ribbonPageHome});
@@ -717,6 +720,15 @@
             this.barSampleInvoice.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barSampleInvoice.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barSampleInvoice_ItemClick);
             // 
+            // barCalcTest
+            // 
+            this.barCalcTest.Caption = "Calculation Test";
+            this.barCalcTest.Id = 16;
+            this.barCalcTest.ImageOptions.ImageUri.Uri = "CalculateSheet;Size32x32";
+            this.barCalcTest.Name = "barCalcTest";
+            this.barCalcTest.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barCalcTest.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCalcTest_ItemClick);
+            // 
             // ribbonPageHome
             // 
             this.ribbonPageHome.Groups.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPageGroup[] {
@@ -746,6 +758,7 @@
             // grpBillingTools
             // 
             this.grpBillingTools.ItemLinks.Add(this.barSampleInvoice);
+            this.grpBillingTools.ItemLinks.Add(this.barCalcTest);
             this.grpBillingTools.Name = "grpBillingTools";
             this.grpBillingTools.Text = "Billing";
             // 

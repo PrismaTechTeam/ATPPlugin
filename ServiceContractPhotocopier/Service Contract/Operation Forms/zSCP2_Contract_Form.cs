@@ -1299,6 +1299,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 barPasteWhole.ImageOptions.Image = img.GetSmallImage_PasteToClipboard();
                 barPasteItems.ImageOptions.Image = img.GetSmallImage_PasteSelectedToClipoard();
                 barDemoFill.ImageOptions.Image = img.GetLargeImage_Refresh();
+                DevExpress.Utils.Svg.SvgImage calc =
+                    DevExpress.Images.ImageResourceCache.Default.GetSvgImage("svgimages/icon%20builder/business_calculator.svg");
+                if (calc != null) barCalcTest.ImageOptions.SvgImage = calc;
             }
             catch { }   // icons are cosmetic — never block the form
         }
@@ -5795,6 +5798,40 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 RebuildItemsView();
             }
             UpdateFormatSummary();
+        }
+
+        /// <summary>Calculation Test — key in readings and see what this contract bills.</summary>
+        /// <remarks>
+        /// The test reads the SAVED contract, because that is what billing reads: a test of what is
+        /// on the screen but not yet saved would answer a question billing never asks. So a new
+        /// contract is saved first, and unsaved changes are offered a save.
+        /// </remarks>
+        private void barCalcTest_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            GridViewItems.PostEditor();
+            GridViewItems.CloseEditor();
+            if (_isNew || _contractKey == 0)
+            {
+                XtraMessageBox.Show("Save the contract first — the test works the money out the way billing does, " +
+                    "from the saved contract.", "Calculation Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (_dirty)
+            {
+                DialogResult ans = XtraMessageBox.Show(
+                    "This contract has changes that are not saved yet. The test reads the saved contract, " +
+                    "the same as billing does." + Environment.NewLine + Environment.NewLine +
+                    "Save the changes first?", "Calculation Test",
+                    MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (ans == DialogResult.Cancel) return;
+                if (ans == DialogResult.Yes)
+                {
+                    BtnSave_Click(this, EventArgs.Empty);
+                    if (_dirty) return;   // the save did not go through; its own message said why
+                }
+            }
+            using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey))
+                f.ShowDialog(this);
         }
 
         /// <summary>Sample Invoice — what this contract will print, before any reading exists.</summary>
