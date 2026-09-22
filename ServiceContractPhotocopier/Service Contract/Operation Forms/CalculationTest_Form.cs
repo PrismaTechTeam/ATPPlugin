@@ -247,7 +247,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         foreach (string f in new string[] { FIELD_INITIAL, FIELD_CURRENT, FIELD_RATE, FIELD_FOC, FIELD_REBATE })
                             if (_typed.Contains(key + "|" + f)) v[f] = p[f];
                     }
-                    v["TierText"] = flat ? "" : ScpMultiPrice.Describe(TiersOf(key, S(r["MultiPriceCode"])));
+                    List<decimal[]> bands = flat ? new List<decimal[]>() : TiersOf(key, S(r["MultiPriceCode"]));
+                    v["TierText"] = ScpMultiPrice.Describe(bands);
+                    // A tiered meter's free copies are its 0.00 band, not its FOC field -- shown the
+                    // way the meter configuration shows them (user, 22/09: "FOC did not show 100").
+                    if (bands.Count > 0) v[FIELD_FOC] = ScpMultiPrice.LadderFreeCopies(bands);
                     _view.Rows.Add(v);
                 }
             }
@@ -950,10 +954,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (D64(v["ItemMeterKey"]) == _tierKey)
                 {
                     _loading = true;
-                    try { v["TierText"] = ScpMultiPrice.Describe(bands); }
+                    try
+                    {
+                        v["TierText"] = ScpMultiPrice.Describe(bands);
+                        if (bands.Count > 0) v[FIELD_FOC] = ScpMultiPrice.LadderFreeCopies(bands);
+                        else if (!_typed.Contains(_tierKey + "|" + FIELD_FOC)) v[FIELD_FOC] = MeterFoc(_tierKey);
+                    }
                     finally { _loading = false; }
                 }
             Recalculate();
+        }
+
+        /// <summary>The meter's own FOC field, as loaded: what a meter bills free once it has no bands.</summary>
+        private decimal MeterFoc(long key)
+        {
+            if (_rows == null) return 0m;
+            foreach (DataRow r in _rows.Rows)
+                if (D64(r["ItemMeterKey"]) == key) return Dec(r["FOCQty"]);
+            return 0m;
         }
 
         private void Tiers_Changed(object sender, CellValueChangedEventArgs e) { TiersEdited(); }
@@ -977,6 +995,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string f = GridViewMeters.FocusedColumn == null ? "" : GridViewMeters.FocusedColumn.FieldName;
             // A flat charge has no meter to read and nothing to rebate.
             if (Bool(v["IsFlat"]) && (f == FIELD_INITIAL || f == FIELD_CURRENT || f == FIELD_REBATE))
+                e.Cancel = true;
+            // A tiered meter's free copies come from its bands: change them in Tier Price below.
+            if (!Bool(v["IsFlat"]) && f == FIELD_FOC && S(v["TierText"]).Length > 0)
                 e.Cancel = true;
         }
 

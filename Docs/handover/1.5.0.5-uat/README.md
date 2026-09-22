@@ -12,7 +12,7 @@ not on the live one.
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
 | Source | git tag `v1.0.5-uat` |
 
-**1.5.0.5 replaces 1.5.0.4**: Calculation Test has no Min. Charge column; each line has one Price (per copy, the monthly rental, or the committed / waive amount). Install it straight over 1.5.0.4.
+**1.5.0.5 replaces 1.5.0.4**: Calculation Test has no Min. Charge column; each line has one Price (per copy, the monthly rental, or the committed / waive amount). A tiered meter's FOC shows the tier's free copies. Install it straight over 1.5.0.4.
 
 **1.5.0.4 replaced 1.5.0.3**: Calculation Test uses the prices set on the contract screen, saved or not, and they can still be changed in the test. Install it straight over 1.5.0.3.
 
