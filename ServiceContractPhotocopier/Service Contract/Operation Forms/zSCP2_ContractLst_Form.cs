@@ -38,6 +38,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 this.BtnEdit.ImageOptions.Image = img.GetLargeImage_Edit();
                 this.BtnDelete.ImageOptions.Image = img.GetLargeImage_Delete2();
                 this.BtnRefresh.ImageOptions.Image = img.GetLargeImage_Refresh();
+                this.BtnFind.ImageOptions.Image = img.GetLargeImage_Find();
                 this.BtnExit.ImageOptions.Image = img.GetLargeImage_Close();
             }
             catch { }   // icons are cosmetic — never block the form over an image lookup
@@ -191,7 +192,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             DataRow row = GetSelectedRow();
             if (row == null) return;
-            long key = Convert.ToInt64(row["ContractKey"]);
+            OpenContractEditor(Convert.ToInt64(row["ContractKey"]));
+        }
+
+        /// <summary>Opens one contract's editor, or brings it forward when it is already open. The
+        /// list's Edit and Find's Edit both come here, so a contract opens one way only.</summary>
+        protected void OpenContractEditor(long key)
+        {
             zSCP2_Contract_Form open;
             if (_openEditors.TryGetValue(key, out open) && !open.IsDisposed)
             {
@@ -212,18 +219,55 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             DataRow row = GetSelectedRow();
             if (row == null) return;
-            long key = Convert.ToInt64(row["ContractKey"]);
-            string code = row["ContractNo"].ToString();
-            if (XtraMessageBox.Show("Delete contract '" + code + "' and all its machines / meter config?\r\n" +
-                "ALL meter reading history of its machines is permanently deleted too.",
-                "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            System.Collections.Generic.List<long> keys = new System.Collections.Generic.List<long>();
+            System.Collections.Generic.List<string> nos = new System.Collections.Generic.List<string>();
+            keys.Add(Convert.ToInt64(row["ContractKey"]));
+            nos.Add(row["ContractNo"].ToString());
+            DeleteContracts(keys, nos);
+        }
+
+        /// <summary>Asks, deletes the contracts, and says whether it did. The list's Delete and
+        /// Find's Delete both come here, so a contract is deleted one way only.</summary>
+        protected bool DeleteContracts(System.Collections.Generic.List<long> keys, System.Collections.Generic.List<string> nos)
+        {
+            if (keys == null || keys.Count == 0) return false;
+            string question = keys.Count == 1
+                ? "Delete contract '" + nos[0] + "' and all its machines / meter config?\r\n" +
+                  "ALL meter reading history of its machines is permanently deleted too."
+                : "Delete these " + keys.Count + " contracts and all their machines / meter config?\r\n" +
+                  string.Join(", ", nos.ToArray()) + "\r\n" +
+                  "ALL meter reading history of their machines is permanently deleted too.";
+            if (XtraMessageBox.Show(question, "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return false;
             try
             {
                 // FK cascade removes zSCP2_Item -> zSCP2_ItemMeter automatically.
-                _dbSetting.ExecuteNonQuery("DELETE FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + key);
+                foreach (long key in keys)
+                    _dbSetting.ExecuteNonQuery("DELETE FROM [dbo].[zSCP2_Contract] WHERE ContractKey=" + key);
                 LoadGrid();
+                return true;
             }
-            catch (Exception ex) { XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error"); }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Delete failed:\r\n" + ex.Message, "Error");
+                LoadGrid();
+                return false;
+            }
+        }
+
+        /// <summary>Find Service Contract, beside the list. One window: a second Find brings it forward.</summary>
+        private FindContract_Form _find;
+
+        private void OnFind(object sender, EventArgs e)
+        {
+            if (_find != null && !_find.IsDisposed)
+            {
+                if (_find.WindowState == FormWindowState.Minimized) _find.WindowState = FormWindowState.Normal;
+                _find.Activate();
+                return;
+            }
+            _find = new FindContract_Form(_dbSetting, OpenContractEditor, DeleteContracts);
+            _find.Show(this);
         }
 
         private void OnRefresh(object sender, EventArgs e) { LoadGrid(); }

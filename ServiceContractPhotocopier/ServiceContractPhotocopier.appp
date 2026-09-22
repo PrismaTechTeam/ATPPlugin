@@ -9,14 +9,18 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.5.0.5</Version>
+    <Version>1.5.0.6</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.5.0.5 (2026-09-22) — Calculation Test, tier FOC:
+    <WhatsNew>v1.5.0.6 (2026-09-22) — Find Service Contract:
+1. Maintain Service Contract has a Find button. Type what you have in hand - a contract number, a customer, a service item number, a serial number or a model - and tick where to look: it finds the contract and says what it was found in.
+2. Filters for status, contract expiry, one invoice or one per machine, and the rental invoice; Google-like search with OR / AND; Keep Search Result; Check All and Uncheck; Advanced Search. Edit and Delete open or delete the ticked contracts exactly as the list does.
+
+v1.5.0.5 (2026-09-22) — Calculation Test, tier FOC:
 1. On a meter priced by tier price, FOC shows the tier's free copies (its 0.00 band), as the meter configuration does. Those are changed in Tier Price below the list.
 2. The working below the list mentions the minimum charge only on a meter that has one.
 

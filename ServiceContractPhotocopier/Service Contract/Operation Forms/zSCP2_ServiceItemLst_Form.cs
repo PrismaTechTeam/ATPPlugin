@@ -35,6 +35,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Toolbar is New / Edit / Delete / Refresh only — Exit and "Copy to New" removed on request
             // ("Copy From..." lives in the Service Item editor's ribbon; the window closes with its X).
             if (this.BtnExit != null) this.BtnExit.Visible = false;
+            // Find looks for CONTRACTS; this list is machines, and its own search box already finds them.
+            if (this.BtnFind != null) this.BtnFind.Visible = false;
         }
 
         // Edit from the ITEM list must open the SERVICE ITEM editor for the selected row — the base

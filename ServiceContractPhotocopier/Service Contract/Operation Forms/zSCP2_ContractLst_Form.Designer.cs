@@ -19,6 +19,7 @@
         private DevExpress.XtraEditors.SimpleButton BtnEdit;
         private DevExpress.XtraEditors.SimpleButton BtnDelete;
         private DevExpress.XtraEditors.SimpleButton BtnRefresh;
+        protected DevExpress.XtraEditors.SimpleButton BtnFind;
         protected DevExpress.XtraEditors.SimpleButton BtnExit;
         protected DevExpress.XtraGrid.GridControl Grid;                 // protected: the "Maintain Service Item"
         protected DevExpress.XtraGrid.Views.Grid.GridView GridView;    // alias rebuilds the list at item level
@@ -48,6 +49,7 @@
             this.BtnEdit = new DevExpress.XtraEditors.SimpleButton();
             this.BtnDelete = new DevExpress.XtraEditors.SimpleButton();
             this.BtnRefresh = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnFind = new DevExpress.XtraEditors.SimpleButton();
             this.BtnExit = new DevExpress.XtraEditors.SimpleButton();
             this.Grid = new DevExpress.XtraGrid.GridControl();
             this.GridView = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -90,6 +92,7 @@
             this.PanelToolbar.Controls.Add(this.BtnEdit);
             this.PanelToolbar.Controls.Add(this.BtnDelete);
             this.PanelToolbar.Controls.Add(this.BtnRefresh);
+            this.PanelToolbar.Controls.Add(this.BtnFind);
             this.PanelToolbar.Controls.Add(this.BtnExit);
             this.PanelToolbar.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelToolbar.Location = new System.Drawing.Point(0, 56);
@@ -137,13 +140,23 @@
             this.BtnRefresh.Text = "Refresh";
             this.BtnRefresh.Click += new System.EventHandler(this.OnRefresh);
             //
+            // BtnFind
+            //
+            this.BtnFind.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
+            this.BtnFind.Location = new System.Drawing.Point(368, 6);
+            this.BtnFind.Name = "BtnFind";
+            this.BtnFind.Size = new System.Drawing.Size(86, 50);
+            this.BtnFind.TabIndex = 4;
+            this.BtnFind.Text = "Find";
+            this.BtnFind.Click += new System.EventHandler(this.OnFind);
+            //
             // BtnExit
             //
             this.BtnExit.ImageOptions.Location = DevExpress.XtraEditors.ImageLocation.MiddleLeft;
-            this.BtnExit.Location = new System.Drawing.Point(368, 6);
+            this.BtnExit.Location = new System.Drawing.Point(458, 6);
             this.BtnExit.Name = "BtnExit";
             this.BtnExit.Size = new System.Drawing.Size(86, 50);
-            this.BtnExit.TabIndex = 4;
+            this.BtnExit.TabIndex = 5;
             this.BtnExit.Text = "Exit (F2)";
             this.BtnExit.Click += new System.EventHandler(this.OnExit);
             //

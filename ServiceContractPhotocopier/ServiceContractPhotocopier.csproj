@@ -328,6 +328,12 @@
     <Compile Include="Service Contract\Operation Forms\CalculationTest_Form.Designer.cs">
       <DependentUpon>CalculationTest_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Service Contract\Operation Forms\FindContract_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\FindContract_Form.Designer.cs">
+      <DependentUpon>FindContract_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Service Contract\Operation Forms\InterBillBoard_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1280,6 +1286,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\CalculationTest_Form.resx">
       <DependentUpon>CalculationTest_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\FindContract_Form.resx">
+      <DependentUpon>FindContract_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\InterBillBoard_Form.resx">
       <DependentUpon>InterBillBoard_Form.cs</DependentUpon>

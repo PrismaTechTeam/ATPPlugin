@@ -42,11 +42,11 @@ needs the current one uninstalled first.
 
 ## Rebuilding this exact build
 
-Source is at git tag **`v1.0.5-uat`** on `main`. The file you were given is:
+Source is at git tag **`v1.0.6-uat`** on `main`. The file you were given is:
 
 ```
-ATP-ServiceContract-1.5.0.5-uat.app
-SHA256  E56531940A22ABB9FB8DBA47938A9C0FA295A57B8E2248DB10CFC6AAD4F413BE
+ATP-ServiceContract-1.5.0.6-uat.app
+SHA256  B9C80E10AB248C78200759F94004DB0E264ABDA8F4C7FBDF91BBFF57EF4A32BD
 ```
 
 Check it with `Get-FileHash <file> -Algorithm SHA256` before installing if it reached you by e-mail
