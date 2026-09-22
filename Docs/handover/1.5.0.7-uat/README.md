@@ -1,4 +1,4 @@
-# Service Contract Photocopier — 1.5.0.6 (UAT)
+# Service Contract Photocopier — 1.5.0.7 (UAT)
 
 The AutoCount plug-in for photocopier service, rental and meter billing.
 This build is for **user acceptance testing**: use it on a test copy of the account book,
@@ -6,13 +6,15 @@ not on the live one.
 
 | | |
 |---|---|
-| Version | **1.5.0.6** |
-| File | `ATP-ServiceContract-1.5.0.6-uat.app` |
+| Version | **1.5.0.7** |
+| File | `ATP-ServiceContract-1.5.0.7-uat.app` |
 | Built | 22 September 2026 |
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
-| Source | git tag `v1.0.6-uat` |
+| Source | git tag `v1.0.7-uat` |
 
-**1.5.0.6 replaces 1.5.0.5**: Maintain Service Contract has a **Find** button - a contract is found by its number, its customer, or any machine on it (service item no, serial, model). Install it straight over 1.5.0.5.
+**1.5.0.7 replaces 1.5.0.6**: a machine's Item Code offers only the stock items with Has Serial No ticked. Install it straight over 1.5.0.6.
+
+**1.5.0.6 replaced 1.5.0.5**: Maintain Service Contract has a **Find** button - a contract is found by its number, its customer, or any machine on it (service item no, serial, model). Install it straight over 1.5.0.5.
 
 **1.5.0.5 replaced 1.5.0.4**: in Calculation Test a tiered meter's FOC shows the tier's free copies, as the meter configuration does. Install it straight over 1.5.0.4.
 
@@ -45,5 +47,5 @@ Four documents sit beside this one:
    every other recipient is skipped and the send log says so. This is so a test run against a book
    full of real addresses cannot mail them. If bulk email looks like it "did nothing", this is why.
 
-**Report a problem with the version on it.** `1.5.0.6` — please include it in any screenshot,
+**Report a problem with the version on it.** `1.5.0.7` — please include it in any screenshot,
 along with the contract number and the month.

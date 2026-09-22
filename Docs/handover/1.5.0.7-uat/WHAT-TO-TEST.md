@@ -10,7 +10,8 @@ Everything is under **Service & Contract**.
 1. **Maintain Service Contract** → open a contract (or make one). **Find** finds one by what you have
    in hand: type a service item no or a serial number off a machine and it finds the contract, with
    "Found In" saying which machine it was on.
-2. **Service Item Under Contract** — the machines, their serials and their counters.
+2. **Service Item Under Contract** — the machines, their serials and their counters. A machine's
+   Item Code lists only the stock items that have Has Serial No ticked.
 3. **Meters & Pricing** — this is the deal. Each line says what the invoice will print and which
    machines it covers. The heading above tells you **how many invoices this contract sends**.
 4. **View Sample Invoice** — the real invoice layout, with no reading and no posting.

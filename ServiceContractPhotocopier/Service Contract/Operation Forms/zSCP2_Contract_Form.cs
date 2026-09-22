@@ -2956,8 +2956,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             try
             {
-                _inlineItemLookup = _db.GetDataTable(
-                    "SELECT ItemCode, ISNULL(Description,'') AS Description FROM dbo.Item ORDER BY ItemCode", false);
+                _inlineItemLookup = LoadMachineItemLookup(_db);
             }
             catch { _inlineItemLookup = new DataTable(); }
             _inlineItemCodeRepo = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
@@ -2973,6 +2972,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _inlineItemCodeRepo.DisplayMember = "ItemCode";
             _inlineItemCodeRepo.ValueMember = "ItemCode";
             _inlineItemCodeRepo.NullText = "";
+            ShowCodeWhenNotListed(_inlineItemCodeRepo);
             GridItems.RepositoryItems.Add(_inlineItemCodeRepo);
 
             try
@@ -3639,6 +3639,37 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     "ISNULL(TaxCode,'') AS TaxType FROM [dbo].[Item] ORDER BY ItemCode", false);
             }
             catch { return new DataTable(); }
+        }
+
+        /// <summary>
+        /// The items a MACHINE can be: the ones AutoCount tracks by serial number (Item "Has Serial
+        /// No"). A machine on a contract is one serial-numbered unit -- its readings, its meters and
+        /// its billing hang off that serial -- so the model picked for it is one that has them (user,
+        /// 22/09). Toner and spare parts keep the full list: they are not machines.
+        /// </summary>
+        internal static DataTable LoadMachineItemLookup(DBSetting db)
+        {
+            try
+            {
+                return db.GetDataTable(
+                    "SELECT ItemCode, ISNULL(Description,'') AS Description, ISNULL(SalesUOM,'') AS UOM, " +
+                    "ISNULL(TaxCode,'') AS TaxType FROM [dbo].[Item] " +
+                    "WHERE ISNULL(HasSerialNo,'F') = 'T' ORDER BY ItemCode", false);
+            }
+            catch { return new DataTable(); }
+        }
+
+        /// <summary>A machine saved before the list was narrowed can hold an item without serial
+        /// numbers. It keeps it, and the cell still shows it -- a lookup shows nothing for a value
+        /// that is not in its list, which would read as the model having been wiped.</summary>
+        internal static void ShowCodeWhenNotListed(DevExpress.XtraEditors.Repository.RepositoryItem repo)
+        {
+            repo.CustomDisplayText += delegate(object sender, DevExpress.XtraEditors.Controls.CustomDisplayTextEventArgs e)
+            {
+                if (e.Value == null || e.Value == DBNull.Value) return;
+                if (!string.IsNullOrEmpty(e.DisplayText) && e.DisplayText.Trim().Length > 0) return;
+                e.DisplayText = e.Value.ToString();
+            };
         }
 
         internal static DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit MakeItemCodeRepo(DataTable itemLookup)

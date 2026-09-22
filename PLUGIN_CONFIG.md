@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.6
+- **Version:** 1.5.0.7
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.7 (2026-09-22) — a machine is a serial-numbered item:
+    1. A machine's Item Code - on the contract's machine list and in the service item - offers only the stock items with Has Serial No ticked. A machine saved earlier on another item keeps it and still shows it. Toner and spare parts keep the full list.
+
     v1.5.0.6 (2026-09-22) — Find Service Contract:
     1. Maintain Service Contract has a Find button. Type what you have in hand - a contract number, a customer, a service item number, a serial number or a model - and tick where to look: it finds the contract and says what it was found in.
     2. Filters for status, contract expiry, one invoice or one per machine, and the rental invoice; Google-like search with OR / AND; Keep Search Result; Check All and Uncheck; Advanced Search. Edit and Delete open or delete the ticked contracts exactly as the list does.

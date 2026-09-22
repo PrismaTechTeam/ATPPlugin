@@ -1955,7 +1955,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             // 2. Header: Item Code (SearchLookUpEdit over the Item master) — left column, row 2.
             MakeLbl("Item Code", 14, 173);
-            _itemHdrLookup = zSCP2_Contract_Form.LoadItemLookup(_db);
+            // The machine's model: serial-numbered items only, as on the contract's machine grid.
+            _itemHdrLookup = zSCP2_Contract_Form.LoadMachineItemLookup(_db);
             _sluItemCode = new DevExpress.XtraEditors.SearchLookUpEdit();
             _sluItemCode.Location = new System.Drawing.Point(120, 170);
             _sluItemCode.Size = new System.Drawing.Size(280, 20);
@@ -1963,6 +1964,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _sluItemCode.Properties.DataSource = _itemHdrLookup;
             _sluItemCode.Properties.ValueMember = "ItemCode";
             _sluItemCode.Properties.DisplayMember = "ItemCode";
+            zSCP2_Contract_Form.ShowCodeWhenNotListed(_sluItemCode.Properties);
             _sluItemCode.EditValueChanged += new EventHandler(ItemCodeHeader_Changed);
             _sluItemCode.EditValueChanged += MarkDirty;
             this.Controls.Add(_sluItemCode); _sluItemCode.BringToFront();
