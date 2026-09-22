@@ -12,7 +12,7 @@ not on the live one.
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
 | Source | git tag `v1.0.7-uat` |
 
-**1.5.0.7 replaces 1.5.0.6**: a machine's Item Code offers only the stock items with Has Serial No ticked. Install it straight over 1.5.0.6.
+**1.5.0.7 replaces 1.5.0.6**: a machine's Item Code offers only the stock items with Has Serial No ticked (a tick in Plugin Option > 4. Contract & Item No.; untick to list every item). Install it straight over 1.5.0.6.
 
 **1.5.0.6 replaced 1.5.0.5**: Maintain Service Contract has a **Find** button - a contract is found by its number, its customer, or any machine on it (service item no, serial, model). Install it straight over 1.5.0.5.
 

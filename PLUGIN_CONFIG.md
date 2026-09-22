@@ -27,6 +27,7 @@
 - **WhatsNew:** |
     v1.5.0.7 (2026-09-22) — a machine is a serial-numbered item:
     1. A machine's Item Code - on the contract's machine list and in the service item - offers only the stock items with Has Serial No ticked. A machine saved earlier on another item keeps it and still shows it. Toner and spare parts keep the full list.
+    2. Plugin Option > 4. Contract & Item No. has the tick for it: untick to list every stock item again.
 
     v1.5.0.6 (2026-09-22) — Find Service Contract:
     1. Maintain Service Contract has a Find button. Type what you have in hand - a contract number, a customer, a service item number, a serial number or a model - and tick where to look: it finds the contract and says what it was found in.

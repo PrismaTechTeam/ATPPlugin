@@ -104,6 +104,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME,
                     ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_ITEM_NO_FOLLOW_CONTRACT_RENAME);
                 OnItemNoFromContractChanged(null, EventArgs.Empty);
+                ChkMachineSerialOnly.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_MACHINE_SERIAL_ITEMS_ONLY,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_MACHINE_SERIAL_ITEMS_ONLY);
 
                 ChkWhitelistOn.Checked = ServiceContractPhotocopier.Data.PumsConfig.GetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_EMAIL_WHITELIST_ON,
@@ -390,6 +393,9 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
                 ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
                     ServiceContractPhotocopier.Data.PumsConfig.KEY_ITEM_NO_FOLLOW_CONTRACT_RENAME,
                     ChkItemNoFromContract.Checked && ChkItemNoRenumber.Checked);
+                ServiceContractPhotocopier.Data.PumsConfig.SetBool(_dbSetting,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_MACHINE_SERIAL_ITEMS_ONLY,
+                    ChkMachineSerialOnly.Checked);
 
                 // API tab: upsert the selected profile and make it the active connection.
                 SaveApiTab();

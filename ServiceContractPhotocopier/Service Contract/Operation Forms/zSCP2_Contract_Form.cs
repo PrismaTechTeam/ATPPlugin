@@ -3649,6 +3649,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// </summary>
         internal static DataTable LoadMachineItemLookup(DBSetting db)
         {
+            // Plugin Option decides: ticked (the default) = serial-numbered items only.
+            if (!ServiceContractPhotocopier.Data.PumsConfig.GetBool(db,
+                    ServiceContractPhotocopier.Data.PumsConfig.KEY_MACHINE_SERIAL_ITEMS_ONLY,
+                    ServiceContractPhotocopier.Data.PumsConfig.DEFAULT_MACHINE_SERIAL_ITEMS_ONLY))
+                return LoadItemLookup(db);
             try
             {
                 return db.GetDataTable(

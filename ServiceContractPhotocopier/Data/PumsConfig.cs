@@ -105,6 +105,13 @@ namespace ServiceContractPhotocopier.Data
 
         /// <summary>Whether the Meter Reading list includes expired service items. Default true = show
         /// them (billing unchanged); set false (Meter Reading &gt; Setting) to hide expired machines.</summary>
+        /// <summary>A machine's Item Code (the contract's machine grid and the service item) lists
+        /// only the stock items with Has Serial No ticked. ON by default -- a machine is one
+        /// serial-numbered unit (user, 22/09); untick (Plugin Option) to list every item. Toner and
+        /// spare parts always list every item.</summary>
+        public const string KEY_MACHINE_SERIAL_ITEMS_ONLY = "MACHINE_SERIAL_ITEMS_ONLY";
+        public const bool DEFAULT_MACHINE_SERIAL_ITEMS_ONLY = true;
+
         public const string KEY_INCLUDE_EXPIRED_ITEMS = "INCLUDE_EXPIRED_ITEMS";
         public const bool DEFAULT_INCLUDE_EXPIRED_ITEMS = true;
         /// <summary>How Generate groups meter lines into invoices. FOLLOW (default) = each contract's

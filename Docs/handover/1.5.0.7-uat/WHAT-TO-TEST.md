@@ -11,7 +11,8 @@ Everything is under **Service & Contract**.
    in hand: type a service item no or a serial number off a machine and it finds the contract, with
    "Found In" saying which machine it was on.
 2. **Service Item Under Contract** — the machines, their serials and their counters. A machine's
-   Item Code lists only the stock items that have Has Serial No ticked.
+   Item Code lists only the stock items that have Has Serial No ticked (Plugin Option >
+   4. Contract & Item No. can switch it back to every item).
 3. **Meters & Pricing** — this is the deal. Each line says what the invoice will print and which
    machines it covers. The heading above tells you **how many invoices this contract sends**.
 4. **View Sample Invoice** — the real invoice layout, with no reading and no posting.

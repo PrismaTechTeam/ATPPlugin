@@ -17,6 +17,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
         private GroupControl GrpGeneral, GrpDefaults, GrpApi, GrpItemNo;
         private CheckEdit ChkItemRefFromContract, ChkItemNoFromContract, ChkItemNoRenumber;
         private LabelControl LblItemNoHint, LblRenumberWarn;
+        private CheckEdit ChkMachineSerialOnly;
+        private LabelControl LblMachineSerialHint;
         private GroupControl GrpWhitelist;
         private CheckEdit ChkWhitelistOn;
         private MemoEdit MemoWhitelist;
@@ -57,6 +59,8 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.ChkItemNoRenumber = new CheckEdit();
             this.LblItemNoHint = new LabelControl();
             this.LblRenumberWarn = new LabelControl();
+            this.ChkMachineSerialOnly = new CheckEdit();
+            this.LblMachineSerialHint = new LabelControl();
             this.GrpWhitelist = new GroupControl();
             this.ChkWhitelistOn = new CheckEdit();
             this.MemoWhitelist = new MemoEdit();
@@ -213,11 +217,28 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             this.LblRenumberWarn.Appearance.ForeColor = Color.FromArgb(110, 110, 110);
             this.LblRenumberWarn.Appearance.Options.UseForeColor = true;
 
+            // Which stock items a machine can be.
+            this.ChkMachineSerialOnly.Properties.Caption =
+                "A machine's Item Code lists only stock items with Serial No (Has Serial No ticked)";
+            this.ChkMachineSerialOnly.Location = new Point(16, 238); this.ChkMachineSerialOnly.Width = 620;
+            Lbl(this.LblMachineSerialHint,
+                "Untick to list every stock item. A machine already saved on an item keeps it either way; " +
+                "toner and spare parts always list every item.", 36, 262);
+            this.LblMachineSerialHint.Width = 600;
+            this.LblMachineSerialHint.AutoSizeMode = LabelAutoSizeMode.None;
+            this.LblMachineSerialHint.Height = 28;
+            this.LblMachineSerialHint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+            this.LblMachineSerialHint.Appearance.Options.UseTextOptions = true;
+            this.LblMachineSerialHint.Appearance.ForeColor = Color.FromArgb(110, 110, 110);
+            this.LblMachineSerialHint.Appearance.Options.UseForeColor = true;
+
             this.GrpItemNo.Controls.Add(this.ChkItemRefFromContract);
             this.GrpItemNo.Controls.Add(this.LblItemNoHint);
             this.GrpItemNo.Controls.Add(this.ChkItemNoFromContract);
             this.GrpItemNo.Controls.Add(this.ChkItemNoRenumber);
             this.GrpItemNo.Controls.Add(this.LblRenumberWarn);
+            this.GrpItemNo.Controls.Add(this.ChkMachineSerialOnly);
+            this.GrpItemNo.Controls.Add(this.LblMachineSerialHint);
             this.PageNumbering.Controls.Add(this.GrpItemNo);
 
             // Email whitelist — a development safety net, on the same tab because it is the same
