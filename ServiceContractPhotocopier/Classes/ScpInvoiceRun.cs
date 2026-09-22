@@ -350,10 +350,162 @@ namespace ServiceContractPhotocopier.Classes
                 ScpBillingRows.Recalc(r, ladders, year, month);
             }
             ScpBillingRows.AutoFillFlatMeters(db, t, year, month, ladders);
+            // The terms that span the contract -- the committed minimum, the waive, group tiers --
+            // priced by the engine that bills them, so the list says what Generate will charge.
+            PriceTerms(db, t, ladders, year, month, null);
 
             if (!t.Columns.Contains(COL_JOBKEY)) t.Columns.Add(COL_JOBKEY, typeof(string));
             if (!t.Columns.Contains(COL_NEEDS)) t.Columns.Add(COL_NEEDS, typeof(bool));
             return t;
+        }
+
+        /// <summary>
+        /// What a contract's own terms do to the money this month, worked out by the engine that
+        /// bills them: the committed minimum's top-up, the rental waive, a group's agreed tiers,
+        /// the strategy rules.
+        ///
+        /// <para>The rows are priced one by one, and a row by itself cannot know any of those -- a
+        /// committed minimum is measured against the other meters' copies, a waive against the
+        /// charges it targets. So the list showed 0.00 for both and "decided at Generate", and an
+        /// invoice with a waive about to fire read 500.00 too high (user, 22/09: Calculation Test
+        /// could show it and this screen could not). Now the pending rows go through
+        /// <see cref="ScpInvoiceJobs.Build"/> -- a copy of them; Build only reads -- and each row
+        /// shows the charge its invoice line will carry.</para>
+        ///
+        /// <para>Priced as if every pending invoice of the contract went out together, which is
+        /// what Generate all ready does. A meter with no reading yet counts as nothing, exactly as
+        /// Generate would count it today. <paramref name="onlyContracts"/> null = every contract.</para>
+        /// </summary>
+        public static void PriceTerms(DBSetting db, DataTable t, Dictionary<string, List<decimal[]>> ladders,
+            int year, int month, HashSet<long> onlyContracts)
+        {
+            if (t == null || t.Rows.Count == 0) return;
+            // Only the contracts that HAVE such a term: every other row is already priced right by
+            // itself, and the engine's pass costs reads per contract (a whole month of the test book
+            // took 45 s for all 2,922 contracts; 86 of them carry a minimum or a waive).
+            HashSet<long> withTerms = ContractsWithTerms(db);
+            HashSet<long> wanted = new HashSet<long>();
+            foreach (DataRow r in t.Rows)
+            {
+                if (IsInvoiced(r)) continue;
+                long ck = D64(r["ContractKey"]);
+                if (onlyContracts != null && !onlyContracts.Contains(ck)) continue;
+                bool isWaive = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
+                bool isFlat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
+                if (isWaive || (isFlat && ScpBillingRows.IsCommitRow(r)) || withTerms.Contains(ck)) wanted.Add(ck);
+            }
+            if (wanted.Count == 0) return;
+
+            DataTable copy = t.Copy();
+            List<DataRow> all = new List<DataRow>();
+            foreach (DataRow r in copy.Rows)
+            {
+                r["Sel"] = wanted.Contains(D64(r["ContractKey"])) && !IsInvoiced(r);
+                all.Add(r);
+            }
+            Dictionary<string, MeterInvoiceGenerator.InvoiceJob> jobs;
+            try
+            {
+                int alreadyInvoiced;
+                Dictionary<long, string> snapshots;
+                string blockTitle, blockMessage;
+                jobs = ScpInvoiceJobs.Build(db, copy, all, ladders, year, month, GroupingMode(db),
+                    out alreadyInvoiced, out snapshots, out blockTitle, out blockMessage);
+            }
+            catch { return; }   // the list keeps its row-by-row figures; Generate says what is wrong
+            if (jobs == null) return;   // e.g. a minimum counted twice -- Generate refuses it, with the reason
+
+            Dictionary<long, decimal> charge = new Dictionary<long, decimal>();
+            foreach (MeterInvoiceGenerator.InvoiceJob j in jobs.Values)
+                foreach (MeterBillLine ln in j.Lines) charge[ln.ItemMeterKey] = ln.Charge;
+            foreach (DataRow r in t.Rows)
+            {
+                if (IsInvoiced(r) || !wanted.Contains(D64(r["ContractKey"]))) continue;
+                decimal c;
+                if (charge.TryGetValue(D64(r["ItemMeterKey"]), out c)) r["TotalCharges"] = c;
+            }
+        }
+
+        /// <summary>
+        /// A TEST Fetch JSON for one contract's machines, to copy into TEST Fetch (Ctrl+Shift+T on
+        /// the Meters view). One entry per machine serial, in the format the fake-API reader takes:
+        /// TotalBK / TotalCL are lifetime counters, written here as the last reading + 100 (TEST
+        /// Fetch's own sample rule) so a charge appears; the tester changes them to try other months.
+        /// LastAuditDate is today when today is in the month, else the 1st. Nothing is fetched here.
+        /// </summary>
+        public static string TestFetchJson(DataTable rows, long contractKey, int year, int month)
+        {
+            if (rows == null) return "";
+            List<string> order = new List<string>();
+            Dictionary<string, string> codeOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> serialOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, decimal?[]> totals = new Dictionary<string, decimal?[]>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow r in rows.Rows)
+            {
+                if (D64(r["ContractKey"]) != contractKey) continue;
+                string role = S(r["Role"]).Trim().ToUpperInvariant();
+                if (role != "BK" && role != "CL") continue;
+                string serial = S(r["SerialNo"]).Trim();
+                string code = S(r["ServiceItemNo"]).Trim();
+                string key = serial.Length > 0 ? serial : "#" + code;
+                decimal?[] v;
+                if (!totals.TryGetValue(key, out v))
+                {
+                    v = new decimal?[2];
+                    totals[key] = v;
+                    order.Add(key);
+                    codeOf[key] = code;
+                    serialOf[key] = serial;
+                }
+                v[role == "BK" ? 0 : 1] = Dec(r["LastReading"]) + 100m;
+            }
+            if (order.Count == 0) return "";
+
+            DateTime today = DateTime.Today;
+            DateTime audit = today.Year == year && today.Month == month ? today : new DateTime(year, month, 1);
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("[\r\n");
+            for (int i = 0; i < order.Count; i++)
+            {
+                string key = order[i];
+                decimal?[] v = totals[key];
+                sb.Append("  { \"Code\": \"").Append(JsonText(codeOf[key])).Append("\"");
+                if (serialOf[key].Length > 0) sb.Append(", \"SerialNumber\": \"").Append(JsonText(serialOf[key])).Append("\"");
+                if (v[0].HasValue) sb.Append(", \"TotalBK\": ").Append(v[0].Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                if (v[1].HasValue) sb.Append(", \"TotalCL\": ").Append(v[1].Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(", \"LastAuditDate\": \"").Append(audit.ToString("yyyy-MM-dd")).Append("\" }");
+                sb.Append(i < order.Count - 1 ? ",\r\n" : "\r\n");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        private static string JsonText(string s)
+        {
+            return (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        /// <summary>Contracts whose money depends on more than one row at a time besides their
+        /// minimum and waive meters: agreed group tiers and strategy rules. Never throws -- an older
+        /// book without the tables simply has none.</summary>
+        private static HashSet<long> ContractsWithTerms(DBSetting db)
+        {
+            HashSet<long> set = new HashSet<long>();
+            try
+            {
+                DataTable k = db.GetDataTable(
+                    "SELECT DISTINCT ContractKey FROM dbo.zSCP2_ContractRentalPrice " +
+                    "WHERE ISNULL(LadderBk,'') <> '' OR ISNULL(LadderCl,'') <> ''", false);
+                foreach (DataRow r in k.Rows) set.Add(D64(r["ContractKey"]));
+            }
+            catch { }
+            try
+            {
+                DataTable k = db.GetDataTable("SELECT DISTINCT ContractKey FROM dbo.zSCP2_ContractStrategyRule", false);
+                foreach (DataRow r in k.Rows) set.Add(D64(r["ContractKey"]));
+            }
+            catch { }
+            return set;
         }
 
         private static bool TableExists(DBSetting db, string name)

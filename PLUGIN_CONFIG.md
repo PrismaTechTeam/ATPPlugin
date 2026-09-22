@@ -25,8 +25,10 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
-    v1.5.0.9 (2026-09-22) — TEST Fetch shortcut inside Meter Invoice Run:
-    1. Ctrl+Shift+T shows the TEST Fetch (JSON) button on the Meters view of Meter Invoice Run again, wherever the focus is, and the button sits after the last button on that row instead of over Setting. For testing only.
+    v1.5.0.9 (2026-09-22) — Meter Invoice Run shows the minimum and the waive:
+    1. Meter Invoice Run works out the committed minimum's top-up and the rental waive from the readings, the way the invoice will: Total Charges and the invoice Amount show them before Generate, and a new reading updates them at once.
+    2. A copy line with a rebate, on a contract on the new layout, shows the same cents as its invoice (3,710.00, where it showed 3,709.94).
+    3. For testing: Ctrl+Shift+U in Meter Invoice Run writes the TEST Fetch JSON for the picked invoice's contract, to copy; Ctrl+Shift+T shows TEST Fetch on the Meters view wherever the focus is.
 
     v1.5.0.8 (2026-09-22) — Machine Serial says when there is none in stock:
     1. The Machine Serial list is the item's serials in AutoCount's stock. When a model has none (never received with serial numbers) the cell now says so - "No BIZHUB 651I serial in stock - type it, or receive it in AutoCount first" - instead of opening an empty list.

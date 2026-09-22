@@ -12,7 +12,7 @@ not on the live one.
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
 | Source | git tag `v1.0.9-uat` |
 
-**1.5.0.9 replaces 1.5.0.8**: a testing shortcut (Ctrl+Shift+T, TEST Fetch) works again inside Meter Invoice Run. Nothing else changes. Install it straight over 1.5.0.8.
+**1.5.0.9 replaces 1.5.0.8**: Meter Invoice Run shows the committed minimum's top-up and the rental waive before Generate, as the invoice will bill them; rebate lines show the invoice's cents. Install it straight over 1.5.0.8.
 
 **1.5.0.8 replaced 1.5.0.7**: when a model has no serial in AutoCount's stock, the Machine Serial cell says so instead of opening an empty list. Install it straight over 1.5.0.7.
 

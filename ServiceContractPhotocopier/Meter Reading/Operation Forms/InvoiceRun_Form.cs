@@ -688,6 +688,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// the list. Both only while the invoice list is the view showing.</summary>
         private void InvoiceRun_KeyDown(object sender, KeyEventArgs e)
         {
+            // Ctrl+Shift+U: a TEST Fetch JSON for the picked invoice's contract, to copy. Testing only.
+            if (e.Control && e.Shift && e.KeyCode == Keys.U)
+            {
+                e.Handled = true;
+                ShowTestFetchJson();
+                return;
+            }
             // Ctrl+Shift+T: the Meters view's TEST Fetch (JSON). The view is a window inside this
             // one and hears keys only while focus is in it -- after clicking "Meters - fetch & key
             // in" the focus is on that button, here. Only this shortcut is passed on.
@@ -704,6 +711,80 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         private void BtnDeleteInvoice_Click(object sender, EventArgs e) { DeleteSelectedInvoice(); }
+
+        /// <summary>Ctrl+Shift+U: the TEST Fetch JSON for the contract of the invoice picked on the
+        /// left, shown to copy. Nothing is fetched or saved -- paste it into TEST Fetch
+        /// (Ctrl+Shift+T on the Meters view).</summary>
+        private void ShowTestFetchJson()
+        {
+            InvoiceRunItem it = _current;
+            if (it == null || _rows == null)
+            {
+                XtraMessageBox.Show("Pick an invoice on the left first - the JSON is written for its contract.",
+                    "TEST JSON", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            // The rows of the month this invoice belongs to (the overdue view holds several months).
+            DataTable rows = _rows;
+            int y = it.Year > 0 ? it.Year : SelectedYear(), m = it.Month > 0 ? it.Month : SelectedMonth();
+            if (it.Rows.Count > 0 && it.Rows[0].Table != null) rows = it.Rows[0].Table;
+            string json = ScpInvoiceRun.TestFetchJson(rows, it.ContractKey, y, m);
+            if (json.Length == 0)
+            {
+                XtraMessageBox.Show(it.ContractNo + " has no black or colour meter to read.", "TEST JSON",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (XtraForm dlg = new XtraForm())
+            {
+                dlg.Text = "TEST JSON - " + it.ContractNo;
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.ClientSize = new System.Drawing.Size(760, 420);
+                dlg.MinimizeBox = false;
+
+                LabelControl hint = new LabelControl();
+                hint.AutoSizeMode = LabelAutoSizeMode.None;
+                hint.Appearance.TextOptions.WordWrap = DevExpress.Utils.WordWrap.Wrap;
+                hint.Appearance.Options.UseTextOptions = true;
+                hint.Location = new System.Drawing.Point(10, 8);
+                hint.Size = new System.Drawing.Size(740, 34);
+                hint.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                hint.Text = "Copy this into TEST Fetch (Ctrl+Shift+T on the Meters view). TotalBK / TotalCL are the " +
+                    "machine's lifetime counters - here the last reading + 100; change them to test another month.";
+                dlg.Controls.Add(hint);
+
+                MemoEdit memo = new MemoEdit();
+                memo.Location = new System.Drawing.Point(10, 46);
+                memo.Size = new System.Drawing.Size(740, 326);
+                memo.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                memo.Properties.Appearance.Font = new System.Drawing.Font("Consolas", 9F);
+                memo.Properties.WordWrap = false;
+                memo.Properties.ScrollBars = ScrollBars.Both;
+                memo.Text = json;
+                dlg.Controls.Add(memo);
+
+                SimpleButton bCopy = new SimpleButton();
+                bCopy.Text = "Copy";
+                bCopy.Size = new System.Drawing.Size(100, 26);
+                bCopy.Location = new System.Drawing.Point(10, 382);
+                bCopy.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+                bCopy.Click += delegate
+                {
+                    try { Clipboard.SetText(memo.Text); bCopy.Text = "Copied"; } catch { }
+                };
+                dlg.Controls.Add(bCopy);
+
+                SimpleButton bClose = new SimpleButton();
+                bClose.Text = "Close";
+                bClose.Size = new System.Drawing.Size(90, 26);
+                bClose.Location = new System.Drawing.Point(660, 382);
+                bClose.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                bClose.DialogResult = DialogResult.Cancel;
+                dlg.Controls.Add(bClose);
+                dlg.CancelButton = bClose;
+                dlg.ShowDialog(this);
+            }
+        }
 
         /// <summary>The invoice the picked row was billed on: deleted from AutoCount, its readings
         /// released, and the row goes back to Ready.</summary>
@@ -1265,17 +1346,27 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ScpBillingRows.Recalc(r, _ladders, y, m);
             r[ScpInvoiceRun.COL_NEEDS] = ScpInvoiceRun.IsUsageMeter(r) && !ScpInvoiceRun.HasReading(r) && !ScpInvoiceRun.IsInvoiced(r);
 
-            // The invoice this row belongs to is recounted, and its line on the left follows.
+            // A new reading moves the contract's terms too: the committed minimum's top-up, the waive.
+            long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+            HashSet<long> thisContract = new HashSet<long>();
+            thisContract.Add(ck);
+            ScpInvoiceRun.PriceTerms(_db, _rows, _ladders, y, m, thisContract);
+
+            // Every invoice of the contract is recounted, not only this row's: a waive can sit on
+            // the rental invoice while the copies it depends on are on another.
             InvoiceRunItem it;
-            if (_byKey.TryGetValue(Convert.ToString(r[ScpInvoiceRun.COL_JOBKEY]), out it))
+            _byKey.TryGetValue(Convert.ToString(r[ScpInvoiceRun.COL_JOBKEY]), out it);
+            foreach (InvoiceRunItem other in _byKey.Values)
             {
-                ScpInvoiceRun.Refresh(it);
-                DataRow ir = ItemRow(it.JobKey);
-                if (ir != null) FillItemRow(ir, it);
-                if (_current == it) { RefreshFacts(it); this.BtnPreview.Enabled = it.Status == InvoiceRunItem.READY; }
-                if (it.Status == InvoiceRunItem.READY && this.ChkMissingOnly.Checked)
-                    this.LblDetailFoot.Text = "That was the last one. This invoice is Ready and goes out with Generate all ready.";
+                if (other.ContractKey != ck) continue;
+                ScpInvoiceRun.Refresh(other);
+                DataRow ir = ItemRow(other.JobKey);
+                if (ir != null) FillItemRow(ir, other);
+                if (_current == other) { RefreshFacts(other); this.BtnPreview.Enabled = other.Status == InvoiceRunItem.READY; }
             }
+            this.GridViewReadings.RefreshData();
+            if (it != null && it.Status == InvoiceRunItem.READY && this.ChkMissingOnly.Checked)
+                this.LblDetailFoot.Text = "That was the last one. This invoice is Ready and goes out with Generate all ready.";
             UpdateSummary();
             this.GridViewInvoices.LayoutChanged();
         }

@@ -42,6 +42,9 @@ Does Calculation Test give the amount you would work out by hand for the same re
 
 ## 3. The invoice
 
+Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and
+what a rental waive takes off, and the invoice **Amount** on the left includes them.
+
 1. Back to **Invoices to generate**. Each line is one invoice the day would produce, with its
    status: Ready, waiting on readings, or already invoiced.
 2. Press **Generate Invoice**.

@@ -695,6 +695,11 @@ namespace ServiceContractPhotocopier.Classes
             ln.RebatePct = Dec(r["RebatePct"]);
             ln.MultiPriceCode = S(r["MultiPriceCode"]);
             ln.FocResetCount = ServiceContractPhotocopier.Classes.ScpInvoiceJobs.FocResetCountFor(r, year, month);
+            // As Generate sets it: it decides whether a rebate comes off as copies or off the amount,
+            // and how the cents round. Left unset the list priced a 5% rebate on the old rule and
+            // showed 3,709.94 for a line the invoice bills at 3,710.00.
+            ln.NewMoneyRules = r.Table.Columns.Contains("NewMoneyRules") && r["NewMoneyRules"] != DBNull.Value
+                               && Convert.ToBoolean(r["NewMoneyRules"]);
             ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, ladders);
             // Honour the user's "Use Min." tick (force the minimum charge) without clobbering their input.
             if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) ln.Charge = ln.MinCharges;
