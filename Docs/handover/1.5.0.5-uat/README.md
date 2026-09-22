@@ -1,4 +1,4 @@
-# Service Contract Photocopier — 1.5.0.4 (UAT)
+# Service Contract Photocopier — 1.5.0.5 (UAT)
 
 The AutoCount plug-in for photocopier service, rental and meter billing.
 This build is for **user acceptance testing**: use it on a test copy of the account book,
@@ -6,13 +6,15 @@ not on the live one.
 
 | | |
 |---|---|
-| Version | **1.5.0.4** |
-| File | `ATP-ServiceContract-1.5.0.4-uat.app` |
-| Built | 21 September 2026 |
+| Version | **1.5.0.5** |
+| File | `ATP-ServiceContract-1.5.0.5-uat.app` |
+| Built | 22 September 2026 |
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
-| Source | git tag `v1.0.4-uat` |
+| Source | git tag `v1.0.5-uat` |
 
-**1.5.0.4 replaces 1.5.0.3**: Calculation Test uses the prices set on the contract screen, saved or not, and they can still be changed in the test. Install it straight over 1.5.0.3.
+**1.5.0.5 replaces 1.5.0.4**: Calculation Test has no Min. Charge column; each line has one Price (per copy, the monthly rental, or the committed / waive amount). Install it straight over 1.5.0.4.
+
+**1.5.0.4 replaced 1.5.0.3**: Calculation Test uses the prices set on the contract screen, saved or not, and they can still be changed in the test. Install it straight over 1.5.0.3.
 
 **1.5.0.3 replaced 1.5.0.2**: adds **Calculation Test** on the contract -- key in readings and see what the contract bills, worked out step by step. Nothing in the database changes; install it straight over 1.5.0.2.
 
@@ -41,5 +43,5 @@ Four documents sit beside this one:
    every other recipient is skipped and the send log says so. This is so a test run against a book
    full of real addresses cannot mail them. If bulk email looks like it "did nothing", this is why.
 
-**Report a problem with the version on it.** `1.5.0.4` — please include it in any screenshot,
+**Report a problem with the version on it.** `1.5.0.5` — please include it in any screenshot,
 along with the contract number and the month.

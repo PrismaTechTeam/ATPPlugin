@@ -31,7 +31,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private const string FIELD_RATE = "Rate";
         private const string FIELD_FOC = "Foc";
         private const string FIELD_REBATE = "Rebate";
-        private const string FIELD_MIN = "Min";
 
         private readonly DBSetting _db;
         private readonly long _contractKey;
@@ -168,7 +167,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             t.Columns.Add("TierText", typeof(string));
             t.Columns.Add(FIELD_FOC, typeof(decimal));
             t.Columns.Add(FIELD_REBATE, typeof(decimal));
-            t.Columns.Add(FIELD_MIN, typeof(decimal));
             t.Columns.Add("Billed", typeof(decimal));
             t.Columns.Add("Unit", typeof(decimal));
             t.Columns.Add("Amount", typeof(decimal));
@@ -234,19 +232,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     v["SerialNo"] = S(r["SerialNo"]);
                     v["Meter"] = S(r["MeterType"]);
                     v["MeterTypeName"] = S(r["MeterTypeName"]);
-                    v["Kind"] = KindOf(r);
+                    string kind = KindOf(r);
+                    v["Kind"] = kind;
                     v["IsFlat"] = flat;
                     v[FIELD_INITIAL] = flat ? 0m : Dec(r["LastReading"]);
                     v[FIELD_CURRENT] = flat ? 0m : Dec(r["CurrentReading"]);
-                    v[FIELD_RATE] = Dec(r["UnitPrice"]);
+                    v[FIELD_RATE] = PriceShown(r, kind);
                     v[FIELD_FOC] = Dec(r["FOCQty"]);
                     v[FIELD_REBATE] = Dec(r["RebatePct"]);
-                    v[FIELD_MIN] = Dec(r["MinCharges"]);
 
                     DataRow p;
                     if (before.TryGetValue(key, out p))
                     {
-                        foreach (string f in new string[] { FIELD_INITIAL, FIELD_CURRENT, FIELD_RATE, FIELD_FOC, FIELD_REBATE, FIELD_MIN })
+                        foreach (string f in new string[] { FIELD_INITIAL, FIELD_CURRENT, FIELD_RATE, FIELD_FOC, FIELD_REBATE })
                             if (_typed.Contains(key + "|" + f)) v[f] = p[f];
                     }
                     v["TierText"] = flat ? "" : ScpMultiPrice.Describe(TiersOf(key, S(r["MultiPriceCode"])));
@@ -258,6 +256,42 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.Cursor = old;
             Recalculate();
             LoadTierGrid();
+        }
+
+        /// <summary>
+        /// The one price a line shows. Per copy on a meter; on a rental, what the month bills -- the
+        /// greater of its rate and its minimum, because the book keeps a rental's money in either;
+        /// and on a committed minimum or a waive, the amount itself.
+        ///
+        /// <para>There is no minimum-charge column (user, 22/09): a minimum floor on a copy meter is
+        /// still the contract's and still applied, and the working says so on a line where it
+        /// changed the money.</para>
+        /// </summary>
+        private static decimal PriceShown(DataRow r, string kind)
+        {
+            decimal rate = Dec(r["UnitPrice"]);
+            decimal min = Dec(r["MinCharges"]);
+            if (kind == "Copies") return rate;
+            if (kind == "Waive") return min != 0m ? min : rate;
+            if (kind == "Committed minimum") return min;
+            if (Bool(r["UseMin"])) return min;
+            return rate > min ? rate : min;
+        }
+
+        /// <summary>A price typed on a line, put where that kind of line keeps it.</summary>
+        private static void PutPrice(DataRow r, string kind, decimal price)
+        {
+            if (kind == "Copies") r["UnitPrice"] = price;
+            else if (kind == "Waive" || kind == "Committed minimum") r["MinCharges"] = price;
+            else
+            {
+                // A rental bills what was typed, whichever field the contract kept it in.
+                r["UnitPrice"] = price;
+                r["MinCharges"] = 0m;
+            }
+            // The billing query's own "bills its minimum" test, asked again of the new figures.
+            r["UseMin"] = Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m &&
+                          !ScpStrategy.IsCommittedMinRole(S(r["Role"]), S(r["MeterType"]), Dec(r["MinCharges"]));
         }
 
         private string KindOf(DataRow r)
@@ -532,10 +566,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     r["LastReading"] = Dec(v[FIELD_INITIAL]);
                     r["CurrentReading"] = Dec(v[FIELD_CURRENT]);
                 }
-                r["UnitPrice"] = Dec(v[FIELD_RATE]);
-                r["FOCQty"] = Dec(v[FIELD_FOC]);
-                r["RebatePct"] = Dec(v[FIELD_REBATE]);
-                r["MinCharges"] = Dec(v[FIELD_MIN]);
+                // Only what was typed moves; everything else is the contract's as loaded.
+                if (_typed.Contains(key + "|" + FIELD_RATE)) PutPrice(r, S(v["Kind"]), Dec(v[FIELD_RATE]));
+                if (_typed.Contains(key + "|" + FIELD_FOC)) r["FOCQty"] = Dec(v[FIELD_FOC]);
+                if (_typed.Contains(key + "|" + FIELD_REBATE)) r["RebatePct"] = Dec(v[FIELD_REBATE]);
 
                 List<decimal[]> bands;
                 if (!flat && _tierOverride.TryGetValue(key, out bands))
@@ -547,12 +581,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     r["MultiPriceCode"] = code;
                 }
 
-                // "Bills its minimum" is decided when the rows load, from the price and the minimum.
-                // Asked again only where the user changed one of them: the loaded answer can also come
-                // from an agreed line price, which this screen does not second-guess.
-                if (_typed.Contains(key + "|" + FIELD_RATE) || _typed.Contains(key + "|" + FIELD_MIN))
-                    r["UseMin"] = Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) > 0m &&
-                                  !ScpStrategy.IsCommittedMinRole(S(r["Role"]), S(r["MeterType"]), Dec(r["MinCharges"]));
                 // A rental's FOC is its free months left: 0.00 this month while there are any.
                 if (flat && _typed.Contains(key + "|" + FIELD_FOC) && !Bool(r["IsWaive"]) && !ScpBillingRows.IsCommitRow(r))
                     r["EntrySource"] = Dec(r["FOCQty"]) > 0m ? "RENTAL FREE" : "RENTAL";
@@ -688,7 +716,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (!flat && Dec(v[FIELD_CURRENT]) < Dec(v[FIELD_INITIAL])) return "Current is below initial - 0 copies";
             if (!string.IsNullOrEmpty(billed.StrategyNote)) return billed.StrategyNote;
             if (alone != null && billed.Charge != alone.Charge) return "Changed by the contract's group terms";
-            if (billed.UseMin) return "Minimum charge applies";
+            if (billed.UseMin && !flat) return "Minimum charge applies";
             if (!flat && ScpMultiPrice.HasLadder(_calcLadders, billed.MultiPriceCode)) return "Tier price";
             if (!flat && billed.Foc > 0m) return "Less FOC";
             return "";
@@ -807,15 +835,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + noMin.Charge.ToString("n2")));
             }
 
+            // Said only where it moved the money: the test has no minimum to set (user, 22/09), but a
+            // floor on the contract still bills, and an amount nobody can account for is worse.
             decimal min = Dec(r["MinCharges"]);
             if (Bool(r["UseMin"]))
-                sb.AppendLine(Step("Min. charge", "the price is 0.00, so the meter bills its minimum " + min.ToString("n2")));
+                sb.AppendLine(Step("Minimum", "the price is 0.00, so the meter bills the contract's minimum " + min.ToString("n2")));
             else if (min > 0m && noMin.Charge < min)
-                sb.AppendLine(Step("Min. charge", min.ToString("n2") + " is more than " + noMin.Charge.ToString("n2") + " -> " + min.ToString("n2")));
-            else if (min > 0m)
-                sb.AppendLine(Step("Min. charge", min.ToString("n2") + " is not more than " + noMin.Charge.ToString("n2") + " -> no change"));
-            else
-                sb.AppendLine(Step("Min. charge", "none"));
+                sb.AppendLine(Step("Minimum", "the contract's minimum " + min.ToString("n2") + " is more than " +
+                    noMin.Charge.ToString("n2") + " -> " + min.ToString("n2")));
 
             if (b != null && b.Charge != a.Charge)
                 sb.AppendLine(Step("Contract terms", (string.IsNullOrEmpty(b.StrategyNote)
@@ -845,13 +872,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 if (b != null && !string.IsNullOrEmpty(b.StrategyNote)) sb.AppendLine(Step("This month", b.StrategyNote));
                 return;
             }
-            sb.AppendLine(Step(kind, rate.ToString("n2") + " a month"));
+            sb.AppendLine(Step(kind, PriceShown(r, kind).ToString("n2") + " a month"));
             if (foc > 0m)
                 sb.AppendLine(Step("FOC", N0(foc) + " free month" + (foc == 1m ? "" : "s") + " left -> nothing to pay this month"));
-            else if (Bool(r["UseMin"]))
-                sb.AppendLine(Step("Min. charge", "the price is 0.00, so it bills its minimum " + min.ToString("n2")));
-            else if (min > rate)
-                sb.AppendLine(Step("Min. charge", min.ToString("n2") + " is more than " + rate.ToString("n2") + " -> " + min.ToString("n2")));
             if (b != null && a != null && b.Charge != a.Charge)
                 sb.AppendLine(Step("Contract terms", (string.IsNullOrEmpty(b.StrategyNote)
                     ? "changed by the contract's terms" : b.StrategyNote) + " -> " + b.Charge.ToString("n2")));

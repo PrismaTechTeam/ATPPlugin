@@ -15,7 +15,7 @@ namespace ServiceContractPhotocopier.Classes
     {
         private const string PLUGIN_GUID = "6A996121-169E-4D35-AEED-58CFBB1386B7";
         private const string PLUGIN_NAME = "Service Contract Photocopier";
-        private const string PLUGIN_VERSION = "1.5.0.4";
+        private const string PLUGIN_VERSION = "1.5.0.5";
         private const string PLUGIN_CONTACT = "support@ruisin.local";
 
         public PluginMain()

@@ -45,7 +45,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColTier = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColFoc = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRebate = new DevExpress.XtraGrid.Columns.GridColumn();
-            this.ColMin = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColBilled = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColUnit = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColAmount = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -53,7 +52,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColInvoice = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoReading = new DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit();
             this.RepoPrice = new DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit();
-            this.RepoMoney = new DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit();
             this.RepoPercent = new DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit();
             this.PanelBottom = new DevExpress.XtraEditors.PanelControl();
             this.GroupTiers = new DevExpress.XtraEditors.GroupControl();
@@ -82,7 +80,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridViewMeters)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoReading)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoPrice)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.RepoMoney)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoPercent)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelBottom)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GroupTiers)).BeginInit();
@@ -146,9 +143,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblHint.Name = "LblHint";
             this.LblHint.Size = new System.Drawing.Size(1288, 20);
             this.LblHint.TabIndex = 1;
-            this.LblHint.Text = "Key in each meter\'s initial and current reading. The price, tier price, FOC and m" +
-                "inimum charge are the ones set on this contract, saved or not - change any of th" +
-                "em to try another deal. Nothing here is saved and no invoice is created.";
+            this.LblHint.Text = "Key in each meter\'s initial and current reading. The price, tier price and FOC ar" +
+                "e the ones set on this contract, saved or not - change any of them to try another" +
+                " deal. Nothing here is saved and no invoice is created.";
             //
             // LblMonth
             //
@@ -213,7 +210,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.GridMeters.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
             this.RepoReading,
             this.RepoPrice,
-            this.RepoMoney,
             this.RepoPercent});
             this.GridMeters.Size = new System.Drawing.Size(1320, 364);
             this.GridMeters.TabIndex = 1;
@@ -235,7 +231,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColTier,
             this.ColFoc,
             this.ColRebate,
-            this.ColMin,
             this.ColBilled,
             this.ColUnit,
             this.ColAmount,
@@ -387,18 +382,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColRebate.VisibleIndex = 11;
             this.ColRebate.Width = 62;
             //
-            // ColMin
-            //
-            this.ColMin.AppearanceCell.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(251)))), ((int)(((byte)(230)))));
-            this.ColMin.AppearanceCell.Options.UseBackColor = true;
-            this.ColMin.Caption = "Min. Charge";
-            this.ColMin.ColumnEdit = this.RepoMoney;
-            this.ColMin.FieldName = "Min";
-            this.ColMin.Name = "ColMin";
-            this.ColMin.Visible = true;
-            this.ColMin.VisibleIndex = 12;
-            this.ColMin.Width = 80;
-            //
             // ColBilled
             //
             this.ColBilled.Caption = "Billed Copies";
@@ -408,7 +391,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColBilled.Name = "ColBilled";
             this.ColBilled.OptionsColumn.AllowEdit = false;
             this.ColBilled.Visible = true;
-            this.ColBilled.VisibleIndex = 13;
+            this.ColBilled.VisibleIndex = 12;
             this.ColBilled.Width = 80;
             //
             // ColUnit
@@ -420,7 +403,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColUnit.Name = "ColUnit";
             this.ColUnit.OptionsColumn.AllowEdit = false;
             this.ColUnit.Visible = true;
-            this.ColUnit.VisibleIndex = 14;
+            this.ColUnit.VisibleIndex = 13;
             this.ColUnit.Width = 75;
             //
             // ColAmount
@@ -435,7 +418,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColAmount.Name = "ColAmount";
             this.ColAmount.OptionsColumn.AllowEdit = false;
             this.ColAmount.Visible = true;
-            this.ColAmount.VisibleIndex = 15;
+            this.ColAmount.VisibleIndex = 14;
             this.ColAmount.Width = 95;
             //
             // ColNote
@@ -445,7 +428,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColNote.Name = "ColNote";
             this.ColNote.OptionsColumn.AllowEdit = false;
             this.ColNote.Visible = true;
-            this.ColNote.VisibleIndex = 16;
+            this.ColNote.VisibleIndex = 15;
             this.ColNote.Width = 210;
             //
             // ColInvoice
@@ -455,7 +438,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ColInvoice.Name = "ColInvoice";
             this.ColInvoice.OptionsColumn.AllowEdit = false;
             this.ColInvoice.Visible = true;
-            this.ColInvoice.VisibleIndex = 17;
+            this.ColInvoice.VisibleIndex = 16;
             this.ColInvoice.Width = 170;
             //
             // RepoReading
@@ -498,26 +481,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             0,
             -2147483648});
             this.RepoPrice.Name = "RepoPrice";
-            //
-            // RepoMoney
-            //
-            this.RepoMoney.AutoHeight = false;
-            this.RepoMoney.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.RepoMoney.DisplayFormat.FormatString = "n2";
-            this.RepoMoney.DisplayFormat.FormatType = DevExpress.Utils.FormatType.Numeric;
-            this.RepoMoney.MaskSettings.Set("mask", "n2");
-            this.RepoMoney.MaxValue = new decimal(new int[] {
-            99999999,
-            0,
-            0,
-            0});
-            this.RepoMoney.MinValue = new decimal(new int[] {
-            99999999,
-            0,
-            0,
-            -2147483648});
-            this.RepoMoney.Name = "RepoMoney";
             //
             // RepoPercent
             //
@@ -817,7 +780,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.GridViewMeters)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoReading)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoPrice)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.RepoMoney)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoPercent)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelBottom)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GroupTiers)).EndInit();
@@ -865,7 +827,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColTier;
         private DevExpress.XtraGrid.Columns.GridColumn ColFoc;
         private DevExpress.XtraGrid.Columns.GridColumn ColRebate;
-        private DevExpress.XtraGrid.Columns.GridColumn ColMin;
         private DevExpress.XtraGrid.Columns.GridColumn ColBilled;
         private DevExpress.XtraGrid.Columns.GridColumn ColUnit;
         private DevExpress.XtraGrid.Columns.GridColumn ColAmount;
@@ -873,7 +834,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColInvoice;
         private DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit RepoReading;
         private DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit RepoPrice;
-        private DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit RepoMoney;
         private DevExpress.XtraEditors.Repository.RepositoryItemSpinEdit RepoPercent;
         private DevExpress.XtraEditors.PanelControl PanelBottom;
         private DevExpress.XtraEditors.GroupControl GroupTiers;
