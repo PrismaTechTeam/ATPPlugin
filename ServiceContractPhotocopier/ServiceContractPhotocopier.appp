@@ -16,9 +16,9 @@
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.5.0.5 (2026-09-22) — Calculation Test without the minimum charge:
-1. Calculation Test has no Min. Charge column. Each line has one Price: per copy on a meter, the monthly amount on a rental, and the amount itself on a committed minimum or a waive. A minimum charge on the contract still applies, and the working says so on the line where it changed the amount.
-2. On a meter priced by tier price, FOC shows the tier's free copies (its 0.00 band), as the meter configuration does. Those are changed in Tier Price below the list.
+    <WhatsNew>v1.5.0.5 (2026-09-22) — Calculation Test, tier FOC:
+1. On a meter priced by tier price, FOC shows the tier's free copies (its 0.00 band), as the meter configuration does. Those are changed in Tier Price below the list.
+2. The working below the list mentions the minimum charge only on a meter that has one.
 
 v1.5.0.4 (2026-09-21) — Calculation Test uses the screen's prices:
 1. Calculation Test uses the prices set on the contract screen, saved or not: each meter's price, tier price, FOC, rebate and minimum charge, Billing Setup's agreed line prices, and the invoice split. Machines and meters added but not saved yet are included; ones taken off are left out. Every figure can still be changed in the test to try another deal. 1.5.0.3 read only the saved contract, so a contract priced but not yet saved tested at 0.00.

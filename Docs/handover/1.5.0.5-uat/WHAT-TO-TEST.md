@@ -13,9 +13,10 @@ Everything is under **Service & Contract**.
    machines it covers. The heading above tells you **how many invoices this contract sends**.
 4. **View Sample Invoice** — the real invoice layout, with no reading and no posting.
 5. **Calculation Test** — key in each meter's initial and current reading and see what the contract
-   charges: the copies, FOC, tier price, rebate, the amount of every meter, which invoice it goes
-   on and the total, with the working written out. Change a price or the FOC there to try another
-   deal -- a rental's Price is what it bills each month. It uses the prices as they are on the contract screen,
+   charges: the copies, FOC, tier price, rebate, minimum charge, the amount of every meter, which
+   invoice it goes on and the total, with the working written out. Change a price, the FOC or the
+   minimum there to try another deal -- the committed minimum and the waive keep their amounts in
+   Min. Charge, so To Pay shows what they really do. It uses the prices as they are on the contract screen,
    saved or not, so a deal can be checked before it is saved. Nothing is saved.
 
 **Look for:** does the sample match what you agreed with this customer — one invoice or several,
