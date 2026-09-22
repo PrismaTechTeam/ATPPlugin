@@ -688,6 +688,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         /// the list. Both only while the invoice list is the view showing.</summary>
         private void InvoiceRun_KeyDown(object sender, KeyEventArgs e)
         {
+            // Ctrl+Shift+T: the Meters view's TEST Fetch (JSON). The view is a window inside this
+            // one and hears keys only while focus is in it -- after clicking "Meters - fetch & key
+            // in" the focus is on that button, here. Only this shortcut is passed on.
+            if (e.Control && e.Shift && e.KeyCode == Keys.T && this.BtnViewMeters.Checked
+                && _meters != null && !_meters.IsDisposed)
+            {
+                e.Handled = true;
+                _meters.ToggleTestFetch();
+                return;
+            }
             if (!this.BtnViewInvoices.Checked || e.KeyCode != Keys.Delete) return;
             if (e.Control && e.Shift) { e.Handled = true; DeleteAllListedInvoices(); return; }
             if (!e.Control && !e.Shift && !e.Alt) { e.Handled = true; DeleteSelectedInvoice(); }

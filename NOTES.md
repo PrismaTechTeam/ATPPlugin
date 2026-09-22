@@ -1718,3 +1718,11 @@ User picked BIZHUB 651I on the machine grid and Machine Serial offered nothing; 
 - Change: when the list is empty the cell shows NullValuePrompt "No <item> serial in stock - type it, or receive it in AutoCount first". Typing a serial was always allowed.
 - Not changed (a decision for the user): serials already on another machine are still listed; the 39 ATPCHECK serials that exist only on DO/IV documents (the 18/9 SerialNoCopy put them on the documents, not in ItemSerialNo) are not in stock and correctly not listed -- Generate From Serial No is the way in for delivered machines.
 - Released **1.5.0.8** (2816828 bytes, SHA256 `A0D93D61…1050`); pack `Docs/handover/1.5.0.8-uat/`; tag `v1.0.8-uat`. Not checked on screen: the prompt shows only in a focused, empty editor.
+
+### 22/9 — Ctrl+Shift+T (TEST Fetch JSON) did nothing in Meter Invoice Run → 1.5.0.9
+
+User: "以前我有一个shortcut key是可以写 meter json 模拟fetch from PUMS" (screenshot: Meter Invoice Run, Meters view). The shortcut is MeterReadingIntegration_Form's Ctrl+Shift+T (KeyPreview on the Meters form). Since the Meters form is hosted inside InvoiceRun_Form (TopLevel = false), it hears keys only while focus is inside it; after clicking "Meters - fetch & key in" focus is on the host's CheckButton, and the host's KeyDown handled only Delete -- so the key went nowhere.
+
+- InvoiceRun_KeyDown passes Ctrl+Shift+T to `_meters.ToggleTestFetch()` (new internal wrapper) when the Meters view is showing. When focus IS inside the Meters form, its own KeyPreview handles it first and marks it Handled, so it never toggles twice. Ctrl+Shift+3 (Dev Wipe) deliberately NOT forwarded -- widening a destructive shortcut is the user's call.
+- The amber button was placed at BtnFetch.Right + 8 -- on top of the Setting button that now sits there. Now after the last visible control on Fetch's row.
+- Not tested on screen (keyboard routing in a hosted form); built clean. Released **1.5.0.9** (2817744 bytes, SHA256 `72024C4E…6818`); pack `Docs/handover/1.5.0.9-uat/`; tag `v1.0.9-uat`.

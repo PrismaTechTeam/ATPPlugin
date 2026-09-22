@@ -134,6 +134,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         // ── TEST Fetch (JSON): hidden button + paste dialog ──────────────────────────────────────
 
+        /// <summary>Ctrl+Shift+T from a screen that holds this one inside it (Meter Invoice Run). A
+        /// hosted form only hears keys while focus is in it, and after "Meters - fetch &amp; key in"
+        /// is clicked the focus is on the host's button.</summary>
+        internal void ToggleTestFetch()
+        {
+            ToggleMockFetchButton();
+        }
+
         private void ToggleMockFetchButton()
         {
             if (_btnMockFetch == null)
@@ -143,7 +151,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 _btnMockFetch.Appearance.BackColor = Color.FromArgb(255, 236, 179);   // amber = TEST
                 _btnMockFetch.Appearance.Options.UseBackColor = true;
                 _btnMockFetch.Parent = this.BtnFetch.Parent;
-                _btnMockFetch.Location = new Point(this.BtnFetch.Right + 8, this.BtnFetch.Top);
+                // After the last button on Fetch's row -- right beside Fetch it landed on Setting.
+                int x = this.BtnFetch.Right + 8;
+                foreach (Control c in this.BtnFetch.Parent.Controls)
+                    if (c != _btnMockFetch && c.Visible && Math.Abs(c.Top - this.BtnFetch.Top) < 10 && c.Right + 8 > x)
+                        x = c.Right + 8;
+                _btnMockFetch.Location = new Point(x, this.BtnFetch.Top);
                 _btnMockFetch.Click += new EventHandler(BtnMockFetch_Click);
                 UpdateMockFetchButtonText();
             }

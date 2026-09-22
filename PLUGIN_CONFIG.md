@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.8
+- **Version:** 1.5.0.9
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.9 (2026-09-22) — TEST Fetch shortcut inside Meter Invoice Run:
+    1. Ctrl+Shift+T shows the TEST Fetch (JSON) button on the Meters view of Meter Invoice Run again, wherever the focus is, and the button sits after the last button on that row instead of over Setting. For testing only.
+
     v1.5.0.8 (2026-09-22) — Machine Serial says when there is none in stock:
     1. The Machine Serial list is the item's serials in AutoCount's stock. When a model has none (never received with serial numbers) the cell now says so - "No BIZHUB 651I serial in stock - type it, or receive it in AutoCount first" - instead of opening an empty list.
 
