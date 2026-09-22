@@ -3186,10 +3186,19 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DevExpress.XtraEditors.ComboBoxEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.ComboBoxEdit;
             if (ed == null) return;
             ed.Properties.Items.Clear();
+            ed.Properties.NullValuePrompt = "";
             string code = (GridViewItems.GetFocusedRowCellValue("ItemCode") ?? "").ToString().Trim();
             if (_inlineSerialLookup == null || code.Length == 0) return;
             foreach (DataRow r in _inlineSerialLookup.Select("ItemCode='" + code.Replace("'", "''") + "'"))
                 ed.Properties.Items.Add(r["SerialNumber"].ToString());
+            // An empty list is not a fault: the model has no serial in AutoCount's stock serial list
+            // (never received with serial numbers). Say so in the cell instead of leaving it blank
+            // (user, 22/09: "BIZHUB 651I does not populate, some machines do").
+            if (ed.Properties.Items.Count == 0)
+            {
+                ed.Properties.NullValuePrompt = "No " + code + " serial in stock - type it, or receive it in AutoCount first";
+                ed.Properties.ShowNullValuePromptWhenFocused = true;
+            }
         }
 
         // #6: when the Bill Group cell opens, list the codes already used in THIS contract so the

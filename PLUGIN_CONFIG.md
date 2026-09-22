@@ -9,7 +9,7 @@
 ## Identity
 - **Guid:** `6A996121-169E-4D35-AEED-58CFBB1386B7`   <!-- DO NOT CHANGE -->
 - **Name:** Service Contract Photocopier
-- **Version:** 1.5.0.7
+- **Version:** 1.5.0.8
 - **MinimumAccountingVersion:** 2.0.2
 - **ScriptLanguage:** C#
 - **ProjectFileVersion:** 1.0
@@ -25,6 +25,9 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
+    v1.5.0.8 (2026-09-22) — Machine Serial says when there is none in stock:
+    1. The Machine Serial list is the item's serials in AutoCount's stock. When a model has none (never received with serial numbers) the cell now says so - "No BIZHUB 651I serial in stock - type it, or receive it in AutoCount first" - instead of opening an empty list.
+
     v1.5.0.7 (2026-09-22) — a machine is a serial-numbered item:
     1. A machine's Item Code - on the contract's machine list and in the service item - offers only the stock items with Has Serial No ticked. A machine saved earlier on another item keeps it and still shows it. Toner and spare parts keep the full list.
     2. Plugin Option > 4. Contract & Item No. has the tick for it: untick to list every stock item again.
