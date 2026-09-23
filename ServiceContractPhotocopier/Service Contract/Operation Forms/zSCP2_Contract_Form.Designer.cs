@@ -1306,7 +1306,7 @@
             // 
             this.TxtAddress.Location = new System.Drawing.Point(125, 24);
             this.TxtAddress.Name = "TxtAddress";
-            this.TxtAddress.Size = new System.Drawing.Size(218, 50);
+            this.TxtAddress.Size = new System.Drawing.Size(218, 74);
             this.TxtAddress.StyleController = this.layoutControl1;
             this.TxtAddress.TabIndex = 16;
             // 
@@ -1516,7 +1516,7 @@
             // 
             this.TxtDescription.Location = new System.Drawing.Point(125, 198);
             this.TxtDescription.Name = "TxtDescription";
-            this.TxtDescription.Size = new System.Drawing.Size(218, 62);
+            this.TxtDescription.Size = new System.Drawing.Size(218, 38);
             this.TxtDescription.StyleController = this.layoutControl1;
             this.TxtDescription.TabIndex = 33;
             // 
@@ -1566,7 +1566,7 @@
             // layoutControlItem3
             // 
             this.layoutControlItem3.Control = this.TxtAttention;
-            this.layoutControlItem3.Location = new System.Drawing.Point(0, 78);
+            this.layoutControlItem3.Location = new System.Drawing.Point(0, 102);
             this.layoutControlItem3.Name = "layoutControlItem3";
             this.layoutControlItem3.Size = new System.Drawing.Size(335, 24);
             this.layoutControlItem3.Text = "Attention";
@@ -1575,7 +1575,7 @@
             // layoutControlItem5
             // 
             this.layoutControlItem5.Control = this.TxtTerm;
-            this.layoutControlItem5.Location = new System.Drawing.Point(0, 126);
+            this.layoutControlItem5.Location = new System.Drawing.Point(0, 150);
             this.layoutControlItem5.Name = "layoutControlItem5";
             this.layoutControlItem5.Size = new System.Drawing.Size(335, 24);
             this.layoutControlItem5.Text = "Term";
@@ -1584,7 +1584,7 @@
             // layoutControlItem6
             // 
             this.layoutControlItem6.Control = this.TxtArea;
-            this.layoutControlItem6.Location = new System.Drawing.Point(0, 150);
+            this.layoutControlItem6.Location = new System.Drawing.Point(0, 174);
             this.layoutControlItem6.Name = "layoutControlItem6";
             this.layoutControlItem6.Size = new System.Drawing.Size(335, 24);
             this.layoutControlItem6.Text = "Area";
@@ -1613,7 +1613,7 @@
             this.layoutControlItem2.Control = this.TxtAddress;
             this.layoutControlItem2.Location = new System.Drawing.Point(0, 24);
             this.layoutControlItem2.Name = "layoutControlItem2";
-            this.layoutControlItem2.Size = new System.Drawing.Size(335, 54);
+            this.layoutControlItem2.Size = new System.Drawing.Size(335, 78);
             this.layoutControlItem2.Text = "Address";
             this.layoutControlItem2.TextSize = new System.Drawing.Size(101, 13);
             // 
@@ -1647,7 +1647,7 @@
             // layoutControlItem4
             // 
             this.layoutControlItem4.Control = this.TxtPhone;
-            this.layoutControlItem4.Location = new System.Drawing.Point(0, 102);
+            this.layoutControlItem4.Location = new System.Drawing.Point(0, 126);
             this.layoutControlItem4.Name = "layoutControlItem4";
             this.layoutControlItem4.Size = new System.Drawing.Size(335, 24);
             this.layoutControlItem4.Text = "Phone";
@@ -1708,7 +1708,7 @@
             // layoutControlItem11
             // 
             this.layoutControlItem11.Control = this.SluAgent;
-            this.layoutControlItem11.Location = new System.Drawing.Point(0, 174);
+            this.layoutControlItem11.Location = new System.Drawing.Point(0, 198);
             this.layoutControlItem11.Name = "layoutControlItem11";
             this.layoutControlItem11.Size = new System.Drawing.Size(335, 24);
             this.layoutControlItem11.Text = "Agent";
@@ -1743,9 +1743,9 @@
             // layoutControlItem15
             // 
             this.layoutControlItem15.Control = this.TxtDescription;
-            this.layoutControlItem15.Location = new System.Drawing.Point(0, 198);
+            this.layoutControlItem15.Location = new System.Drawing.Point(0, 222);
             this.layoutControlItem15.Name = "layoutControlItem15";
-            this.layoutControlItem15.Size = new System.Drawing.Size(335, 66);
+            this.layoutControlItem15.Size = new System.Drawing.Size(335, 42);
             this.layoutControlItem15.Text = "Description";
             this.layoutControlItem15.TextSize = new System.Drawing.Size(101, 13);
             // 
