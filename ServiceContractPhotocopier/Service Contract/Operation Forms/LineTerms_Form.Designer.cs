@@ -66,6 +66,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.SpnPartOff = new DevExpress.XtraEditors.SpinEdit();
             this.LblPartC = new DevExpress.XtraEditors.LabelControl();
             this.LblCount = new DevExpress.XtraEditors.LabelControl();
+            this.LblMinCount = new DevExpress.XtraEditors.LabelControl();
+            this.CmbMinCount = new DevExpress.XtraEditors.ComboBoxEdit();
             this.CmbCount = new DevExpress.XtraEditors.ComboBoxEdit();
             this.LblWaiveD = new DevExpress.XtraEditors.LabelControl();
             this.BtnOK = new DevExpress.XtraEditors.SimpleButton();
@@ -94,6 +96,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.SpnPartAt.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnPartOff.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbCount.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbMinCount.Properties)).BeginInit();
             this.SuspendLayout();
             //
             // LblLineCaption
@@ -117,6 +120,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // GrpMin
             //
             this.GrpMin.Controls.Add(this.ChkMin);
+            this.GrpMin.Controls.Add(this.LblMinCount);
+            this.GrpMin.Controls.Add(this.CmbMinCount);
             this.GrpMin.Controls.Add(this.LblMinA);
             this.GrpMin.Controls.Add(this.SpnMin);
             this.GrpMin.Controls.Add(this.LblMinB);
@@ -169,6 +174,28 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblMinB.Size = new System.Drawing.Size(52, 13);
             this.LblMinB.TabIndex = 3;
             this.LblMinB.Text = "a month";
+            //
+            // LblMinCount
+            //
+            this.LblMinCount.Location = new System.Drawing.Point(34, 106);
+            this.LblMinCount.Name = "LblMinCount";
+            this.LblMinCount.Size = new System.Drawing.Size(60, 13);
+            this.LblMinCount.TabIndex = 6;
+            this.LblMinCount.Text = "Count only";
+            //
+            // CmbMinCount
+            //
+            this.CmbMinCount.Location = new System.Drawing.Point(110, 103);
+            this.CmbMinCount.Name = "CmbMinCount";
+            this.CmbMinCount.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.CmbMinCount.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.CmbMinCount.Properties.Items.AddRange(new object[] {
+            "black and colour",
+            "black only",
+            "colour only"});
+            this.CmbMinCount.Size = new System.Drawing.Size(160, 20);
+            this.CmbMinCount.TabIndex = 7;
             //
             // LblMinC
             //
@@ -636,6 +663,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Minimum / waive";
             ((System.ComponentModel.ISupportInitialize)(this.CmbCount.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbMinCount.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnPartOff.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SpnPartAt.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkPartial.Properties)).EndInit();
@@ -708,6 +736,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.SpinEdit SpnPartOff;
         private DevExpress.XtraEditors.LabelControl LblPartC;
         private DevExpress.XtraEditors.LabelControl LblCount;
+        private DevExpress.XtraEditors.LabelControl LblMinCount;
+        private DevExpress.XtraEditors.ComboBoxEdit CmbMinCount;
         private DevExpress.XtraEditors.ComboBoxEdit CmbCount;
         private DevExpress.XtraEditors.LabelControl LblWaiveD;
         private DevExpress.XtraEditors.SimpleButton BtnOK;

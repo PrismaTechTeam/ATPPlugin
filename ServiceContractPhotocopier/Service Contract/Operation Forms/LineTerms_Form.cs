@@ -52,6 +52,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <see cref="MinPerMachine"/> is chosen.</summary>
         public readonly System.Data.DataTable Machines = NewMachineTable();
 
+        /// <summary>Which copies the minimum is measured over: <c>BKCL</c> both, <c>BK</c> black
+        /// only, <c>CL</c> colour only. A deal can floor the black copies and leave colour out of it
+        /// (feedback ATP-4). The engine has always read it -- the meter's WaiveScope -- this is the
+        /// screen that sets it.</summary>
+        public string MinCount = "BKCL";
+
         /// <summary>Whose copies decide the waive: <c>G</c> this line's machines added up, <c>S</c>
         /// each machine against its own. A waive credits the RENTAL, so the set is the machines that
         /// share the rental — unlike a minimum, which floors the copies and follows the copies.</summary>
@@ -140,7 +146,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             bool perMachine, System.Collections.Generic.List<MachineMin> onLine,
             bool waivePerMachine, int waiveFirstN,
             decimal waivePartialAt, decimal waivePartialOff, string waiveCount,
-            bool allowUsageWaive, decimal lineRental) : this()
+            bool allowUsageWaive, decimal lineRental, string minCount) : this()
         {
             MinScope = perMachine ? "S" : "G";
             if (onLine != null)
@@ -183,7 +189,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 WaiveScopeMode = "G";
                 // and the figures move into the row the radios were on, so the group is not a box
                 // with a hole where a question used to be.
-                Up(LblMinA); Up(SpnMin); Up(LblMinB); Up(LblMinC);
+                Up(LblMinA); Up(SpnMin); Up(LblMinB); Up(LblMinCount); Up(CmbMinCount); Up(LblMinC);
                 Up(LblWaiveA); Up(SpnWaiveAt); Up(LblWaiveB); Up(SpnWaiveAmount); Up(LblWaiveC);
                 // ...and everything BELOW them, which is the rest of the deal. Only the first two
                 // rows used to move, and the box was then cut to the second one -- so a line with
@@ -198,6 +204,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 GrpMin.Height = LblMinC.Bottom + 12 + Chrome(GrpMin);
             }
             SpnMin.Value = minCharge;
+            MinCount = (minCount ?? "BKCL").Trim().ToUpperInvariant();
+            CmbMinCount.SelectedIndex = MinCount == "BK" ? 1 : (MinCount == "CL" ? 2 : 0);
+            CmbMinCount.SelectedIndexChanged += new EventHandler(Gate);
             SpnWaiveAt.Value = waiveAt;
             SpnWaiveAmount.Value = waiveAmount;
             WaiveFirstN = waiveFirstN;
@@ -352,6 +361,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             RgMinMode.Enabled = on;
             GridMin.Visible = on && per;
             LblMinA.Visible = SpnMin.Visible = LblMinB.Visible = on && !per;
+            // Which copies the floor is measured over -- the same question the waive asks below,
+            // asked of the minimum (feedback ATP-4). It applies to both modes: per machine, each
+            // machine's floor is measured over the copies chosen here.
+            LblMinCount.Visible = CmbMinCount.Visible = on;
+            CmbMinCount.Enabled = on;
+            LblMinA.Text = CmbMinCount.SelectedIndex == 1
+                ? "Their black copies must come to at least   RM"
+                : (CmbMinCount.SelectedIndex == 2
+                    ? "Their colour copies must come to at least   RM"
+                    : "Their black and colour must come to at least   RM");
             // The sentence sits UNDER whatever is on screen. It used to be pinned where the single
             // figure leaves room, so switching to the per-machine sheet drew it straight across the
             // grid's first row -- the top machine simply vanished behind an explanation of itself.
@@ -360,8 +379,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 : (mode == "C"
                     ? "Measured over EVERY machine on this contract, not just this row's."
                     : "Print less and the invoice charges the difference, not the whole amount.");
+            int minRowBottom = per ? GridMin.Bottom : SpnMin.Bottom;
+            LblMinCount.Location = new System.Drawing.Point(34, minRowBottom + 9);
+            CmbMinCount.Location = new System.Drawing.Point(110, minRowBottom + 6);
             LblMinC.Location = new System.Drawing.Point(LblMinA.Left,
-                per ? GridMin.Bottom + 6 : SpnMin.Bottom + 10);
+                on ? CmbMinCount.Bottom + 8 : minRowBottom + 10);
             SpnMin.Enabled = on && !per;
             // Shown and live are two different questions here. A waive the contract cannot carry -- the
             // rental is on its own invoice -- is still SHOWN, greyed, with the reason beside it, because
@@ -478,6 +500,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ViewMin.UpdateCurrentRow();
             MinScope = _allowMin && ChkMin.Checked ? Convert.ToString(RgMinMode.EditValue) : "G";
             MinCharge = _allowMin && ChkMin.Checked && !MinPerMachine ? SpnMin.Value : 0m;
+            MinCount = !(_allowMin && ChkMin.Checked) ? "BKCL"
+                     : (CmbMinCount.SelectedIndex == 1 ? "BK"
+                     : (CmbMinCount.SelectedIndex == 2 ? "CL" : "BKCL"));
             ViewWaive.PostEditor();
             ViewWaive.UpdateCurrentRow();
             WaiveScopeMode = _allowWaive && ChkWaive.Checked

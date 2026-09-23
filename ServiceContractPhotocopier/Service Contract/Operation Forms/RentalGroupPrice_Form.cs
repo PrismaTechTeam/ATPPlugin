@@ -873,7 +873,7 @@ namespace ServiceContractPhotocopier
             }
         }
 
-        private void WriteMinPerMachine(Line L, DataTable machines)
+        private void WriteMinPerMachine(Line L, DataTable machines, string countOnly)
         {
             ClearTermMeters(L, "COMMIT");
             for (int i = 0; i < L.Rows.Count && i < machines.Rows.Count; i++)
@@ -895,6 +895,7 @@ namespace ServiceContractPhotocopier
                     if (m != null)
                     {
                         SetIfCol(m, "CommitScope", "S");
+                        SetIfCol(m, "WaiveScope", countOnly);
                         m["MinimumCharges"] = v;
                     }
                 }
@@ -1271,6 +1272,14 @@ namespace ServiceContractPhotocopier
                 string sc = Str(wm, "WaiveScope").Trim().ToUpperInvariant();
                 countOnly = ((sc == "BK" || sc == "CL") ? sc : "BKCL");
             }
+            // Which copies this line's minimum counts, off the COMMIT meter that carries it.
+            string minCountOnly = "BKCL";
+            DataRow cmm = FindTermMeter(L, "COMMIT");
+            if (cmm != null)
+            {
+                string ms = Str(cmm, "WaiveScope").Trim().ToUpperInvariant();
+                minCountOnly = ((ms == "BK" || ms == "CL") ? ms : "BKCL");
+            }
             bool rentalSide = L.Side == "R";
             bool oneInvoice = WaiveFits;
             List<LineTerms_Form.MachineMin> onLine = new List<LineTerms_Form.MachineMin>();
@@ -1292,7 +1301,7 @@ namespace ServiceContractPhotocopier
             }
             bool perMachine = !rentalSide && L.Rows.Count > 1 && CountTermMeters(L, "COMMIT") > 0 && !IsGroupScoped(L, "COMMIT");
             bool waivePerMachine = rentalSide && L.Rows.Count > 1 && CountTermMeters(L, "WAIVE") > 0 && !IsGroupScoped(L, "WAIVE");
-            using (LineTerms_Form f = new LineTerms_Form(L.Name, L.Rows.Count, min, at, amt, !rentalSide, rentalSide, (!rentalSide || oneInvoice) ? "" : "The rental is on an invoice of its own, so a waive cannot be judged by what the copies came to -- they are on the other paper. Free months still work: they read a calendar, not a meter.", perMachine, onLine, waivePerMachine, firstN, partAt, partOff, countOnly, rentalSide && oneInvoice, RentalOfLine(L)))
+            using (LineTerms_Form f = new LineTerms_Form(L.Name, L.Rows.Count, min, at, amt, !rentalSide, rentalSide, (!rentalSide || oneInvoice) ? "" : "The rental is on an invoice of its own, so a waive cannot be judged by what the copies came to -- they are on the other paper. Free months still work: they read a calendar, not a meter.", perMachine, onLine, waivePerMachine, firstN, partAt, partOff, countOnly, rentalSide && oneInvoice, RentalOfLine(L), minCountOnly))
             {
                 if (f.ShowDialog(this) != DialogResult.OK)
                 {
@@ -1302,7 +1311,7 @@ namespace ServiceContractPhotocopier
                 {
                     if (f.MinPerMachine)
                     {
-                        WriteMinPerMachine(L, f.Machines);
+                        WriteMinPerMachine(L, f.Machines, f.MinCount);
                     }
                     else
                     {
@@ -1319,6 +1328,7 @@ namespace ServiceContractPhotocopier
                         if (w != null)
                         {
                             SetIfCol(w, "CommitScope", f.MinScope);
+                            SetIfCol(w, "WaiveScope", f.MinCount);
                         }
                     }
                 }

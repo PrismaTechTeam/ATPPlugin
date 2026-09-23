@@ -9,14 +9,18 @@
     <ProjectFileVersion>1.0</ProjectFileVersion>
     <Guid>6A996121-169E-4D35-AEED-58CFBB1386B7</Guid>
     <Name>Service Contract Photocopier</Name>
-    <Version>1.5.0.9</Version>
+    <Version>1.5.0.10</Version>
     <Manufacturer>RUISIN PLASTIC INDUSTRIES SDN BHD</Manufacturer>
     <ManufacturerUrl>https://www.newpages.com.my/v2/cn/company/190550/Rui_Sin_Plastic_Industries_Sdn__Bhd_.html</ManufacturerUrl>
     <Copyright>Copyright ©  2026 RUISIN PLASTIC INDUSTRIES SDN BHD</Copyright>
     <SalesPhone>0167166663</SalesPhone>
     <SupportPhone>0167216749</SupportPhone>
     <Description>This Plugin handles Service &amp; Contract management for the Photocopier business in AutoCount.</Description>
-    <WhatsNew>v1.5.0.9 (2026-09-22) — Meter Invoice Run shows the minimum and the waive:
+    <WhatsNew>v1.5.0.10 (2026-09-23) — the contract header, and which copies a minimum counts:
+1. On a contract, the Address box is taller and the Description box shorter, so a four-line address reads without scrolling.
+2. Meters / Pricing, Minimum / waive: the minimum charge can count black only, colour only, or both. The invoice already billed whichever was set on the meter; now this screen sets it, and the sentence above says which copies it measures.
+
+v1.5.0.9 (2026-09-22) — Meter Invoice Run shows the minimum and the waive:
 1. Meter Invoice Run works out the committed minimum's top-up and the rental waive from the readings, the way the invoice will: Total Charges and the invoice Amount show them before Generate, and a new reading updates them at once.
 2. A copy line with a rebate, on a contract on the new layout, shows the same cents as its invoice (3,710.00, where it showed 3,709.94).
 3. For testing: Ctrl+Shift+U in Meter Invoice Run writes the TEST Fetch JSON for the picked invoice's contract, to copy; Ctrl+Shift+T shows TEST Fetch on the Meters view wherever the focus is.

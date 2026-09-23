@@ -1749,3 +1749,13 @@ Two questions are with the customer, on a 100 free / 0.024 / 0.020 ladder and 1,
 - And how the invoice prints it: one line per band (our suggestion -- each line multiplies back) or one line at the blended rate (0.022584, a price on no contract).
 
 Evidence gathered: the old V8 book has 99 ladders and every real one is "free copies + ONE price" -- the only two multi-rate ladders there are called IMPORT and testing, on 0 machines. Today AED_ATPCHECK has exactly ONE meter on a multi-rate ladder (CSSI-000003.1 BK, the ticket's own test) and AED_ATPTEST none, so whichever rule is chosen moves no existing money.
+
+### 23/9 — feedback ATP-2 and ATP-4 → 1.5.0.10
+
+From the feedback portal (read over HTTP; the MCP server was added mid-session so its tools were not loaded).
+
+**ATP-2 "Contract Module Address Field and Description Field Size"** -- "Reduce Description Size but increase Address Size to make the address full view". The contract header's left column ran Debtor / Address (54) / Attention / Phone / Term / Area / Agent / Description (66), total 264. Address is now 78 and Description 42, with the five items between them moved down 24, so the group ends where it did and nothing else on the tab moves. The memos follow (TxtAddress 50 -> 74, TxtDescription 62 -> 38). Checked on screen with SC 000000010: three address lines show in full.
+
+**ATP-4 "Min charges should allow choose Both BK CL or BK ONLY or CL only"** -- the screenshot is the Minimum / waive dialog, which only ever said "Their black and colour must come to at least RM". The ENGINE has always measured a committed minimum over the copies its meter names (`ScpCommittedMin`: `cscope = l.WaiveScope`, BK / CL / else both), and the meter grid's "..." (CommitConfig_Form) could already set it -- the deal screen could not. Added `Count only` (black and colour / black only / colour only) to the minimum, beside the same picker the waive has: `LineTerms_Form.MinCount`, passed in from the COMMIT meter's WaiveScope and written back to it (group minimum and per-machine minimums both). The sentence above the figure follows the choice ("Their black copies must come to at least RM"). Both screens write the same field, so they cannot disagree.
+- MinScopeTest (no DB, synthetic lines): black 100.00, colour 300.00, minimum 200.00 -> both 0.00 top-up, black only 100.00, colour only 0.00; black only with nothing in black tops up the whole 200.00. ALL OK. Dialog and contract header checked by screenshot.
+- Released **1.5.0.10**: 2825615 bytes, SHA256 `3A234425…C958`; pack `Docs/handover/1.5.0.10-uat/`; tag `v1.0.10-uat`. Tickets NOT answered or closed on the portal -- that is the user's to send.
