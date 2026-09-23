@@ -86,6 +86,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnPreview = new DevExpress.XtraEditors.SimpleButton();
             this.BtnHistory = new DevExpress.XtraEditors.SimpleButton();
             this.BtnDeleteInvoice = new DevExpress.XtraEditors.SimpleButton();
+            this.BtnTakeOver = new DevExpress.XtraEditors.SimpleButton();
             this.BtnOverdue = new DevExpress.XtraEditors.CheckButton();
             this.GridReadings = new DevExpress.XtraGrid.GridControl();
             this.GridViewReadings = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -775,6 +776,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelDetailHead.Controls.Add(this.BtnPreview);
             this.PanelDetailHead.Controls.Add(this.BtnHistory);
             this.PanelDetailHead.Controls.Add(this.BtnDeleteInvoice);
+            this.PanelDetailHead.Controls.Add(this.BtnTakeOver);
             this.PanelDetailHead.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelDetailHead.Location = new System.Drawing.Point(0, 0);
             this.PanelDetailHead.Name = "PanelDetailHead";
@@ -898,6 +900,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnDeleteInvoice.Size = new System.Drawing.Size(160, 26);
             this.BtnDeleteInvoice.TabIndex = 9;
             this.BtnDeleteInvoice.Text = "Delete this invoice";
+            //
+            // BtnTakeOver  (the machine's reading becomes the operator's, number and date kept)
+            //
+            this.BtnTakeOver.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnTakeOver.Appearance.Options.UseFont = true;
+            this.BtnTakeOver.Location = new System.Drawing.Point(180, 118);
+            this.BtnTakeOver.Name = "BtnTakeOver";
+            this.BtnTakeOver.Size = new System.Drawing.Size(112, 26);
+            this.BtnTakeOver.TabIndex = 10;
+            this.BtnTakeOver.Text = "Key in myself";
             //
             // GridReadings
             //
@@ -1403,6 +1415,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnPreview;
         private DevExpress.XtraEditors.SimpleButton BtnHistory;
         private DevExpress.XtraEditors.SimpleButton BtnDeleteInvoice;
+        private DevExpress.XtraEditors.SimpleButton BtnTakeOver;
         private DevExpress.XtraEditors.CheckButton BtnOverdue;
         private DevExpress.XtraGrid.GridControl GridReadings;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewReadings;

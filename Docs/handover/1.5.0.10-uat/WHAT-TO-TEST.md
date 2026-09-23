@@ -48,6 +48,11 @@ counter. The invoice prints that day, and next month's **Last Read Date** is tha
 cell only opens where the reading was keyed: a reading fetched from a machine, a locked
 billing-day snapshot and an already-invoiced period keep the date they have.
 
+If the machine itself could not be trusted that month -- it broke down, it was swapped, it sent a
+stale counter -- pick its row and press **Key in myself**. The number and its date stay as they
+are; what changes is that the reading is yours, so its date can be corrected, and the next
+Fetch raises a conflict instead of overwriting it.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and

@@ -835,6 +835,95 @@ namespace ServiceContractPhotocopier.Classes
 
         // ─────────────────────── the day a reading was taken (feedback ATP-5) ───────────────────────
 
+        /// <summary>Why this reading cannot be taken over by hand, or "" when it can. Taking over
+        /// is for the machine that could not be trusted that month -- it broke down, it was swapped,
+        /// it reported a stale counter -- where the NUMBER is right but it is not the machine's word
+        /// any more. Typing the number again cannot say that: a grid raises nothing when the value
+        /// does not change, so the reading stays the machine's and its date stays locked.</summary>
+        public static string WhyCannotTakeOver(DataRow r)
+        {
+            if (r == null) return "There is nothing on this row.";
+            if (!IsUsageMeter(r))
+                return "A rental, a minimum and a waive have no counter to read.";
+            if (IsInvoiced(r))
+                return "This period is already invoiced. Delete the invoice first.";
+            if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
+                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+            if (!HasReading(r))
+                return "There is no reading to take over -- just key yours in.";
+            string src = S(r["EntrySource"]).Trim().ToUpperInvariant();
+            if (src == "MANUAL")
+                return "This reading is already yours -- the reading and its date can both be typed.";
+            if (src == "INTERBILL")
+                return "This counter is read in the other book and billed across. Its reading is not this book's to take over.";
+            return "";
+        }
+
+        /// <summary>Take a machine's reading over by hand, keeping the number and the date it came
+        /// with. Nothing about the money changes: what changes is WHOSE reading it is -- the row
+        /// becomes a manual entry, so its date can be corrected, and a later fetch that disagrees
+        /// raises a conflict instead of overwriting it.</summary>
+        public static void TakeOverReading(DBSetting db, long itemMeterKey, int year, int month)
+        {
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                using (SqlTransaction tx = cn.BeginTransaction("RunTakeOver"))
+                {
+                    try
+                    {
+                        decimal reading = 0m;
+                        string src = "";
+                        DateTime? when = null;
+                        bool locked = false, invoiced = false, found = false;
+                        SqlCommand chk = new SqlCommand(
+                            "SELECT CurrentReading, Source, ReadingDate, LockedAt, InvoicedDocKey FROM dbo.zSCP2_MeterEntry " +
+                            "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo", cn, tx);
+                        chk.Parameters.AddWithValue("@imk", itemMeterKey);
+                        chk.Parameters.AddWithValue("@yr", year);
+                        chk.Parameters.AddWithValue("@mo", month);
+                        using (SqlDataReader rd = chk.ExecuteReader())
+                        {
+                            if (rd.Read())
+                            {
+                                found = true;
+                                reading = rd.IsDBNull(0) ? 0m : rd.GetDecimal(0);
+                                src = rd.IsDBNull(1) ? "" : rd.GetString(1).Trim().ToUpperInvariant();
+                                when = rd.IsDBNull(2) ? (DateTime?)null : rd.GetDateTime(2);
+                                locked = !rd.IsDBNull(3);
+                                invoiced = !rd.IsDBNull(4);
+                            }
+                        }
+                        if (!found)
+                            throw new InvalidOperationException("There is no reading staged for this meter and period -- key yours in instead.");
+                        if (locked)
+                            throw new InvalidOperationException("This reading was locked by the billing-day snapshot and cannot be changed here.");
+                        if (invoiced)
+                            throw new InvalidOperationException("This period is already invoiced. Delete the invoice first.");
+                        if (src == "INTERBILL")
+                            throw new InvalidOperationException("This counter is read in the other book and billed across. Its reading is not this book's to take over.");
+
+                        // The number and the date stay exactly as they arrived -- the operator adjusts
+                        // the date afterwards if the machine's was wrong. TrackingId stays too: where
+                        // an offline reading came from is evidence, and the invoice stamps it.
+                        SqlCommand cmd = new SqlCommand(
+                            "UPDATE dbo.zSCP2_MeterEntry SET Source='MANUAL', LastModified=GETDATE() " +
+                            "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
+                            "  AND LockedAt IS NULL AND InvoicedDocKey IS NULL;", cn, tx);
+                        cmd.Parameters.AddWithValue("@imk", itemMeterKey);
+                        cmd.Parameters.AddWithValue("@yr", year);
+                        cmd.Parameters.AddWithValue("@mo", month);
+                        if (cmd.ExecuteNonQuery() == 0)
+                            throw new InvalidOperationException("The reading changed underneath. Refresh and try again.");
+
+                        ScpMeterReadingLog.Append(cn, tx, itemMeterKey, year, month, reading, when, "MANUAL", "");
+                        tx.Commit();
+                    }
+                    catch { tx.Rollback(); throw; }
+                }
+            }
+        }
+
         /// <summary>The day the staged reading was taken, as the database now holds it, and whether
         /// a person typed it. Read back after a save instead of guessing: saving the SAME reading
         /// again keeps a hand-set date, saving a different one stamps a fresh date, and the screen

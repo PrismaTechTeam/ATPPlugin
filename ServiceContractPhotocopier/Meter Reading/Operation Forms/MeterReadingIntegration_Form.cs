@@ -537,12 +537,67 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void GridViewMeter_PopupMenuShowing(object sender,
             DevExpress.XtraGrid.Views.Grid.PopupMenuShowingEventArgs e)
         {
-            if (e.MenuType != DevExpress.XtraGrid.Views.Grid.GridMenuType.Column || e.Menu == null) return;
+            if (e.Menu == null) return;
+            // Right-click on a ROW: take a machine's reading over by hand. The machine was down,
+            // swapped, or reporting a stale counter -- the number is right but it is not the
+            // machine's word any more, and typing the same number over it says nothing (a grid
+            // raises no event when the value does not change). Feedback ATP-5.
+            if (e.MenuType == DevExpress.XtraGrid.Views.Grid.GridMenuType.Row)
+            {
+                DataRow rr = V(sender).GetDataRow(e.HitInfo.RowHandle);
+                if (rr == null) return;
+                DevExpress.Utils.Menu.DXMenuItem take =
+                    new DevExpress.Utils.Menu.DXMenuItem("Key this reading in myself",
+                        new EventHandler(TakeOverMenu_Click));
+                take.Tag = rr;
+                take.BeginGroup = true;
+                take.Enabled = ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyCannotTakeOver(rr).Length == 0;
+                e.Menu.Items.Add(take);
+                return;
+            }
+            if (e.MenuType != DevExpress.XtraGrid.Views.Grid.GridMenuType.Column) return;
             DevExpress.Utils.Menu.DXMenuItem item =
                 new DevExpress.Utils.Menu.DXMenuItem("What the colours mean...",
                     new EventHandler(ColourKeyMenu_Click));
             item.BeginGroup = true;
             e.Menu.Items.Add(item);
+        }
+
+        // The machine's reading becomes the operator's: same number, same date, but the date can
+        // then be corrected and the next fetch raises a conflict instead of overwriting it.
+        private void TakeOverMenu_Click(object sender, EventArgs e)
+        {
+            DevExpress.Utils.Menu.DXMenuItem mi = sender as DevExpress.Utils.Menu.DXMenuItem;
+            DataRow r = mi == null ? null : mi.Tag as DataRow;
+            if (r == null || _dbSetting == null) return;
+            string no = ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyCannotTakeOver(r);
+            if (no.Length > 0)
+            { XtraMessageBox.Show(no, "Key in myself", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            if (XtraMessageBox.Show(
+                    S(r["ServiceItemNo"]).Trim() + "  " + S(r["Role"]).Trim() + " reads " +
+                    Dec(r["CurrentReading"]).ToString("n0") + ", and that reading came from the machine." +
+                    Environment.NewLine + Environment.NewLine +
+                    "Take it over as your own? The number and its date stay as they are -- what " +
+                    "changes is that the date becomes yours to correct.",
+                    "Key in myself", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+            long imk = D64(r["ItemMeterKey"]);
+            int year = SelectedYear(), month = SelectedMonth();
+            try
+            {
+                ServiceContractPhotocopier.Classes.ScpInvoiceRun.TakeOverReading(_dbSetting, imk, year, month);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The reading was not taken over:" + Environment.NewLine + ex.Message,
+                    "Key in myself", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            r["EntrySource"] = "MANUAL";
+            r["HasConflict"] = false;
+            r["Status"] = "Taken over by hand  " + DateTime.Now.ToString("dd/MM/yyyy");
+            ShowStagedDate(r, imk, year, month);
+            ActiveGrid.RefreshDataSource();
         }
 
         private void ColourKeyMenu_Click(object sender, EventArgs e) { ShowColourKey(); }

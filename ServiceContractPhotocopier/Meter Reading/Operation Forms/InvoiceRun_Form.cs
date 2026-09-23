@@ -173,6 +173,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnPreview.Click += new EventHandler(BtnGenerateThis_Click);
             this.BtnHistory.Click += new EventHandler(BtnHistory_Click);
             this.BtnDeleteInvoice.Click += new EventHandler(BtnDeleteInvoice_Click);
+            this.BtnTakeOver.Click += new EventHandler(BtnTakeOver_Click);
+            this.BtnTakeOver.ToolTip = "The machine could not be trusted this month -- it broke down, it was " +
+                "swapped, it reported a stale counter. This makes the reading on the row yours: the number " +
+                "and its date are kept, the date can then be corrected, and a later fetch that disagrees " +
+                "raises a conflict instead of overwriting it.";
+            this.GridViewReadings.FocusedRowChanged +=
+                new DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventHandler(GridViewReadings_FocusedRowChanged);
             this.BtnOverdue.CheckedChanged += new EventHandler(BtnOverdue_CheckedChanged);
             this.KeyPreview = true;
             this.KeyDown += new KeyEventHandler(InvoiceRun_KeyDown);
@@ -211,6 +218,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnPreview.Enabled = false;
             this.BtnHistory.Enabled = false;
             this.BtnDeleteInvoice.Enabled = false;
+            this.BtnTakeOver.Enabled = false;
         }
 
         private void Boot()
@@ -617,6 +625,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 this.BtnPreview.Enabled = false;
                 this.BtnHistory.Enabled = false;
                 this.BtnDeleteInvoice.Enabled = false;
+                this.BtnTakeOver.Enabled = false;
                 return;
             }
             this.LblDetailTitle.Text = it.ContractNo + "  ·  " + it.Kind + " invoice" +
@@ -711,6 +720,59 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         private void BtnDeleteInvoice_Click(object sender, EventArgs e) { DeleteSelectedInvoice(); }
+
+        // The button follows the row the operator is on: it is only for a reading that came off a
+        // machine and can still be taken over.
+        private void GridViewReadings_FocusedRowChanged(object sender,
+            DevExpress.XtraGrid.Views.Base.FocusedRowChangedEventArgs e)
+        {
+            DataRow r = this.GridViewReadings.GetFocusedDataRow();
+            this.BtnTakeOver.Enabled = r != null && ScpInvoiceRun.WhyCannotTakeOver(r).Length == 0;
+        }
+
+        // "Key in myself": the machine was down (or swapped, or reporting a stale counter), so the
+        // reading on the row becomes the operator's. The number and the date it arrived with are
+        // kept -- nothing is billed differently by this click -- and the date can then be corrected
+        // (feedback ATP-5). Typing the number again cannot do this: a grid raises nothing when the
+        // value does not change, so the reading would stay the machine's.
+        private void BtnTakeOver_Click(object sender, EventArgs e)
+        {
+            DataRow r = this.GridViewReadings.GetFocusedDataRow();
+            if (r == null || _db == null) return;
+            string no = ScpInvoiceRun.WhyCannotTakeOver(r);
+            if (no.Length > 0)
+            { XtraMessageBox.Show(no, "Key in myself", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+            string what = Convert.ToString(r["ServiceItemNo"]).Trim() + "  " +
+                          Convert.ToString(r["Role"]).Trim();
+            decimal cur = r["CurrentReading"] == DBNull.Value ? 0m : Convert.ToDecimal(r["CurrentReading"]);
+            if (XtraMessageBox.Show(
+                    what + " reads " + cur.ToString("n0") + ", and that reading came from the machine.\r\n\r\n" +
+                    "Take it over as your own? The number and its date stay as they are -- what changes is that " +
+                    "the date becomes yours to correct, and the next fetch will raise a conflict instead of " +
+                    "overwriting it.",
+                    "Key in myself", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            int y = SelectedYear(), m = SelectedMonth();
+            long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
+            try
+            {
+                ScpInvoiceRun.TakeOverReading(_db, imk, y, m);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The reading was not taken over:\r\n" + ex.Message,
+                    "Key in myself", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            r["EntrySource"] = "MANUAL";
+            r["HasConflict"] = false;
+            ShowStagedDate(r, imk, y, m);
+            this.GridViewReadings.RefreshData();
+            this.BtnTakeOver.Enabled = false;
+            this.LblDetailFoot.Text = "That reading is yours now -- type over Last Audit Date if the machine was read on another day.";
+        }
 
         /// <summary>Ctrl+Shift+U: the TEST Fetch JSON for the contract of the invoice picked on the
         /// left, shown to copy. Nothing is fetched or saved -- paste it into TEST Fetch
