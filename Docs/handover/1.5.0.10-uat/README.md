@@ -12,7 +12,7 @@ not on the live one.
 | Needs | AutoCount Accounting **2.0.2** or later, DevExpress 22.2.7 |
 | Source | git tag `v1.0.10-uat` |
 
-**1.5.0.10 replaces 1.5.0.9**: a contract's Address box is bigger (Description smaller), a minimum charge can count black only, colour only or both, and Meter Invoice Run no longer lists contracts that have not started yet. Install it straight over 1.5.0.9.
+**1.5.0.10 replaces 1.5.0.9**: a contract's Address box is bigger (Description smaller), a minimum charge can count black only, colour only or both, Meter Invoice Run no longer lists contracts that have not started yet, and the day a keyed meter reading was taken can be corrected. Install it straight over 1.5.0.9.
 
 **1.5.0.9 replaced 1.5.0.8**: Meter Invoice Run shows the committed minimum's top-up and the rental waive before Generate, as the invoice will bill them; rebate lines show the invoice's cents. Install it straight over 1.5.0.8.
 

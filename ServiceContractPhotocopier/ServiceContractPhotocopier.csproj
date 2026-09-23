@@ -1055,6 +1055,7 @@
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_InterBillLink.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_InterBillBook_v2_Margin.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v7_SourceInterBill.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v8_ReadingDateEdited.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v18_BillFrom.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractPeriodSkip.sql" />
     <EmbeddedResource Include="SQL\02_CreateTrigger_zSCP2_IV_NoDeleteEarlierBilledMonth.sql" />

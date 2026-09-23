@@ -252,6 +252,9 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_InterBillBook_v2_Margin.sql", asm);
             // A reading taken from another book says so, instead of pretending this book read it.
             RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v7_SourceInterBill.sql", asm);
+            // A reading date the operator typed themselves says so, so the next fetch does not
+            // quietly stamp its own date over it.
+            RunDDL(dbsetting, "02_Update_zSCP2_MeterEntry_v8_ReadingDateEdited.sql", asm);
             // The billing sequence: where this book's months of a contract start, and the months
             // deliberately not billed.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v18_BillFrom.sql", asm);

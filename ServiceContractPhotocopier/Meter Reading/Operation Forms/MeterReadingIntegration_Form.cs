@@ -2413,7 +2413,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             SetNum("FOCQty", "FOC Qty", 70, false, "n0");
             SetNum("RebatePct", "Rebate (%)", 80, false, "n2");
             SetCol("LastReadDate", "Last Read Date", 100, false);
-            SetCol("LastAuditDate", "Last Audit Date", 110, false);
+            // Editable for a KEYED reading only -- the day the counter was actually read
+            // (feedback ATP-5). Every row that may not be touched is vetoed in ShowingEditor.
+            SetCol("LastAuditDate", "Last Audit Date", 110, true);
             SetCol("LastFetchDate", "Last Fetch Date", 115, false);
             GridColumn cFd = ActiveView.Columns["LastFetchDate"];
             if (cFd != null)
@@ -2834,7 +2836,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         bool isOnline = dto.Status == MachineStatus.Online;
                         if (!string.IsNullOrWhiteSpace(dto.SerialNumber)) r["SerialNo"] = dto.SerialNumber.Trim();
                         r["MachineStatus"] = isOnline ? "ONLINE" : "OFFLINE";
-                        if (dto.LastAuditDate.HasValue) r["LastAuditDate"] = dto.LastAuditDate.Value;
+                        // A date the operator typed stays on screen while the reading it belongs
+                        // to is unchanged -- the staging UPDATE keeps it, so the grid must too
+                        // (feedback ATP-5).
+                        bool keptDate = r.Table.Columns.Contains("DateEdited")
+                            && r["DateEdited"] != DBNull.Value && Convert.ToBoolean(r["DateEdited"]);
+                        if (dto.LastAuditDate.HasValue && !keptDate) r["LastAuditDate"] = dto.LastAuditDate.Value;
                         // Offline readings come off a monthly report with a TrackingId — kept on the
                         // machine's rows (and staged) so Generate can stamp it into the invoice's
                         // Reference No. Online / unmatched rows carry ''.
@@ -3185,7 +3192,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (lockedAt != null && lockedAt != DBNull.Value) return;
 
             SqlCommand cmd = new SqlCommand(
-                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, ReadingDate=@dt, Source=@src, TrackingId=@tid, LastModified=GETDATE() " +
+                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, " +
+                // A date somebody TYPED survives a re-save of the same reading (feedback ATP-5) --
+                // including a fetch that comes back with the number already staged. A DIFFERENT
+                // reading is a new reading and takes a fresh stamp.
+                "ReadingDate = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
+                "                   THEN ReadingDate ELSE @dt END, " +
+                "ReadingDateEdited = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
+                "                        THEN 'Y' ELSE 'N' END, " +
+                "Source=@src, TrackingId=@tid, LastModified=GETDATE() " +
                 "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo AND LockedAt IS NULL; " +
                 "IF @@ROWCOUNT=0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
                 "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,TrackingId) " +
@@ -3236,15 +3251,75 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // editor (the Invoiced tab only shows invoiced rows, so it is read-only for free).
         private void GridViewMeter_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (V(sender).FocusedColumn == null ||
-                V(sender).FocusedColumn.FieldName != "CurrentReading") return;
+            if (V(sender).FocusedColumn == null) return;
             DataRow r = V(sender).GetDataRow(V(sender).FocusedRowHandle);
+            // The day a keyed reading was taken (feedback ATP-5): same rules as Meter Invoice Run,
+            // one shared judgement so the two screens cannot disagree.
+            if (V(sender).FocusedColumn.FieldName == "LastAuditDate")
+            {
+                if (r == null || ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyDateFixed(r).Length > 0)
+                    e.Cancel = true;
+                return;
+            }
+            if (V(sender).FocusedColumn.FieldName != "CurrentReading") return;
             if (r == null || !IsInlineEditable(r)) e.Cancel = true;
         }
 
         // Demo #2(a): the grid twin of the detail dialog's save (manual / cleared-to-0 branches).
         // One short transaction per committed cell. Deliberately does NOT touch NeedManual — tab
         // membership stays a snapshot until the next Refresh/Fetch, same as the dialog.
+        /// <summary>Move the day a keyed reading was taken (feedback ATP-5). The reading and the
+        /// money stay where they are; the date moves, and with it what the invoice prints and what
+        /// the next period counts from. Anything that must not be changed is refused with a reason
+        /// and the cell goes back to what the database holds.</summary>
+        private void SaveInlineReadingDate(DataRow r, object value)
+        {
+            if (_dbSetting == null || r == null) return;
+            long imk = D64(r["ItemMeterKey"]);
+            if (imk <= 0) return;
+            int year = SelectedYear(), month = SelectedMonth();
+            string no = ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyDateFixed(r);
+            if (no.Length == 0 && (value == null || value == DBNull.Value))
+                no = "A reading has to carry the day it was taken -- pick a date.";
+            if (no.Length == 0)
+                no = ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyDateWrong(r, Convert.ToDateTime(value));
+            if (no.Length > 0)
+            {
+                XtraMessageBox.Show(no, "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowStagedDate(r, imk, year, month);
+                ActiveGrid.RefreshDataSource();
+                return;
+            }
+            try
+            {
+                ServiceContractPhotocopier.Classes.ScpInvoiceRun.SaveReadingDate(
+                    _dbSetting, imk, year, month, Convert.ToDateTime(value).Date);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The date was not saved:\r\n" + ex.Message,
+                    "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            ShowStagedDate(r, imk, year, month);
+            ActiveGrid.RefreshDataSource();
+        }
+
+        /// <summary>Put the staged reading date (and whether a person set it) back on the row --
+        /// read back rather than assumed, because saving the SAME reading again keeps a hand-set
+        /// date while a different reading takes a fresh stamp.</summary>
+        private void ShowStagedDate(DataRow r, long itemMeterKey, int year, int month)
+        {
+            try
+            {
+                bool edited;
+                DateTime? when = ServiceContractPhotocopier.Classes.ScpInvoiceRun.StagedDate(
+                    _dbSetting, itemMeterKey, year, month, out edited);
+                if (when.HasValue) r["LastAuditDate"] = when.Value; else r["LastAuditDate"] = DBNull.Value;
+                if (r.Table.Columns.Contains("DateEdited")) r["DateEdited"] = edited;
+            }
+            catch { }
+        }
+
         private void SaveInlineReading(DataRow r)
         {
             if (_dbSetting == null || r == null) return;
@@ -3287,6 +3362,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 r["HasConflict"] = false;
                 r["Sel"] = true;
                 r["Status"] = "Manual (saved)  " + DateTime.Now.ToString("dd/MM/yyyy");
+                ShowStagedDate(r, imk, year, month);   // the date this reading now carries
             }
             else
             {   // cleared to 0 → same full reset as the detail dialog's cleared branch
@@ -3570,6 +3646,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void GridViewMeter_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (e.Column == null) return;
+            if (e.Column.FieldName == "LastAuditDate")
+            {
+                SaveInlineReadingDate(V(sender).GetDataRow(e.RowHandle), e.Value);
+                return;
+            }
             if (e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")
             {
                 DataRow r = V(sender).GetDataRow(e.RowHandle);

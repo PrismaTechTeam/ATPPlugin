@@ -94,6 +94,7 @@ namespace ServiceContractPhotocopier.Classes
         dt.Columns.Add("LastReadDate", typeof(DateTime));
         dt.Columns.Add("LastAuditDate", typeof(DateTime));   // API audit date of the CURRENT fetched reading
         dt.Columns.Add("LastFetchDate", typeof(DateTime));   // when the reading was last fetched/saved into staging
+        dt.Columns.Add("DateEdited", typeof(bool));          // the Last Audit Date was typed by a person, not stamped (hidden)
         dt.Columns.Add("LastReading", typeof(decimal));
         dt.Columns.Add("CurrentReading", typeof(decimal));
         dt.Columns.Add("MeterUsage", typeof(decimal));
@@ -580,6 +581,7 @@ namespace ServiceContractPhotocopier.Classes
             if (rows == null) return;
             Dictionary<long, DataRow> byMeter = new Dictionary<long, DataRow>();
             string sql = "SELECT ItemMeterKey, CurrentReading, ReadingDate, Source, InvoicedDocNo, InvoicedAt, LockedAt, LastModified, " +
+                         "ISNULL(ReadingDateEdited,'N') AS ReadingDateEdited, " +
                          "ISNULL(TrackingId,'') AS TrackingId " +
                          "FROM dbo.zSCP2_MeterEntry WHERE PeriodYear=" + year + " AND PeriodMonth=" + month;
             DataTable saved = Query(db, sql, 60);
@@ -595,6 +597,9 @@ namespace ServiceContractPhotocopier.Classes
                 r["EntrySource"] = src;
                 r["TrackingId"] = S(s["TrackingId"]).Trim();
                 if (s["ReadingDate"] != DBNull.Value) r["LastAuditDate"] = Convert.ToDateTime(s["ReadingDate"]);
+                // Typed by a person (feedback ATP-5), so a later fetch leaves it alone while the
+                // reading it belongs to is unchanged.
+                r["DateEdited"] = S(s["ReadingDateEdited"]).Trim().ToUpperInvariant() == "Y";
                 if (s["LastModified"] != DBNull.Value) r["LastFetchDate"] = Convert.ToDateTime(s["LastModified"]);
                 Recalc(r, ladders, year, month);   // restored but NOT auto-selected — user picks rows before generating
                 string dt = (s["ReadingDate"] != DBNull.Value) ? "  " + Convert.ToDateTime(s["ReadingDate"]).ToString("dd/MM/yyyy") : "";

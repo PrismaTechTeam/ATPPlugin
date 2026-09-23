@@ -803,7 +803,16 @@ namespace ServiceContractPhotocopier.Classes
                         else
                         {
                             SqlCommand cmd = new SqlCommand(
-                                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, ReadingDate=@dt, Source=@src, TrackingId='', LastModified=GETDATE() " +
+                                "UPDATE dbo.zSCP2_MeterEntry SET CurrentReading=@rd, " +
+                                // A date somebody TYPED survives a re-save of the same reading
+                                // (feedback ATP-5): they corrected the day it was read, and
+                                // re-saving the same number is not a new reading. A DIFFERENT
+                                // reading is, and takes a fresh stamp.
+                                "ReadingDate = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
+                                "                   THEN ReadingDate ELSE @dt END, " +
+                                "ReadingDateEdited = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
+                                "                        THEN 'Y' ELSE 'N' END, " +
+                                "Source=@src, TrackingId='', LastModified=GETDATE() " +
                                 "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo AND LockedAt IS NULL; " +
                                 "IF @@ROWCOUNT=0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
                                 "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,TrackingId) " +
@@ -817,6 +826,133 @@ namespace ServiceContractPhotocopier.Classes
                             cmd.ExecuteNonQuery();
                             ScpMeterReadingLog.Append(cn, tx, itemMeterKey, year, month, reading, DateTime.Now, "MANUAL", "");
                         }
+                        tx.Commit();
+                    }
+                    catch { tx.Rollback(); throw; }
+                }
+            }
+        }
+
+        // ─────────────────────── the day a reading was taken (feedback ATP-5) ───────────────────────
+
+        /// <summary>The day the staged reading was taken, as the database now holds it, and whether
+        /// a person typed it. Read back after a save instead of guessing: saving the SAME reading
+        /// again keeps a hand-set date, saving a different one stamps a fresh date, and the screen
+        /// has to show whichever actually happened.</summary>
+        public static DateTime? StagedDate(DBSetting db, long itemMeterKey, int year, int month, out bool edited)
+        {
+            edited = false;
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT ReadingDate, ISNULL(ReadingDateEdited,'N') FROM dbo.zSCP2_MeterEntry " +
+                    "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo", cn);
+                cmd.Parameters.AddWithValue("@imk", itemMeterKey);
+                cmd.Parameters.AddWithValue("@yr", year);
+                cmd.Parameters.AddWithValue("@mo", month);
+                using (SqlDataReader rd = cmd.ExecuteReader())
+                {
+                    if (!rd.Read()) return null;
+                    edited = !rd.IsDBNull(1) && rd.GetString(1).Trim().ToUpperInvariant() == "Y";
+                    return rd.IsDBNull(0) ? (DateTime?)null : rd.GetDateTime(0);
+                }
+            }
+        }
+
+        /// <summary>Why the day this reading was taken cannot be changed on this row, or "" when it
+        /// can. The date is only the operator's to set where the reading itself was theirs to type:
+        /// a machine's own audit date, a locked billing-day snapshot and an invoiced period all keep
+        /// the date they were given.</summary>
+        public static string WhyDateFixed(DataRow r)
+        {
+            if (r == null) return "There is nothing on this row.";
+            if (!IsUsageMeter(r))
+                return "A rental, a minimum and a waive have no counter to read, so they have no reading date.";
+            if (IsInvoiced(r))
+                return "This period is already invoiced. Delete the invoice first if its date is wrong.";
+            if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
+                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+            if (!HasReading(r))
+                return "Key the reading in first -- the date says when THAT reading was taken.";
+            if (S(r["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL")
+                return "This reading came from the machine, so it carries the machine's own audit date. "
+                     + "Key the reading in by hand if the date has to change.";
+            return "";
+        }
+
+        /// <summary>Why this day cannot be the day the reading was taken, or "" when it can. Two
+        /// rules, and both of them protect the NEXT period: this date is stamped on the meter
+        /// transaction, so it becomes the following invoice's "Last Read Date".</summary>
+        public static string WhyDateWrong(DataRow r, DateTime when)
+        {
+            if (when.Date > DateTime.Today)
+                return "A reading cannot be taken in the future.";
+            if (r != null && r.Table.Columns.Contains("LastReadDate") && r["LastReadDate"] != DBNull.Value)
+            {
+                DateTime last = Convert.ToDateTime(r["LastReadDate"]).Date;
+                if (when.Date < last)
+                    return "The previous reading was taken on " + last.ToString("dd/MM/yyyy") +
+                           ", so this one cannot be earlier than that.";
+            }
+            return "";
+        }
+
+        /// <summary>Move the day a KEYED reading was taken. The reading, its source and its money do
+        /// not change -- only the day, which is the day the invoice prints, the day the meter
+        /// transaction carries, and therefore next period's "Last Read Date". The row is marked as
+        /// hand-set so a later fetch of the same number leaves it alone.</summary>
+        public static void SaveReadingDate(DBSetting db, long itemMeterKey, int year, int month, DateTime when)
+        {
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                using (SqlTransaction tx = cn.BeginTransaction("RunReadDate"))
+                {
+                    try
+                    {
+                        decimal reading = 0m;
+                        string src = "";
+                        bool locked = false, invoiced = false, found = false;
+                        SqlCommand chk = new SqlCommand(
+                            "SELECT CurrentReading, Source, LockedAt, InvoicedDocKey FROM dbo.zSCP2_MeterEntry " +
+                            "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo", cn, tx);
+                        chk.Parameters.AddWithValue("@imk", itemMeterKey);
+                        chk.Parameters.AddWithValue("@yr", year);
+                        chk.Parameters.AddWithValue("@mo", month);
+                        using (SqlDataReader rd = chk.ExecuteReader())
+                        {
+                            if (rd.Read())
+                            {
+                                found = true;
+                                reading = rd.IsDBNull(0) ? 0m : rd.GetDecimal(0);
+                                src = rd.IsDBNull(1) ? "" : rd.GetString(1).Trim().ToUpperInvariant();
+                                locked = !rd.IsDBNull(2);
+                                invoiced = !rd.IsDBNull(3);
+                            }
+                        }
+                        if (!found)
+                            throw new InvalidOperationException("There is no reading staged for this meter and period -- key the reading in first.");
+                        if (locked)
+                            throw new InvalidOperationException("This reading was locked by the billing-day snapshot and cannot be changed here.");
+                        if (invoiced)
+                            throw new InvalidOperationException("This period is already invoiced. Delete the invoice first if its date is wrong.");
+                        if (src != "MANUAL")
+                            throw new InvalidOperationException("This reading came from the machine (" + src + "), so its date is the machine's own audit date.");
+
+                        SqlCommand cmd = new SqlCommand(
+                            "UPDATE dbo.zSCP2_MeterEntry SET ReadingDate=@dt, ReadingDateEdited='Y', LastModified=GETDATE() " +
+                            "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
+                            "  AND LockedAt IS NULL AND InvoicedDocKey IS NULL AND Source='MANUAL';", cn, tx);
+                        cmd.Parameters.AddWithValue("@imk", itemMeterKey);
+                        cmd.Parameters.AddWithValue("@yr", year);
+                        cmd.Parameters.AddWithValue("@mo", month);
+                        cmd.Parameters.AddWithValue("@dt", when);
+                        if (cmd.ExecuteNonQuery() == 0)
+                            throw new InvalidOperationException("The reading changed while the date was being typed. Refresh and try again.");
+
+                        // The reading log is the trail: same reading, new date, said out loud.
+                        ScpMeterReadingLog.Append(cn, tx, itemMeterKey, year, month, reading, when, "MANUAL", "");
                         tx.Commit();
                     }
                     catch { tx.Rollback(); throw; }

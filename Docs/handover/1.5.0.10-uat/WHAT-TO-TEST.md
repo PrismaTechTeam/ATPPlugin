@@ -43,6 +43,11 @@ Does Calculation Test give the amount you would work out by hand for the same re
 A contract whose start date is still in the future is not on **Ready to Invoice** or
 **Need Manual Key-In** -- there is nothing to read or bill yet. It appears on its start date.
 
+Key a reading in by hand, then type over **Last Audit Date** -- the day you actually read the
+counter. The invoice prints that day, and next month's **Last Read Date** is that day. The
+cell only opens where the reading was keyed: a reading fetched from a machine, a locked
+billing-day snapshot and an already-invoiced period keep the date they have.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and

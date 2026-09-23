@@ -1294,13 +1294,34 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void GridViewReadings_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (this.GridViewReadings.FocusedColumn != this.ColRCurrent) { e.Cancel = true; return; }
             DataRow r = this.GridViewReadings.GetFocusedDataRow();
+            // The day a KEYED reading was taken is the operator's to correct (feedback ATP-5): the
+            // machine was read on the 10th even if the reading reached the screen on the 23rd, and
+            // that date is what the invoice prints and what next period counts from. Everything the
+            // row is not allowed to change is named by WhyDateFixed, which the tooltip repeats.
+            if (this.GridViewReadings.FocusedColumn == this.ColRLastAudit)
+            {
+                if (r == null || ScpInvoiceRun.WhyDateFixed(r).Length > 0) e.Cancel = true;
+                return;
+            }
+            if (this.GridViewReadings.FocusedColumn != this.ColRCurrent) { e.Cancel = true; return; }
             if (r == null || ScpInvoiceRun.IsInvoiced(r) || !ScpInvoiceRun.IsUsageMeter(r)) e.Cancel = true;
         }
 
         private void GridViewReadings_RowCellStyle(object sender, RowCellStyleEventArgs e)
         {
+            if (e.Column == this.ColRLastAudit && e.RowHandle >= 0)
+            {
+                // Same pale yellow the Current Reading uses: this cell can be typed in. Only the
+                // rows that may be corrected get it, so the ones that may not look inert.
+                DataRow dr = this.GridViewReadings.GetDataRow(e.RowHandle);
+                if (dr != null && ScpInvoiceRun.WhyDateFixed(dr).Length == 0)
+                {
+                    e.Appearance.BackColor = Color.FromArgb(255, 249, 219);
+                    e.Appearance.Options.UseBackColor = true;
+                }
+                return;
+            }
             if (e.Column != this.ColRCurrent || e.RowHandle < 0) return;
             DataRow r = this.GridViewReadings.GetDataRow(e.RowHandle);
             if (r == null) return;
@@ -1324,7 +1345,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
         private void GridViewReadings_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
-            if (e.Column != this.ColRCurrent || _db == null) return;
+            if (_db == null) return;
+            if (e.Column == this.ColRLastAudit)
+            {
+                ReadingDateChanged(this.GridViewReadings.GetDataRow(e.RowHandle), e.Value, e.RowHandle);
+                return;
+            }
+            if (e.Column != this.ColRCurrent) return;
             DataRow r = this.GridViewReadings.GetDataRow(e.RowHandle);
             if (r == null) return;
             decimal v = 0m;
@@ -1343,6 +1370,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             r["CurrentReading"] = v;
             r["EntrySource"] = v > 0m ? "MANUAL" : "";
+            // Show the date the reading now carries, read back rather than assumed: the same value
+            // saved again keeps a hand-set date, a different value takes a fresh stamp.
+            ShowStagedDate(r, imk, y, m);
             ScpBillingRows.Recalc(r, _ladders, y, m);
             r[ScpInvoiceRun.COL_NEEDS] = ScpInvoiceRun.IsUsageMeter(r) && !ScpInvoiceRun.HasReading(r) && !ScpInvoiceRun.IsInvoiced(r);
 
@@ -1369,6 +1399,74 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 this.LblDetailFoot.Text = "That was the last one. This invoice is Ready and goes out with Generate all ready.";
             UpdateSummary();
             this.GridViewInvoices.LayoutChanged();
+        }
+
+        /// <summary>Put the staged reading date (and whether a person set it) back on the row.</summary>
+        private void ShowStagedDate(DataRow r, long itemMeterKey, int year, int month)
+        {
+            try
+            {
+                bool edited;
+                DateTime? when = ScpInvoiceRun.StagedDate(_db, itemMeterKey, year, month, out edited);
+                if (when.HasValue) r["LastAuditDate"] = when.Value; else r["LastAuditDate"] = DBNull.Value;
+                if (r.Table.Columns.Contains("DateEdited")) r["DateEdited"] = edited;
+            }
+            catch { }
+        }
+
+        // The day a keyed reading was taken (feedback ATP-5). The reading and its money do not
+        // move; the date does, and with it the date the invoice prints and the date the meter
+        // transaction carries -- which is next period's "Last Read Date".
+        private void ReadingDateChanged(DataRow r, object value, int rowHandle)
+        {
+            if (r == null || _db == null) return;
+            int y = SelectedYear(), m = SelectedMonth();
+            long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
+            string no = ScpInvoiceRun.WhyDateFixed(r);
+            if (no.Length > 0)
+            {
+                XtraMessageBox.Show(no, "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            if (value == null || value == DBNull.Value)
+            {
+                XtraMessageBox.Show("A reading has to carry the day it was taken -- pick a date.",
+                    "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            DateTime when = Convert.ToDateTime(value);
+            string wrong = ScpInvoiceRun.WhyDateWrong(r, when);
+            if (wrong.Length > 0)
+            {
+                XtraMessageBox.Show(wrong, "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            try
+            {
+                ScpInvoiceRun.SaveReadingDate(_db, imk, y, m, when.Date);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The date was not saved:\r\n" + ex.Message,
+                    "Reading date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            ShowStagedDate(r, imk, y, m);
+            // The money is untouched -- usage is reading minus reading, and no charge is worked out
+            // from a date -- so nothing is repriced here. What DOES follow the date is the invoice's
+            // printed period, so the facts pane is refreshed.
+            InvoiceRunItem it;
+            if (_byKey.TryGetValue(Convert.ToString(r[ScpInvoiceRun.COL_JOBKEY]), out it) && _current == it)
+                RefreshFacts(it);
+            this.GridViewReadings.RefreshData();
         }
 
         // ───────────────────────────── generate ─────────────────────────────

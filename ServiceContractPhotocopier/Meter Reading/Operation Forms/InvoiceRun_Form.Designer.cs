@@ -1140,7 +1140,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRLastAudit.ColumnEdit = this.RepoDate;
             this.ColRLastAudit.FieldName = "LastAuditDate";
             this.ColRLastAudit.Name = "ColRLastAudit";
-            this.ColRLastAudit.OptionsColumn.AllowEdit = false;
+            this.ColRLastAudit.OptionsColumn.AllowEdit = true;
             this.ColRLastAudit.Visible = true;
             this.ColRLastAudit.VisibleIndex = 3;
             this.ColRLastAudit.Width = 110;
