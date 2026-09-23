@@ -53,6 +53,11 @@ stale counter -- pick its row and press **Key in myself**. The number and its da
 are; what changes is that the reading is yours, so its date can be corrected, and the next
 Fetch raises a conflict instead of overwriting it.
 
+A reading keyed by hand can carry a **Reference No** (the column after Source): type the slip or
+report number once and both counters of the machine take it. Generate the invoice and its **Ref**
+shows it -- the same place a PUMS reading's report id appears. Leave it empty and the Ref is the
+usual contract or machine number.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and

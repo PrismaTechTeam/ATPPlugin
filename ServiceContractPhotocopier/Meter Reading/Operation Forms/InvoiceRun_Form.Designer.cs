@@ -98,6 +98,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRUsage = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRAmount = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRSource = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColRRef = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRMeterName = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRMin = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRPrice = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -114,6 +115,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.RepoRate = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoDate = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoDateEdit = new DevExpress.XtraEditors.Repository.RepositoryItemDateEdit();
+            this.RepoRef = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoNum = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoReading = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoMoney2 = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
@@ -150,6 +152,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.RepoDate)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit.CalendarTimeProperties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoRef)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelDetailFoot)).BeginInit();
             this.PanelDetailFoot.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelStatus)).BeginInit();
@@ -926,7 +929,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.RepoMoney2,
             this.RepoRate,
             this.RepoDate,
-            this.RepoDateEdit});
+            this.RepoDateEdit,
+            this.RepoRef});
             this.GridReadings.Size = new System.Drawing.Size(510, 336);
             this.GridReadings.TabIndex = 1;
             this.GridReadings.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
@@ -959,6 +963,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRLast,
             this.ColRCurrent,
             this.ColRSource,
+            this.ColRRef,
             this.ColRUsage,
             this.ColRAmount,
             this.ColRMeterName,
@@ -1057,7 +1062,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRUsage.Name = "ColRUsage";
             this.ColRUsage.OptionsColumn.AllowEdit = false;
             this.ColRUsage.Visible = true;
-            this.ColRUsage.VisibleIndex = 7;
+            this.ColRUsage.VisibleIndex = 8;
             this.ColRUsage.Width = 80;
             //
             // ColRAmount
@@ -1076,7 +1081,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRAmount.Name = "ColRAmount";
             this.ColRAmount.OptionsColumn.AllowEdit = false;
             this.ColRAmount.Visible = true;
-            this.ColRAmount.VisibleIndex = 8;
+            this.ColRAmount.VisibleIndex = 9;
             this.ColRAmount.Width = 90;
             //
             // ColRSource  (keyed or fetched -- the clerk must know which)
@@ -1088,6 +1093,17 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRSource.Visible = true;
             this.ColRSource.VisibleIndex = 6;
             this.ColRSource.Width = 96;
+            //
+            // ColRRef  (the reading's reference: PUMS's report id, or the one keyed with a manual reading)
+            //
+            this.ColRRef.Caption = "Reference No";
+            this.ColRRef.ColumnEdit = this.RepoRef;
+            this.ColRRef.FieldName = "TrackingId";
+            this.ColRRef.Name = "ColRRef";
+            this.ColRRef.OptionsColumn.AllowEdit = true;
+            this.ColRRef.Visible = true;
+            this.ColRRef.VisibleIndex = 7;
+            this.ColRRef.Width = 130;
             //
             // ColRMeterName  (the list screen's columns, off by default -- Column Chooser has them)
             //
@@ -1244,6 +1260,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.RepoDateEdit.Mask.UseMaskAsDisplayFormat = true;
             this.RepoDateEdit.Name = "RepoDateEdit";
             //
+            // RepoRef  (at most 30 -- all the invoice's Ref can hold)
+            //
+            this.RepoRef.AutoHeight = false;
+            this.RepoRef.MaxLength = 30;
+            this.RepoRef.Name = "RepoRef";
+            //
             // RepoNum
             //
             this.RepoNum.AutoHeight = false;
@@ -1365,6 +1387,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.RepoDate)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit.CalendarTimeProperties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoRef)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelDetailFoot)).EndInit();
             this.PanelDetailFoot.ResumeLayout(false);
             this.PanelDetailFoot.PerformLayout();
@@ -1448,6 +1471,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColRUsage;
         private DevExpress.XtraGrid.Columns.GridColumn ColRAmount;
         private DevExpress.XtraGrid.Columns.GridColumn ColRSource;
+        private DevExpress.XtraGrid.Columns.GridColumn ColRRef;
         private DevExpress.XtraGrid.Columns.GridColumn ColRMeterName;
         private DevExpress.XtraGrid.Columns.GridColumn ColRMin;
         private DevExpress.XtraGrid.Columns.GridColumn ColRPrice;
@@ -1464,6 +1488,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoRate;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoDate;
         private DevExpress.XtraEditors.Repository.RepositoryItemDateEdit RepoDateEdit;
+        private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoRef;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoNum;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoReading;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoMoney2;

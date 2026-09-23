@@ -31,6 +31,7 @@
     3. Meter Invoice Run leaves out a contract that has not started yet: while its start date is still in the future it is off Ready to Invoice and Need Manual Key-In, and it appears on the day it starts.
     4. The day a keyed reading was taken can be corrected: Last Audit Date is now typed in, on the rows whose reading was keyed by hand. The invoice prints that day and the next period counts from it. A reading that came from the machine, a locked billing-day snapshot and an invoiced period keep their dates.
     5. "Key in myself", in Meter Invoice Run (and on the right-click menu of the Meters view): the machine broke down, was swapped or reported a stale counter, so its reading becomes the operator's -- same number, same date, but the date can then be corrected and the next fetch raises a conflict instead of overwriting it.
+    6. Reference No for a keyed reading: a reading fetched from PUMS brings its report id and the invoice prints it as its Ref; a reading keyed by hand can now be given one too (the slip, the photo, the call), up to 30 characters, and the invoice prints it the same way. Typed once, it covers the machine's black and colour counters.
 
     v1.5.0.9 (2026-09-22) — Meter Invoice Run shows the minimum and the waive:
     1. Meter Invoice Run works out the committed minimum's top-up and the rental waive from the readings, the way the invoice will: Total Charges and the invoice Amount show them before Generate, and a new reading updates them at once.

@@ -1366,12 +1366,29 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (r == null || ScpInvoiceRun.WhyDateFixed(r).Length > 0) e.Cancel = true;
                 return;
             }
+            // The reading's reference (feedback ATP-8): PUMS brings its own report id and the
+            // invoice prints it as Ref; a keyed reading brings nothing, so the operator types one.
+            if (this.GridViewReadings.FocusedColumn == this.ColRRef)
+            {
+                if (r == null || ScpInvoiceRun.WhyRefFixed(r).Length > 0) e.Cancel = true;
+                return;
+            }
             if (this.GridViewReadings.FocusedColumn != this.ColRCurrent) { e.Cancel = true; return; }
             if (r == null || ScpInvoiceRun.IsInvoiced(r) || !ScpInvoiceRun.IsUsageMeter(r)) e.Cancel = true;
         }
 
         private void GridViewReadings_RowCellStyle(object sender, RowCellStyleEventArgs e)
         {
+            if (e.Column == this.ColRRef && e.RowHandle >= 0)
+            {
+                DataRow rr = this.GridViewReadings.GetDataRow(e.RowHandle);
+                if (rr != null && ScpInvoiceRun.WhyRefFixed(rr).Length == 0)
+                {
+                    e.Appearance.BackColor = Color.FromArgb(255, 249, 219);
+                    e.Appearance.Options.UseBackColor = true;
+                }
+                return;
+            }
             if (e.Column == this.ColRLastAudit && e.RowHandle >= 0)
             {
                 // Same pale yellow the Current Reading uses: this cell can be typed in. Only the
@@ -1411,6 +1428,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column == this.ColRLastAudit)
             {
                 ReadingDateChanged(this.GridViewReadings.GetDataRow(e.RowHandle), e.Value, e.RowHandle);
+                return;
+            }
+            if (e.Column == this.ColRRef)
+            {
+                ReadingRefChanged(this.GridViewReadings.GetDataRow(e.RowHandle), e.Value);
                 return;
             }
             if (e.Column != this.ColRCurrent) return;
@@ -1469,9 +1491,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 bool edited;
-                DateTime? when = ScpInvoiceRun.StagedDate(_db, itemMeterKey, year, month, out edited);
+                string reference;
+                DateTime? when = ScpInvoiceRun.StagedDate(_db, itemMeterKey, year, month, out edited, out reference);
                 if (when.HasValue) r["LastAuditDate"] = when.Value; else r["LastAuditDate"] = DBNull.Value;
                 if (r.Table.Columns.Contains("DateEdited")) r["DateEdited"] = edited;
+                if (r.Table.Columns.Contains("TrackingId")) r["TrackingId"] = reference;
             }
             catch { }
         }
@@ -1528,6 +1552,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             InvoiceRunItem it;
             if (_byKey.TryGetValue(Convert.ToString(r[ScpInvoiceRun.COL_JOBKEY]), out it) && _current == it)
                 RefreshFacts(it);
+            this.GridViewReadings.RefreshData();
+        }
+
+        // The reading's reference (feedback ATP-8). Written to every keyed meter of the machine
+        // for the period -- one slip covers the black and the colour counter -- and shown on those
+        // rows at once. At Generate it becomes the invoice's Ref exactly as a PUMS report id does.
+        private void ReadingRefChanged(DataRow r, object value)
+        {
+            if (r == null || _db == null) return;
+            int y = SelectedYear(), m = SelectedMonth();
+            long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
+            long ik = r["ItemKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemKey"]);
+            string refNo = value == null || value == DBNull.Value ? "" : Convert.ToString(value).Trim();
+            string no = ScpInvoiceRun.WhyRefFixed(r);
+            if (no.Length == 0 && refNo.Length > ScpInvoiceRun.REF_MAX)
+                no = "A reference can be at most " + ScpInvoiceRun.REF_MAX + " characters -- that is all the invoice's Ref can hold.";
+            if (no.Length > 0)
+            {
+                XtraMessageBox.Show(no, "Reference No", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            try
+            {
+                ScpInvoiceRun.SaveReadingRef(_db, ik, y, m, refNo);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The reference was not saved:\r\n" + ex.Message,
+                    "Reference No", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowStagedDate(r, imk, y, m);
+                this.GridViewReadings.RefreshData();
+                return;
+            }
+            // The machine's other keyed meters took it too -- show it where it now is.
+            foreach (DataRow o in _rows.Rows)
+            {
+                if (o["ItemKey"] == DBNull.Value || Convert.ToInt64(o["ItemKey"]) != ik) continue;
+                if (ScpInvoiceRun.IsInvoiced(o)) continue;
+                if (Convert.ToString(o["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL") continue;
+                o["TrackingId"] = refNo;
+            }
             this.GridViewReadings.RefreshData();
         }
 

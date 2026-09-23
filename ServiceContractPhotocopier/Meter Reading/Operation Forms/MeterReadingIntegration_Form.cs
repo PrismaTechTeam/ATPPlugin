@@ -2345,7 +2345,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         // Columns the user may never see (data drivers / plumbing) — never offered in View Setting.
-        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "NotStarted", "EffStart", "Late" };
+        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "NotStarted", "EffStart", "Late" };
 
         // Hidden by DEFAULT but user-selectable (column chooser / View Setting).
         private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role", "DueDay" };
@@ -2362,7 +2362,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             "MachineStatus", "MinCharges", "UnitPrice", "FOCQty", "RebatePct",
             "LastReadDate", "LastAuditDate", "LastFetchDate", "LastReading",
             "CurrentReading", "MeterUsage", "TotalCharges",
-            "LastInvNo", "LastInvDate", "InvTotal", "UseMin", "Status", "EntrySource", "FetchedReading",
+            "LastInvNo", "LastInvDate", "InvTotal", "UseMin", "Status", "EntrySource", "TrackingId", "FetchedReading",
             "HasConflict", "BillGroupCode", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Role" };
 
         // ConfigureGrid is pure column/view SHAPING (captions, widths, default visibility, appearance,
@@ -2471,6 +2471,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Editable for a KEYED reading only -- the day the counter was actually read
             // (feedback ATP-5). Every row that may not be touched is vetoed in ShowingEditor.
             SetCol("LastAuditDate", "Last Audit Date", 110, true);
+            // The reading's reference (feedback ATP-8): PUMS's report id arrives with a fetched
+            // reading; a keyed reading takes one typed here. Either becomes the invoice's Ref.
+            SetCol("TrackingId", "Reference No", 120, true);
             SetCol("LastFetchDate", "Last Fetch Date", 115, false);
             GridColumn cFd = ActiveView.Columns["LastFetchDate"];
             if (cFd != null)
@@ -2545,7 +2548,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // NET = Usage - FOC off the screen is then reading the wrong line.
             foreach (string nm in new string[] { "MeterType", "MeterTypeName", "MinCharges", "UnitPrice",
                 "FOCQty", "RebatePct", "LastReadDate", "LastAuditDate", "LastFetchDate", "LastReading",
-                "CurrentReading", "MeterUsage", "TotalCharges", "FetchedReading", "EntrySource",
+                "CurrentReading", "MeterUsage", "TotalCharges", "FetchedReading", "EntrySource", "TrackingId",
                 "UseMin", "MultiPriceCode", "Role" })
                 if (ActiveView.Columns[nm] != null)
                     ActiveView.Columns[nm].OptionsColumn.AllowMerge = DevExpress.Utils.DefaultBoolean.False;
@@ -2900,7 +2903,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                         // Offline readings come off a monthly report with a TrackingId — kept on the
                         // machine's rows (and staged) so Generate can stamp it into the invoice's
                         // Reference No. Online / unmatched rows carry ''.
-                        r["TrackingId"] = isOnline ? "" : (dto.TrackingId ?? "").Trim();
+                        // ...and a fetch that brings no id of its own leaves the reference the
+                        // operator gave their keyed reading (feedback ATP-8), as staging does.
+                        string apiTid = isOnline ? "" : (dto.TrackingId ?? "").Trim();
+                        bool keepRef = apiTid.Length == 0
+                            && S(r["EntrySource"]).Trim().ToUpperInvariant() == "MANUAL"
+                            && S(r["TrackingId"]).Trim().Length > 0;
+                        if (!keepRef) r["TrackingId"] = apiTid;
 
                         // The API has exactly TWO counters — TotalBK and TotalCL — so ONLY the machine's
                         // black meter (role BK) and colour meter (role CL) receive a reading. Every other
@@ -3255,7 +3264,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 "                   THEN ReadingDate ELSE @dt END, " +
                 "ReadingDateEdited = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
                 "                        THEN 'Y' ELSE 'N' END, " +
-                "Source=@src, TrackingId=@tid, LastModified=GETDATE() " +
+                // The reading's reference (feedback ATP-8). A hand-typed reading keeps the
+                // operator's own reference, but not a PUMS report id -- that id belongs to a number
+                // the operator has just replaced. A fetch brings its report id, and when it brings
+                // none (online) it does not wipe the one the operator gave their reading.
+                "TrackingId = CASE WHEN @src='MANUAL' THEN (CASE WHEN Source='MANUAL' THEN TrackingId ELSE '' END) " +
+                "                  WHEN LTRIM(RTRIM(@tid))='' AND Source='MANUAL' THEN TrackingId " +
+                "                  ELSE @tid END, " +
+                "Source=@src, LastModified=GETDATE() " +
                 "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo AND LockedAt IS NULL; " +
                 "IF @@ROWCOUNT=0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
                 "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,TrackingId) " +
@@ -3316,6 +3332,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     e.Cancel = true;
                 return;
             }
+            if (V(sender).FocusedColumn.FieldName == "TrackingId")
+            {
+                if (r == null || ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyRefFixed(r).Length > 0)
+                    e.Cancel = true;
+                return;
+            }
             if (V(sender).FocusedColumn.FieldName != "CurrentReading") return;
             if (r == null || !IsInlineEditable(r)) e.Cancel = true;
         }
@@ -3359,6 +3381,49 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ActiveGrid.RefreshDataSource();
         }
 
+        /// <summary>Give the machine's keyed readings of the period their reference (feedback
+        /// ATP-8) -- every MANUAL meter of the machine, since one slip covers both counters.</summary>
+        private void SaveInlineReadingRef(DataRow r, object value)
+        {
+            if (_dbSetting == null || r == null) return;
+            long imk = D64(r["ItemMeterKey"]);
+            long ik = D64(r["ItemKey"]);
+            int year = SelectedYear(), month = SelectedMonth();
+            string refNo = value == null || value == DBNull.Value ? "" : Convert.ToString(value).Trim();
+            string no = ServiceContractPhotocopier.Classes.ScpInvoiceRun.WhyRefFixed(r);
+            if (no.Length == 0 && refNo.Length > ServiceContractPhotocopier.Classes.ScpInvoiceRun.REF_MAX)
+                no = "A reference can be at most " + ServiceContractPhotocopier.Classes.ScpInvoiceRun.REF_MAX +
+                     " characters -- that is all the invoice's Ref can hold.";
+            if (no.Length > 0)
+            {
+                XtraMessageBox.Show(no, "Reference No", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowStagedDate(r, imk, year, month);
+                ActiveGrid.RefreshDataSource();
+                return;
+            }
+            try
+            {
+                ServiceContractPhotocopier.Classes.ScpInvoiceRun.SaveReadingRef(_dbSetting, ik, year, month, refNo);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("The reference was not saved:" + Environment.NewLine + ex.Message,
+                    "Reference No", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowStagedDate(r, imk, year, month);
+                ActiveGrid.RefreshDataSource();
+                return;
+            }
+            if (_dtGrid != null)
+                foreach (DataRow o in _dtGrid.Rows)
+                {
+                    if (D64(o["ItemKey"]) != ik) continue;
+                    if (S(o["InvoicedDocNo"]).Trim().Length > 0) continue;
+                    if (S(o["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL") continue;
+                    o["TrackingId"] = refNo;
+                }
+            ActiveGrid.RefreshDataSource();
+        }
+
         /// <summary>Put the staged reading date (and whether a person set it) back on the row --
         /// read back rather than assumed, because saving the SAME reading again keeps a hand-set
         /// date while a different reading takes a fresh stamp.</summary>
@@ -3367,10 +3432,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             try
             {
                 bool edited;
+                string reference;
                 DateTime? when = ServiceContractPhotocopier.Classes.ScpInvoiceRun.StagedDate(
-                    _dbSetting, itemMeterKey, year, month, out edited);
+                    _dbSetting, itemMeterKey, year, month, out edited, out reference);
                 if (when.HasValue) r["LastAuditDate"] = when.Value; else r["LastAuditDate"] = DBNull.Value;
                 if (r.Table.Columns.Contains("DateEdited")) r["DateEdited"] = edited;
+                if (r.Table.Columns.Contains("TrackingId")) r["TrackingId"] = reference;
             }
             catch { }
         }
@@ -3704,6 +3771,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (e.Column.FieldName == "LastAuditDate")
             {
                 SaveInlineReadingDate(V(sender).GetDataRow(e.RowHandle), e.Value);
+                return;
+            }
+            if (e.Column.FieldName == "TrackingId")
+            {
+                SaveInlineReadingRef(V(sender).GetDataRow(e.RowHandle), e.Value);
                 return;
             }
             if (e.Column.FieldName == "CurrentReading" || e.Column.FieldName == "UseMin")

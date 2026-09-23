@@ -812,7 +812,11 @@ namespace ServiceContractPhotocopier.Classes
                                 "                   THEN ReadingDate ELSE @dt END, " +
                                 "ReadingDateEdited = CASE WHEN ISNULL(ReadingDateEdited,'N')='Y' AND CurrentReading=@rd " +
                                 "                        THEN 'Y' ELSE 'N' END, " +
-                                "Source=@src, TrackingId='', LastModified=GETDATE() " +
+                                // The reference follows the same rule (feedback ATP-8): one the
+                                // operator typed stays with their reading; a PUMS report id does
+                                // not survive a number that did not come from that report.
+                                "TrackingId = CASE WHEN Source='MANUAL' THEN TrackingId ELSE '' END, " +
+                                "Source=@src, LastModified=GETDATE() " +
                                 "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo AND LockedAt IS NULL; " +
                                 "IF @@ROWCOUNT=0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
                                 "INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey,PeriodYear,PeriodMonth,CurrentReading,ReadingDate,Source,TrackingId) " +
@@ -834,6 +838,60 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         // ─────────────────────── the day a reading was taken (feedback ATP-5) ───────────────────────
+
+        /// <summary>The longest reference an invoice can carry: IV.RefDocNo is nvarchar(30), and
+        /// the invoice's Ref is built from the machines' references joined up to that length.</summary>
+        public const int REF_MAX = 30;
+
+        /// <summary>Why this row's reading reference cannot be typed, or "" when it can (feedback
+        /// ATP-8). A reading fetched from PUMS arrives with its report id and the invoice prints it
+        /// as its Ref; a reading keyed by hand arrives with nothing, so the operator gives it one --
+        /// the slip, the photo, the call. Only readings that are the operator's take one.</summary>
+        public static string WhyRefFixed(DataRow r)
+        {
+            if (r == null) return "There is nothing on this row.";
+            if (!IsUsageMeter(r))
+                return "A rental, a minimum and a waive have no reading, so there is no reading reference to give.";
+            if (IsInvoiced(r))
+                return "This period is already invoiced -- its Ref is on the invoice now.";
+            if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
+                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+            if (!HasReading(r))
+                return "Key the reading in first -- the reference belongs to a reading.";
+            if (S(r["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL")
+                return "This reading came from PUMS, so it carries PUMS's own reference. "
+                     + "Key the reading in by hand (or use Key in myself) to give it yours.";
+            return "";
+        }
+
+        /// <summary>Give the machine's keyed readings of the period their reference. It is written to
+        /// every MANUAL meter of the machine, not just the row it was typed on: one reading slip
+        /// covers the black and the colour counter, and the invoice's Ref is built per machine.
+        /// Returns how many meters now carry it.</summary>
+        public static int SaveReadingRef(DBSetting db, long itemKey, int year, int month, string reference)
+        {
+            string refNo = (reference ?? "").Trim();
+            if (refNo.Length > REF_MAX)
+                throw new InvalidOperationException("A reference can be at most " + REF_MAX +
+                    " characters -- that is all the invoice's Ref can hold.");
+            using (SqlConnection cn = new SqlConnection(db.ConnectionString))
+            {
+                cn.Open();
+                SqlCommand cmd = new SqlCommand(
+                    "UPDATE dbo.zSCP2_MeterEntry SET TrackingId=@ref, LastModified=GETDATE() " +
+                    "WHERE PeriodYear=@yr AND PeriodMonth=@mo " +
+                    "  AND ItemMeterKey IN (SELECT m.ItemMeterKey FROM dbo.zSCP2_ItemMeter m WHERE m.ItemKey=@ik) " +
+                    "  AND Source='MANUAL' AND LockedAt IS NULL AND InvoicedDocKey IS NULL;", cn);
+                cmd.Parameters.AddWithValue("@ref", refNo);
+                cmd.Parameters.AddWithValue("@yr", year);
+                cmd.Parameters.AddWithValue("@mo", month);
+                cmd.Parameters.AddWithValue("@ik", itemKey);
+                int n = cmd.ExecuteNonQuery();
+                if (n == 0)
+                    throw new InvalidOperationException("This machine has no keyed reading for the period to attach it to. Refresh and try again.");
+                return n;
+            }
+        }
 
         /// <summary>Why this reading cannot be taken over by hand, or "" when it can. Taking over
         /// is for the machine that could not be trusted that month -- it broke down, it was swapped,
@@ -930,12 +988,22 @@ namespace ServiceContractPhotocopier.Classes
         /// has to show whichever actually happened.</summary>
         public static DateTime? StagedDate(DBSetting db, long itemMeterKey, int year, int month, out bool edited)
         {
+            string ignored;
+            return StagedDate(db, itemMeterKey, year, month, out edited, out ignored);
+        }
+
+        /// <summary>The staged date, whether a person set it, and the reading's reference (the PUMS
+        /// report id, or the one keyed with a manual reading) -- all as the database now holds them.</summary>
+        public static DateTime? StagedDate(DBSetting db, long itemMeterKey, int year, int month,
+                                           out bool edited, out string reference)
+        {
             edited = false;
+            reference = "";
             using (SqlConnection cn = new SqlConnection(db.ConnectionString))
             {
                 cn.Open();
                 SqlCommand cmd = new SqlCommand(
-                    "SELECT ReadingDate, ISNULL(ReadingDateEdited,'N') FROM dbo.zSCP2_MeterEntry " +
+                    "SELECT ReadingDate, ISNULL(ReadingDateEdited,'N'), ISNULL(TrackingId,'') FROM dbo.zSCP2_MeterEntry " +
                     "WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo", cn);
                 cmd.Parameters.AddWithValue("@imk", itemMeterKey);
                 cmd.Parameters.AddWithValue("@yr", year);
@@ -944,6 +1012,7 @@ namespace ServiceContractPhotocopier.Classes
                 {
                     if (!rd.Read()) return null;
                     edited = !rd.IsDBNull(1) && rd.GetString(1).Trim().ToUpperInvariant() == "Y";
+                    reference = rd.IsDBNull(2) ? "" : rd.GetString(2).Trim();
                     return rd.IsDBNull(0) ? (DateTime?)null : rd.GetDateTime(0);
                 }
             }
