@@ -93,9 +93,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 AutoCount.Authentication.UserSession us = AutoCount.Authentication.UserSession.CurrentUserSession;
                 if (us == null) return;
                 if (GridViewItems != null) _layoutItems = NewLayout(us, LAYOUT_ITEMS, GridViewItems);
+                if (GridViewItems != null) PlaceBranchBesideBillGroup();
                 if (GridViewMeterCfg != null) _layoutMeters = NewLayout(us, LAYOUT_METERS, GridViewMeterCfg);
             }
             catch { }   // layout plumbing must never break the screen
+        }
+
+        /// <summary>Feedback ATP-7: a layout saved before the Branch column existed appends it as
+        /// the last column. The first time, put it where it belongs -- right after Bill Group, when
+        /// the user shows Bill Group. On close that arrangement is saved with the layout, so from
+        /// then on the layout places it and the user's own moves stand.</summary>
+        private void PlaceBranchBesideBillGroup()
+        {
+            DevExpress.XtraGrid.Columns.GridColumn br = GridViewItems.Columns.ColumnByFieldName("BranchCode");
+            DevExpress.XtraGrid.Columns.GridColumn bg = GridViewItems.Columns.ColumnByFieldName("BillGroupCode");
+            if (br == null || bg == null || !br.Visible || !bg.Visible) return;
+            int last = -1;
+            foreach (DevExpress.XtraGrid.Columns.GridColumn c in GridViewItems.VisibleColumns)
+                if (c.VisibleIndex > last) last = c.VisibleIndex;
+            if (br.VisibleIndex != last) return;   // the saved layout already places it
+            br.VisibleIndex = bg.VisibleIndex + 1;
         }
 
         private AutoCount.XtraUtils.CustomizeGridLayout NewLayout(
@@ -1666,6 +1683,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("Inactive", typeof(string));
             _dtItemsView.Columns.Add("MachineMode", typeof(string));
             _dtItemsView.Columns.Add("BillGroupCode", typeof(string));
+            _dtItemsView.Columns.Add("BranchCode", typeof(string));
             _dtItemsView.Columns.Add("HasRental", typeof(bool));
             _dtItemsView.Columns.Add("HasBK", typeof(bool));
             _dtItemsView.Columns.Add("HasCL", typeof(bool));
@@ -1696,6 +1714,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["Inactive"] = d.Inactive ? "Y" : "N";
                 r["MachineMode"] = d.MachineMode ?? "";
                 r["BillGroupCode"] = d.BillGroupCode ?? "";
+                r["BranchCode"] = (d.MoreHeader != null && d.MoreHeader.ContainsKey("DelBranchCode"))
+                    ? (d.MoreHeader["DelBranchCode"] ?? "") : "";
                 r["HasRental"] = MachineHasRental(d);
                 // Which counters this machine actually has. Not every machine has both, and some
                 // have neither -- a machine nobody reads still bills its rent.
@@ -2945,6 +2965,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineGradeRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineSerialRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemComboBox _inlineBillGroupRepo;
+        private DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit _inlineBranchRepo;
+        private DataTable _inlineBranchLookup;   // the contract customer's AutoCount branches (dbo.Branch)
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasRentalRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasBKRepo;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit _inlineHasCLRepo;
@@ -3091,6 +3113,45 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // would have shown it was this one.
             colBillGrp.Visible = true;
 
+            // Feedback ATP-7: each machine's own BRANCH, beside its bill group -- one of the
+            // customer's AutoCount branches (A/R > Debtor > Branch tab). It is the machine's
+            // DelBranchCode, the very field the Service Item screen edits, so the two screens can
+            // never disagree, and the normal contract save stores it with the machine's other
+            // extras. Empty = the machine follows the contract's delivery branch. A searchable
+            // list, not free text: AutoCount only knows the branches registered on the debtor.
+            _inlineBranchLookup = LoadInlineBranchLookup();
+            _inlineBranchRepo = new DevExpress.XtraEditors.Repository.RepositoryItemSearchLookUpEdit();
+            DevExpress.XtraGrid.Views.Grid.GridView vBr = new DevExpress.XtraGrid.Views.Grid.GridView();
+            vBr.OptionsView.ShowAutoFilterRow = true;
+            vBr.OptionsBehavior.AutoPopulateColumns = false;
+            _inlineBranchRepo.PopupView = vBr;
+            DevExpress.XtraGrid.Columns.GridColumn brCode = vBr.Columns.AddVisible("BranchCode");
+            brCode.Caption = "Branch Code"; brCode.Width = 90;
+            DevExpress.XtraGrid.Columns.GridColumn brName = vBr.Columns.AddVisible("BranchName");
+            brName.Caption = "Branch Name"; brName.Width = 200;
+            DevExpress.XtraGrid.Columns.GridColumn brAddr = vBr.Columns.AddVisible("Address1");
+            brAddr.Caption = "Address"; brAddr.Width = 200;
+            _inlineBranchRepo.DataSource = _inlineBranchLookup;
+            _inlineBranchRepo.DisplayMember = "BranchCode";
+            _inlineBranchRepo.ValueMember = "BranchCode";
+            _inlineBranchRepo.NullText = "";
+            // A clear button: taking the branch off hands the machine back to the contract's.
+            _inlineBranchRepo.Buttons.Add(new DevExpress.XtraEditors.Controls.EditorButton(
+                DevExpress.XtraEditors.Controls.ButtonPredefines.Delete));
+            _inlineBranchRepo.ButtonClick +=
+                new DevExpress.XtraEditors.Controls.ButtonPressedEventHandler(InlineBranch_ButtonClick);
+            ShowCodeWhenNotListed(_inlineBranchRepo);   // a branch since removed in AutoCount still shows its code
+            GridItems.RepositoryItems.Add(_inlineBranchRepo);
+            GridViewItems.ShownEditor += new EventHandler(GridViewItems_ShownEditorBranch);
+            DevExpress.XtraGrid.Columns.GridColumn colBranch = GridViewItems.Columns.AddVisible("BranchCode");
+            colBranch.Caption = "Branch";
+            colBranch.Width = 80;
+            colBranch.OptionsColumn.AllowEdit = true;
+            colBranch.ColumnEdit = _inlineBranchRepo;
+            colBranch.ToolTip = "This machine's own branch of the customer (registered in AutoCount: A/R > " +
+                "Debtor > Branch tab). Picking one also fills the machine's delivery address. Empty = the " +
+                "machine follows the contract's branch.";
+
             // "Line label" is not here any more. It is the word PRINTED beside the charge, so it
             // belongs with the rest of what prints -- Meters & Pricing, next to the bill group and
             // the merge groups. Editing it in two screens was the same fault "Own invoice" had.
@@ -3199,6 +3260,63 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ed.Properties.NullValuePrompt = "No " + code + " serial in stock - type it, or receive it in AutoCount first";
                 ed.Properties.ShowNullValuePromptWhenFocused = true;
             }
+        }
+
+        /// <summary>The contract customer's AutoCount branches (dbo.Branch), for the machine grid's
+        /// Branch column (feedback ATP-7). Empty when no customer is picked or it has none.</summary>
+        private DataTable LoadInlineBranchLookup()
+        {
+            string debtor = LkDebtorCode == null || LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString().Trim();
+            DataTable br = null;
+            if (debtor.Length > 0)
+            {
+                try
+                {
+                    br = _db.GetDataTable(
+                        "SELECT BranchCode, ISNULL(BranchName,'') AS BranchName, ISNULL(Address1,'') AS Address1, " +
+                        "ISNULL(Address2,'') AS Address2, ISNULL(Address3,'') AS Address3, ISNULL(Address4,'') AS Address4, " +
+                        "ISNULL(PostCode,'') AS PostCode, ISNULL(Phone1,'') AS Phone1, ISNULL(Fax1,'') AS Fax1, " +
+                        "ISNULL(EmailAddress,'') AS EmailAddress, ISNULL(Contact,'') AS Contact " +
+                        "FROM [dbo].[Branch] WHERE AccNo=N'" + debtor.Replace("'", "''") + "' " +
+                        "AND ISNULL(IsActive,'T')<>'F' ORDER BY BranchCode", false);
+                }
+                catch { br = null; }
+            }
+            if (br == null)
+            {
+                br = new DataTable();
+                foreach (string c in new string[] { "BranchCode", "BranchName", "Address1", "Address2", "Address3",
+                    "Address4", "PostCode", "Phone1", "Fax1", "EmailAddress", "Contact" })
+                    br.Columns.Add(c, typeof(string));
+            }
+            return br;
+        }
+
+        // The Branch cell lists the branches of the customer on the contract NOW -- the customer can
+        // be changed after the grid was built -- and says so when that customer has none.
+        private void GridViewItems_ShownEditorBranch(object sender, EventArgs e)
+        {
+            if (GridViewItems.FocusedColumn == null || GridViewItems.FocusedColumn.FieldName != "BranchCode") return;
+            DevExpress.XtraEditors.SearchLookUpEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.SearchLookUpEdit;
+            if (ed == null) return;
+            _inlineBranchLookup = LoadInlineBranchLookup();
+            ed.Properties.DataSource = _inlineBranchLookup;
+            _inlineBranchRepo.DataSource = _inlineBranchLookup;
+            string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString().Trim();
+            ed.Properties.NullValuePrompt = debtor.Length == 0
+                ? "Pick the customer first"
+                : (_inlineBranchLookup.Rows.Count == 0
+                    ? debtor + " has no branches - add them in AutoCount: A/R > Debtor > Branch tab"
+                    : "");
+            ed.Properties.ShowNullValuePromptWhenFocused = true;
+        }
+
+        // The Branch cell's clear button: the machine follows the contract's branch again.
+        private void InlineBranch_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
+        {
+            if (e.Button.Kind != DevExpress.XtraEditors.Controls.ButtonPredefines.Delete) return;
+            DevExpress.XtraEditors.BaseEdit ed = sender as DevExpress.XtraEditors.BaseEdit;
+            if (ed != null) ed.EditValue = null;
         }
 
         // #6: when the Bill Group cell opens, list the codes already used in THIS contract so the
@@ -3445,6 +3563,35 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         int rh = e.RowHandle;
                         BeginInvoke(new MethodInvoker(delegate
                         { GridViewItems.SetRowCellValue(rh, "BillGroupCode", bg); }));
+                    }
+                    break;
+                }
+                case "BranchCode":
+                {
+                    // Feedback ATP-7. Picking a branch fills the machine's delivery block exactly as
+                    // the Service Item screen's branch search does. Clearing it hands the branch back
+                    // to the contract and leaves any delivery address already on the machine alone --
+                    // it may have been typed, and a cleared code is no reason to lose it.
+                    DataRow b = null;
+                    if (s.Length > 0 && _inlineBranchLookup != null)
+                    {
+                        DataRow[] f = _inlineBranchLookup.Select("BranchCode='" + s.Replace("'", "''") + "'");
+                        if (f.Length > 0) b = f[0];
+                    }
+                    if (d.MoreHeader == null) d.MoreHeader = new Dictionary<string, string>();
+                    d.MoreHeader["DelBranchCode"] = s;
+                    if (s.Length == 0) d.MoreHeader["DelBranchName"] = "";
+                    if (b != null)
+                    {
+                        d.MoreHeader["DelBranchName"] = AsStr(b["BranchName"]);
+                        d.MoreHeader["DelAddress"] = string.Join("\r\n", new string[] {
+                            AsStr(b["Address1"]), AsStr(b["Address2"]), AsStr(b["Address3"]), AsStr(b["Address4"]) })
+                            .Trim('\r', '\n');
+                        d.MoreHeader["DelPostalCode"] = AsStr(b["PostCode"]);
+                        d.MoreHeader["DelPhone"] = AsStr(b["Phone1"]);
+                        d.MoreHeader["DelFax"] = AsStr(b["Fax1"]);
+                        d.MoreHeader["DelEmail"] = AsStr(b["EmailAddress"]);
+                        d.MoreHeader["DelContactPerson"] = AsStr(b["Contact"]);
                     }
                     break;
                 }

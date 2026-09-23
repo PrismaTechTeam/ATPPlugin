@@ -58,6 +58,11 @@ report number once and both counters of the machine take it. Generate the invoic
 shows it -- the same place a PUMS reading's report id appears. Leave it empty and the Ref is the
 usual contract or machine number.
 
+On a contract, the machine grid has a **Branch** column beside Bill Group. It lists the customer's
+branches as registered in AutoCount (A/R > Debtor > Branch tab) -- a customer with none shows an
+empty list that says so. Pick one for a machine and Save: the machine's delivery address follows the
+branch, and the Service Item screen shows the same branch. The invoice does not change.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and
