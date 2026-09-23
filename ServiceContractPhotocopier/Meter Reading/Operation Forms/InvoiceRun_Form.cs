@@ -174,6 +174,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnHistory.Click += new EventHandler(BtnHistory_Click);
             this.BtnDeleteInvoice.Click += new EventHandler(BtnDeleteInvoice_Click);
             this.BtnTakeOver.Click += new EventHandler(BtnTakeOver_Click);
+            // Feedback ATP-6 / ATP-9: the invoice date is the due date only by default.
+            this.DtInvDate.EditValueChanged += new EventHandler(DtInvDate_EditValueChanged);
+            this.BtnInvDateFromReading.Click += new EventHandler(BtnInvDateFromReading_Click);
+            this.GridViewInvoices.RowCellStyle +=
+                new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewInvoices_InvDateCellStyle);
             this.BtnTakeOver.ToolTip = "The machine could not be trusted this month -- it broke down, it was " +
                 "swapped, it reported a stale counter. This makes the reading on the row yours: the number " +
                 "and its date are kept, the date can then be corrected, and a later fetch that disagrees " +
@@ -219,6 +224,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnHistory.Enabled = false;
             this.BtnDeleteInvoice.Enabled = false;
             this.BtnTakeOver.Enabled = false;
+            this.DtInvDate.Enabled = false;
+            this.BtnInvDateFromReading.Enabled = false;
         }
 
         private void Boot()
@@ -443,8 +450,22 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             LoadData();
         }
 
+        // The invoice dates the operator moved (feedback ATP-6 / ATP-9), by period + invoice. Kept for
+        // as long as the screen is open, so a Refresh or a Fetch does not quietly put them back.
+        private readonly Dictionary<string, DateTime> _docDates = new Dictionary<string, DateTime>();
+
+        private static string DocDateKey(InvoiceRunItem it)
+        {
+            return it.Year + "-" + it.Month + "|" + it.JobKey;
+        }
+
         private void BindItems(HashSet<string> ticked)
         {
+            foreach (InvoiceRunItem it0 in _items)
+            {
+                DateTime moved;
+                it0.DocDateOverride = _docDates.TryGetValue(DocDateKey(it0), out moved) ? (DateTime?)moved : null;
+            }
             DataTable t = new DataTable();
             t.Columns.Add("Sel", typeof(bool));
             t.Columns.Add("JobKey", typeof(string));
@@ -461,6 +482,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             t.Columns.Add("RentalSide", typeof(bool));
             t.Columns.Add("Overdue", typeof(bool));
             t.Columns.Add("Due", typeof(DateTime));
+            t.Columns.Add("InvDate", typeof(DateTime));
+            t.Columns.Add("InvDateChanged", typeof(bool));
             foreach (InvoiceRunItem it in _items)
             {
                 DataRow r = t.NewRow();
@@ -489,6 +512,14 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             r["RentalSide"] = it.RentalSide;
             r["Overdue"] = it.Overdue;
             if (it.Year > 0 && it.Month > 0) r["Due"] = it.Due;
+            if (r.Table.Columns.Contains("InvDate"))
+            {
+                // An invoice already made carries its own date on the document; a date worked out here
+                // could differ from it, so the column stays empty rather than say something untrue.
+                if (it.Status == InvoiceRunItem.INVOICED) r["InvDate"] = DBNull.Value;
+                else r["InvDate"] = ScpInvoiceRun.EffectiveDocDate(it);
+                r["InvDateChanged"] = it.Status != InvoiceRunItem.INVOICED && it.DocDateOverride.HasValue;
+            }
         }
 
         private DataRow ItemRow(string jobKey)
@@ -626,6 +657,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 this.BtnHistory.Enabled = false;
                 this.BtnDeleteInvoice.Enabled = false;
                 this.BtnTakeOver.Enabled = false;
+                _suppress = true;
+                this.DtInvDate.EditValue = null;
+                _suppress = false;
+                this.DtInvDate.Enabled = false;
+                this.BtnInvDateFromReading.Enabled = false;
                 return;
             }
             this.LblDetailTitle.Text = it.ContractNo + "  ·  " + it.Kind + " invoice" +
@@ -642,6 +678,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnPreview.Enabled = it.Status == InvoiceRunItem.READY;
             this.BtnHistory.Enabled = it.Rows.Count > 0;
             this.BtnDeleteInvoice.Enabled = it.Status == InvoiceRunItem.INVOICED && it.InvoicedDocNo.Trim().Length > 0;
+            // The date this invoice will carry; an invoice already made keeps the date it was made with.
+            _suppress = true;
+            this.DtInvDate.EditValue = it.Status == InvoiceRunItem.INVOICED ? null : (object)ScpInvoiceRun.EffectiveDocDate(it);
+            _suppress = false;
+            this.DtInvDate.Enabled = it.Status != InvoiceRunItem.INVOICED;
+            this.BtnInvDateFromReading.Enabled = it.Status != InvoiceRunItem.INVOICED;
 
             // The other half of a contract that bills its rent apart, so the clerk sees both.
             string foot = "";
@@ -1598,6 +1640,79 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GridViewReadings.RefreshData();
         }
 
+        // ─────────────────────── the invoice date (feedback ATP-6 / ATP-9) ───────────────────────
+
+        // The due date is the default, not the rule: a machine that broke down on the 15th is billed
+        // for the 1st-14th and the invoice is dated the 14th. Any day in the same month; the list
+        // shows it (in blue when moved) and Generate uses it, for this invoice or a batch.
+        private void DtInvDate_EditValueChanged(object sender, EventArgs e)
+        {
+            if (_suppress || _current == null) return;
+            InvoiceRunItem it = _current;
+            object v = this.DtInvDate.EditValue;
+            if (v == null || v == DBNull.Value)
+            {
+                // Cleared: back to the default.
+                SetDocDate(it, null);
+                return;
+            }
+            DateTime when = Convert.ToDateTime(v).Date;
+            string wrong = ScpInvoiceRun.WhyDocDateWrong(it, when);
+            if (wrong.Length > 0)
+            {
+                XtraMessageBox.Show(wrong, "Invoice date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _suppress = true;
+                this.DtInvDate.EditValue = ScpInvoiceRun.EffectiveDocDate(it);
+                _suppress = false;
+                return;
+            }
+            SetDocDate(it, when == ScpInvoiceRun.DefaultDocDate(it).Date ? (DateTime?)null : when);
+        }
+
+        private void SetDocDate(InvoiceRunItem it, DateTime? when)
+        {
+            it.DocDateOverride = when;
+            string key = DocDateKey(it);
+            if (when.HasValue) _docDates[key] = when.Value; else _docDates.Remove(key);
+            _suppress = true;
+            this.DtInvDate.EditValue = ScpInvoiceRun.EffectiveDocDate(it);
+            _suppress = false;
+            DataRow ir = ItemRow(it.JobKey);
+            if (ir != null) FillItemRow(ir, it);
+            this.GridViewInvoices.LayoutChanged();
+            this.LblDetailFoot.Text = when.HasValue
+                ? "This invoice will be dated " + when.Value.ToString("dd/MM/yyyy") + " instead of its due date " +
+                  ScpInvoiceRun.DefaultDocDate(it).ToString("dd/MM/yyyy") + "."
+                : "This invoice is dated its due date, " + ScpInvoiceRun.DefaultDocDate(it).ToString("dd/MM/yyyy") + ".";
+        }
+
+        private void BtnInvDateFromReading_Click(object sender, EventArgs e)
+        {
+            if (_current == null) return;
+            DateTime? last = ScpInvoiceRun.LastReadingDate(_current);
+            if (!last.HasValue)
+            {
+                XtraMessageBox.Show("None of this invoice's readings has a date yet -- key or fetch them first.",
+                    "Invoice date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            // Through the editor, so the same month check applies.
+            this.DtInvDate.EditValue = last.Value;
+        }
+
+        private void GridViewInvoices_InvDateCellStyle(object sender, RowCellStyleEventArgs e)
+        {
+            if (e.Column != this.ColInvDate || e.RowHandle < 0) return;
+            object moved = this.GridViewInvoices.GetRowCellValue(e.RowHandle, "InvDateChanged");
+            if (moved != null && moved != DBNull.Value && Convert.ToBoolean(moved))
+            {
+                e.Appearance.ForeColor = Color.FromArgb(21, 101, 192);
+                e.Appearance.FontStyleDelta = FontStyle.Bold;
+                e.Appearance.Options.UseForeColor = true;
+                e.Appearance.Options.UseFont = true;
+            }
+        }
+
         // ───────────────────────────── generate ─────────────────────────────
 
         private void BtnGenerateReady_Click(object sender, EventArgs e)
@@ -1719,6 +1834,24 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (jobs.Count == 0)
             {
                 XtraMessageBox.Show("Nothing to generate for " + monthName + ".", "Meter Invoice Run");
+                return;
+            }
+            // Feedback ATP-6 / ATP-9: an invoice whose date was moved goes out on that date. Every
+            // moved date must find its invoice; one that does not stops the run rather than going out
+            // quietly on the due date the operator changed.
+            List<string> unplaced = new List<string>();
+            foreach (InvoiceRunItem it in chosen)
+            {
+                if (!it.DocDateOverride.HasValue) continue;
+                MeterInvoiceGenerator.InvoiceJob job;
+                if (jobs.TryGetValue(it.JobKey, out job)) job.DocDate = it.DocDateOverride.Value;
+                else unplaced.Add(it.ContractNo + " (" + it.DocDateOverride.Value.ToString("dd/MM/yyyy") + ")");
+            }
+            if (unplaced.Count > 0)
+            {
+                XtraMessageBox.Show("The invoice date set for " + string.Join(", ", unplaced.ToArray()) +
+                    " could not be matched to its invoice, so nothing was generated. Refresh and set the date again.",
+                    "Meter Invoice Run", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 

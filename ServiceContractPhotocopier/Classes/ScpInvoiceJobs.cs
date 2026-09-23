@@ -22,7 +22,38 @@ namespace ServiceContractPhotocopier.Classes
     /// </summary>
     public static class ScpInvoiceJobs
     {
-public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
+        /// <summary>
+        /// The date an invoice takes BY DEFAULT: the billed period's billing day (the row's effective
+        /// day, clamped), so a May run dated 28/05 lands in the MR2605.* number series -- never
+        /// "today". Demo 28/07 #18: a rental billed apart takes the contract's own rental day when it
+        /// has one ("rental 是跟头标的, meter 是跟尾标的"): accrual in the billing month, prepayment in
+        /// the NEXT month (June run -> July 1).
+        ///
+        /// <para>Only the default (feedback ATP-6 / ATP-9): Meter Invoice Run lets the operator move
+        /// it within the same month -- a machine that broke down on the 15th is billed up to the
+        /// 14th, dated the 14th. Build uses this; the run screen shows it.</para>
+        /// </summary>
+        public static DateTime DocDateFor(DataRow r, int genYear, int genMonth, bool rentalJob)
+        {
+            int effDay = r["BillingDay"] == DBNull.Value ? 28 : Convert.ToInt32(r["BillingDay"]);
+            int dim = DateTime.DaysInMonth(genYear, genMonth);
+            DateTime d = new DateTime(genYear, genMonth, effDay > dim ? dim : (effDay < 1 ? 1 : effDay));
+            if (rentalJob)
+            {
+                int rentDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
+                    ? Convert.ToInt32(r["RentalBillingDay"]) : 0;
+                if (rentDay >= 1 && rentDay <= 28)
+                {
+                    int ry = genYear, rm = genMonth;
+                    if (S(r["RentalBasis"]) == "P") { rm++; if (rm > 12) { rm = 1; ry++; } }
+                    int rdim = DateTime.DaysInMonth(ry, rm);
+                    d = new DateTime(ry, rm, rentDay > rdim ? rdim : rentDay);
+                }
+            }
+            return d;
+        }
+
+        public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
             DBSetting db, DataTable allRows, List<DataRow> visibleRows,
             Dictionary<string, List<decimal[]>> ladders,
             int genYear, int genMonth, string grpMode,
@@ -237,26 +268,7 @@ public static Dictionary<string, MeterInvoiceGenerator.InvoiceJob> Build(
                     job = new MeterInvoiceGenerator.InvoiceJob();
                     job.DebtorCode = ln.DebtorCode;
                     job.RefDocNo = refNo;
-                    // Invoice date = the BILLED PERIOD's billing day (row's effective day, clamped),
-                    // so a May run dated 28/05 lands in the MR2605.* number series — never "today".
-                    int effDay = r["BillingDay"] == DBNull.Value ? 28 : Convert.ToInt32(r["BillingDay"]);
-                    int dim = DateTime.DaysInMonth(genYear, genMonth);
-                    job.DocDate = new DateTime(genYear, genMonth, effDay > dim ? dim : (effDay < 1 ? 1 : effDay));
-                    // Demo 28/07 #18: the rental-separate job gets its OWN invoice day when the
-                    // contract sets one ("rental 是跟头标的,meter 是跟尾标的"): accrual rentals date
-                    // in the billing month, prepayment rentals in the NEXT month (June run -> July 1).
-                    if (rentalJob)
-                    {
-                        int rentDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
-                            ? Convert.ToInt32(r["RentalBillingDay"]) : 0;
-                        if (rentDay >= 1 && rentDay <= 28)
-                        {
-                            int ry = genYear, rm = genMonth;
-                            if (S(r["RentalBasis"]) == "P") { rm++; if (rm > 12) { rm = 1; ry++; } }
-                            int rdim = DateTime.DaysInMonth(ry, rm);
-                            job.DocDate = new DateTime(ry, rm, rentDay > rdim ? rdim : rentDay);
-                        }
-                    }
+                    job.DocDate = DocDateFor(r, genYear, genMonth, rentalJob);
                     // Legacy header text (verified against the customer's V8 meter invoices);
                     // rental-only invoices get their own header so the two are distinguishable.
                     job.Description = (rentalJob ? "Rental- [" : "Billing- [") + refNo

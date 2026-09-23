@@ -73,6 +73,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColAmount = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColStatus = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColDue = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColInvDate = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoSel = new DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit();
             this.RepoMoney = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.PanelDetailHead = new DevExpress.XtraEditors.PanelControl();
@@ -87,6 +88,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnHistory = new DevExpress.XtraEditors.SimpleButton();
             this.BtnDeleteInvoice = new DevExpress.XtraEditors.SimpleButton();
             this.BtnTakeOver = new DevExpress.XtraEditors.SimpleButton();
+            this.LblInvDate = new DevExpress.XtraEditors.LabelControl();
+            this.DtInvDate = new DevExpress.XtraEditors.DateEdit();
+            this.BtnInvDateFromReading = new DevExpress.XtraEditors.SimpleButton();
             this.BtnOverdue = new DevExpress.XtraEditors.CheckButton();
             this.GridReadings = new DevExpress.XtraGrid.GridControl();
             this.GridViewReadings = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -143,6 +147,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.PanelDetailHead)).BeginInit();
             this.PanelDetailHead.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMissingOnly.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties.CalendarTimeProperties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridReadings)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewReadings)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoNum)).BeginInit();
@@ -627,7 +633,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColReadings,
             this.ColAmount,
             this.ColStatus,
-            this.ColDue});
+            this.ColDue,
+            this.ColInvDate});
             this.GridViewInvoices.ColumnPanelRowHeight = 28;
             this.GridViewInvoices.GridControl = this.GridInvoices;
             this.GridViewInvoices.GroupFormat = "{1}";
@@ -754,6 +761,18 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColStatus.VisibleIndex = 8;
             this.ColStatus.Width = 170;
             //
+            // ColInvDate  (the date the invoice will carry -- the due date unless the operator moved it)
+            //
+            this.ColInvDate.Caption = "Invoice Date";
+            this.ColInvDate.DisplayFormat.FormatString = "dd/MM/yyyy";
+            this.ColInvDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.ColInvDate.FieldName = "InvDate";
+            this.ColInvDate.Name = "ColInvDate";
+            this.ColInvDate.OptionsColumn.AllowEdit = false;
+            this.ColInvDate.Visible = true;
+            this.ColInvDate.VisibleIndex = 9;
+            this.ColInvDate.Width = 90;
+            //
             // RepoSel
             //
             this.RepoSel.AutoHeight = false;
@@ -783,10 +802,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelDetailHead.Controls.Add(this.BtnHistory);
             this.PanelDetailHead.Controls.Add(this.BtnDeleteInvoice);
             this.PanelDetailHead.Controls.Add(this.BtnTakeOver);
+            this.PanelDetailHead.Controls.Add(this.LblInvDate);
+            this.PanelDetailHead.Controls.Add(this.DtInvDate);
+            this.PanelDetailHead.Controls.Add(this.BtnInvDateFromReading);
             this.PanelDetailHead.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelDetailHead.Location = new System.Drawing.Point(0, 0);
             this.PanelDetailHead.Name = "PanelDetailHead";
-            this.PanelDetailHead.Size = new System.Drawing.Size(510, 150);
+            this.PanelDetailHead.Size = new System.Drawing.Size(510, 182);
             this.PanelDetailHead.TabIndex = 0;
             //
             // LblDetailTitle
@@ -917,10 +939,48 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnTakeOver.TabIndex = 10;
             this.BtnTakeOver.Text = "Key in myself";
             //
+            // LblInvDate
+            //
+            this.LblInvDate.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.LblInvDate.Appearance.Options.UseFont = true;
+            this.LblInvDate.Location = new System.Drawing.Point(12, 156);
+            this.LblInvDate.Name = "LblInvDate";
+            this.LblInvDate.Size = new System.Drawing.Size(66, 15);
+            this.LblInvDate.TabIndex = 11;
+            this.LblInvDate.Text = "Invoice date";
+            //
+            // DtInvDate  (the due date by default; the operator may move it within the same month)
+            //
+            this.DtInvDate.EditValue = null;
+            this.DtInvDate.Location = new System.Drawing.Point(86, 153);
+            this.DtInvDate.Name = "DtInvDate";
+            this.DtInvDate.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.DtInvDate.Properties.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.DtInvDate.Properties.DisplayFormat.FormatString = "dd/MM/yyyy";
+            this.DtInvDate.Properties.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.DtInvDate.Properties.EditFormat.FormatString = "dd/MM/yyyy";
+            this.DtInvDate.Properties.EditFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.DtInvDate.Properties.Mask.EditMask = "dd/MM/yyyy";
+            this.DtInvDate.Properties.Mask.UseMaskAsDisplayFormat = true;
+            this.DtInvDate.Size = new System.Drawing.Size(110, 20);
+            this.DtInvDate.TabIndex = 12;
+            //
+            // BtnInvDateFromReading  (a machine read for the last time on the 14th is billed on the 14th)
+            //
+            this.BtnInvDateFromReading.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.BtnInvDateFromReading.Appearance.Options.UseFont = true;
+            this.BtnInvDateFromReading.Location = new System.Drawing.Point(202, 151);
+            this.BtnInvDateFromReading.Name = "BtnInvDateFromReading";
+            this.BtnInvDateFromReading.Size = new System.Drawing.Size(150, 24);
+            this.BtnInvDateFromReading.TabIndex = 13;
+            this.BtnInvDateFromReading.Text = "Use last reading date";
+            //
             // GridReadings
             //
             this.GridReadings.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.GridReadings.Location = new System.Drawing.Point(0, 150);
+            this.GridReadings.Location = new System.Drawing.Point(0, 182);
             this.GridReadings.MainView = this.GridViewReadings;
             this.GridReadings.Name = "GridReadings";
             this.GridReadings.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
@@ -1378,6 +1438,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelDetailHead.ResumeLayout(false);
             this.PanelDetailHead.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.ChkMissingOnly.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties.CalendarTimeProperties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridReadings)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewReadings)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoNum)).EndInit();
@@ -1446,6 +1508,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColAmount;
         private DevExpress.XtraGrid.Columns.GridColumn ColStatus;
         private DevExpress.XtraGrid.Columns.GridColumn ColDue;
+        private DevExpress.XtraGrid.Columns.GridColumn ColInvDate;
         private DevExpress.XtraEditors.Repository.RepositoryItemCheckEdit RepoSel;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoMoney;
         private DevExpress.XtraEditors.PanelControl PanelDetailHead;
@@ -1460,6 +1523,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.SimpleButton BtnHistory;
         private DevExpress.XtraEditors.SimpleButton BtnDeleteInvoice;
         private DevExpress.XtraEditors.SimpleButton BtnTakeOver;
+        private DevExpress.XtraEditors.LabelControl LblInvDate;
+        private DevExpress.XtraEditors.DateEdit DtInvDate;
+        private DevExpress.XtraEditors.SimpleButton BtnInvDateFromReading;
         private DevExpress.XtraEditors.CheckButton BtnOverdue;
         private DevExpress.XtraGrid.GridControl GridReadings;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewReadings;

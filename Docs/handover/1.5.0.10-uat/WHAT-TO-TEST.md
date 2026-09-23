@@ -80,6 +80,12 @@ refuses it with its own message, and nothing is written.
 
 ## 3. The invoice
 
+**The invoice date.** Pick an invoice in Meter Invoice Run: under the buttons, **Invoice date** shows the date it
+will carry -- its due date. Change it to another day of the same month (a machine that broke down on the 15th is
+billed for the 1st-14th and dated the 14th), or press **Use last reading date**. The list's **Invoice Date**
+column shows it in blue, a Refresh keeps it, and the generated invoice carries it. A date in another month is
+refused: the month decides the invoice's number series and where next month's readings start.
+
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and
 what a rental waive takes off, and the invoice **Amount** on the left includes them.
 

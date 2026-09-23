@@ -37,6 +37,10 @@ namespace ServiceContractPhotocopier.Classes
         /// and then nothing is ever late.</summary>
         public int Year, Month, DueDay;
 
+        /// <summary>The invoice date the operator chose instead of the default (feedback ATP-6 /
+        /// ATP-9); null = the default. Kept by the run screen for the session.</summary>
+        public DateTime? DocDateOverride;
+
         public DateTime Due
         {
             get
@@ -613,6 +617,49 @@ namespace ServiceContractPhotocopier.Classes
             bool rentalJob = flat && rentSep && (ScpStrategy.IsRentalMeterCode(S(r["MeterType"])) || waive);
             if (rentalJob) key += "_R";
             return key;
+        }
+
+        /// <summary>The date this invoice takes when nobody changes it -- the same rule Build applies,
+        /// from the invoice's first row (which is also the row Build dates the job from).</summary>
+        public static DateTime DefaultDocDate(InvoiceRunItem it)
+        {
+            if (it == null) return DateTime.Today;
+            if (it.Rows.Count == 0 || it.Year <= 0 || it.Month <= 0) return it.Due == DateTime.MaxValue ? DateTime.Today : it.Due;
+            return ScpInvoiceJobs.DocDateFor(it.Rows[0], it.Year, it.Month, it.RentalSide);
+        }
+
+        /// <summary>The date the invoice will carry: the operator's, else the default.</summary>
+        public static DateTime EffectiveDocDate(InvoiceRunItem it)
+        {
+            return it != null && it.DocDateOverride.HasValue ? it.DocDateOverride.Value : DefaultDocDate(it);
+        }
+
+        /// <summary>Why this date cannot be the invoice's, or "" when it can. It must stay in the month
+        /// of its default: that month decides the number series (MR2609.*) and where next month's
+        /// readings start, and a date outside it would move the invoice into another period.</summary>
+        public static string WhyDocDateWrong(InvoiceRunItem it, DateTime when)
+        {
+            DateTime def = DefaultDocDate(it);
+            if (when.Year != def.Year || when.Month != def.Month)
+                return "The invoice date has to stay in " + def.ToString("MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("en-US")) +
+                       " -- the month this invoice is billed in, which decides its number series and where next month's readings start.";
+            return "";
+        }
+
+        /// <summary>The latest day any of this invoice's readings was taken, or null -- for "use the
+        /// last reading date" (a machine that broke down on the 15th was last read on the 14th).</summary>
+        public static DateTime? LastReadingDate(InvoiceRunItem it)
+        {
+            DateTime? best = null;
+            if (it == null) return null;
+            foreach (DataRow r in it.Rows)
+            {
+                if (!IsUsageMeter(r) || !HasReading(r)) continue;
+                if (!r.Table.Columns.Contains("LastAuditDate") || r["LastAuditDate"] == DBNull.Value) continue;
+                DateTime d = Convert.ToDateTime(r["LastAuditDate"]).Date;
+                if (!best.HasValue || d > best.Value) best = d;
+            }
+            return best;
         }
 
         /// <summary>A counter somebody reads: not rent, not a waive, not a minimum.</summary>
