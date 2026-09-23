@@ -113,6 +113,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRInvoiced = new DevExpress.XtraGrid.Columns.GridColumn();
             this.RepoRate = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoDate = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
+            this.RepoDateEdit = new DevExpress.XtraEditors.Repository.RepositoryItemDateEdit();
             this.RepoNum = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoReading = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
             this.RepoMoney2 = new DevExpress.XtraEditors.Repository.RepositoryItemTextEdit();
@@ -147,6 +148,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.RepoMoney2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoRate)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDate)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit.CalendarTimeProperties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelDetailFoot)).BeginInit();
             this.PanelDetailFoot.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.PanelStatus)).BeginInit();
@@ -922,7 +925,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.RepoReading,
             this.RepoMoney2,
             this.RepoRate,
-            this.RepoDate});
+            this.RepoDate,
+            this.RepoDateEdit});
             this.GridReadings.Size = new System.Drawing.Size(510, 336);
             this.GridReadings.TabIndex = 1;
             this.GridReadings.ViewCollection.AddRange(new DevExpress.XtraGrid.Views.Base.BaseView[] {
@@ -1149,7 +1153,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // ColRLastAudit
             //
             this.ColRLastAudit.Caption = "Last Audit Date";
-            this.ColRLastAudit.ColumnEdit = this.RepoDate;
+            this.ColRLastAudit.ColumnEdit = this.RepoDateEdit;
             this.ColRLastAudit.FieldName = "LastAuditDate";
             this.ColRLastAudit.Name = "ColRLastAudit";
             this.ColRLastAudit.OptionsColumn.AllowEdit = true;
@@ -1224,6 +1228,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.RepoDate.DisplayFormat.FormatString = "dd/MM/yyyy";
             this.RepoDate.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
             this.RepoDate.Name = "RepoDate";
+            //
+            // RepoDateEdit  (the day a keyed reading was taken -- the one date that is typed in)
+            //
+            this.RepoDateEdit.AutoHeight = false;
+            this.RepoDateEdit.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.RepoDateEdit.CalendarTimeProperties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.RepoDateEdit.DisplayFormat.FormatString = "dd/MM/yyyy";
+            this.RepoDateEdit.DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.RepoDateEdit.EditFormat.FormatString = "dd/MM/yyyy";
+            this.RepoDateEdit.EditFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
+            this.RepoDateEdit.Mask.EditMask = "dd/MM/yyyy";
+            this.RepoDateEdit.Mask.UseMaskAsDisplayFormat = true;
+            this.RepoDateEdit.Name = "RepoDateEdit";
             //
             // RepoNum
             //
@@ -1344,6 +1363,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.RepoMoney2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoRate)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoDate)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit.CalendarTimeProperties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.RepoDateEdit)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.PanelDetailFoot)).EndInit();
             this.PanelDetailFoot.ResumeLayout(false);
             this.PanelDetailFoot.PerformLayout();
@@ -1442,6 +1463,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColRInvoiced;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoRate;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoDate;
+        private DevExpress.XtraEditors.Repository.RepositoryItemDateEdit RepoDateEdit;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoNum;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoReading;
         private DevExpress.XtraEditors.Repository.RepositoryItemTextEdit RepoMoney2;

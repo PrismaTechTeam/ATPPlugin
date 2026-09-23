@@ -1793,3 +1793,13 @@ User, reading back the guard list: "❌ 不给改 -- 那是机器自己的 audit
 - What it does NOT change: the number, the date, the money, the period. What it changes: whose reading it is -- so the date unlocks, and a later fetch that disagrees raises a CONFLICT instead of overwriting (the existing MANUAL-vs-API rule).
 - TakeOverTest (AED_ATPTEST, July 2027, cleans up): an OFFLINE 8,400 read nine days ago -> date locked, take-over allowed; after it, the reading, the date and the report reference are untouched, the row is the operator's, nothing is marked hand-typed yet, and the date now accepts a correction (which then marks it); taking over one that is already yours, an INTERBILL row, and a locked snapshot are all refused, in the guard AND in the database. ALL OK (18). ReadDateTest and NotStartedTest re-run: ALL OK.
 - Re-cut into **1.5.0.10** again: 2837368 bytes, SHA256 `B9D88F97…D624`.
+
+### 23/9 — ATP-5 seen on screen (and a text editor swapped for a real date editor)
+
+User: "ATP-5 成功了?" -- fair question, because everything so far was headless. Opened Meter Invoice Run on AED_ATPTEST in its own process (RunShow harness; the ShadowMain windows were not touched), staged one keyed and one machine reading on CSSI 00000700 of SC-000153, and looked:
+
+- the keyed row's **Last Audit Date is pale yellow**, the fetched row's is not; UIA reports the keyed cell as editable and the rest of the row read-only;
+- **Key in myself** is greyed until the focused row is a machine's reading, and enabled on it. Pressed: source OFFLINE -> Keyed, reading 1,200 and date 18/09 unchanged, TrackingId REPORT-0099 kept, log row written, footer says "That reading is yours now...", button greys again. Verified in the database, not just on screen.
+- **Found by looking**: the column's editor was `RepoDate`, a RepositoryItemTextEdit -- opening it showed `2026/9/18 15:53:36` with no calendar. Added `RepoDateEdit` (RepositoryItemDateEdit, dd/MM/yyyy mask, calendar button, both ISupportInitialize pairs) for that column only; the other date columns keep the text edit since they are read-only.
+- Keyboard automation cannot type into a DevExpress in-place editor here (it cannot type into the long-working Current Reading cell either), so the commit was driven where a keystroke lands instead: `DateProbe` opens the real form, focuses SC-000153, and calls `GridViewReadings.SetRowCellValue(row, "LastAuditDate", today-3)` -- the same event a committed editor raises. Result: row shows 20/09/2026 hand-set True, and `zSCP2_MeterEntry` holds `20/09/2026 / MANUAL / ReadingDateEdited = Y`. The staged test rows were then deleted (staging and log both back to 0).
+- Re-cut 1.5.0.10 again: 2,837,787 bytes, SHA256 `DA807E5D…34FF`.
