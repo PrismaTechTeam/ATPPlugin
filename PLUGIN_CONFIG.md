@@ -25,9 +25,10 @@
 ## Description
 - **Description:** This Plugin handles Service & Contract management for the Photocopier business in AutoCount.
 - **WhatsNew:** |
-    v1.5.0.10 (2026-09-23) — the contract header, and which copies a minimum counts:
+    v1.5.0.10 (2026-09-23) — the contract header, which copies a minimum counts, and a tidier run:
     1. On a contract, the Address box is taller and the Description box shorter, so a four-line address reads without scrolling.
     2. Meters / Pricing, Minimum / waive: the minimum charge can count black only, colour only, or both. The invoice already billed whichever was set on the meter; now this screen sets it, and the sentence above says which copies it measures.
+    3. Meter Invoice Run leaves out a contract that has not started yet: while its start date is still in the future it is off Ready to Invoice and Need Manual Key-In, and it appears on the day it starts.
 
     v1.5.0.9 (2026-09-22) — Meter Invoice Run shows the minimum and the waive:
     1. Meter Invoice Run works out the committed minimum's top-up and the rental waive from the readings, the way the invoice will: Total Charges and the invoice Amount show them before Generate, and a new reading updates them at once.

@@ -158,6 +158,7 @@ namespace ServiceContractPhotocopier.Classes
         dt.Columns.Add("Locked", typeof(bool));            // billing-day auto-fetch snapshot lock — reading frozen (hidden)
         dt.Columns.Add("HasConflict", typeof(bool));       // saved-manual value differs from a fresh API value (hidden)
         dt.Columns.Add("IsExpired", typeof(bool));         // effective expiry BEFORE the billing month (row tinted; Generate warns)
+        dt.Columns.Add("NotStarted", typeof(bool));        // the contract has not begun yet (start date after today) - off the run's working tabs
         dt.Columns.Add("EffStart", typeof(DateTime));      // effective service start (RENTAL-FREE-N month anchor; hidden)
         dt.Columns.Add("ContractStart", typeof(DateTime)); // CONTRACT service start (#16 period anchor - one period per invoice; hidden)
         dt.Columns.Add("InvoicedDocNo", typeof(string));   // non-empty = this meter+period is already invoiced (hidden)
@@ -397,6 +398,13 @@ namespace ServiceContractPhotocopier.Classes
                 // final month — this only flags machines whose last billable month is already over).
                 g["IsExpired"] = r["EffExpiry"] != DBNull.Value &&
                     Convert.ToDateTime(r["EffExpiry"]).Date < new DateTime(year, month, 1);
+                // Not started = the CONTRACT's service start is still in the future, measured
+                // against TODAY and not against the billing month: a deal signed today to start
+                // on 1 Nov has nothing to read and nothing to bill, and sitting in the run only
+                // gets it billed by accident (feedback ATP-11). The row is still loaded -- the
+                // screen decides what to do with it.
+                g["NotStarted"] = r["ContractStart"] != DBNull.Value &&
+                    Convert.ToDateTime(r["ContractStart"]).Date > DateTime.Today;
                 if (r["EffStart"] != DBNull.Value) g["EffStart"] = Convert.ToDateTime(r["EffStart"]);
                 if (r["ContractStart"] != DBNull.Value) g["ContractStart"] = Convert.ToDateTime(r["ContractStart"]);
                 g["StrategyCode"] = S(r["StrategyCode"]);

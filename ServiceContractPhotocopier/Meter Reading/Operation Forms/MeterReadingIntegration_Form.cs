@@ -1137,6 +1137,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // one may go out before its BK / CL is the Generate guard's question, not this tab's.
             if (page == _pageWith) f = "[NeedManual] = False AND ISNULL([InvoicedDocNo],'') = ''";
             else if (page == _pageNo) f = "[NeedManual] = True";
+            // A contract that has not started yet stays off both working tabs until the day it
+            // starts (feedback ATP-11): there is no reading to key and nothing to bill, so it is
+            // only in the operator's way. It is not dropped from the run -- Invoiced still shows
+            // it if somebody has already billed it (a start date moved later, say), and the
+            // Conflicts tab still shows a clash worth looking at.
+            if (page == _pageWith || page == _pageNo)
+                f = "(" + f + ") AND [NotStarted] = False";
             else if (page == _pageDone) f = "[InvoicedDocNo] <> ''";   // this month's billed machines
             else if (page == _pageConflict) f = "[HasConflict] = True";
 
@@ -1529,7 +1536,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 // unread is on BOTH Ready to Invoice and Need Manual Key-In, and is counted on both.
                 bool inv = S(r["InvoicedDocNo"]).Trim().Length > 0;
                 bool nm = r["NeedManual"] != DBNull.Value && Convert.ToBoolean(r["NeedManual"]);
+                bool ns = r["NotStarted"] != DBNull.Value && Convert.ToBoolean(r["NotStarted"]);
                 if (inv) invoicedItems.Add(itemKey);
+                else if (ns) { }                     // not started: on neither tab, so on neither count
                 else if (nm) needManualItems.Add(itemKey);
                 else withItems.Add(itemKey);
                 if (r["HasConflict"] != DBNull.Value && Convert.ToBoolean(r["HasConflict"])) conflictItems.Add(itemKey);
@@ -2281,7 +2290,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         }
 
         // Columns the user may never see (data drivers / plumbing) — never offered in View Setting.
-        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "EffStart", "Late" };
+        private static readonly string[] _systemHiddenCols = new string[] { "ItemKey", "ContractKey", "DebtorCode", "BillingMode", "ItemMeterKey", "ACItemCode", "Shade", "Sel", "InvoicedDocNo", "ItemDesc", "NeedManual", "Locked", "IsFlat", "IsWaive", "IsGroupItem", "MachineMode", "TrackingId", "WaiveFirstNMonths", "WaiveTargetAmount", "WaivePartialThreshold", "WaivePartialAmount", "WaiveScope", "StrategyCode", "RentSep", "PeriodByContract", "ContractStart", "RentalBillingDay", "RentalStartDate", "RentalMonths", "RentalBasis", "IsExpired", "NotStarted", "EffStart", "Late" };
 
         // Hidden by DEFAULT but user-selectable (column chooser / View Setting).
         private static readonly string[] _optionalCols = new string[] { "Mode", "BillingDay", "UseMin", "MultiPriceCode", "FOCResetUnit", "FOCResetN", "Status", "EntrySource", "FetchedReading", "HasConflict", "BillGroupCode", "Role", "DueDay" };

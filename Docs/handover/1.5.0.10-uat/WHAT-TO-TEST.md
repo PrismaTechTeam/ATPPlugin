@@ -40,6 +40,9 @@ Does Calculation Test give the amount you would work out by hand for the same re
 
 ---
 
+A contract whose start date is still in the future is not on **Ready to Invoice** or
+**Need Manual Key-In** -- there is nothing to read or bill yet. It appears on its start date.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and
