@@ -63,6 +63,21 @@ branches as registered in AutoCount (A/R > Debtor > Branch tab) -- a customer wi
 empty list that says so. Pick one for a machine and Save: the machine's delivery address follows the
 branch, and the Service Item screen shows the same branch. The invoice does not change.
 
+**Create DO.** On a saved contract, select one or more machines in the Service Item grid (Ctrl+click for
+several) and press **Delivery > Create DO**. It lists each machine with its model and serial and asks; a
+machine whose serial is not in stock, or that is already on a DO, is left out with the reason. Say Yes and
+check, in AutoCount's Delivery Order:
+
+- one DO to the contract's customer, dated today, Ref = the contract no;
+- one line per machine: its item code, qty 1, price 0, and its serial number;
+- the serial is now out of stock -- press Create DO for the same machine again and it is refused, naming the DO;
+- the contract's **DO** column shows the DO on those machines, and **Maintain Service Contract** shows it in its
+  **DO** column (a contract with none shows an amber **No DO yet**).
+
+Delete that test DO in AutoCount afterwards; the serial goes back into stock and the machine back to No DO yet.
+The DO is saved by AutoCount itself, so it needs a licensed AutoCount: an evaluation copy past 500 transactions
+refuses it with its own message, and nothing is written.
+
 ## 3. The invoice
 
 Before Generate, **Total Charges** on the right already shows what a committed minimum tops up and
