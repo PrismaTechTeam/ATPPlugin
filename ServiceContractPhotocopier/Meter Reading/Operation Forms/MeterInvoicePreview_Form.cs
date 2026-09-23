@@ -121,7 +121,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 bool isBlocked = reasons.Count > 0;
 
                 decimal total = 0m;
-                foreach (ScpFoldedLine row in rows) total += row.PrintAmount;
+                foreach (ScpFoldedLine row in rows) total += row.PrintTotal;
                 if (isBlocked) blocked++; else { ready++; grand += total; Approved.Add(job); }
 
                 DataRow h = _dt.NewRow();
@@ -134,14 +134,20 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
 
                 foreach (ScpFoldedLine row in rows)
                 {
-                    DataRow l = _dt.NewRow();
-                    l["Level"] = 1;
-                    l["What"] = "      " + DescribeRow(row);
-                    l["Qty"] = row.PrintQty;
-                    l["UnitPrice"] = row.PrintUnitPrice;
-                    l["Amount"] = row.PrintAmount;
-                    l["Blocked"] = isBlocked;
-                    _dt.Rows.Add(l);
+                    // One row, or one per band on a contract priced band by band (ATP-3) -- the same
+                    // parts the invoice prints.
+                    List<decimal[]> parts = row.PrintParts;
+                    for (int pi = 0; pi < parts.Count; pi++)
+                    {
+                        DataRow l = _dt.NewRow();
+                        l["Level"] = 1;
+                        l["What"] = "      " + DescribeRow(row) + (parts.Count > 1 ? "  (Tier " + (pi + 1) + ")" : "");
+                        l["Qty"] = parts[pi][0];
+                        l["UnitPrice"] = parts[pi][1];
+                        l["Amount"] = parts[pi][2];
+                        l["Blocked"] = isBlocked;
+                        _dt.Rows.Add(l);
+                    }
 
                     // Only a merged row needs its machines spelled out; a single-machine row already
                     // names its machine on the line itself.

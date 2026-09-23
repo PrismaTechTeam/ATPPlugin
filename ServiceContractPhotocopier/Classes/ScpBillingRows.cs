@@ -140,6 +140,7 @@ namespace ServiceContractPhotocopier.Classes
         dt.Columns.Add("CommitScope", typeof(string));    // S machine / G merge group / C contract
         dt.Columns.Add("StrategyCode", typeof(string));    // contract's strategy in force (hidden; stamped at generate)
         dt.Columns.Add("RentSep", typeof(bool));           // contract flag: rental billed on its own invoice (hidden)
+        dt.Columns.Add("TierIncremental", typeof(bool));   // ATP-3: the contract prices tiers band by band (hidden)
         dt.Columns.Add("PeriodByContract", typeof(bool));  // #16: invoice display dates follow the contract cycle (hidden)
         dt.Columns.Add("RentalBillingDay", typeof(int));   // rental-separate invoice's own day; 0 = follow meter date (hidden)
         /// <summary>The day of the month THIS row is due on -- not the contract's, the row's.
@@ -199,6 +200,7 @@ namespace ServiceContractPhotocopier.Classes
                 "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                 "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
                 "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
+                "ISNULL(c.TierMode,'T') AS TierMode, " +
                 // What the machine line names -- model, duty label, or both. From the contract's
                 // format; 'B' for a contract that has none, which is what it printed before.
                 // The contract carries its own answer now; the format is only a fallback for
@@ -411,6 +413,7 @@ namespace ServiceContractPhotocopier.Classes
                 g["StrategyCode"] = S(r["StrategyCode"]);
                 g["RentSep"] = S(r["RentSep"]) == "Y";
                 g["PeriodByContract"] = S(r["PeriodByContract"]) == "Y";
+                g["TierIncremental"] = S(r["TierMode"]).Trim().ToUpperInvariant() == "I";
                 g["RentalBillingDay"] = r["RentalBillingDay"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalBillingDay"]);
                 g["DueDay"] = r.Table.Columns.Contains("DueDay") && r["DueDay"] != DBNull.Value
                     ? Convert.ToInt32(r["DueDay"]) : 0;
@@ -713,6 +716,8 @@ namespace ServiceContractPhotocopier.Classes
             // showed 3,709.94 for a line the invoice bills at 3,710.00.
             ln.NewMoneyRules = r.Table.Columns.Contains("NewMoneyRules") && r["NewMoneyRules"] != DBNull.Value
                                && Convert.ToBoolean(r["NewMoneyRules"]);
+            ln.TierIncremental = r.Table.Columns.Contains("TierIncremental") && r["TierIncremental"] != DBNull.Value
+                                 && Convert.ToBoolean(r["TierIncremental"]);
             ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, ladders);
             // Honour the user's "Use Min." tick (force the minimum charge) without clobbering their input.
             if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) ln.Charge = ln.MinCharges;

@@ -1015,8 +1015,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // FOC Qty display: show the free allowance the CHARGE ENGINE actually deducts, so the
         // customer's own arithmetic (NET = Usage - FOC, Charge = NET x Rate) reconciles off the
         // screen every time. Two things make the raw FOCQty column lie:
-        //   - a LADDER meter's free copies come from the ladder's 0.00 band; the engine ignores the
-        //     meter's own FOCQty entirely when a ladder is in effect
+        //   - a LADDER meter saved before ATP-3 may still carry free copies in a 0.00 first band,
+        //     which the engine deducts ON TOP of the meter's own Free Qty
         //   - the FOC RESET accrual multiplies the allowance when a bill spans N reset periods
         //     (weekly / every-N-days contracts), so the stored figure understates what was deducted
         private void GridViewMeter_CustomColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
@@ -1028,12 +1028,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (resetN < 1) resetN = 1;
             string code = S(r["MultiPriceCode"]);
             decimal applied;
-            if (_ladders != null && ServiceContractPhotocopier.Classes.ScpMultiPrice.HasLadder(_ladders, code))
-                applied = ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(_ladders[code]) * resetN;
-            else if (resetN > 1)
-                applied = Dec(r["FOCQty"]) * resetN;
+            decimal inLadder = _ladders != null && ServiceContractPhotocopier.Classes.ScpMultiPrice.HasLadder(_ladders, code)
+                ? ServiceContractPhotocopier.Classes.ScpMultiPrice.LadderFreeCopies(_ladders[code]) : 0m;
+            if (inLadder > 0m || resetN > 1)
+                applied = (Dec(r["FOCQty"]) + inLadder) * resetN;
             else
-                return;   // plain meter, single reset period — the stored value is already the truth
+                return;   // single reset period, nothing in a ladder — the stored value is already the truth
             e.DisplayText = applied.ToString("#,##0.##");
         }
 
@@ -3541,7 +3541,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             dt.Columns.Add("IsWaive", typeof(bool));
             dt.Columns.Add("Deal", typeof(string));        // effective pricing/deal summary (display-only)
             dt.Columns.Add("HasLadder", typeof(bool));     // a multi-price ladder drives price + FOC
-            dt.Columns.Add("LadderFoc", typeof(decimal));  // the ladder's free band = the EFFECTIVE FOC
+            dt.Columns.Add("LadderFoc", typeof(decimal));  // the free copies the engine takes: Free Qty + any old 0.00 band
+            dt.Columns.Add("TierIncremental", typeof(bool)); // the contract prices its tiers band by band (ATP-3)
             foreach (DataRow r in rows)
             {
                 DataRow d = dt.NewRow();
@@ -3590,7 +3591,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     }
                 }
                 d["HasLadder"] = hasLadder;
-                d["LadderFoc"] = ladderFoc;
+                d["TierIncremental"] = r.Table.Columns.Contains("TierIncremental") && r["TierIncremental"] != DBNull.Value
+                                       && Convert.ToBoolean(r["TierIncremental"]);
+                // The free copies the engine takes: the meter's Free Qty (ATP-3: the one place they are
+                // set), plus any 0.00 band an old ladder still starts with.
+                d["LadderFoc"] = ladderFoc + Dec(r["FOCQty"]);
                 string deal = "";
                 if (dIsWaive)
                 {
@@ -3617,8 +3622,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 else if (hasLadder)
                 {
                     deal = "MULTI-PRICE " + (mpc.StartsWith("#") ? "(custom)" : mpc) +
-                           (ladderFoc > 0m ? ": first " + ladderFoc.ToString("#,##0") + " FREE" : "") +
-                           (ladderNext.Length > 0 ? ", then " + ladderNext + "/copy" : "");
+                           (ladderFoc + Dec(r["FOCQty"]) > 0m ? ": first " + (ladderFoc + Dec(r["FOCQty"])).ToString("#,##0") + " FREE" : "") +
+                           (ladderNext.Length > 0 ? ", then " + ladderNext + "/copy" : "") +
+                           (Convert.ToBoolean(d["TierIncremental"]) ? " - each tier at its own rate" : "");
                 }
                 d["Deal"] = deal;
                 dt.Rows.Add(d);

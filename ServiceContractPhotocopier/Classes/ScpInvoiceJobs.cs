@@ -169,6 +169,8 @@ namespace ServiceContractPhotocopier.Classes
                 // Must be set BEFORE ComputeCharge — it decides how the rebate is taken and how the
                 // cents are rounded.
                 ln.NewMoneyRules = r["NewMoneyRules"] != DBNull.Value && Convert.ToBoolean(r["NewMoneyRules"]);
+                ln.TierIncremental = r.Table.Columns.Contains("TierIncremental") && r["TierIncremental"] != DBNull.Value
+                                     && Convert.ToBoolean(r["TierIncremental"]);
                 ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, ladders);
                 if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
                 ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
@@ -433,9 +435,11 @@ private static void ApplyGroupLimit(Dictionary<string, MeterInvoiceGenerator.Inv
                         if (rule.LimitQty <= 0m) continue;
                         // Gather this contract's covered usage lines (scope + item set), deterministic order.
                         // Only BK/CL print meters join the pool ("BK+CL usage" scope means exactly that —
-                        // NA meters like scan/plotter stay out). Ladder meters stay out too: their FOC lives
-                        // in the ladder's own 0.00 band and ComputeCharge ignores ln.Foc for them, so a pool
-                        // share allocated there would be silently DISCARDED (the group would lose free copies).
+                        // NA meters like scan/plotter stay out). Ladder meters stay out too. A GROUP ladder's
+                        // machines were priced together by ScpGroupLadder just before this, and re-pricing one
+                        // of them here would price it alone and throw the group's volume away. A machine on a
+                        // ladder of its own keeps its own free copies -- its Free Qty since ATP-3, its 0.00
+                        // band before -- exactly as it always stood outside the pool.
                         List<MeterBillLine> members = new List<MeterBillLine>();
                         foreach (MeterInvoiceGenerator.InvoiceJob jb in jobs.Values)
                             foreach (MeterBillLine l in jb.Lines)

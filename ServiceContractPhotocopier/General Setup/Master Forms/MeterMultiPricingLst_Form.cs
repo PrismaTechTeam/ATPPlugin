@@ -199,13 +199,27 @@ namespace ServiceContractPhotocopier.GeneralSetup.MasterForms
             if (string.IsNullOrWhiteSpace(TxtCode.Text))
             { XtraMessageBox.Show("Code is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
+            GridViewItems.CloseEditor();
+            GridViewItems.UpdateCurrentRow();
+
+            // Feedback ATP-3: the first tier may not be 0.00 -- free copies are the meter's Free Qty on
+            // the contract's meter grid. Checked before anything is written.
+            System.Collections.Generic.List<decimal[]> tiers = new System.Collections.Generic.List<decimal[]>();
+            foreach (DataRow row in _dtItems.Rows)
+            {
+                if (row.RowState == DataRowState.Deleted) continue;
+                tiers.Add(new decimal[] {
+                    row["MeterReading"] == DBNull.Value ? 0m : Convert.ToDecimal(row["MeterReading"]),
+                    row["UnitPrice"] == DBNull.Value ? 0m : Convert.ToDecimal(row["UnitPrice"]) });
+            }
+            string why = ScpMultiPrice.WhyTiersWrong(tiers);
+            if (why.Length > 0)
+            { XtraMessageBox.Show(why, "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
             try
             {
                 string c = SQLString(TxtCode.Text.Trim());
                 string d = SQLString(TxtDesc.Text ?? "");
-
-                GridViewItems.CloseEditor();
-                GridViewItems.UpdateCurrentRow();
 
                 if (_isNewRow || string.IsNullOrEmpty(_selectedCode))
                 {

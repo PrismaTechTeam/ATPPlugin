@@ -101,6 +101,22 @@ namespace ServiceContractPhotocopier.Classes
         /// worth 0.00 still printed. Off = the engine as it behaved before, so an existing contract's
         /// money does not move until someone picks a format for it.</summary>
         public bool NewMoneyRules;
+
+        /// <summary>Feedback ATP-3: the contract prices its tiers BAND BY BAND -- each band's copies at
+        /// that band's rate -- instead of the whole month at the band it reached. From the contract's
+        /// TierMode ('I'); off = the threshold rule every contract had before.</summary>
+        public bool TierIncremental;
+        /// <summary>Band by band: the bands this line was charged in, {copies, rate, amount} each,
+        /// ascending, amounts rounded per band (before any old-rule rebate discount, which the
+        /// invoice prints per band). Null when the line was not split.</summary>
+        public System.Collections.Generic.List<decimal[]> TierBands;
+        /// <summary>True when <see cref="TierBands"/> are the GROUP's pooled bands, the same list on
+        /// every machine of a group ladder -- printed once for the group, never added up.</summary>
+        public bool TierBandsAreGroup;
+        /// <summary>How many machines share <see cref="TierBands"/> when they are a group's (ATP-3).
+        /// The bands are the whole group's copies, so they may only print on a row that holds all of
+        /// them; a row holding fewer prints its machines' share as one line.</summary>
+        public int TierGroupSize;
         /// <summary>Copies removed by the rebate (new rules only) — printed as "Meter Rebate Qty (3%)".</summary>
         public decimal RebateQty;
         // --- Rental-Waive contra meter (master-style; the engine decides firing at Generate) ---
@@ -183,25 +199,31 @@ namespace ServiceContractPhotocopier.Classes
             if (usage < 0m) usage = 0m;
             ln.Usage = usage;
 
-            // Billed copies + effective per-copy price come from ONE of two mechanisms:
-            //   (a) multi-price ladder present -> MARGINAL charge (its 0.00 first band IS the FOC allowance);
-            //       billed = usage - freeCopies, effective price = grossCharge / billed (blended).
-            //   (b) no ladder -> flat rate with the FOCQty column deducted (NET).
+            // Billed copies + effective per-copy price:
+            //   (a) multi-price ladder -> the band the month REACHED prices the lot (threshold), or,
+            //       on a contract that asks for it, each band's copies at its own rate (ATP-3).
+            //   (b) no ladder -> flat rate.
+            // Either way the free copies are the meter's Free Qty (ATP-3: FOC lives there and nowhere
+            // else; a 0.00 band left in an old ladder still counts as the allowance it always was).
             // FOC reset accrual: the free allowance refreshes every reset period, so a bill spanning N
             // reset periods grants N x the base allowance (FocResetCount; 1 = the simple monthly case).
             int resetN = ln.FocResetCount < 1 ? 1 : ln.FocResetCount;
             decimal billed, effUnit;
+            ln.TierBands = null;
+            ln.TierBandsAreGroup = false;
+            bool bandByBand = false;
             if (ScpMultiPrice.HasLadder(ladders, ln.MultiPriceCode))
             {
                 decimal freeCopies, bandRate;
                 // Scale the ladder's boundaries (its FOC bands + tier breaks are "per reset period").
                 ScpMultiPrice.LadderCharge(ladders, ln.MultiPriceCode, usage, resetN,
                                            out freeCopies, out bandRate);
-                billed = usage - freeCopies;
+                billed = usage - freeCopies - ln.Foc * resetN;
                 if (billed < 0m) billed = 0m;
                 // The band's own rate, not a figure derived from the total. A ladder line prints a
                 // price the customer agreed to and can multiply back to the amount.
                 effUnit = bandRate;
+                bandByBand = ln.TierIncremental;
             }
             else
             {
@@ -230,6 +252,27 @@ namespace ServiceContractPhotocopier.Classes
                 ln.RebateQty = 0m;
                 decimal sub = Round2(billed * effUnit, ln.NewMoneyRules);
                 charge = ln.RebatePct > 0m ? Round2(sub * (1m - ln.RebatePct / 100m), ln.NewMoneyRules) : sub;
+            }
+            if (bandByBand)
+            {
+                // ATP-3, band by band: the copies left after the free copies (and a rebate taken as
+                // copies) are laid over the priced bands, each band's share at its own rate --
+                // 1,548 over "1,000 at 0.024, then 0.020" is 24.00 + 10.96 = 34.96. One invoice row
+                // per band, so every row multiplies out.
+                List<decimal[]> tiers = ScpMultiPrice.Tiers(ladders, ln.MultiPriceCode);
+                ln.TierBands = ScpMultiPrice.Slices(tiers, billed, resetN, ln.NewMoneyRules);
+                decimal sum = 0m;
+                foreach (decimal[] b in ln.TierBands)
+                    sum += (ln.RebatePct > 0m && !ln.NewMoneyRules)
+                        ? Round2(b[2] * (1m - ln.RebatePct / 100m), ln.NewMoneyRules)   // the discount each row prints
+                        : b[2];
+                charge = sum;
+                // One band: that band's own rate, so the single row multiplies out as any other. Two or
+                // more: what the line would print as one rate -- a display figure only; the rows carry
+                // the money.
+                if (ln.TierBands.Count == 1) effUnit = ln.TierBands[0][1];
+                else if (ln.TierBands.Count > 1) effUnit = Math.Round(sum / billed, 6, MidpointRounding.AwayFromZero);
+                if (ln.TierBands.Count < 2) ln.TierBands = null;   // one band: an ordinary line
             }
             ln.BillCopies = billed;
             ln.EffUnitPrice = effUnit;
@@ -424,17 +467,14 @@ namespace ServiceContractPhotocopier.Classes
                 for (int di = 1; di < descLines.Length; di++)
                     if (descLines[di].Trim().Length > 0) extraDescRows.Add(descLines[di]);
 
-                // ---- one row per BAND, where the copies climbed a ladder -------------------------
+                // ---- the charge row -----------------------------------------------------------
                 //
-                // A ladder charges each slice at its own rate, so the line has no single price. It
-                // used to print charge-over-copies -- 335.00 over 15,000 copies came out as 0.0223,
-                // a rate that appears nowhere in the deal and that the reader cannot multiply back
-                // to the amount. Now each band is its own row at the rate that was agreed, and
-                // Qty x Unit Price = Amount holds on every one of them.
-                //
-                // Only where it is needed. One priced band means the blended rate IS that band's
-                // rate -- the free-copies ladders every old contract uses -- and those keep printing
-                // as they always have.
+                // A ladder on THRESHOLD (every contract's rule before ATP-3) prices the lot at the
+                // band reached, so the row has one agreed rate. A contract priced BAND BY BAND
+                // charges each slice at its own rate; that line has no single price, and printing
+                // charge-over-copies would show a rate that appears nowhere in the deal -- so there
+                // each band becomes its own row (below), and Qty x Unit Price = Amount holds on
+                // every one of them.
                 AutoCount.Invoicing.Sales.Invoice.InvoiceDetail dtl = doc.AddDetail();
                 if (!string.IsNullOrEmpty(ln.ACItemCode)) dtl.ItemCode = ln.ACItemCode;
                 dtl.Description = Fit(descLines[0]);
@@ -481,6 +521,39 @@ namespace ServiceContractPhotocopier.Classes
                 // span several contracts). Empty contract values leave the detail's defaults untouched.
                 if (!string.IsNullOrEmpty(lineDept)) dtl.DeptNo = lineDept;
                 if (!string.IsNullOrEmpty(lineProj)) dtl.ProjNo = lineProj;
+
+                // ATP-3, band by band: the row above becomes Tier 1, and each further band gets its
+                // own row -- same item, its own copies and rate -- so every row multiplies out and the
+                // rows add up to the charge. The FOC column stays on Tier 1; the text rows that follow
+                // (strategy note, serials, readings) come after the last band.
+                List<decimal[]> bands = row.Bands;
+                if (bands != null && !minBilled)
+                {
+                    bool oldDiscount = ln.RebatePct > 0m && !ln.NewMoneyRules;
+                    for (int bi = 0; bi < bands.Count; bi++)
+                    {
+                        AutoCount.Invoicing.Sales.Invoice.InvoiceDetail bd = bi == 0 ? dtl : doc.AddDetail();
+                        if (bi > 0)
+                        {
+                            // The item and the analysis codes, but not the legacy data block: that is the
+                            // machine's readings, and it belongs to the line once, on Tier 1.
+                            if (!string.IsNullOrEmpty(ln.ACItemCode)) bd.ItemCode = ln.ACItemCode;
+                            if (!string.IsNullOrEmpty(lineDept)) bd.DeptNo = lineDept;
+                            if (!string.IsNullOrEmpty(lineProj)) bd.ProjNo = lineProj;
+                        }
+                        bd.Description = Fit(descLines[0] + "  (Tier " + (bi + 1) + ")");
+                        bd.Qty = bands[bi][0];
+                        bd.UnitPrice = bands[bi][1];
+                        if (oldDiscount) bd.Discount = ln.RebatePct.ToString("0.##") + "%";
+                        else bd.SubTotal = bands[bi][2];
+                    }
+                }
+                // A machine whose group was priced band by band but whose row does not hold the whole
+                // group (another meter type, another invoice) prints its share as one line. Its rate is
+                // the group's blended figure, which does not multiply back to the share exactly, so the
+                // amount is stated -- the machine's charge, as the reading log keeps it.
+                else if (bands == null && ln.TierBandsAreGroup && !row.IsMerged && !minBilled && ln.BillCopies > 0m)
+                    dtl.SubTotal = row.PrintAmount;
 
                 // Strategy outcome ("RENTAL FREE month 1/1 (strategy)", "WAIVED: charges >= target",
                 // "PARTIAL WAIVE 90%: ...") — its own text row directly under the charge row, so the
@@ -778,18 +851,15 @@ namespace ServiceContractPhotocopier.Classes
             if (row.IsMerged && ln.ShowSerial)
                 rows.Add("S/N : " + SerialList(row));
 
-            // FOC actually APPLIED to this bill: for a ladder meter that is the ladder's own free band
-            // (usage - billed copies) -- its FOCQty column is ignored by the engine, so printing the
-            // raw column here used to show a FOC that was never deducted.
-            // A ladder meter's FOC is the ladder's own free band (usage - billed copies), since the
-            // engine ignores its FOCQty column -- printing the raw column showed a FOC never deducted.
+            // A ladder meter's allowance is its Free Qty, like any meter's (ATP-3). Only a meter with no
+            // Free Qty -- an old ladder still carrying its 0.00 band -- prints what it actually took.
             // The ALLOWANCE, not what this month happened to use. A machine allowed 5,000 free
             // copies that printed 4,813 was printing "Meter FOC Qty : 4813" -- which reads as if
             // the allowance were 4,813, and would say something different every month. The
             // customer's own invoice prints 5000, because that is the term of the deal.
             //
-            // A ladder meter has no allowance column of its own -- its free band comes out of the
-            // bands -- so there the applied figure IS the allowance and is still what prints.
+            // A meter with no Free Qty of its own takes its free copies from an old 0.00 band, so
+            // there the applied figure IS the allowance and is still what prints.
             decimal focShow = row.IsMerged
                 ? row.FocAllowed
                 : (ln.Foc > 0m ? ln.Foc : ln.Usage - ln.BillCopies - ln.RebateQty);

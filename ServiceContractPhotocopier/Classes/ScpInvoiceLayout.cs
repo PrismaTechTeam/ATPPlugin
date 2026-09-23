@@ -32,7 +32,7 @@ namespace ServiceContractPhotocopier.Classes
         /// number as <see cref="FocApplied"/>: a machine allowed 5,000 free copies that printed
         /// 4,813 used 4,813 of them, and a line reading "Meter FOC Qty : 4813" tells the customer
         /// their allowance is whatever they happened to print. A meter with no allowance of its
-        /// own -- a ladder, whose free band is worked out from the bands -- contributes what it
+        /// own -- an old ladder whose free copies are still a 0.00 band -- contributes what it
         /// actually took, because that is the only free quantity it has.</summary>
         public decimal FocAllowed;
         /// <summary>Copies the rebate removed, floored per machine then added up — which is how the
@@ -62,6 +62,105 @@ namespace ServiceContractPhotocopier.Classes
         /// name their machine and nothing else. It never touches Qty or price: a group waive is
         /// still ONE amount, not one per machine.</para></summary>
         public List<MeterBillLine> Covers;
+
+        /// <summary>
+        /// Feedback ATP-3: the bands this row prints, one invoice row each -- {copies, rate, amount},
+        /// the amount being what the row is WORTH (after an old-rule rebate discount) -- or null when
+        /// the row prints as one line. Only a contract priced band by band has them, and only when
+        /// the copies actually reached a second band.
+        ///
+        /// <para>A group ladder's bands are the group's and print as they are -- but only on a row that
+        /// holds the WHOLE group. They are the group's copies and the group's money, so a row with
+        /// some of its machines (another meter type, another invoice) would bill the lot again; that
+        /// row prints its machines' share as one line instead. Machines merged onto one row, each
+        /// priced band by band, print their bands added up by rate, each band at Qty x rate so every
+        /// row multiplies out -- the same rule a merged one-rate row follows.</para>
+        ///
+        /// <para>A row with a machine on its minimum charge prints as one line: the minimum is money
+        /// no band describes, and leaving it out of the bands would bill the row short.</para>
+        /// </summary>
+        public List<decimal[]> Bands
+        {
+            get
+            {
+                if (Leader == null || Leader.IsFlat || Leader.UseMin) return null;
+                foreach (MeterBillLine m in Members) if (m.UseMin) return null;
+                List<decimal[]> raw = null;
+                if (Leader.TierBandsAreGroup)
+                {
+                    int holding = 0;
+                    foreach (MeterBillLine m in Members)
+                        if (m.TierBandsAreGroup && object.ReferenceEquals(m.TierBands, Leader.TierBands)) holding++;
+                    if (holding != Members.Count || holding != Leader.TierGroupSize) return null;
+                    raw = Leader.TierBands;
+                }
+                else if (!IsMerged) raw = Leader.TierBands;
+                else
+                {
+                    bool any = false;
+                    foreach (MeterBillLine m in Members) if (m.TierBands != null) { any = true; break; }
+                    if (!any) return null;
+                    List<decimal> rates = new List<decimal>();
+                    Dictionary<decimal, decimal> qty = new Dictionary<decimal, decimal>();
+                    foreach (MeterBillLine m in Members)
+                    {
+                        if (m.TierBands != null)
+                            foreach (decimal[] b in m.TierBands)
+                            {
+                                if (!qty.ContainsKey(b[1])) { qty[b[1]] = 0m; rates.Add(b[1]); }
+                                qty[b[1]] += b[0];
+                            }
+                        else if (m.BillCopies > 0m)
+                        {
+                            if (!qty.ContainsKey(m.EffUnitPrice)) { qty[m.EffUnitPrice] = 0m; rates.Add(m.EffUnitPrice); }
+                            qty[m.EffUnitPrice] += m.BillCopies;
+                        }
+                    }
+                    raw = new List<decimal[]>();
+                    foreach (decimal r in rates)
+                        raw.Add(new decimal[] { qty[r], r, Math.Round(qty[r] * r, 2, MidpointRounding.AwayFromZero) });
+                }
+                if (raw == null || raw.Count < 2) return null;
+                bool oldDiscount = Leader.RebatePct > 0m && !Leader.NewMoneyRules;
+                List<decimal[]> worth = new List<decimal[]>();
+                foreach (decimal[] b in raw)
+                {
+                    // Rounded exactly as ComputeCharge rounded it (the old rules round half to even),
+                    // so the rows add up to the charge the reading log keeps.
+                    decimal amt = oldDiscount
+                        ? Math.Round(b[2] * (1m - Leader.RebatePct / 100m), 2)
+                        : b[2];
+                    worth.Add(new decimal[] { b[0], b[1], amt });
+                }
+                return worth;
+            }
+        }
+
+        /// <summary>What this row prints, as invoice rows: {qty, unit price, amount} -- one entry for an
+        /// ordinary row, one per band for a row priced band by band (ATP-3). The invoice, the Meter
+        /// Invoice Run preview and the contract's sample invoice all print from this, so they agree.</summary>
+        public List<decimal[]> PrintParts
+        {
+            get
+            {
+                List<decimal[]> bands = Bands;
+                if (bands != null) return bands;
+                List<decimal[]> one = new List<decimal[]>();
+                one.Add(new decimal[] { PrintQty, PrintUnitPrice, PrintAmount });
+                return one;
+            }
+        }
+
+        /// <summary>What the row comes to in all: the sum of its parts.</summary>
+        public decimal PrintTotal
+        {
+            get
+            {
+                decimal t = 0m;
+                foreach (decimal[] p in PrintParts) t += p[2];
+                return t;
+            }
+        }
 
         /// <summary>The quantity this row prints — machines for a rental, copies for usage.</summary>
         public decimal PrintQty

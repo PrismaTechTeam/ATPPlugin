@@ -23,8 +23,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         // NOTE: "Initial Meter" and "FOC + Rebate" are intentionally NOT offered here.
         //  * Initial reading (a used copier moved from customer A to B that already shows 10,000)
         //    is configured on the meter itself (Initial Meter field in the meter configuration).
-        //  * FOC + Rebate live on the METER too (Free Qty / Rebate % columns, or the multi-price
-        //    ladder's free band) — the meter grid is the billing source of truth.
+        //  * FOC + Rebate live on the METER too (Free Qty / Rebate % columns -- on a multi-price
+        //    ladder as well, since ATP-3) — the meter grid is the billing source of truth.
         // Their TYPE_* codes stay in ScpStrategy + the SQL CHECK constraints for backward-compat
         // with legacy rows (which still load, bill and save), but the builder no longer offers them.
         private static readonly string[] TypeCodes = new string[]

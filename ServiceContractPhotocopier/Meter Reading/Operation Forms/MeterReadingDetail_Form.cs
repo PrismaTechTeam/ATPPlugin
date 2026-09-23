@@ -200,6 +200,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
             if (this.GridViewDetail.Columns["HasLadder"] != null) this.GridViewDetail.Columns["HasLadder"].Visible = false;
             if (this.GridViewDetail.Columns["LadderFoc"] != null) this.GridViewDetail.Columns["LadderFoc"].Visible = false;
+            if (this.GridViewDetail.Columns["TierIncremental"] != null) this.GridViewDetail.Columns["TierIncremental"].Visible = false;
             SetNum("MinCharges", "Min. Charges", 85, "n2");
             SetNum("UnitPrice", "Unit Price", 80, "n4");
             SetNum("FOCQty", "FOC Qty", 70, "n0");
@@ -276,9 +277,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             }
         }
 
-        // With a multi-price ladder the meter row's raw Unit Price / FOC Qty are ignored by the
-        // engine — show "tiered" and the ladder's free band instead, so the grid never contradicts
-        // the computed Total Charges.
+        // With a multi-price ladder the meter row's raw Unit Price is ignored by the engine — show
+        // "tiered", and as FOC Qty the free copies it takes (Free Qty + any old 0.00 band), so the
+        // grid never contradicts the computed Total Charges.
         private void Detail_ColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
         {
             if (e.Column == null || e.ListSourceRowIndex < 0) return;
@@ -397,6 +398,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ln.FocResetCount = d.Table.Columns.Contains("FocResetCount") && d["FocResetCount"] != DBNull.Value
                 ? Convert.ToInt32(d["FocResetCount"]) : 1;
             ln.IsFlat = d.Table.Columns.Contains("IsFlat") && d["IsFlat"] != DBNull.Value && Convert.ToBoolean(d["IsFlat"]);
+            ln.TierIncremental = d.Table.Columns.Contains("TierIncremental") && d["TierIncremental"] != DBNull.Value
+                                 && Convert.ToBoolean(d["TierIncremental"]);
             ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
             // Same UseMin override the generate loop applies (meter flagged "always bill the minimum").
             bool useMin = d["UseMin"] != DBNull.Value && Convert.ToBoolean(d["UseMin"]);

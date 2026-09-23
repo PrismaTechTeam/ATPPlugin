@@ -254,9 +254,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     }
                     List<decimal[]> bands = flat ? new List<decimal[]>() : TiersOf(key, S(r["MultiPriceCode"]));
                     v["TierText"] = ScpMultiPrice.Describe(bands);
-                    // A tiered meter's free copies are its 0.00 band, not its FOC field -- shown the
-                    // way the meter configuration shows them (user, 22/09: "FOC did not show 100").
-                    if (bands.Count > 0) v[FIELD_FOC] = ScpMultiPrice.LadderFreeCopies(bands);
+                    // FOC is the meter's own Free Qty on a tiered meter too (ATP-3: free copies are set
+                    // there and nowhere else); a 0.00 band an old ladder still has shows in the tiers.
                     _view.Rows.Add(v);
                 }
             }
@@ -392,6 +391,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 r["RentSep"] = _screen.RentalSeparate;
                 r["BillingMode"] = _screen.BillSeparate ? "S" : "G";
+                if (rows.Columns.Contains("TierIncremental")) r["TierIncremental"] = _screen.TierIncremental;
             }
 
             // Billing Setup's agreed line prices, as the screen has them -- through the same two
@@ -651,6 +651,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ln.MultiPriceCode = S(r["MultiPriceCode"]);
             ln.FocResetCount = ScpInvoiceJobs.FocResetCountFor(r, _year, _month);
             ln.NewMoneyRules = Bool(r["NewMoneyRules"]);
+            ln.TierIncremental = r.Table.Columns.Contains("TierIncremental") && Bool(r["TierIncremental"]);
             ScpInvoiceBuilder.ComputeCharge(ln, ladders);
             if (withMin && Bool(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
             return ln;
@@ -762,22 +763,27 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (ScpMultiPrice.HasLadder(_calcLadders, code))
             {
                 List<decimal[]> bands = _calcLadders[code];
-                decimal free, rate;
-                ScpMultiPrice.LadderCharge(_calcLadders, code, usage, resetN, out free, out rate);
-                sb.AppendLine(Step("Tier price", ScpMultiPrice.Describe(bands)));
-                // The ladder replaces both: its 0.00 band IS the free allowance, and its bands the price.
-                List<string> unused = new List<string>();
-                if (Dec(r["UnitPrice"]) != 0m) unused.Add("Price " + P(Dec(r["UnitPrice"])));
-                if (Dec(r["FOCQty"]) != 0m) unused.Add("FOC " + N0(Dec(r["FOCQty"])));
-                if (unused.Count > 0)
-                    sb.AppendLine(Step("", "(the tier price replaces " + string.Join(" and ", unused.ToArray()) + ")"));
-                sb.AppendLine(Step("", BandWords(bands, usage, resetN) + " -> " + P(rate) + " a copy"));
+                decimal inLadder, rate;
+                ScpMultiPrice.LadderCharge(_calcLadders, code, usage, resetN, out inLadder, out rate);
+                bool byBand = r.Table.Columns.Contains("TierIncremental") && Bool(r["TierIncremental"]);
+                sb.AppendLine(Step("Tier price", ScpMultiPrice.Describe(bands) +
+                    (byBand ? "   (each tier at its own rate)" : "   (whole month at the tier reached)")));
+                // The ladder replaces the Unit Price. The meter's FOC still counts (ATP-3).
+                if (Dec(r["UnitPrice"]) != 0m)
+                    sb.AppendLine(Step("", "(the tier price replaces Price " + P(Dec(r["UnitPrice"])) + ")"));
+                if (!byBand)
+                    sb.AppendLine(Step("", BandWords(bands, usage, resetN) + " -> " + P(rate) + " a copy"));
                 if (resetN > 1)
                     sb.AppendLine(Step("", "(each band x " + resetN + ": the allowance resets " + resetN + " times this month)"));
+                decimal foc = Dec(r["FOCQty"]) * resetN;
+                decimal free = foc + inLadder;
                 toBill = usage - free;
                 if (toBill < 0m) toBill = 0m;
+                List<string> from = new List<string>();
+                if (foc > 0m) from.Add("FOC " + N0(foc) + (resetN > 1 ? " (" + N0(Dec(r["FOCQty"])) + " x " + resetN + " resets)" : ""));
+                if (inLadder > 0m) from.Add("the old 0.00 band " + N0(inLadder));
                 sb.AppendLine(Step("Free copies", free > 0m
-                    ? "the 0.00 band covers " + N0(free) + " -> " + N0(usage) + " - " + N0(free) + " = " + N0(toBill) + " to bill"
+                    ? string.Join(" + ", from.ToArray()) + " -> " + N0(usage) + " - " + N0(free) + " = " + N0(toBill) + " to bill"
                     : "none -> " + N0(toBill) + " to bill"));
             }
             else
@@ -801,18 +807,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 sb.AppendLine(Step("Rebate " + pct.ToString("0.##") + "%", "floor(" + N0(toBill) + " x " + pct.ToString("0.##") + "%) = " +
                     N0(noMin.RebateQty) + " copies off -> " + N0(noMin.BillCopies) + " to bill"));
-                sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + noMin.Charge.ToString("n2")));
+                if (noMin.TierBands != null) sb.AppendLine(Step("Amount", BandAmountWords(noMin.TierBands)));
+                else sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + noMin.Charge.ToString("n2")));
             }
             else if (pct > 0m)
             {
-                decimal sub = Math.Round(noMin.BillCopies * noMin.EffUnitPrice, 2);
-                sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + sub.ToString("n2")));
+                if (noMin.TierBands != null) sb.AppendLine(Step("Amount", BandAmountWords(noMin.TierBands)));
+                else
+                {
+                    decimal sub = Math.Round(noMin.BillCopies * noMin.EffUnitPrice, 2);
+                    sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + sub.ToString("n2")));
+                }
                 sb.AppendLine(Step("Rebate " + pct.ToString("0.##") + "%", "taken off the amount -> " + noMin.Charge.ToString("n2") +
                     "   (no billing format on this contract)"));
             }
             else
             {
-                sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + noMin.Charge.ToString("n2")));
+                if (noMin.TierBands != null) sb.AppendLine(Step("Amount", BandAmountWords(noMin.TierBands)));
+                else sb.AppendLine(Step("Amount", N0(noMin.BillCopies) + " x " + P(noMin.EffUnitPrice) + " = " + noMin.Charge.ToString("n2")));
             }
 
             // Only where a minimum is set: "Min. charge: none" on every meter was noise (user, 22/09).
@@ -862,6 +874,20 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (b != null && a != null && b.Charge != a.Charge)
                 sb.AppendLine(Step("Contract terms", (string.IsNullOrEmpty(b.StrategyNote)
                     ? "changed by the contract's terms" : b.StrategyNote) + " -> " + b.Charge.ToString("n2")));
+        }
+
+        /// <summary>Band by band, in words: "1,000 x 0.0240 = 24.00 + 548 x 0.0200 = 10.96 -> 34.96" --
+        /// one term per invoice row (ATP-3).</summary>
+        private static string BandAmountWords(List<decimal[]> tierBands)
+        {
+            List<string> parts = new List<string>();
+            decimal sum = 0m;
+            foreach (decimal[] tb in tierBands)
+            {
+                parts.Add(N0(tb[0]) + " x " + P(tb[1]) + " = " + tb[2].ToString("n2"));
+                sum += tb[2];
+            }
+            return string.Join(" + ", parts.ToArray()) + " -> " + sum.ToString("n2");
         }
 
         /// <summary>Which band the copies reached, in words: "2,500 copies reach the band up to 5,000".</summary>
@@ -937,21 +963,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     try
                     {
                         v["TierText"] = ScpMultiPrice.Describe(bands);
-                        if (bands.Count > 0) v[FIELD_FOC] = ScpMultiPrice.LadderFreeCopies(bands);
-                        else if (!_typed.Contains(_tierKey + "|" + FIELD_FOC)) v[FIELD_FOC] = MeterFoc(_tierKey);
                     }
                     finally { _loading = false; }
                 }
             Recalculate();
-        }
-
-        /// <summary>The meter's own FOC field, as loaded: what a meter bills free once it has no bands.</summary>
-        private decimal MeterFoc(long key)
-        {
-            if (_rows == null) return 0m;
-            foreach (DataRow r in _rows.Rows)
-                if (D64(r["ItemMeterKey"]) == key) return Dec(r["FOCQty"]);
-            return 0m;
         }
 
         private void Tiers_Changed(object sender, CellValueChangedEventArgs e) { TiersEdited(); }
@@ -975,9 +990,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string f = GridViewMeters.FocusedColumn == null ? "" : GridViewMeters.FocusedColumn.FieldName;
             // A flat charge has no meter to read and nothing to rebate.
             if (Bool(v["IsFlat"]) && (f == FIELD_INITIAL || f == FIELD_CURRENT || f == FIELD_REBATE))
-                e.Cancel = true;
-            // A tiered meter's free copies come from its bands: change them in Tier Price below.
-            if (!Bool(v["IsFlat"]) && f == FIELD_FOC && S(v["TierText"]).Length > 0)
                 e.Cancel = true;
         }
 
@@ -1004,11 +1016,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DataRow v = GridViewMeters.GetDataRow(e.RowHandle);
             if (v == null) return;
             bool flat = Bool(v["IsFlat"]);
-            // Nothing to key in on a flat charge; and on a tiered meter the bands decide the price
-            // and the free copies, so Price and FOC are not used. Grey, not the input colour.
+            // Nothing to key in on a flat charge; and on a tiered meter the bands decide the price,
+            // so Price is not used (FOC still is -- ATP-3). Grey, not the input colour.
             bool unused = flat
                 ? (f == FIELD_INITIAL || f == FIELD_CURRENT || f == FIELD_REBATE)
-                : ((f == FIELD_RATE || f == FIELD_FOC) && S(v["TierText"]).Length > 0);
+                : (f == FIELD_RATE && S(v["TierText"]).Length > 0);
             if (!unused) return;
             e.Appearance.BackColor = System.Drawing.Color.FromArgb(245, 245, 245);
             e.Appearance.ForeColor = System.Drawing.Color.FromArgb(170, 170, 170);
@@ -1094,5 +1106,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public bool BillSeparate;
         /// <summary>The rental on an invoice of its own.</summary>
         public bool RentalSeparate;
+        /// <summary>Tier pricing: each tier at its own rate (true) or the whole month at the tier
+        /// reached (false, the default) -- ATP-3.</summary>
+        public bool TierIncremental;
     }
 }

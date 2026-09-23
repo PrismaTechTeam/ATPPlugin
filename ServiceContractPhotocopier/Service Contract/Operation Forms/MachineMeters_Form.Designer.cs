@@ -624,7 +624,7 @@ namespace ServiceContractPhotocopier
             this.CmbLadder.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbLadder.Size = new System.Drawing.Size(248, 20);
             this.CmbLadder.TabIndex = 22;
-            this.CmbLadder.ToolTip = "A Meter Multi Pricing scheme — free band plus per-copy bands";
+            this.CmbLadder.ToolTip = "A Meter Multi Pricing scheme — its per-copy bands (free copies are the meter\'s Free Qty)";
             //
             // BtnLadderBK
             //

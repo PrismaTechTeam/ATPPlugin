@@ -41,6 +41,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             _db = db;
             _isNew = true;
+            CmbTierMode.SelectedIndex = 0;   // ATP-3: a new contract prices tiers the way every contract did
             this.Load += new EventHandler(OnFormLoad);
         }
 
@@ -59,6 +60,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _db = db;
             _isNew = true;
             _cloneFromKey = cloneAsNew ? sourceKey : 0;
+            CmbTierMode.SelectedIndex = 0;   // the source's own mode is loaded over this when it is copied
             this.Load += new EventHandler(OnFormLoad);
         }
 
@@ -785,6 +787,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
             ChkPeriodByContract.EditValueChanged += h;
+            CmbTierMode.EditValueChanged += h;   // ATP-3
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
             if (cboNoOfMonth != null) cboNoOfMonth.EditValueChanged += h;
             if (cboTermUnit != null) cboTermUnit.EditValueChanged += h;
@@ -1413,6 +1416,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _rentalPricesDirty = false;
             UpdateFormatSummary();   // now that the prices are in, the summary can mention them
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
+            // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
+            // and every contract's rule before) or each tier at its own rate.
+            CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;
@@ -2015,8 +2021,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Price button on a meter row: pick a Multi-Price scheme + view/override its tier ladder.
-        // The dialog validates the two billing traps (last bracket must be unlimited; a 0.00 free
-        // band conflicts with Free Qty) and tells us when Free Qty must be zeroed.
+        // The dialog validates the two billing traps (last bracket must be unlimited; the first
+        // tier may not be 0.00 -- free copies are the row's Free Qty, ATP-3).
         private void RepoPricePick_ButtonClick(object sender, DevExpress.XtraEditors.Controls.ButtonPressedEventArgs e)
         {
             GridViewMeterCfg.CloseEditor();
@@ -2445,11 +2451,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 return;
             }
 
-            // Unit Price and Free Qty are DEAD while a multi-price ladder is in effect (the ladder
-            // prices the copies AND carries the free band) — grey both out; Free Qty shows the
-            // ladder's own free quantity via CustomColumnDisplayText.
-            if (e.Column != null && (e.Column.FieldName == "ChargesRate" || e.Column.FieldName == "FOCQty")
-                && RowHasLadder(e.RowHandle))
+            // Unit Price is DEAD while a multi-price ladder is in effect (the ladder prices the
+            // copies) -- grey it out. Free Qty stays open: since ATP-3 it is the ONE place free
+            // copies are set, ladder or not.
+            if (e.Column != null && e.Column.FieldName == "ChargesRate" && RowHasLadder(e.RowHandle))
             {
                 e.Appearance.BackColor = System.Drawing.Color.Gainsboro;
                 e.Appearance.ForeColor = System.Drawing.Color.Gray;
@@ -2534,11 +2539,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return !string.IsNullOrEmpty(code) || !string.IsNullOrEmpty(custom);
         }
 
-        // Unit Price / Free Qty are not editable while a ladder is in effect (use the price button).
+        // Unit Price is not editable while a ladder is in effect (use the price button). Free Qty is:
+        // the free copies live there and nowhere else (ATP-3).
         private void ViewMeterCfg_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
             if (GridViewMeterCfg.FocusedColumn != null
-                && (GridViewMeterCfg.FocusedColumn.FieldName == "ChargesRate" || GridViewMeterCfg.FocusedColumn.FieldName == "FOCQty")
+                && GridViewMeterCfg.FocusedColumn.FieldName == "ChargesRate"
                 && RowHasLadder(GridViewMeterCfg.FocusedRowHandle))
                 e.Cancel = true;
 
@@ -2632,8 +2638,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Multi-Price cell text: scheme code / "code (Modified)" / "(Custom)" / "".
-        // Free Qty cell text while a ladder is active: the LADDER's free quantity (read-only display —
-        // the stored per-meter Free Qty is untouched and returns when the ladder is cleared).
+        // Free Qty cell text: the meter's own Free Qty, which counts on a ladder too (ATP-3). A ladder
+        // saved before that rule may still start with a 0.00 band; that band is free as well, so the
+        // cell names both -- "100 + 2,500 in ladder" -- rather than hide either.
         private void ViewMeterCfg_CustomColumnDisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
         {
             if (e.Column == null || e.ListSourceRowIndex < 0) return;
@@ -2672,7 +2679,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 return;
             }
             if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty
-            e.DisplayText = LadderFocFor(code, custom).ToString("#,##0.##");
+            decimal inLadder = LadderFocFor(code, custom);
+            if (inLadder <= 0m) return;
+            e.DisplayText = AsDec(r["FOCQty"]).ToString("#,##0.##") + " + " + inLadder.ToString("#,##0.##") + " in ladder";
         }
 
         // Picking a Meter Type pre-fills its pricing (same behaviour as the item dialog); any edit dirties.
@@ -4902,7 +4911,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void GroupView_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
-            if (e.Column != null && (e.Column.FieldName == "ChargesRate" || e.Column.FieldName == "FOCQty"))
+            // A ladder prices the copies, so Unit Price is dead; Free Qty still counts (ATP-3).
+            if (e.Column != null && e.Column.FieldName == "ChargesRate")
             {
                 string mp = Convert.ToString(_viewGroup.GetRowCellValue(e.RowHandle, "MeterMultiPriceCode"));
                 string ct = Convert.ToString(_viewGroup.GetRowCellValue(e.RowHandle, "CustomTiers"));
@@ -5784,9 +5794,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, TierMode, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@tiermode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -6223,6 +6233,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             screen.Terms = _lineTerms;
             screen.BillSeparate = ChkBillSeparate.Checked;
             screen.RentalSeparate = ChkRentalSeparate.Checked;
+            screen.TierIncremental = CmbTierMode.SelectedIndex == 1;
             using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey, screen))
                 f.ShowDialog(this);
         }
@@ -6298,6 +6309,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // Whatever is being edited right now, so a group ladder typed a moment ago is priced
                 // in the preview rather than the one that was last saved.
                 f.LineTerms = _sampleTerms ?? _lineTerms;
+                f.TierIncremental = CmbTierMode.SelectedIndex == 1;
                 f.ShowModel = _sampleShowModel ?? _showModel;
                 f.ShowSerial = _sampleShowSerial ?? _showSerial;
                 f.ShowUnits = _sampleShowUnits ?? _showUnits;
@@ -6524,7 +6536,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
-                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, " +
+                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, TierMode=@tiermode, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "BillingFormatCode=@fmtcode, RentalLineMode=@rlmode, MeterLineMode=@mlmode, UseNewLayout=@newlayout, " +
                 "ShowModelOnLine=@showmodel, ShowSerialOnLine=@showserial, ShowUnitsOnLine=@showunits, " +
@@ -6588,6 +6600,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             long emailTpl = EmailTplVal();
             cmd.Parameters.AddWithValue("@emailtpl", emailTpl > 0 ? (object)emailTpl : DBNull.Value);
             cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
+            cmd.Parameters.AddWithValue("@tiermode", CmbTierMode.SelectedIndex == 1 ? "I" : "T");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -7312,6 +7325,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             LoadBillingFormat(r);
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
+            // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
+            // and every contract's rule before) or each tier at its own rate.
+            CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;

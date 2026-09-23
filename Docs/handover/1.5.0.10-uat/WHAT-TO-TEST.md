@@ -27,6 +27,24 @@ Everything is under **Service & Contract**.
 the rental together or apart, black and colour on one line or two?
 Does Calculation Test give the amount you would work out by hand for the same readings?
 
+**Tier pricing.** Take a contract with a meter on a tier price.
+
+1. In the meter grid under the machines, that meter's **Free Qty** is white and takes a number; its
+   Unit Price stays grey (the tier price sets it). A tier price that used to start with free copies
+   now shows them here -- "first 100 at 0.00" reads as Free Qty 100.
+2. **Billing → 1. The invoice → Tier pricing** reads **Whole month at the tier reached**. Run
+   **Calculation Test** on that meter: key 0 and 1,648 on a meter with 100 free and tiers "up to
+   1,000 at 0.024, then 0.020" (Tier Price below the list sets them for the test) -- it bills
+   1,548 x 0.020 = **30.96**.
+3. Change Tier pricing to **Each tier at its own rate** and run Calculation Test again, without
+   saving: 1,000 x 0.024 + 548 x 0.020 = **34.96**, with the working showing each tier.
+4. **View Sample Invoice**: the meter prints one row per tier, "(Tier 1)", "(Tier 2)", each row's
+   Qty x Unit Price = its Amount, and the rows add up to 34.96.
+5. Try to give a tier price a first tier of 0.00 -- on the meter's price button, or in
+   **Meter Multi Pricing** -- it is refused, pointing to Free Qty.
+
+Save the contract with Each tier at its own rate and generate its invoice: the same rows as the sample.
+
 ---
 
 ## 2. A reading
@@ -152,5 +170,5 @@ month's copies rather than the machine's whole life.
 
 ## What to send back
 
-The version (`1.5.0.1`), the contract number, the month, and what you expected against what you got.
+The version (`1.5.0.10`), the contract number, the month, and what you expected against what you got.
 A screenshot of the screen you were on says more than a description.

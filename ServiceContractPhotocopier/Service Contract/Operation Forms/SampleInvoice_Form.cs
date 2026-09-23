@@ -99,6 +99,10 @@ namespace ServiceContractPhotocopier
         /// contract has agreed nothing and every machine keeps its own price.</summary>
         public Dictionary<string, ScpLineTerms> LineTerms;
 
+        /// <summary>Tier pricing as the contract screen has it: each tier at its own rate (true) or
+        /// the whole month at the tier reached (false) -- ATP-3. Set by the caller before ShowDialog.</summary>
+        public bool TierIncremental;
+
         private void OnFormLoad(object sender, EventArgs e)
         {
             _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
@@ -230,6 +234,7 @@ namespace ServiceContractPhotocopier
                     l.MeterTypeName = Str(mr, "Description");
                     l.ACItemCode = ChargeItemOf(type);
                     l.NewMoneyRules = _hasFormat;
+                    l.TierIncremental = TierIncremental;
                     l.MachineLineShows = _machineLineShows;
                     l.ShowModel = ShowModel;
                     l.ShowSerial = ShowSerial;
@@ -480,13 +485,36 @@ namespace ServiceContractPhotocopier
                     sl.Note = row.IsMerged && row.Leader.IsCommittedMin
                         ? ScpInvoiceBuilder.MergedMinimumNote(row)
                         : (row.Leader.StrategyNote ?? "");
-                    sl.Qty = row.PrintQty;
-                    sl.UnitPrice = row.PrintUnitPrice;
-                    sl.Amount = row.PrintAmount;
+                    // One line, or one per band on a contract priced band by band (ATP-3) -- the same
+                    // parts the posted invoice prints. The readings go under the LAST band, as there.
+                    List<decimal[]> parts = row.PrintParts;
+                    sl.Qty = parts[0][0];
+                    sl.UnitPrice = parts[0][1];
+                    sl.Amount = parts[0][2];
                     // A rental, a waive and a committed minimum have no copies to print.
                     sl.ShowQty = !(row.Leader.IsFlat || row.Leader.IsCommittedMin || row.Leader.IsWaiveMeter);
+                    if (parts.Count > 1) sl.Description = head + "  (Tier 1)";
                     doc.Lines.Add(sl);
-                    grand += row.PrintAmount;
+                    SampleInvoiceLine lastLine = sl;
+                    for (int pi = 1; pi < parts.Count; pi++)
+                    {
+                        SampleInvoiceLine bl = new SampleInvoiceLine();
+                        bl.ItemCode = sl.ItemCode;
+                        bl.Uom = sl.Uom;
+                        bl.Description = head + "  (Tier " + (pi + 1) + ")";
+                        bl.Qty = parts[pi][0];
+                        bl.UnitPrice = parts[pi][1];
+                        bl.Amount = parts[pi][2];
+                        bl.ShowQty = true;
+                        doc.Lines.Add(bl);
+                        lastLine = bl;
+                    }
+                    if (lastLine != sl)
+                    {
+                        lastLine.TextRows.AddRange(sl.TextRows);
+                        sl.TextRows.Clear();
+                    }
+                    grand += row.PrintTotal;
                 }
             }
 

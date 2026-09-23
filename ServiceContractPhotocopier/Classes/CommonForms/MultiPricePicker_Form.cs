@@ -20,8 +20,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
     ///
     /// On OK it validates the billing traps:
     ///   * the LAST bracket must be unlimited (otherwise usage beyond it finds no bracket),
-    ///   * a 0.00-price FREE band conflicts with the meter's own Free Qty (FOC) — only ONE of
-    ///     the two free mechanisms is allowed, so the caller is told to clear Free Qty.
+    ///   * the FIRST tier may not be 0.00 (feedback ATP-3) — free copies are the meter's own Free
+    ///     Qty on the contract's meter grid, the one place they are set.
     /// </summary>
     public partial class MultiPricePicker_Form : XtraForm
     {
@@ -44,7 +44,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         {
             InitializeComponent();
             _db = db;
-            // meterFocQty is no longer needed for a prompt — a ladder always zeroes + locks Free Qty.
+            // meterFocQty is no longer needed for a prompt — Free Qty counts beside a ladder (ATP-3).
 
             _tiers = new DataTable();
             _tiers.Columns.Add("MeterReading", typeof(decimal));
@@ -214,7 +214,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         }
 
         // Clear: no scheme, no override — the meter bills by its flat Unit Price again
-        // (and its own stored Free Qty comes back into force).
+        // (its Free Qty counts either way).
         private void BtnClear_Click(object sender, EventArgs e)
         {
             SelectedCode = "";
@@ -255,10 +255,15 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                 rows = GridRows();
             }
 
-            // 2) A ladder in effect means the engine IGNORES the meter's own Free Qty entirely (the
-            //    ladder's 0.00 band is the free mechanism). The meter grid locks the Free Qty cell
-            //    and DISPLAYS the ladder's own free quantity instead; the stored value is untouched
-            //    (it comes back into force if the ladder is later cleared).
+            // 2) The first tier may not be 0.00 (ATP-3). Free copies are the meter's Free Qty, which
+            //    counts beside the ladder; "the first 100 free" as a 0.00 band is refused here, for a
+            //    picked scheme as much as for tiers keyed in, so no new ladder carries one.
+            string why = ServiceContractPhotocopier.Classes.ScpMultiPrice.WhyTiersWrong(rows);
+            if (why.Length > 0)
+            {
+                XtraMessageBox.Show(why, "Multi-Price", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             // 3) Scheme untouched -> just the code. Edited (or schemeless) -> per-meter override rows.
             //    Master schemes are NEVER written from here (that is Meter Multi Pricing maintenance).

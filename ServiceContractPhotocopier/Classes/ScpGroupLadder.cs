@@ -14,8 +14,8 @@ namespace ServiceContractPhotocopier.Classes
     /// us the ten-thousand rate".</para>
     ///
     /// <para><b>What this does.</b> The group's copies are added up and climb ONE ladder, once. The
-    /// resulting blended rate goes back on every machine in the group, and the free band is shared
-    /// out in proportion to what each printed — so the machines' own charges still add up to the
+    /// resulting blended rate goes back on every machine in the group, and the free copies (the
+    /// machines' Free Qty, pooled -- ATP-3) are shared out in proportion to what each printed — so the machines' own charges still add up to the
     /// line, and the reading log still says what each machine cost.</para>
     ///
     /// <para><b>What it does not do.</b> It never touches a machine that carries a ladder of its own.
@@ -129,12 +129,22 @@ namespace ServiceContractPhotocopier.Classes
                 groupUsage += u;
             }
 
-            // The free band refreshes every reset period, and every machine on one contract bills over
+            // The free copies refresh every reset period, and every machine on one contract bills over
             // the same span, so the leader's count speaks for the group.
             int resetN = set[0].FocResetCount < 1 ? 1 : set[0].FocResetCount;
             decimal freeCopies, effUnit;
             decimal gross = ScpMultiPrice.LadderCharge(ladders, key, groupUsage, resetN,
                                                        out freeCopies, out effUnit);
+            // ATP-3: the group's free copies are its machines' Free Qty, added up (plus a 0.00 band an
+            // old ladder may still carry). The group is priced as one, so its allowance is one pool.
+            decimal ownFree = 0m;
+            foreach (MeterBillLine m in set) ownFree += m.Foc * resetN;
+            if (ownFree > 0m)
+            {
+                freeCopies += ownFree;
+                if (freeCopies > groupUsage) freeCopies = groupUsage;
+                gross = (groupUsage - freeCopies) * effUnit;
+            }
             decimal billedGroup = groupUsage - freeCopies;
             if (billedGroup < 0m) billedGroup = 0m;
 
@@ -185,6 +195,36 @@ namespace ServiceContractPhotocopier.Classes
                 given += charge;
                 if (charge < m.MinCharges) { m.Charge = m.MinCharges; m.UseMin = true; }
                 else { m.Charge = charge; m.UseMin = false; }
+            }
+
+            // ATP-3, band by band: the group's billable copies over the priced bands as ONE count,
+            // and the resulting amount shared back by copies the way the threshold amount is. The
+            // bands are the group's -- the same list on every machine -- and print once.
+            if (set[0].TierIncremental)
+            {
+                decimal totalBilled = 0m;
+                foreach (MeterBillLine m in set) totalBilled += m.BillCopies;
+                List<decimal[]> bands = ScpMultiPrice.Slices(ScpMultiPrice.Tiers(ladders, key), totalBilled, resetN, true);
+                decimal groupCharge = 0m;
+                foreach (decimal[] b in bands) groupCharge += b[2];
+                decimal blended = bands.Count == 1 ? bands[0][1]
+                    : (bands.Count > 1 ? Math.Round(groupCharge / totalBilled, 6, MidpointRounding.AwayFromZero) : effUnit);
+                decimal shared = 0m;
+                for (int i = 0; i < set.Count; i++)
+                {
+                    MeterBillLine m = set[i];
+                    decimal part = i == set.Count - 1
+                        ? groupCharge - shared
+                        : (totalBilled > 0m ? Math.Round(groupCharge * m.BillCopies / totalBilled, 2, MidpointRounding.AwayFromZero) : 0m);
+                    if (part < 0m) part = 0m;
+                    shared += part;
+                    m.EffUnitPrice = blended;
+                    m.TierBands = bands.Count >= 2 ? bands : null;
+                    m.TierBandsAreGroup = bands.Count >= 2;
+                    m.TierGroupSize = set.Count;
+                    if (part < m.MinCharges) { m.Charge = m.MinCharges; m.UseMin = true; }
+                    else { m.Charge = part; m.UseMin = false; }
+                }
             }
         }
     }

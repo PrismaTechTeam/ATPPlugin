@@ -164,6 +164,68 @@ namespace ServiceContractPhotocopier.Classes
             return billed * rate;
         }
 
+        /// <summary>The ladder behind a code, or null.</summary>
+        public static List<decimal[]> Tiers(Dictionary<string, List<decimal[]>> ladders, string code)
+        {
+            List<decimal[]> tiers;
+            if (ladders == null || string.IsNullOrEmpty(code) || !ladders.TryGetValue(code, out tiers)) return null;
+            return tiers;
+        }
+
+        /// <summary>
+        /// Feedback ATP-3, band by band: lay BILLABLE copies -- what is left after the free copies --
+        /// over the ladder's priced bands, each band's share at its own rate. A band's boundary is its
+        /// upper edge counted in billable copies (scaled per reset period, like the threshold bands);
+        /// the last band runs on without end. 0.00 bands are skipped: they are the old free allowance,
+        /// already taken off before this is called, so a ladder converted to Free Qty and one that
+        /// still carries its 0.00 band split the same copies the same way.
+        /// Returns {copies, rate, amount} for each band that received copies; amounts rounded per band.
+        /// </summary>
+        public static List<decimal[]> Slices(List<decimal[]> tiers, decimal billable, int boundaryScale, bool awayFromZero)
+        {
+            List<decimal[]> result = new List<decimal[]>();
+            if (tiers == null || tiers.Count == 0 || billable <= 0m) return result;
+            if (boundaryScale < 1) boundaryScale = 1;
+            List<decimal[]> priced = new List<decimal[]>();
+            foreach (decimal[] t in tiers) if (t[1] != 0m) priced.Add(t);
+            priced.Sort(delegate (decimal[] a, decimal[] b) { return a[0].CompareTo(b[0]); });
+            if (priced.Count == 0) return result;
+            decimal remaining = billable, prev = 0m;
+            for (int i = 0; i < priced.Count && remaining > 0m; i++)
+            {
+                bool last = i == priced.Count - 1;
+                decimal take = remaining;
+                if (!last)
+                {
+                    decimal width = priced[i][0] * boundaryScale - prev;
+                    if (width < 0m) width = 0m;
+                    if (width < take) take = width;
+                    prev = priced[i][0] * boundaryScale;
+                }
+                if (take <= 0m) continue;
+                decimal amt = awayFromZero
+                    ? Math.Round(take * priced[i][1], 2, MidpointRounding.AwayFromZero)
+                    : Math.Round(take * priced[i][1], 2);
+                result.Add(new decimal[] { take, priced[i][1], amt });
+                remaining -= take;
+            }
+            return result;
+        }
+
+        /// <summary>Feedback ATP-3: why these bands cannot be saved, or "" when they can. The first band
+        /// may not be 0.00 -- free copies are the meter's Free Qty, set on the contract's meter grid,
+        /// not a band of the ladder.</summary>
+        public static string WhyTiersWrong(List<decimal[]> tiers)
+        {
+            if (tiers == null || tiers.Count == 0) return "";
+            List<decimal[]> sorted = new List<decimal[]>(tiers);
+            sorted.Sort(delegate (decimal[] a, decimal[] b) { return a[0].CompareTo(b[0]); });
+            if (sorted[0][1] == 0m)
+                return "The first tier cannot be 0.00. Free copies are the meter's Free Qty, on the contract's " +
+                       "meter grid -- give the meter its Free Qty there and start the tiers at the first paid rate.";
+            return "";
+        }
+
         /// <summary>The rate a given quantity earns: the band it lands in, or the last band's rate
         /// once it is past the ladder's top boundary.</summary>
         public static decimal PriceAt(List<decimal[]> tiers, decimal usage, int boundaryScale)

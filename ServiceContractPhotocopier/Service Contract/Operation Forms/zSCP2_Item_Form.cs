@@ -480,8 +480,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         // Price button on a meter row: pick a Multi-Price scheme + view/override its tier ladder.
-        // The dialog validates the billing traps (last bracket unlimited; 0.00 free band vs Free
-        // Qty conflict) and reports when Free Qty must be zeroed. _meters.RowChanged marks dirty.
+        // The dialog validates the billing traps (last bracket unlimited; the first tier may not be
+        // 0.00 -- free copies are the row's Free Qty, ATP-3). _meters.RowChanged marks dirty.
         private bool IsWaiveType(string meterTypeCode)
         {
             if (_meterTypeLookup == null || !_meterTypeLookup.Columns.Contains("IsRentalWaive") || string.IsNullOrEmpty(meterTypeCode)) return false;
@@ -646,11 +646,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return !string.IsNullOrEmpty(code) || !string.IsNullOrEmpty(custom);
         }
 
-        // Unit Price and Free Qty are DEAD while a ladder is in effect — grey both out
-        // (the ladder prices the copies AND carries the free band).
+        // Unit Price is DEAD while a ladder is in effect (the ladder prices the copies) -- grey it out.
+        // Free Qty stays open: since ATP-3 it is the one place free copies are set, ladder or not.
         private void GridViewMeters_RowCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
-            if (e.Column == null || (e.Column.FieldName != "ChargesRate" && e.Column.FieldName != "FOCQty")
+            if (e.Column == null || e.Column.FieldName != "ChargesRate"
                 || !MeterRowHasLadder(e.RowHandle)) return;
             e.Appearance.BackColor = System.Drawing.Color.Gainsboro;
             e.Appearance.ForeColor = System.Drawing.Color.Gray;
@@ -662,7 +662,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void GridViewMeters_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
             if (GridViewMeters.FocusedColumn != null
-                && (GridViewMeters.FocusedColumn.FieldName == "ChargesRate" || GridViewMeters.FocusedColumn.FieldName == "FOCQty")
+                && GridViewMeters.FocusedColumn.FieldName == "ChargesRate"
                 && MeterRowHasLadder(GridViewMeters.FocusedRowHandle))
                 e.Cancel = true;
         }
@@ -717,7 +717,12 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 return;
             }
             if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty
-            e.DisplayText = LadderFocFor(code, custom).ToString("#,##0.##");
+            // ATP-3: the meter's own Free Qty counts on a ladder too. A ladder saved before that rule
+            // may still start with a 0.00 band, which is free as well -- name both.
+            decimal inLadder = LadderFocFor(code, custom);
+            if (inLadder <= 0m) return;
+            decimal own = r["FOCQty"] == DBNull.Value ? 0m : Convert.ToDecimal(r["FOCQty"]);
+            e.DisplayText = own.ToString("#,##0.##") + " + " + inLadder.ToString("#,##0.##") + " in ladder";
         }
 
         private void LoadItemLookup()

@@ -97,12 +97,13 @@ namespace ServiceContractPhotocopier
                 "ISNULL(lg.FOCQty,0) AS BilledFoc, ISNULL(lg.RebatePct,0) AS BilledRebate, " +
                 "ISNULL(lg.MinCharges,0) AS BilledMin, " +
                 "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
+                "ISNULL(c.TierMode,'T') AS TierMode, " +
                 // The ladder key, resolved exactly as ScpBillingRows resolves it: a per-meter
                 // override beats the scheme code and is keyed '#<ItemMeterKey>'.
                 "CASE WHEN pm.ItemMeterKey IS NOT NULL " +
                 "     THEN '#' + CAST(m.ItemMeterKey AS varchar(20)) " +
                 "     ELSE ISNULL(NULLIF(m.MeterMultiPriceCode,''), ISNULL(mt.MeterMultiPriceCode,'')) END AS MultiPriceCode, " +
-                "ISNULL(m.ChargesRate,0) AS CurrentRate, pc.PrevCorrectReading, " +
+                "ISNULL(m.ChargesRate,0) AS CurrentRate, ISNULL(m.FOCQty,0) AS CurrentFoc, pc.PrevCorrectReading, " +
                 "ISNULL(pi.PrevInvNo,'') AS PrevInvNo, ISNULL(nn.NextInvNo,'') AS NextInvNo " +
                 "FROM dbo.zSCP_MeterTrans t " +
                 "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = t.ServiceItemMeterTypeKey " +
@@ -178,6 +179,8 @@ namespace ServiceContractPhotocopier
             // The Max term stops us crediting copies a LATER invoice charged for; the current-reading
             // term stops a second CN un-crediting what an earlier one already gave back.
             _dt.Columns.Add("MaxAllowed", typeof(decimal));
+            _dt.Columns["BilledFoc"].ReadOnly = false;   // a pre-ATP-3 ladder line may take today's Free Qty below
+            _dt.Columns["TierMode"].ReadOnly = false;    // ... or the tier rule the contract had when it was billed
             int cannot = 0;
             foreach (DataRow r in _dt.Rows)
             {
@@ -187,6 +190,45 @@ namespace ServiceContractPhotocopier
                 // crediting at that price short-changes the customer on every corrected copy.
                 decimal effRate;
                 decimal rebuilt = ChargeAt(r, Dec(r["BilledReading"]), out effRate);
+                // ATP-3: an invoice billed before free copies moved out of the ladders logged the
+                // meter's Free Qty column, which a ladder then ignored -- its free copies were the
+                // ladder's 0.00 band, and that band is the meter's Free Qty now. And a contract's tier
+                // rule can be changed after an invoice was made. So a ladder line that does not
+                // rebuild is tried with today's Free Qty, then with the other tier rule, and what is
+                // tried is kept only if it reproduces the invoice to the cent.
+                if (Math.Abs(rebuilt - Dec(r["BilledCharge"])) > 0.01m
+                    && Convert.ToString(r["MultiPriceCode"]).Length > 0)
+                {
+                    object loggedFoc = r["BilledFoc"];
+                    object loggedMode = r["TierMode"];
+                    string otherMode = Convert.ToString(loggedMode).Trim().ToUpperInvariant() == "I" ? "T" : "I";
+                    object[][] attempts = new object[][]
+                    {
+                        new object[] { Dec(r["CurrentFoc"]), loggedMode },
+                        new object[] { loggedFoc, otherMode },
+                        new object[] { Dec(r["CurrentFoc"]), otherMode }
+                    };
+                    bool rebuiltAlt = false;
+                    foreach (object[] attempt in attempts)
+                    {
+                        r["BilledFoc"] = attempt[0];
+                        r["TierMode"] = attempt[1];
+                        decimal effAlt;
+                        decimal alt = ChargeAt(r, Dec(r["BilledReading"]), out effAlt);
+                        if (Math.Abs(alt - Dec(r["BilledCharge"])) <= 0.01m)
+                        {
+                            rebuilt = alt;
+                            effRate = effAlt;
+                            rebuiltAlt = true;
+                            break;
+                        }
+                    }
+                    if (!rebuiltAlt)
+                    {
+                        r["BilledFoc"] = loggedFoc;
+                        r["TierMode"] = loggedMode;
+                    }
+                }
                 bool derivable = Math.Abs(rebuilt - Dec(r["BilledCharge"])) <= 0.01m
                                  && Dec(r["BilledCharge"]) > 0m;
                 r["CannotDerive"] = !derivable;
@@ -247,6 +289,8 @@ namespace ServiceContractPhotocopier
                 Convert.ToString(r["FOCResetUnit"]),
                 r["FOCResetN"] == DBNull.Value ? 0 : Convert.ToInt32(r["FOCResetN"]),
                 DaysInBilledMonth(r));
+            // Band by band or threshold, as the contract prices its tiers (ATP-3).
+            ln.TierIncremental = Convert.ToString(r["TierMode"]).Trim().ToUpperInvariant() == "I";
             ScpInvoiceBuilder.ComputeCharge(ln, _ladders);
             effUnitPrice = ln.EffUnitPrice;
             return ln.Charge;

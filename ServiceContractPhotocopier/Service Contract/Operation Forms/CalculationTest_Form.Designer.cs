@@ -658,10 +658,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.LblTierHint.Padding = new System.Windows.Forms.Padding(4, 2, 4, 2);
             this.LblTierHint.Size = new System.Drawing.Size(326, 78);
             this.LblTierHint.TabIndex = 1;
-            this.LblTierHint.Text = "Up to = the top of each band. A 0.00 band is free copies. The copies decide the b" +
-                "and, and that band\'s price is charged on every billed copy. While bands are set," +
-                " Price and FOC are not used. Delete every band to test the flat price. Changes h" +
-                "ere are for this meter\'s test only.";
+            this.LblTierHint.Text = "Up to = the top of each band. Free copies are FOC, not a 0.00 band. The contract" +
+                "\'s Tier pricing decides: the band reached prices every copy, or each band its own." +
+                " Price is not used while bands are set; delete them all to test the flat price. F" +
+                "or this meter\'s test only.";
             //
             // GroupWorking
             //

@@ -62,7 +62,7 @@ internal static class CnCredit
             "SELECT l.LogKey, l.DocNo, l.ItemMeterKey, i.SerialNumber, m.MeterTypeCode, " +
             "       ISNULL(l.LastReading,0) AS LastReading, l.Reading, ISNULL(l.[Usage],0) AS Usage, " +
             "       ISNULL(l.UnitPrice,0) AS LoggedRate, ISNULL(l.MinCharges,0) AS MinCharges, " +
-            "       ISNULL(l.FOCQty,0) AS FOCQty, ISNULL(l.RebatePct,0) AS RebatePct, l.Charge, " +
+            "       ISNULL(l.FOCQty,0) AS FOCQty, ISNULL(m.FOCQty,0) AS CurrentFoc, ISNULL(l.RebatePct,0) AS RebatePct, l.Charge, " +
             "       ISNULL(l.PeriodYear,0) AS PeriodYear, ISNULL(l.PeriodMonth,0) AS PeriodMonth, " +
             "       ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
             "       CASE WHEN pm.ItemMeterKey IS NOT NULL " +
@@ -84,6 +84,9 @@ internal static class CnCredit
         int derivable = 0, repriced = 0, differs = 0;
         decimal worstGap = 0m; string worstLine = "";
         decimal shortChanged = 0m, overCredited = 0m;
+
+        foreach (DataColumn c in t.Columns) c.ReadOnly = false;
+        foreach (DataRow r in t.Rows) Settle(r, ladders);
 
         foreach (DataRow r in t.Rows)
         {
@@ -201,6 +204,19 @@ internal static class CnCredit
             : "== " + _fail + " FAILED ==========================================");
         Console.WriteLine();
         return _fail == 0 ? 0 : 1;
+    }
+
+    /// <summary>As MeterCN_Form does it (ATP-3): a ladder line billed before its free band became the
+    /// meter's Free Qty logged the Free Qty column the ladder then ignored. When the logged figure does
+    /// not rebuild the invoice, today's Free Qty is tried, and kept only if it reproduces it.</summary>
+    private static void Settle(DataRow r, Dictionary<string, List<decimal[]>> ladders)
+    {
+        decimal eff;
+        if (Math.Abs(ChargeAt(r, ladders, Dec(r["Reading"]), out eff) - Dec(r["Charge"])) <= 0.01m) return;
+        if (Convert.ToString(r["MultiPriceCode"]).Length == 0 || Dec(r["CurrentFoc"]) == Dec(r["FOCQty"])) return;
+        object logged = r["FOCQty"];
+        r["FOCQty"] = Dec(r["CurrentFoc"]);
+        if (Math.Abs(ChargeAt(r, ladders, Dec(r["Reading"]), out eff) - Dec(r["Charge"])) > 0.01m) r["FOCQty"] = logged;
     }
 
     private static decimal ChargeAt(DataRow r, Dictionary<string, List<decimal[]>> ladders,

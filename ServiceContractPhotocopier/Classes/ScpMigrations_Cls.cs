@@ -258,6 +258,10 @@ namespace ServiceContractPhotocopier.Classes
             // The billing sequence: where this book's months of a contract start, and the months
             // deliberately not billed.
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v18_BillFrom.sql", asm);
+            // ATP-3: how the contract prices its tiers (threshold, or band by band) ...
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v19_TierMode.sql", asm);
+            // ... and free copies move out of the ladders into the meters' Free Qty.
+            RunDDL(dbsetting, "02_Update_zSCP_MeterMultiPriceItem_v2_FreeBandToFreeQty.sql", asm);
             RunDDL(dbsetting, "02_CreateTable_zSCP2_ContractPeriodSkip.sql", asm);   // guarded throughout; the index is retried if it ever failed
             RunDDL(dbsetting, "02_CreateTrigger_zSCP2_IV_NoDeleteEarlierBilledMonth.sql", asm);   // a month comes off only after the months behind it
 

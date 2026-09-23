@@ -1,4 +1,4 @@
-# Known limitations — 1.5.0.1 (UAT)
+# Known limitations — 1.5.0.10 (UAT)
 
 Everything here is known. It is written down so nothing on this list is a surprise, and so a real
 surprise is easy to tell apart from a thing we already knew about.
@@ -63,6 +63,8 @@ e-mail path. **SMTP has never been sent end to end** — bulk e-mail is untested
 | 12 | Billing Format's sample preview is permanently dated July 2026. |
 | 13 | Contracts saved before 17 September show blank Created By / Modified By. Nothing recorded them until then. |
 | 14 | **Cancelling** an invoice inside AutoCount is not covered by the delete-order rule. The money is voided but the readings stay marked as billed, so that month will not come back on the list. Delete it rather than cancel it. |
+| 15 | On a contract priced **each tier at its own rate**, the Summary Sales Invoice Meter Listing shows one Rate per machine -- its charge divided by its copies, e.g. 0.022584 -- where the invoice prints a row per tier at the agreed rates. The Charge on the listing is the invoice's. |
+| 16 | A tier price whose **name** promises free copies -- "BK +P - 0.02 FOC20K" -- no longer carries them: when this version first opened the book they moved into the Free Qty of each meter on it. A meter given that tier price from now on starts with the Free Qty you key in, not the name's. |
 
 ---
 
