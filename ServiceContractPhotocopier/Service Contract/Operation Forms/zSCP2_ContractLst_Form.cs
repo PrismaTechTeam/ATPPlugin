@@ -69,14 +69,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             try
             {
-                Grid.DataSource = _dbSetting.GetDataTable(
+                DataTable dt = _dbSetting.GetDataTable(
                     "SELECT ContractKey, ContractNo, ContractTypeCode, DebtorCode, DebtorName, ContractDate, " +
                     "ServiceStartDate, ServiceExpiryDate, ContractValue, BillingDay, BillOnMonthEnd, BillingMode, " +
                     "Agent, Area, DeptNo, ProjNo, ReferenceNo, Description, ItemCount, Inactive, " +
                     "CreatedBy, CreatedDate, ModifiedBy, LastModifiedDate " +
                     "FROM [dbo].[zvSCP2_ContractList] ORDER BY ContractNo", false);
+                bool withDO = FillDOColumn(dt);
+                Grid.DataSource = dt;
                 EnsureContractDateColumns();
                 EnsureAuditColumns();
+                if (withDO) EnsureDOColumn();
             }
             catch (Exception ex) { XtraMessageBox.Show("Load failed:\r\n" + ex.Message, "Error"); }
         }
@@ -126,6 +129,66 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     : "In this window, you can create, modify, or delete service contracts and their service items.";
             }
             catch { }
+        }
+
+        /// <summary>Feedback ATP-13: each contract's delivery orders -- the DO its machines came from, or
+        /// went out on -- read live from the machines' serial numbers on AutoCount's DOs to that
+        /// customer. Added to the loaded table in memory, so the list view itself is unchanged.
+        /// False when the DOs could not be read (the column is then left off, rather than claiming
+        /// every contract has none).</summary>
+        private bool FillDOColumn(DataTable dt)
+        {
+            System.Collections.Generic.Dictionary<long, string> dos;
+            try { dos = ServiceContractPhotocopier.Classes.ScpContractDO.SummaryByContract(_dbSetting); }
+            catch { return false; }
+            if (!dt.Columns.Contains("DONo")) dt.Columns.Add("DONo", typeof(string));
+            foreach (DataRow r in dt.Rows)
+            {
+                string s;
+                long ck = r["ContractKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ContractKey"]);
+                r["DONo"] = dos.TryGetValue(ck, out s) ? s : "";
+            }
+            return true;
+        }
+
+        private void EnsureDOColumn()
+        {
+            if (GridView.Columns.ColumnByFieldName("DONo") == null)
+            {
+                DevExpress.XtraGrid.Columns.GridColumn c = GridView.Columns.AddVisible("DONo");
+                c.Caption = "DO";
+                c.Width = 150;
+                c.OptionsColumn.AllowEdit = false;
+                c.ToolTip = "The delivery order(s) this contract's machines came from or went out on. " +
+                    "No DO yet = open the contract, select the machines and press Create DO.";
+                DevExpress.XtraGrid.Columns.GridColumn refCol = GridView.Columns.ColumnByFieldName("ReferenceNo");
+                if (refCol != null && refCol.Visible) c.VisibleIndex = refCol.VisibleIndex + 1;
+                GridView.CustomColumnDisplayText +=
+                    new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(ContractList_DODisplayText);
+                GridView.RowCellStyle +=
+                    new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(ContractList_DOCellStyle);
+            }
+        }
+
+        private void ContractList_DODisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "DONo") return;
+            if (e.Value == null || e.Value == DBNull.Value || Convert.ToString(e.Value).Trim().Length == 0)
+                e.DisplayText = "No DO yet";
+        }
+
+        // No DO yet: the warning colour, so an undelivered contract stands out in the list.
+        private void ContractList_DOCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "DONo" || e.RowHandle < 0) return;
+            object v = GridView.GetRowCellValue(e.RowHandle, "DONo");
+            if (v == null || v == DBNull.Value || Convert.ToString(v).Trim().Length == 0)
+            {
+                e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 236, 179);
+                e.Appearance.ForeColor = System.Drawing.Color.FromArgb(150, 80, 0);
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+            }
         }
 
         /// <summary>Who made the contract and who last changed it, with the dates. Created once, after

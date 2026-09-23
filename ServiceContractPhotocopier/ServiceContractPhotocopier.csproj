@@ -191,6 +191,7 @@
     <Compile Include="Classes\ScpInvoiceJobs.cs" />
     <Compile Include="Classes\ScpInvoiceDelete.cs" />
     <Compile Include="Classes\ScpInvoiceRun.cs" />
+    <Compile Include="Classes\ScpContractDO.cs" />
     <Compile Include="Classes\ScpInterBillBoard.cs" />
     <Compile Include="Classes\ScpBillingSequence.cs" />
     <Compile Include="Classes\ScpBillingHistory.cs" />

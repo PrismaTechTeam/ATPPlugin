@@ -18,6 +18,7 @@
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpSave;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpItem;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpBillingTools;
+        private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpDelivery;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpCopy;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpClipboard;
         private DevExpress.XtraBars.Ribbon.RibbonPageGroup grpDemo;
@@ -31,6 +32,7 @@
         private DevExpress.XtraBars.BarButtonItem barRentalPrice;
         private DevExpress.XtraBars.BarButtonItem barSampleInvoice;
         private DevExpress.XtraBars.BarButtonItem barCalcTest;
+        private DevExpress.XtraBars.BarButtonItem barCreateDO;
         private DevExpress.XtraBars.BarButtonItem barCopyToNew;
         private DevExpress.XtraBars.BarButtonItem barCopyWhole;
         private DevExpress.XtraBars.BarButtonItem barCopySelected;
@@ -205,10 +207,12 @@
             this.barRentalPrice = new DevExpress.XtraBars.BarButtonItem();
             this.barSampleInvoice = new DevExpress.XtraBars.BarButtonItem();
             this.barCalcTest = new DevExpress.XtraBars.BarButtonItem();
+            this.barCreateDO = new DevExpress.XtraBars.BarButtonItem();
             this.ribbonPageHome = new DevExpress.XtraBars.Ribbon.RibbonPage();
             this.grpSave = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpItem = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpBillingTools = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
+            this.grpDelivery = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpCopy = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpClipboard = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
             this.grpDemo = new DevExpress.XtraBars.Ribbon.RibbonPageGroup();
@@ -577,9 +581,10 @@
             this.barPasteItems,
             this.barDemoFill,
             this.barSampleInvoice,
-            this.barCalcTest});
+            this.barCalcTest,
+            this.barCreateDO});
             this.RibbonCtl.Location = new System.Drawing.Point(0, 0);
-            this.RibbonCtl.MaxItemId = 17;
+            this.RibbonCtl.MaxItemId = 18;
             this.RibbonCtl.Name = "RibbonCtl";
             this.RibbonCtl.Pages.AddRange(new DevExpress.XtraBars.Ribbon.RibbonPage[] {
             this.ribbonPageHome});
@@ -728,6 +733,15 @@
             this.barCalcTest.Name = "barCalcTest";
             this.barCalcTest.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
             this.barCalcTest.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCalcTest_ItemClick);
+            //
+            // barCreateDO
+            //
+            this.barCreateDO.Caption = "Create DO";
+            this.barCreateDO.Id = 17;
+            this.barCreateDO.ImageOptions.ImageUri.Uri = "PackageProduct;Size32x32";
+            this.barCreateDO.Name = "barCreateDO";
+            this.barCreateDO.RibbonStyle = DevExpress.XtraBars.Ribbon.RibbonItemStyles.Large;
+            this.barCreateDO.ItemClick += new DevExpress.XtraBars.ItemClickEventHandler(this.barCreateDO_ItemClick);
             // 
             // ribbonPageHome
             // 
@@ -735,6 +749,7 @@
             this.grpSave,
             this.grpItem,
             this.grpBillingTools,
+            this.grpDelivery,
             this.grpCopy,
             this.grpClipboard,
             this.grpDemo});
@@ -761,6 +776,12 @@
             this.grpBillingTools.ItemLinks.Add(this.barCalcTest);
             this.grpBillingTools.Name = "grpBillingTools";
             this.grpBillingTools.Text = "Billing";
+            //
+            // grpDelivery
+            //
+            this.grpDelivery.ItemLinks.Add(this.barCreateDO);
+            this.grpDelivery.Name = "grpDelivery";
+            this.grpDelivery.Text = "Delivery";
             // 
             // grpCopy
             // 

@@ -105,14 +105,31 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// then on the layout places it and the user's own moves stand.</summary>
         private void PlaceBranchBesideBillGroup()
         {
-            DevExpress.XtraGrid.Columns.GridColumn br = GridViewItems.Columns.ColumnByFieldName("BranchCode");
+            // Columns a saved layout did not know are appended as a run at the END (Branch, then DO
+            // from ATP-13). Only that trailing run is moved; a column the layout places stays put.
+            string[] fresh = { "BranchCode", "DONo" };
+            System.Collections.Generic.List<DevExpress.XtraGrid.Columns.GridColumn> ordered =
+                new System.Collections.Generic.List<DevExpress.XtraGrid.Columns.GridColumn>();
+            foreach (DevExpress.XtraGrid.Columns.GridColumn c in GridViewItems.VisibleColumns) ordered.Add(c);
+            ordered.Sort(delegate(DevExpress.XtraGrid.Columns.GridColumn a, DevExpress.XtraGrid.Columns.GridColumn b)
+                { return a.VisibleIndex.CompareTo(b.VisibleIndex); });
+            System.Collections.Generic.List<string> trailing = new System.Collections.Generic.List<string>();
+            for (int i = ordered.Count - 1; i >= 0; i--)
+            {
+                if (Array.IndexOf(fresh, ordered[i].FieldName) < 0) break;
+                trailing.Add(ordered[i].FieldName);
+            }
+            if (trailing.Count == 0) return;   // the saved layout already places them
             DevExpress.XtraGrid.Columns.GridColumn bg = GridViewItems.Columns.ColumnByFieldName("BillGroupCode");
-            if (br == null || bg == null || !br.Visible || !bg.Visible) return;
-            int last = -1;
-            foreach (DevExpress.XtraGrid.Columns.GridColumn c in GridViewItems.VisibleColumns)
-                if (c.VisibleIndex > last) last = c.VisibleIndex;
-            if (br.VisibleIndex != last) return;   // the saved layout already places it
-            br.VisibleIndex = bg.VisibleIndex + 1;
+            DevExpress.XtraGrid.Columns.GridColumn br = GridViewItems.Columns.ColumnByFieldName("BranchCode");
+            DevExpress.XtraGrid.Columns.GridColumn dc = GridViewItems.Columns.ColumnByFieldName("DONo");
+            if (br != null && br.Visible && trailing.Contains("BranchCode") && bg != null && bg.Visible)
+                br.VisibleIndex = bg.VisibleIndex + 1;
+            if (dc != null && dc.Visible && trailing.Contains("DONo"))
+            {
+                DevExpress.XtraGrid.Columns.GridColumn anchor = (br != null && br.Visible) ? br : ((bg != null && bg.Visible) ? bg : null);
+                if (anchor != null) dc.VisibleIndex = anchor.VisibleIndex + 1;
+            }
         }
 
         private AutoCount.XtraUtils.CustomizeGridLayout NewLayout(
@@ -1427,9 +1444,28 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             finally { _loading = false; }
         }
 
+        // Feedback ATP-13: which live DO each machine came from or went out on (by ItemKey). Read
+        // from AutoCount's serial transactions whenever the machines are, and after a DO is made.
+        private Dictionary<long, ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO> _machineDOs =
+            new Dictionary<long, ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO>();
+
+        private void LoadMachineDOs()
+        {
+            try { _machineDOs = ServiceContractPhotocopier.Classes.ScpContractDO.ForContract(_db, _contractKey); }
+            catch { _machineDOs = new Dictionary<long, ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO>(); }
+        }
+
+        /// <summary>The DO a machine is on, or null.</summary>
+        private ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO DOOf(ItemEditData d)
+        {
+            ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO m;
+            return d != null && d.ItemKey > 0 && _machineDOs.TryGetValue(d.ItemKey, out m) ? m : null;
+        }
+
         private void LoadItems()
         {
             _items.Clear();
+            LoadMachineDOs();
             DataTable it = _db.GetDataTable(
                 "SELECT ItemKey FROM [dbo].[zSCP2_Item] WHERE ContractKey=" + _contractKey + " ORDER BY Pos, ItemKey", false);
             foreach (DataRow r in it.Rows)
@@ -1650,11 +1686,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             int idx = Convert.ToInt32(GridViewItems.GetRowCellValue(rh, "No")) - 1;
             if (idx < 0 || idx >= _items.Count) return;
             string no = string.IsNullOrEmpty(_items[idx].ServiceItemNo) ? "this service item" : _items[idx].ServiceItemNo;
-            if (XtraMessageBox.Show("Detach " + no + " from this contract?\r\n\r\n" +
+            string doWarn = DOWarning(_items[idx]);
+            if (XtraMessageBox.Show(doWarn + "Detach " + no + " from this contract?\r\n\r\n" +
                 "The service item itself is KEPT (it becomes contract-less, with all its meters and " +
                 "history) and can be attached to a contract again later.\r\n" +
                 "Its provided-item lines leave this contract with it.",
-                "Detach from Contract", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                "Detach from Contract", MessageBoxButtons.YesNo,
+                doWarn.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question,
+                doWarn.Length > 0 ? MessageBoxDefaultButton.Button2 : MessageBoxDefaultButton.Button1) != DialogResult.Yes) return;
             long removedKey = _items[idx].ItemKey;
             _items.RemoveAt(idx);
             // Existing item -> it becomes an orphan (contract-less) on save; make it re-pickable now.
@@ -1684,6 +1723,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _dtItemsView.Columns.Add("MachineMode", typeof(string));
             _dtItemsView.Columns.Add("BillGroupCode", typeof(string));
             _dtItemsView.Columns.Add("BranchCode", typeof(string));
+            _dtItemsView.Columns.Add("DONo", typeof(string));
             _dtItemsView.Columns.Add("HasRental", typeof(bool));
             _dtItemsView.Columns.Add("HasBK", typeof(bool));
             _dtItemsView.Columns.Add("HasCL", typeof(bool));
@@ -1716,6 +1756,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 r["BillGroupCode"] = d.BillGroupCode ?? "";
                 r["BranchCode"] = (d.MoreHeader != null && d.MoreHeader.ContainsKey("DelBranchCode"))
                     ? (d.MoreHeader["DelBranchCode"] ?? "") : "";
+                ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO mdo = DOOf(d);
+                r["DONo"] = mdo == null ? "" : mdo.DocNo;
                 r["HasRental"] = MachineHasRental(d);
                 // Which counters this machine actually has. Not every machine has both, and some
                 // have neither -- a machine nobody reads still bills its rent.
@@ -2834,8 +2876,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 return;
             }
 
-            // Confirm #1: the SUPER warning.
+            // Confirm #1: the SUPER warning -- led by the DO the machine is on, when it is on one.
             if (XtraMessageBox.Show(
+                DOWarning(d) +
                 "PERMANENTLY DELETE service item " + no + "?\r\n\r\n" +
                 "This deletes the machine from the database TOGETHER WITH:\r\n" +
                 "   -  all its meters\r\n" +
@@ -3152,6 +3195,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "Debtor > Branch tab). Picking one also fills the machine's delivery address. Empty = the " +
                 "machine follows the contract's branch.";
 
+            // Feedback ATP-13: the DO this machine came from, or went out on -- read from its serial
+            // number on AutoCount's delivery orders to this customer. Amber "No DO yet" when there is
+            // none: Create DO (ribbon) sends the selected machines out on one.
+            DevExpress.XtraGrid.Columns.GridColumn colDO = GridViewItems.Columns.AddVisible("DONo");
+            colDO.Caption = "DO";
+            colDO.Width = 95;
+            colDO.OptionsColumn.AllowEdit = false;
+            colDO.OptionsColumn.ReadOnly = true;
+            colDO.ToolTip = "The delivery order this machine came from, or went out on (matched by its serial number). " +
+                "No DO yet = select the machine and press Create DO.";
+            GridViewItems.CustomColumnDisplayText +=
+                new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewItems_DODisplayText);
+            GridViewItems.RowCellStyle +=
+                new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewItems_DOCellStyle);
+
             // "Line label" is not here any more. It is the word PRINTED beside the charge, so it
             // belongs with the rest of what prints -- Meters & Pricing, next to the bill group and
             // the merge groups. Editing it in two screens was the same fault "Own invoice" had.
@@ -3260,6 +3318,156 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ed.Properties.NullValuePrompt = "No " + code + " serial in stock - type it, or receive it in AutoCount first";
                 ed.Properties.ShowNullValuePromptWhenFocused = true;
             }
+        }
+
+        // "No DO yet" in amber for a machine that has not gone out on a DO (feedback ATP-13).
+        private void GridViewItems_DODisplayText(object sender, DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "DONo") return;
+            // The blank "add a machine" row at the bottom is not a machine yet -- it says nothing.
+            if (e.ListSourceRowIndex < 0 || _dtItemsView == null || e.ListSourceRowIndex >= _dtItemsView.Rows.Count) return;
+            if (e.Value == null || e.Value == DBNull.Value || Convert.ToString(e.Value).Trim().Length == 0)
+                e.DisplayText = "No DO yet";
+        }
+
+        private void GridViewItems_DOCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
+        {
+            if (e.Column == null || e.Column.FieldName != "DONo" || e.RowHandle < 0) return;
+            object v = GridViewItems.GetRowCellValue(e.RowHandle, "DONo");
+            if (v == null || v == DBNull.Value || Convert.ToString(v).Trim().Length == 0)
+            {
+                e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 236, 179);
+                e.Appearance.ForeColor = System.Drawing.Color.FromArgb(150, 80, 0);
+                e.Appearance.Options.UseBackColor = true;
+                e.Appearance.Options.UseForeColor = true;
+            }
+        }
+
+        /// <summary>
+        /// Create DO (feedback ATP-13): one delivery order for the SELECTED machines of this saved
+        /// contract. Each machine must have its item code and serial, and the serial must still be in
+        /// stock -- checked when the list is shown, and again by ScpContractDO.CreateDO at the moment
+        /// the DO is made. A machine already delivered (the contract came from a DO, or a DO was
+        /// already made) is refused with the DO it is on.
+        /// </summary>
+        private void barCreateDO_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
+        {
+            if (_isNew || _contractKey <= 0)
+            { XtraMessageBox.Show("Save the contract first -- the DO is made from the saved contract.", "Create DO"); return; }
+            if (_dirty)
+            { XtraMessageBox.Show("Save your changes first -- the DO is made from the saved contract, and " +
+                "the machines on screen have changed since.", "Create DO"); return; }
+
+            // The selected machines, in grid order; the invisible group "machine" is never delivered.
+            System.Collections.Generic.List<ItemEditData> picked = new System.Collections.Generic.List<ItemEditData>();
+            foreach (int rh in GridViewItems.GetSelectedRows())
+            {
+                if (rh < 0) continue;
+                object noVal = GridViewItems.GetRowCellValue(rh, "No");
+                if (noVal == null || noVal == DBNull.Value) continue;
+                int idx = Convert.ToInt32(noVal) - 1;
+                if (idx < 0 || idx >= _items.Count || _items[idx].IsGroupItem) continue;
+                if (!picked.Contains(_items[idx])) picked.Add(_items[idx]);
+            }
+            if (picked.Count == 0)
+            { XtraMessageBox.Show("Select the machine(s) to deliver in the Service Item grid first " +
+                "(Ctrl+click or Shift+click to select several).", "Create DO"); return; }
+
+            string debtor = "", contractNo = "", deptNo = "", projNo = "";
+            try
+            {
+                DataTable hdr = _db.GetDataTable("SELECT DebtorCode, ContractNo, ISNULL(DeptNo,'') AS DeptNo, ISNULL(ProjNo,'') AS ProjNo " +
+                    "FROM dbo.zSCP2_Contract WHERE ContractKey=" + _contractKey, false);
+                if (hdr.Rows.Count == 0) { XtraMessageBox.Show("The contract is not in the database any more.", "Create DO"); return; }
+                debtor = AsStr(hdr.Rows[0]["DebtorCode"]).Trim();
+                contractNo = AsStr(hdr.Rows[0]["ContractNo"]).Trim();
+                deptNo = AsStr(hdr.Rows[0]["DeptNo"]).Trim();
+                projNo = AsStr(hdr.Rows[0]["ProjNo"]).Trim();
+            }
+            catch (Exception ex) { XtraMessageBox.Show("The contract could not be read:\r\n" + ex.Message, "Create DO"); return; }
+            if (debtor.Length == 0) { XtraMessageBox.Show("The contract has no customer.", "Create DO"); return; }
+
+            System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> cands =
+                new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
+            foreach (ItemEditData d in picked)
+            {
+                ServiceContractPhotocopier.Classes.ScpContractDO.Candidate c = new ServiceContractPhotocopier.Classes.ScpContractDO.Candidate();
+                c.ItemKey = d.ItemKey;
+                c.ServiceItemNo = string.IsNullOrEmpty(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
+                c.ItemCode = d.ItemCode ?? "";
+                c.SerialNo = d.SerialNumber ?? "";
+                c.Location = d.StockLocationCode ?? "";
+                cands.Add(c);
+            }
+
+            System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Check> checks;
+            try { checks = ServiceContractPhotocopier.Classes.ScpContractDO.CheckAvailable(_db, cands); }
+            catch (Exception ex) { XtraMessageBox.Show("The stock could not be checked:\r\n" + ex.Message, "Create DO"); return; }
+
+            System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> ok =
+                new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
+            System.Text.StringBuilder okText = new System.Text.StringBuilder();
+            System.Text.StringBuilder noText = new System.Text.StringBuilder();
+            foreach (ServiceContractPhotocopier.Classes.ScpContractDO.Check c in checks)
+            {
+                if (c.Ok)
+                {
+                    ok.Add(c.Machine);
+                    okText.Append("   ").Append(c.Machine.ServiceItemNo).Append("   ").Append(c.Machine.ItemCode)
+                          .Append("   S/N ").Append(c.Machine.SerialNo).Append("\r\n");
+                }
+                else
+                    noText.Append("   ").Append(c.Machine.ServiceItemNo).Append(" -- ").Append(c.Reason).Append("\r\n");
+            }
+            if (ok.Count == 0)
+            {
+                XtraMessageBox.Show("None of the selected machines can go out on a DO:\r\n\r\n" + noText,
+                    "Create DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            string ask = "Create a Delivery Order to " + debtor + ", dated " + DateTime.Today.ToString("dd/MM/yyyy") +
+                ", for " + ok.Count + " machine(s)?\r\n\r\n" + okText +
+                "\r\nEach goes out at no price -- the machine is billed through this contract, not sold on the DO." +
+                (noText.Length > 0 ? "\r\n\r\nLEFT OUT:\r\n" + noText : "");
+            if (XtraMessageBox.Show(ask, "Create DO", MessageBoxButtons.YesNo,
+                    noText.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            string docNo;
+            long docKey;
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                docNo = ServiceContractPhotocopier.Classes.ScpContractDO.CreateDO(_db, debtor, contractNo, deptNo, projNo,
+                    DateTime.Today, ok, out docKey);
+            }
+            catch (Exception ex)
+            {
+                Cursor = Cursors.Default;
+                XtraMessageBox.Show("The DO was not made:\r\n\r\n" + ex.Message, "Create DO",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            finally { Cursor = Cursors.Default; }
+
+            LoadMachineDOs();
+            RebuildItemsView();
+            XtraMessageBox.Show(docNo + " created for " + ok.Count + " machine(s).\r\n\r\n" +
+                "It is an ordinary AutoCount delivery order: open it from Sales > Delivery Order to print it, " +
+                "or to cancel it if it was made by mistake.", "Create DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>The paragraph that opens every warning about deleting or detaching a machine that
+        /// is on a DO (feedback ATP-13): the DO and the stock do not follow the machine.</summary>
+        private string DOWarning(ItemEditData d)
+        {
+            ServiceContractPhotocopier.Classes.ScpContractDO.MachineDO m = DOOf(d);
+            if (m == null) return "";
+            return "!!  THIS MACHINE IS ON DELIVERY ORDER " + m.DocNo +
+                (m.DocDate.HasValue ? " (" + m.DocDate.Value.ToString("dd/MM/yyyy") + ")" : "") + "  !!\r\n" +
+                "Serial " + (d.SerialNumber ?? "") + " went out to the customer on that DO. Removing the machine here " +
+                "does NOT cancel the DO and does NOT put the serial back into stock -- AutoCount will still show " +
+                "the customer holding it. If the machine did not stay with the customer, cancel the DO or return " +
+                "the machine in AutoCount as well.\r\n\r\n";
         }
 
         /// <summary>The contract customer's AutoCount branches (dbo.Branch), for the machine grid's
