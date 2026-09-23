@@ -1736,3 +1736,16 @@ User (screenshot: CSSI-000003 HR invoice, COMMIT 0.00 "MIN-AUTO", WAIVE 0.00 "au
 - Found on the way: `ScpBillingRows.Recalc` never set NewMoneyRules, so a rebate on a new-layout contract was priced off the amount (3,709.94) while the invoice takes it off as copies (3,710.00). Now set from the row, as Build does.
 - Ctrl+Shift+U (user, same turn: "请为 CSSI-000003 生成json 请在这里也加Ctrl+Shift+U ... 只是生成json 那我可以copy"): `ScpInvoiceRun.TestFetchJson` -> dialog with Copy, for the picked invoice's contract; Code + SerialNumber + TotalBK/TotalCL (last reading + 100, TEST Fetch's sample rule) + LastAuditDate (today in the month, else the 1st). Nothing fetched or saved. JsonPasteMeterReadingApiClient reads the CSSI-000003 JSON (2 machines).
 - RunTermsTest (read-only against AED_ATPCHECK for CSSI-000003, and ATPTEST for timing): waive -500.00, top-up 0.00, HR 3,900.01; ALL OK. Not clicked on screen. 1.5.0.9 re-cut: 2824599 bytes, SHA256 `94BCB487…9413`; tag `v1.0.9-uat` moved (local only; no book had 1.5.0.9).
+
+### 23/9 — OPEN, waiting on the customer: how a tier ladder prices (feedback ATP-3)
+
+Feedback portal ticket **ATP-3 "Tier Calculation Wrong For Meter"** (Pending, screenshot = the Calculation Test window): ladder 100 free / up to 1,000 at 0.023 / then 0.021, usage 1,648. The engine billed 1,548 x 0.021 = 32.51 -- THRESHOLD, which `ScpMultiPrice` documents as a deliberate decision ("the copies decide the band, and that band's rate is charged on every billed copy"; an invoice line is one Qty x Unit Price). The ticket expects the copies SLICED: 1,000 at the middle rate, the rest at the top rate.
+
+Nothing changed. The user asked for a message to the customer and said to wait: "不要做先 顾客要讨论先".
+
+Two questions are with the customer, on a 100 free / 0.024 / 0.020 ladder and 1,648 copies:
+- **A** free counted inside the first band: 900 x 0.024 + 648 x 0.020 = 34.56.
+- **B** free deducted first, then bands from copy 1 (what the ticket's arithmetic does): 1,000 x 0.024 + 548 x 0.020 = 34.96. The user corrected me to B's shape ("应该是 548 是 0.020"), but the customer still has to choose.
+- And how the invoice prints it: one line per band (our suggestion -- each line multiplies back) or one line at the blended rate (0.022584, a price on no contract).
+
+Evidence gathered: the old V8 book has 99 ladders and every real one is "free copies + ONE price" -- the only two multi-rate ladders there are called IMPORT and testing, on 0 machines. Today AED_ATPCHECK has exactly ONE meter on a multi-rate ladder (CSSI-000003.1 BK, the ticket's own test) and AED_ATPTEST none, so whichever rule is chosen moves no existing money.
