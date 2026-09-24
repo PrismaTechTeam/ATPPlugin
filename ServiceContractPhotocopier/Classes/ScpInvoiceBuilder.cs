@@ -57,6 +57,13 @@ namespace ServiceContractPhotocopier.Classes
         public DateTime? RentalStartDate;  // n/N anchor
         public int RentalMonths;           // N (0 = open-ended, no n/N text)
         public char RentalBasis = 'A';     // A accrual / P prepayment
+        /// <summary>Feedback ATP-10: the rental months this line bills -- 1, or 2 when a machine joined
+        /// a prepaid contract after the bill that should have carried its first month.</summary>
+        public int RentalMonthsBilled = 1;
+        /// <summary>ATP-10: the prepaid rental months this line pays for (0 = accrual).</summary>
+        public int RentalFromN, RentalToN;
+        /// <summary>ATP-10: free-rental months a two-month line used up (counted down at Generate).</summary>
+        public int RentalFreeUsed;
         public string MachineStatus = "";  // API fetch status (ONLINE/OFFLINE/"") — drives the
                                            // advanced per-status invoice number format
         public string TrackingId = "";     // offline reading report id ("MR-yymmdd-nnn") — the job's
@@ -186,6 +193,20 @@ namespace ServiceContractPhotocopier.Classes
             if (ln.IsFlat)
             {
                 ln.Usage = 0m; ln.BillCopies = 0m;
+                if (ln.RentalMonthsBilled > 1)
+                {
+                    // ATP-10: a machine that joined a prepaid contract after the bill that should have
+                    // carried its first month pays for two months on this one. Free-rental months
+                    // count month by month: one left means one of the two is free.
+                    int months = ln.RentalMonthsBilled;
+                    int free = ln.Foc > 0m ? (int)Math.Min(Math.Floor(ln.Foc), months) : 0;
+                    decimal one = ln.Rate < ln.MinCharges ? ln.MinCharges : ln.Rate;
+                    ln.RentalFreeUsed = free;
+                    ln.UseMin = false;
+                    ln.EffUnitPrice = one;
+                    ln.Charge = one * (months - free);
+                    return;
+                }
                 if (ln.Foc > 0m) { ln.Charge = 0m; ln.UseMin = false; ln.EffUnitPrice = 0m; return; }
                 decimal flat = ln.Rate;
                 if (flat < ln.MinCharges) flat = ln.MinCharges;
@@ -906,12 +927,26 @@ namespace ServiceContractPhotocopier.Classes
         {
             if (row == null || row.Leader == null) return baseText;
             MeterBillLine ln = row.Leader;
-            if (!ln.NewMoneyRules) return baseText;
+            if (!ln.NewMoneyRules)
+            {
+                // A rental billed in advance names the months it pays for on every invoice (ATP-10) --
+                // a first bill reading just "MONTHLY RENTAL" does not say it is next month's.
+                string ahead = ln.IsRental && ln.RentalBasis == 'P' ? ScpInvoiceLayout.RentalCounterText(ln) : "";
+                if (ahead.Length > 0 && (baseText ?? "").IndexOf(ahead.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
+                    return (baseText ?? "").TrimEnd() + ahead;
+                return baseText;
+            }
 
             string head = (baseText ?? "").Trim();
             // The instalment counter belongs to the rental sentence, not to the machine list.
-            if (ln.IsRental && ln.RentalMonths > 0)
-                head += " (" + ScpInvoiceLayout.RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
+            if (ln.IsRental)
+            {
+                string counter = ScpInvoiceLayout.RentalCounterText(ln);
+                // A prepaid line whose description already names its months does not say them twice.
+                if (!(ln.RentalBasis == 'P' && counter.Length > 0
+                      && head.IndexOf(counter.Trim(), StringComparison.OrdinalIgnoreCase) >= 0))
+                    head += counter;
+            }
 
             // A rental the deal gives free this month says so ON THE LINE. The amount column
             // prints 0.00 -- writing the word "FOC" there is the report layout's decision, and

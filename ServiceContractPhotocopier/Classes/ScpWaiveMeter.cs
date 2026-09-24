@@ -54,6 +54,7 @@ namespace ServiceContractPhotocopier.Classes
                     DateTime? anchor = l.RentalStartDate ?? l.EffStartDate;
                     if (!anchor.HasValue) { l.Charge = 0m; l.UseMin = false; continue; }   // no date to count from
                     int monthNo = (genYear * 12 + genMonth) - (anchor.Value.Year * 12 + anchor.Value.Month) + 1;
+                    if (l.RentalBasis == 'P') monthNo++;   // ATP-10: the rental on this bill is next month's
                     if (monthNo >= 1 && monthNo <= l.WaiveFirstNMonths)
                     {
                         inWindow = true;

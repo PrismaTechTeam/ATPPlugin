@@ -42,6 +42,7 @@ menu accordingly.
 | 5 | **Group Rental** groups machines by meter type. If your rule is really "same remark and same customer", say so — it has never been checked against real data. |
 | 6 | Four rules about a contract's month count were assumed, not agreed: which month counts as month 1, what a period bills, what happens to a contract taken over mid-life, and how contracts imported from V8 start. Please confirm them against a contract you know. |
 | 7 | Two places fail quietly: if the listing's query errors it prints a **blank sheet** rather than saying so, and the tidy-up after a deleted invoice can stop half-way without telling anyone. A blank listing is a symptom — tell us, do not print it. |
+| 8 | On a contract billing its rental **in advance**, a machine that joins after the bill that should have carried its first month pays two months on its next bill. If that machine also has a rental waive for its first months, the waive gives back one month on that bill, not two. Check such a machine's first invoice. |
 
 ---
 
@@ -56,15 +57,16 @@ e-mail path. **SMTP has never been sent end to end** — bulk e-mail is untested
 
 | | What |
 |---|---|
-| 8 | **About a third of the module's menu says "(IN MAINTENANCE)"** — 16 Reports and 6 Inquiries. They were written for the old contract module and open a notice instead of an empty screen. They will come back. |
-| 9 | Meter readings are **simulated** until somebody switches the API to LIVE. Nothing on screen says which mode it is in. |
-| 10 | **Bulk e-mail reaches nobody.** The whitelist is on and holds three of our addresses; everyone else is skipped, and the send log says so per recipient. |
-| 11 | The bulk-email template preview shows a real customer's name as its example. |
-| 12 | Billing Format's sample preview is permanently dated July 2026. |
-| 13 | Contracts saved before 17 September show blank Created By / Modified By. Nothing recorded them until then. |
-| 14 | **Cancelling** an invoice inside AutoCount is not covered by the delete-order rule. The money is voided but the readings stay marked as billed, so that month will not come back on the list. Delete it rather than cancel it. |
-| 15 | On a contract priced **each tier at its own rate**, the Summary Sales Invoice Meter Listing shows one Rate per machine -- its charge divided by its copies, e.g. 0.022584 -- where the invoice prints a row per tier at the agreed rates. The Charge on the listing is the invoice's. |
-| 16 | A tier price whose **name** promises free copies -- "BK +P - 0.02 FOC20K" -- no longer carries them: when this version first opened the book they moved into the Free Qty of each meter on it. A meter given that tier price from now on starts with the Free Qty you key in, not the name's. |
+| 9 | **About a third of the module's menu says "(IN MAINTENANCE)"** — 16 Reports and 6 Inquiries. They were written for the old contract module and open a notice instead of an empty screen. They will come back. |
+| 10 | Meter readings are **simulated** until somebody switches the API to LIVE. Nothing on screen says which mode it is in. |
+| 11 | **Bulk e-mail reaches nobody.** The whitelist is on and holds three of our addresses; everyone else is skipped, and the send log says so per recipient. |
+| 12 | The bulk-email template preview shows a real customer's name as its example. |
+| 13 | Billing Format's sample preview is permanently dated July 2026. |
+| 14 | Contracts saved before 17 September show blank Created By / Modified By. Nothing recorded them until then. |
+| 15 | **Cancelling** an invoice inside AutoCount is not covered by the delete-order rule. The money is voided but the readings stay marked as billed, so that month will not come back on the list. Delete it rather than cancel it. |
+| 16 | On a contract priced **each tier at its own rate**, the Summary Sales Invoice Meter Listing shows one Rate per machine -- its charge divided by its copies, e.g. 0.022584 -- where the invoice prints a row per tier at the agreed rates. The Charge on the listing is the invoice's. |
+| 17 | A tier price whose **name** promises free copies -- "BK +P - 0.02 FOC20K" -- no longer carries them: when this version first opened the book they moved into the Free Qty of each meter on it. A meter given that tier price from now on starts with the Free Qty you key in, not the name's. |
+| 18 | A rental billed **in advance** on an invoice of its own, with a Rental invoice day, is dated that day in the month it pays for -- September's run makes October's rental invoice dated 1 October -- and its date can be moved only within October. |
 
 ---
 

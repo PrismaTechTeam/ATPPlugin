@@ -204,7 +204,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             try
             {
                 Dictionary<string, List<decimal[]>> ladders;
-                _rows = ScpBillingRows.ForContract(_db, _contractKey, _year, _month, out ladders);
+                // The rental basis as the screen has it (ATP-10): which rental month each bill carries
+                // decides which rows exist at all, so it is given to the load, not patched after.
+                _rows = ScpBillingRows.ForContract(_db, _contractKey, _year, _month,
+                    _screen == null ? null : (_screen.RentalInAdvance ? "P" : "A"), out ladders);
                 _ladders = ladders ?? new Dictionary<string, List<decimal[]>>(StringComparer.OrdinalIgnoreCase);
                 ApplyScreen(_rows, _ladders);
             }
@@ -1109,5 +1112,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// <summary>Tier pricing: each tier at its own rate (true) or the whole month at the tier
         /// reached (false, the default) -- ATP-3.</summary>
         public bool TierIncremental;
+        /// <summary>Rental billed a month ahead (true) or with the month's copies (false, the default)
+        /// -- ATP-10.</summary>
+        public bool RentalInAdvance;
     }
 }

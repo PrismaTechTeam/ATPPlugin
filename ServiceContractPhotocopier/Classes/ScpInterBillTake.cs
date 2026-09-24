@@ -361,6 +361,18 @@ namespace ServiceContractPhotocopier.Classes
                             bf.ExecuteNonQuery();
                         }
 
+                        // ATP-10: whether the rental is billed a month ahead. The other book keeps it on
+                        // the contract AND on each machine (its contract screen keeps them in step); the
+                        // machines are what were copied, so the contract follows them.
+                        using (SqlCommand rb = new SqlCommand(
+                            "UPDATE c SET c.RentalBasis = 'P' FROM dbo.zSCP2_Contract c WHERE c.ContractKey = @k " +
+                            "AND EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeter m JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                            "            WHERE i.ContractKey = c.ContractKey AND ISNULL(m.RentalBasis,'A') = 'P')", cn, tx))
+                        {
+                            rb.Parameters.AddWithValue("@k", ck);
+                            rb.ExecuteNonQuery();
+                        }
+
                         tx.Commit();
                         res.ContractKey = ck;
                         res.ContractNo = no;
@@ -694,11 +706,12 @@ namespace ServiceContractPhotocopier.Classes
                 " InitialReading, RentalMonths, RentalBasis, WaiveFirstNMonths, WaiveTargetAmount, " +
                 " WaivePartialPct, WaiveScope, WaivePartialThreshold, WaivePartialAmount, " +
                 " CommitScope, LastModified) " +
-                "VALUES (@ik, @type, @desc, @role, @msn, @min, @rate, '', 0, 0, @init, 0, 'A', 0, 0, 100, 'S', " +
+                "VALUES (@ik, @type, @desc, @role, @msn, @min, @rate, '', 0, 0, @init, 0, @rb, 0, 0, 100, 'S', " +
                 " 0, 0, 'S', GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
             {
                 cmd.Parameters.AddWithValue("@ik", ik);
+                cmd.Parameters.AddWithValue("@rb", t.RentalBasis == "P" ? "P" : "A");   // ATP-10
                 cmd.Parameters.AddWithValue("@type", t.MeterTypeCode);
                 cmd.Parameters.AddWithValue("@desc", t.Description);
                 cmd.Parameters.AddWithValue("@role", t.MeterRole);

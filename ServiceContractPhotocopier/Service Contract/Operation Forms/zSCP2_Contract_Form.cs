@@ -42,6 +42,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _db = db;
             _isNew = true;
             CmbTierMode.SelectedIndex = 0;   // ATP-3: a new contract prices tiers the way every contract did
+            CmbRentalBasis.SelectedIndex = 0;   // ATP-10: and bills its rental with the month's copies
             this.Load += new EventHandler(OnFormLoad);
         }
 
@@ -61,7 +62,53 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _isNew = true;
             _cloneFromKey = cloneAsNew ? sourceKey : 0;
             CmbTierMode.SelectedIndex = 0;   // the source's own mode is loaded over this when it is copied
+            CmbRentalBasis.SelectedIndex = 0;
             this.Load += new EventHandler(OnFormLoad);
+        }
+
+        // ATP-10: once a rental of this contract has been billed, WHEN its rental is billed can no
+        // longer change -- switching mid-way bills one month twice (with the copies -> ahead) or
+        // misses one (ahead -> with the copies). The invoice that locks it is named; deleting the
+        // contract's rental invoices unlocks it. A new contract, and a copy of one, is never locked.
+        private string _rentalBasisLockedBy = "";
+
+        private void LockRentalBasisIfBilled()
+        {
+            _rentalBasisLockedBy = "";
+            if (!_isNew && _contractKey > 0)
+            {
+                try
+                {
+                    object o = _db.ExecuteScalar(
+                        "SELECT TOP 1 e.InvoicedDocNo FROM dbo.zSCP2_MeterEntry e " +
+                        "JOIN dbo.zSCP2_ItemMeter m ON m.ItemMeterKey = e.ItemMeterKey " +
+                        "JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                        "WHERE i.ContractKey = " + _contractKey + " AND ISNULL(e.InvoicedDocNo,'') <> '' " +
+                        "  AND " + ServiceContractPhotocopier.Classes.ScpStrategy.RentalRoleSql("m") + " " +
+                        "ORDER BY e.PeriodYear, e.PeriodMonth");
+                    if (o != null && o != DBNull.Value) _rentalBasisLockedBy = Convert.ToString(o).Trim();
+                }
+                catch { }
+            }
+            bool locked = _rentalBasisLockedBy.Length > 0;
+            CmbRentalBasis.Properties.ReadOnly = locked;
+            CmbRentalBasis.ToolTip = locked
+                ? "Locked: this contract's rental has already been billed (" + _rentalBasisLockedBy + "). " +
+                  "Changing when it is billed now would bill one month twice or miss one."
+                : "With the month's copies: each bill carries that month's rental. In advance: the month before " +
+                  "the start bills the first month's rental, each bill after carries next month's, the last " +
+                  "month bills copies only.";
+        }
+
+        private void CmbRentalBasis_EditValueChanging(object sender, DevExpress.XtraEditors.Controls.ChangingEventArgs e)
+        {
+            if (_rentalBasisLockedBy.Length == 0) return;
+            e.Cancel = true;
+            XtraMessageBox.Show(
+                "Locked: this contract's rental has already been billed (" + _rentalBasisLockedBy + ")." +
+                Environment.NewLine + Environment.NewLine +
+                "Changing when the rental is billed now would bill one month twice or miss one.",
+                "Rental billed", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private long PickContract(DataTable src, string title)
@@ -788,6 +835,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkRentalSeparate.EditValueChanged += h;
             ChkPeriodByContract.EditValueChanged += h;
             CmbTierMode.EditValueChanged += h;   // ATP-3
+            CmbRentalBasis.EditValueChanged += h;   // ATP-10
+            CmbRentalBasis.EditValueChanging += CmbRentalBasis_EditValueChanging;
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
             if (cboNoOfMonth != null) cboNoOfMonth.EditValueChanged += h;
             if (cboTermUnit != null) cboTermUnit.EditValueChanged += h;
@@ -1419,6 +1468,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
             // and every contract's rule before) or each tier at its own rate.
             CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
+            // ATP-10: the rental with the month's copies (the default, every contract's rule before)
+            // or a month ahead -- and whether that can still change.
+            CmbRentalBasis.SelectedIndex = r.Table.Columns.Contains("RentalBasis") && AsStr(r["RentalBasis"]).Trim().ToUpperInvariant() == "P" ? 1 : 0;
+            LockRentalBasisIfBilled();
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;
@@ -5717,6 +5770,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         SaveMoreHeader(conn, tx);
                         SaveContractStrategyRules(conn, tx);   // this contract's own strategy rules copy
                         SaveRentalGroupPrices(conn, tx);       // one price per merged rental line
+                        // ATP-10: the machines' own rental basis follows the contract's, so a book that
+                        // takes this contract through Inter-Billing (which copies it per machine) agrees.
+                        ExecNonQuery(conn, tx,
+                            "UPDATE m SET m.RentalBasis = c.RentalBasis FROM [dbo].[zSCP2_ItemMeter] m " +
+                            "JOIN [dbo].[zSCP2_Item] i ON i.ItemKey = m.ItemKey " +
+                            "JOIN [dbo].[zSCP2_Contract] c ON c.ContractKey = i.ContractKey " +
+                            "WHERE i.ContractKey = @ck AND ISNULL(m.RentalBasis,'A') <> c.RentalBasis",
+                            P("@ck", _contractKey));
 
                         // Change History: diff old vs new contract row (both UPDATEs included); new
                         // contracts get a single CREATED marker. Never blocks the save.
@@ -5794,9 +5855,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, TierMode, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, TierMode, RentalBasis, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@tiermode,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@tiermode,@rentalbasis,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -6234,6 +6295,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             screen.BillSeparate = ChkBillSeparate.Checked;
             screen.RentalSeparate = ChkRentalSeparate.Checked;
             screen.TierIncremental = CmbTierMode.SelectedIndex == 1;
+            screen.RentalInAdvance = CmbRentalBasis.SelectedIndex == 1;
             using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey, screen))
                 f.ShowDialog(this);
         }
@@ -6310,6 +6372,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // in the preview rather than the one that was last saved.
                 f.LineTerms = _sampleTerms ?? _lineTerms;
                 f.TierIncremental = CmbTierMode.SelectedIndex == 1;
+                f.RentalInAdvance = CmbRentalBasis.SelectedIndex == 1;
                 f.ShowModel = _sampleShowModel ?? _showModel;
                 f.ShowSerial = _sampleShowSerial ?? _showSerial;
                 f.ShowUnits = _sampleShowUnits ?? _showUnits;
@@ -6537,6 +6600,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
                 "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, TierMode=@tiermode, " +
+                // ATP-10: once a rental of the contract is billed, the stored basis stands, whatever the
+                // screen held when it was opened -- a rental billed meanwhile locks it here too.
+                "RentalBasis = CASE WHEN EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry xe " +
+                "  JOIN dbo.zSCP2_ItemMeter xm ON xm.ItemMeterKey = xe.ItemMeterKey " +
+                "  JOIN dbo.zSCP2_Item xi ON xi.ItemKey = xm.ItemKey " +
+                "  WHERE xi.ContractKey = @ck AND ISNULL(xe.InvoicedDocNo,'') <> '' " +
+                "    AND " + ServiceContractPhotocopier.Classes.ScpStrategy.RentalRoleSql("xm") + ") " +
+                "  THEN RentalBasis ELSE @rentalbasis END, " +
                 "FOCResetUnit=@focresetunit, FOCResetN=@focresetn, " +
                 "BillingFormatCode=@fmtcode, RentalLineMode=@rlmode, MeterLineMode=@mlmode, UseNewLayout=@newlayout, " +
                 "ShowModelOnLine=@showmodel, ShowSerialOnLine=@showserial, ShowUnitsOnLine=@showunits, " +
@@ -6601,6 +6672,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             cmd.Parameters.AddWithValue("@emailtpl", emailTpl > 0 ? (object)emailTpl : DBNull.Value);
             cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
             cmd.Parameters.AddWithValue("@tiermode", CmbTierMode.SelectedIndex == 1 ? "I" : "T");
+            cmd.Parameters.AddWithValue("@rentalbasis", CmbRentalBasis.SelectedIndex == 1 ? "P" : "A");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
             cmd.Parameters.AddWithValue("@focresetunit", focResetUnit);
@@ -7328,6 +7400,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
             // and every contract's rule before) or each tier at its own rate.
             CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
+            // ATP-10: the rental with the month's copies (the default, every contract's rule before)
+            // or a month ahead -- and whether that can still change.
+            CmbRentalBasis.SelectedIndex = r.Table.Columns.Contains("RentalBasis") && AsStr(r["RentalBasis"]).Trim().ToUpperInvariant() == "P" ? 1 : 0;
+            LockRentalBasisIfBilled();
             _loadedRentalDay = r.Table.Columns.Contains("RentalBillingDay") && r["RentalBillingDay"] != DBNull.Value
                 ? Math.Max(0, Math.Min(28, Convert.ToInt32(r["RentalBillingDay"]))) : 0;
             if (SpnRentalDay != null) SpnRentalDay.Value = _loadedRentalDay;

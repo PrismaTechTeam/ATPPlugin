@@ -1058,6 +1058,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v7_SourceInterBill.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_MeterEntry_v8_ReadingDateEdited.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v19_TierMode.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v20_RentalBasis.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP_MeterMultiPriceItem_v2_FreeBandToFreeQty.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v18_BillFrom.sql" />
     <EmbeddedResource Include="SQL\02_CreateTable_zSCP2_ContractPeriodSkip.sql" />

@@ -30,7 +30,7 @@ namespace ServiceContractPhotocopier.Classes
             "City","PostalCode","State","Country","Fax","Ref1","Ref2","Ref3","Ref4",
             "DelBranchCode","DelBranchName","DelAddress","DelCity","DelPostalCode","DelState","DelCountry",
             "DelPhone","DelFax","DelEmail","DelContactPerson",
-            "StrategyCode","RentalSeparateInvoice","PeriodFollowContract","TierMode","FOCResetUnit","FOCResetN"
+            "StrategyCode","RentalSeparateInvoice","PeriodFollowContract","TierMode","RentalBasis","FOCResetUnit","FOCResetN"
         };
 
         /// <summary>Reads the audited columns of one contract as normalised strings (dates yyyy-MM-dd,

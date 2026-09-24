@@ -106,6 +106,9 @@ namespace ServiceContractPhotocopier.Classes
         /// books bill the same machine is that the two prices are different.</summary>
         public decimal ChargesRate;
         public decimal MinimumCharges;
+        /// <summary>'A' / 'P': the rental billed with the month's copies or a month ahead (ATP-10). The
+        /// other book keeps its machines in step with its contract.</summary>
+        public string RentalBasis = "A";
 
         /// <summary>What is compared later to decide "they changed this".
         ///
@@ -315,7 +318,8 @@ namespace ServiceContractPhotocopier.Classes
                         "SELECT m.ItemMeterKey, m.ItemKey, ISNULL(m.MeterTypeCode,'') AS MeterTypeCode, " +
                         "       ISNULL(m.MeterRole,'') AS MeterRole, ISNULL(m.MachineSerialNo,'') AS MachineSerialNo, " +
                         "       ISNULL(m.Description,'') AS Description, ISNULL(m.InitialReading,0) AS InitialReading, " +
-                        "       ISNULL(m.ChargesRate,0) AS ChargesRate, ISNULL(m.MinimumCharges,0) AS MinimumCharges " +
+                        "       ISNULL(m.ChargesRate,0) AS ChargesRate, ISNULL(m.MinimumCharges,0) AS MinimumCharges, " +
+                        "       ISNULL(m.RentalBasis,'A') AS RentalBasis " +
                         "  FROM dbo.zSCP2_ItemMeter m " +
                         "  JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
                         " WHERE i.ContractKey = @ck ORDER BY m.ItemKey, m.ItemMeterKey", cn))
@@ -335,6 +339,7 @@ namespace ServiceContractPhotocopier.Classes
                                 t.InitialReading = Convert.ToDecimal(r["InitialReading"]);
                                 t.ChargesRate = Convert.ToDecimal(r["ChargesRate"]);
                                 t.MinimumCharges = Convert.ToDecimal(r["MinimumCharges"]);
+                                t.RentalBasis = Str(r["RentalBasis"]).Trim().ToUpperInvariant() == "P" ? "P" : "A";
                                 ScpRemoteMachine owner;
                                 if (byKey.TryGetValue(t.ItemKey, out owner)) owner.Meters.Add(t);
                             }

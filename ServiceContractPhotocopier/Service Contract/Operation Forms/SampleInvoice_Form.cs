@@ -103,6 +103,10 @@ namespace ServiceContractPhotocopier
         /// the whole month at the tier reached (false) -- ATP-3. Set by the caller before ShowDialog.</summary>
         public bool TierIncremental;
 
+        /// <summary>The rental billed a month ahead, as the contract screen has it (ATP-10): the sample's
+        /// rental line then pays for NEXT month, "(14/36) OCT 2026". Set by the caller.</summary>
+        public bool RentalInAdvance;
+
         private void OnFormLoad(object sender, EventArgs e)
         {
             _legacyRentalFold = ScpInvoiceLayout.LegacyRentalFold(_db);
@@ -275,6 +279,14 @@ namespace ServiceContractPhotocopier
                         l.IsWaiveMeter = isWaive;
                         l.RentalMonths = 36;
                         l.RentalStartDate = period.AddMonths(-12);
+                        l.RentalBasis = RentalInAdvance ? 'P' : 'A';
+                        if (isRental && RentalInAdvance)
+                        {
+                            // This month's bill carries next month's rental (ATP-10).
+                            int n = ScpStrategy.RentalPeriodN(l.RentalStartDate.Value, 'P', period.Year, period.Month);
+                            l.RentalFromN = n;
+                            l.RentalToN = n;
+                        }
                         if (isCommit)
                         {
                             // The shortfall IS knowable here -- the copies on this preview are the

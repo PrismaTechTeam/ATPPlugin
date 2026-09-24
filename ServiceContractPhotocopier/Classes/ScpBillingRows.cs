@@ -154,7 +154,14 @@ namespace ServiceContractPhotocopier.Classes
         dt.Columns.Add("Late", typeof(bool));
         dt.Columns.Add("RentalStartDate", typeof(DateTime)); // rental period anchor (hidden; n/N)
         dt.Columns.Add("RentalMonths", typeof(int));       // rental total periods N (hidden)
-        dt.Columns.Add("RentalBasis", typeof(string));     // A accrual / P prepayment (hidden)
+        dt.Columns.Add("RentalBasis", typeof(string));     // A accrual / P prepayment -- the CONTRACT's (ATP-10; hidden)
+        dt.Columns.Add("RentalFromN", typeof(int));        // ATP-10: first rental month this bill pays for in advance (0 = accrual; hidden)
+        dt.Columns.Add("RentalToN", typeof(int));          // ATP-10: last one (hidden)
+        dt.Columns.Add("RentalMonthsDue", typeof(int));    // ATP-10: rental months on this bill -- 1, or 2 for a machine that joined late (hidden)
+        dt.Columns.Add("LastRentalPeriod", typeof(int));   // ATP-10: YYYYMM this meter was last billed before this month, 0 = never (hidden)
+        dt.Columns.Add("PrevHandled", typeof(bool));       // ATP-10: the contract's previous month is billed or skipped (hidden)
+        dt.Columns.Add("EffExpiry", typeof(DateTime));     // ATP-10: the machine's effective end -- its last month bills no rental in advance (hidden)
+        dt.Columns.Add("BilledNow", typeof(bool));         // ATP-10: this meter's month is already invoiced (hidden)
         dt.Columns.Add("NeedManual", typeof(bool));        // SNAPSHOT tab membership: set at load/fetch, NOT live —
                                                            // keying a reading must not make the row vanish mid-work (hidden)
         dt.Columns.Add("Locked", typeof(bool));            // billing-day auto-fetch snapshot lock — reading frozen (hidden)
@@ -249,7 +256,15 @@ namespace ServiceContractPhotocopier.Classes
                 "ISNULL(m.WaiveFirstNMonths,0) AS WaiveFirstNMonths, ISNULL(m.WaiveTargetAmount,0) AS WaiveTargetAmount, " +
                 "ISNULL(m.WaivePartialThreshold,0) AS WaivePartialThreshold, " +
                 "ISNULL(m.WaivePartialAmount,0) AS WaivePartialAmount, ISNULL(m.WaiveScope,'BKCL') AS WaiveScope, " +
-                "m.RentalStartDate, ISNULL(m.RentalMonths,0) AS RentalMonths, ISNULL(m.RentalBasis,'A') AS RentalBasis, " +
+                // The CONTRACT says whether its rental is billed with the month's copies or a month
+                // ahead (feedback ATP-10); the old per-machine field is kept in step by the contract.
+                "m.RentalStartDate, ISNULL(m.RentalMonths,0) AS RentalMonths, ISNULL(c.RentalBasis,'A') AS RentalBasis, " +
+                // ...and, for a contract billing in advance: the last month this meter was billed, whether
+                // the contract's previous month is billed or skipped, and whether this month is billed.
+                "ISNULL(lrb.P, 0) AS LastRentBilledP, CASE WHEN ph.ContractKey IS NULL THEN 0 ELSE 1 END AS PrevHandled, " +
+                "CASE WHEN ISNULL(c.RentalBasis,'A') = 'P' AND EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry xb " +
+                "  WHERE xb.ItemMeterKey = m.ItemMeterKey AND xb.PeriodYear = " + year + " AND xb.PeriodMonth = " + month +
+                "    AND ISNULL(xb.InvoicedDocNo,'') <> '') THEN 1 ELSE 0 END AS BilledNow, " +
                 "COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) AS EffExpiry, " +
                 "COALESCE(i.ServiceStartDate, c.ServiceStartDate) AS EffStart, " +
                 "lr.LastReading, lr.LastDate, " +
@@ -288,6 +303,23 @@ namespace ServiceContractPhotocopier.Classes
                 "  LEFT JOIN dbo.IV ivh ON ivh.DocKey = z2.InvoicedDocKey " +
                 "  WHERE z2.rn = 1) li " +
                 "ON li.ItemMeterKey = m.ItemMeterKey " +
+                // ATP-10: contracts billing their rental in advance only -- nothing else pays for this.
+                "LEFT JOIN (SELECT e3.ItemMeterKey, MAX(e3.PeriodYear * 100 + e3.PeriodMonth) AS P " +
+                "  FROM dbo.zSCP2_MeterEntry e3 " +
+                "  JOIN dbo.zSCP2_ItemMeter m3 ON m3.ItemMeterKey = e3.ItemMeterKey " +
+                "  JOIN dbo.zSCP2_Item i3 ON i3.ItemKey = m3.ItemKey " +
+                "  JOIN dbo.zSCP2_Contract c3 ON c3.ContractKey = i3.ContractKey AND ISNULL(c3.RentalBasis,'A') = 'P' " +
+                "  WHERE ISNULL(e3.InvoicedDocNo,'') <> '' AND e3.PeriodYear * 100 + e3.PeriodMonth < " + (year * 100 + month) + " " +
+                "  GROUP BY e3.ItemMeterKey) lrb ON lrb.ItemMeterKey = m.ItemMeterKey " +
+                "LEFT JOIN (SELECT DISTINCT i5.ContractKey FROM dbo.zSCP2_MeterEntry e5 " +
+                "  JOIN dbo.zSCP2_ItemMeter m5 ON m5.ItemMeterKey = e5.ItemMeterKey " +
+                "  JOIN dbo.zSCP2_Item i5 ON i5.ItemKey = m5.ItemKey " +
+                "  JOIN dbo.zSCP2_Contract c5 ON c5.ContractKey = i5.ContractKey AND ISNULL(c5.RentalBasis,'A') = 'P' " +
+                "  WHERE e5.PeriodYear = " + (month == 1 ? year - 1 : year) + " AND e5.PeriodMonth = " + (month == 1 ? 12 : month - 1) +
+                "    AND ISNULL(e5.InvoicedDocNo,'') <> '' " +
+                "  UNION SELECT sk.ContractKey FROM dbo.zSCP2_ContractPeriodSkip sk " +
+                "  WHERE sk.UndoneAt IS NULL AND sk.PeriodYear = " + (month == 1 ? year - 1 : year) +
+                "    AND sk.PeriodMonth = " + (month == 1 ? 12 : month - 1) + ") ph ON ph.ContractKey = c.ContractKey " +
                 // ALL meters of the item are shown — BK/CL usage meters AND the non-reading ones
                 // (rental RA-*, minimum MIN-*, fax, etc., role NA). Previously only BK/CL showed,
                 // which made the item's other meters look "missing".
@@ -306,6 +338,17 @@ namespace ServiceContractPhotocopier.Classes
         public static DataTable Load(DBSetting db, int year, int month,
                                     string inactiveFilter, string dayFilter,
                                     string searchFilter, string expiryFilter,
+                                    out Dictionary<string, List<decimal[]>> ladders)
+        {
+            return Load(db, year, month, inactiveFilter, dayFilter, searchFilter, expiryFilter, null, out ladders);
+        }
+
+        /// <summary>The same, with the rental basis given rather than read ("A" / "P"; null = each
+        /// contract's own). Only Calculation Test does this: it bills the setting on the contract
+        /// screen, saved or not.</summary>
+        public static DataTable Load(DBSetting db, int year, int month,
+                                    string inactiveFilter, string dayFilter,
+                                    string searchFilter, string expiryFilter, string rentalBasisOverride,
                                     out Dictionary<string, List<decimal[]>> ladders)
         {
             DataTable src = Query(db, Sql(year, month, inactiveFilter, dayFilter,
@@ -428,9 +471,111 @@ namespace ServiceContractPhotocopier.Classes
                     rentalMonths = ServiceContractPhotocopier.Classes.ScpStrategy.TermMonths(r["EffStart"], r["EffExpiry"]);
                 g["RentalMonths"] = rentalMonths;
                 g["RentalBasis"] = S(r["RentalBasis"]) == "P" ? "P" : "A";
+                if (rentalBasisOverride == "A" || rentalBasisOverride == "P") g["RentalBasis"] = rentalBasisOverride;
+                g["RentalFromN"] = 0;
+                g["RentalToN"] = 0;
+                g["RentalMonthsDue"] = 1;
+                g["LastRentalPeriod"] = r["LastRentBilledP"] == DBNull.Value ? 0 : Convert.ToInt32(r["LastRentBilledP"]);
+                g["PrevHandled"] = r["PrevHandled"] != DBNull.Value && Convert.ToInt32(r["PrevHandled"]) == 1;
+                if (r["EffExpiry"] != DBNull.Value) g["EffExpiry"] = Convert.ToDateTime(r["EffExpiry"]);
+                g["BilledNow"] = r["BilledNow"] != DBNull.Value && Convert.ToInt32(r["BilledNow"]) == 1;
                 t.Rows.Add(g);
             }
+            ApplyRentalBasis(t, year, month);
             return t;
+        }
+
+        /// <summary>
+        /// Feedback ATP-10, a contract that bills its rental IN ADVANCE: each bill carries that month's
+        /// copies and NEXT month's rental. So, for such a contract only --
+        /// <list type="bullet">
+        /// <item>a rental row pays for next month ("(2/36) NOV 2026") -- two months only for a machine
+        /// that joined after the bill that should have carried its first month -- and nothing in the
+        /// machine's last month (it was paid the month before);</item>
+        /// <item>in the month before the start the contract bills its first month's rental alone: its
+        /// counters, and a committed minimum, are not due until it starts;</item>
+        /// <item>a waive stays with the rental it gives back, and goes where no rental is due.</item>
+        /// </list>
+        /// Rows that are not due are taken off the table, so every screen and the invoice agree that
+        /// they are not there. A row already invoiced this month always stays. A contract billed with
+        /// its month's copies -- every contract before ATP-10 -- is not touched.
+        /// </summary>
+        public static void ApplyRentalBasis(DataTable t, int year, int month)
+        {
+            if (t == null || t.Rows.Count == 0 || !t.Columns.Contains("RentalToN")) return;
+            int period = year * 100 + month;
+            List<DataRow> drop = new List<DataRow>();
+            HashSet<long> rentDue = new HashSet<long>();
+            foreach (DataRow r in t.Rows)
+            {
+                if (S(r["RentalBasis"]) != "P" || !IsRentRow(r)) continue;
+                // Already invoiced this month, or no start to count from: it stays as it is -- and so
+                // does its waive.
+                if ((r["BilledNow"] != DBNull.Value && Convert.ToBoolean(r["BilledNow"])) || r["RentalStartDate"] == DBNull.Value)
+                {
+                    rentDue.Add(D64(r["ItemKey"]));
+                    continue;
+                }
+                DateTime start = Convert.ToDateTime(r["RentalStartDate"]);
+                // The rental month this bill pays for is fixed by the calendar -- next month's. It is
+                // never worked out from what happens to be billed already: months billed together,
+                // out of order, or after a deleted invoice must each still pay for their own month.
+                int n = ScpStrategy.RentalPeriodN(start, 'P', year, month);
+                // The machine's last month pays for nothing: its rental went out the month before.
+                bool lastMonth = false;
+                if (r["EffExpiry"] != DBNull.Value)
+                {
+                    DateTime end = Convert.ToDateTime(r["EffExpiry"]);
+                    lastMonth = period >= end.Year * 100 + end.Month;
+                }
+                if (n < 1 || lastMonth)
+                {
+                    drop.Add(r);
+                    continue;
+                }
+                // The one exception: a machine that joined after the bill that should have carried
+                // its first month -- never billed itself, while the contract's previous month was
+                // billed (or skipped) without it. That month goes on this bill with next month's,
+                // and never more than the two.
+                int due = 1;
+                bool billedBefore = r["LastRentalPeriod"] != DBNull.Value && Convert.ToInt32(r["LastRentalPeriod"]) > 0;
+                bool prevHandled = r["PrevHandled"] != DBNull.Value && Convert.ToBoolean(r["PrevHandled"]);
+                if (!billedBefore && prevHandled && n >= 2) due = 2;
+                r["RentalFromN"] = n - due + 1;
+                r["RentalToN"] = n;
+                r["RentalMonthsDue"] = due;
+                // Due before the contract starts is the point: it is on the working tabs.
+                r["NotStarted"] = false;
+                rentDue.Add(D64(r["ItemKey"]));
+            }
+            foreach (DataRow r in t.Rows)
+            {
+                if (S(r["RentalBasis"]) != "P" || IsRentRow(r) || drop.Contains(r)) continue;
+                if (r["BilledNow"] != DBNull.Value && Convert.ToBoolean(r["BilledNow"])) continue;
+                if (IsWaiveRow(r))
+                {
+                    if (!rentDue.Contains(D64(r["ItemKey"]))) drop.Add(r);
+                    continue;
+                }
+                if (r["ContractStart"] == DBNull.Value) continue;
+                DateTime cs = Convert.ToDateTime(r["ContractStart"]);
+                if (period < cs.Year * 100 + cs.Month) drop.Add(r);
+            }
+            foreach (DataRow r in drop) t.Rows.Remove(r);
+        }
+
+        /// <summary>A machine's rental line -- not its waive, not a committed minimum.</summary>
+        private static bool IsRentRow(DataRow r)
+        {
+            bool flat = r["IsFlat"] != DBNull.Value && Convert.ToBoolean(r["IsFlat"]);
+            return flat && !IsWaiveRow(r) && !IsCommitRow(r)
+                && ScpStrategy.IsRentalRole(S(r["Role"]), S(r["MeterType"]));
+        }
+
+        private static bool IsWaiveRow(DataRow r)
+        {
+            if (r.Table.Columns.Contains("IsWaive") && r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"])) return true;
+            return S(r["Role"]).Trim().ToUpperInvariant() == "WAIVE";
         }
 
         /// <summary>Every billable row of ONE contract for one period, priced -- what a screen that
@@ -439,8 +584,16 @@ namespace ServiceContractPhotocopier.Classes
         public static DataTable ForContract(DBSetting db, long contractKey, int year, int month,
                                             out Dictionary<string, List<decimal[]>> ladders)
         {
+            return ForContract(db, contractKey, year, month, null, out ladders);
+        }
+
+        /// <summary>The same, billing the rental basis given ("A" / "P", null = the saved one).</summary>
+        public static DataTable ForContract(DBSetting db, long contractKey, int year, int month,
+                                            string rentalBasisOverride,
+                                            out Dictionary<string, List<decimal[]>> ladders)
+        {
             DataTable t = Load(db, year, month, "1=1", "",
-                               " AND c.ContractKey = " + contractKey + " ", "", out ladders);
+                               " AND c.ContractKey = " + contractKey + " ", "", rentalBasisOverride, out ladders);
             // Same order as the screen: the staged readings, then the flat charges that have
             // none, then the agreed prices. Any of them missing bills the wrong money.
             PrefillFromStaging(db, t, month, year, ladders);
@@ -657,7 +810,18 @@ namespace ServiceContractPhotocopier.Classes
                 decimal min = Dec(r["MinCharges"]);
                 decimal foc = Dec(r["FOCQty"]);        // rental FOC Qty = free-rental months remaining
                 decimal charge;
-                if (foc > 0m)
+                int rentMonths = r.Table.Columns.Contains("RentalMonthsDue") && r["RentalMonthsDue"] != DBNull.Value
+                    ? Convert.ToInt32(r["RentalMonthsDue"]) : 1;
+                if (rentMonths > 1 && !IsCommitRow(r))
+                {
+                    // ATP-10: a machine that joined a prepaid contract after the bill that should have
+                    // carried its first month pays two months here. Free months count one by one.
+                    decimal one = rate < min ? min : rate;
+                    int free = foc > 0m ? (int)Math.Min(Math.Floor(foc), rentMonths) : 0;
+                    charge = one * (rentMonths - free);
+                    r["EntrySource"] = charge == 0m ? "RENTAL FREE" : "RENTAL";
+                }
+                else if (foc > 0m)
                 {
                     // Free-rental month: RM0 this period; the FOC-months counter is decremented at
                     // Generate (per the countdown model), then normal rental resumes at FOC = 0.
@@ -686,11 +850,17 @@ namespace ServiceContractPhotocopier.Classes
                 r["TotalCharges"] = charge;
                 // Rental period n/N ("MONTHLY RENTAL (3/12)") — replaces the blank slot in the meter
                 // type name so the grid AND the invoice line both show the current period.
-                if (r["RentalStartDate"] != DBNull.Value && Convert.ToInt32(r["RentalMonths"]) > 0)
+                // A rental billed in advance (ATP-10) names the months it pays for: "(2/36) NOV 2026".
+                int toN = r.Table.Columns.Contains("RentalToN") && r["RentalToN"] != DBNull.Value
+                    ? Convert.ToInt32(r["RentalToN"]) : 0;
+                if (toN > 0 && r["RentalStartDate"] != DBNull.Value)
+                    r["MeterTypeName"] = ServiceContractPhotocopier.Classes.ScpStrategy.ComposePrepaidRentalText(
+                        S(r["MeterTypeName"]), Convert.ToDateTime(r["RentalStartDate"]),
+                        Convert.ToInt32(r["RentalMonths"]), Convert.ToInt32(r["RentalFromN"]), toN);
+                else if (r["RentalStartDate"] != DBNull.Value && Convert.ToInt32(r["RentalMonths"]) > 0)
                     r["MeterTypeName"] = ServiceContractPhotocopier.Classes.ScpStrategy.ComposeRentalPeriodText(
                         S(r["MeterTypeName"]), Convert.ToDateTime(r["RentalStartDate"]),
-                        Convert.ToInt32(r["RentalMonths"]), S(r["RentalBasis"]) == "P" ? 'P' : 'A',
-                        year, month);
+                        Convert.ToInt32(r["RentalMonths"]), 'A', year, month);
             }
                 }
 

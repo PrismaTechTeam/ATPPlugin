@@ -621,7 +621,9 @@ namespace ServiceContractPhotocopier.Classes
                 return "R|" + ln.ContractKey + "|" + (ln.MeterTypeCode ?? "") + "|" +
                        (ln.ACItemCode ?? "") + "|P:" +
                        ln.Charge.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + "|" +
-                       ln.RentalMonths + "/" + RentalMonthNo(ln) + "|" + (ln.StrategyNote ?? "") + "|" +
+                       (ln.RentalBasis == 'P' && ln.RentalToN > 0 ? RentalCounterText(ln)
+                                                                   : ln.RentalMonths + "/" + RentalMonthNo(ln)) +
+                       "|" + (ln.StrategyNote ?? "") + "|" +
                        ScpRentalGroupPrice.GroupKeyFor(lay.RentalMode, ln.ModelCode, ln.MergeGroupCode);
             }
 
@@ -672,10 +674,26 @@ namespace ServiceContractPhotocopier.Classes
             return "P:" + ln.Rate.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        /// <summary>The counter a rental line prints after its name: "(11/36)", or -- for a rental billed
+        /// in advance (ATP-10) -- the months it pays for, "(2/36) NOV 2026". Empty for an open-ended
+        /// rental billed with its month's copies.</summary>
+        public static string RentalCounterText(MeterBillLine ln)
+        {
+            if (ln == null) return "";
+            if (ln.RentalBasis == 'P' && ln.RentalToN > 0 && ln.RentalStartDate.HasValue)
+                return " " + ScpStrategy.PrepaidRentalCounter(ln.RentalStartDate.Value, ln.RentalMonths,
+                                                              ln.RentalFromN, ln.RentalToN);
+            if (ln.RentalMonths <= 0) return "";
+            return " (" + RentalMonthNo(ln) + "/" + ln.RentalMonths + ")";
+        }
+
         /// <summary>Which instalment this rental is in — part of a rental row's identity, and the
         /// "(11/36)" the line prints.</summary>
         public static int RentalMonthNo(MeterBillLine ln)
         {
+            // A rental billed in advance (ATP-10) knows the months it pays for; the bill's own date
+            // is a month behind them.
+            if (ln.RentalBasis == 'P' && ln.RentalToN > 0) return ln.RentalToN;
             if (!ln.RentalStartDate.HasValue || ln.RentalMonths <= 0) return 0;
             DateTime s = ln.RentalStartDate.Value;
             DateTime now = ln.PeriodEnd ?? ln.AuditDate ?? DateTime.Today;

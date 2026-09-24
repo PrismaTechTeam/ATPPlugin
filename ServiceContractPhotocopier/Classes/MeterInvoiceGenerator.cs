@@ -219,6 +219,17 @@ namespace ServiceContractPhotocopier.Classes
                             st.Parameters.AddWithValue("@sc", ln.StrategyCode ?? "");
                             st.ExecuteNonQuery();
 
+                            // ATP-10: a two-month prepaid line that is partly free still used free months.
+                            if (ln.IsFlat && ln.RentalFreeUsed > 0)
+                            {
+                                SqlCommand decUsed = new SqlCommand(
+                                    "UPDATE dbo.zSCP2_ItemMeter SET FOCQty = CASE WHEN FOCQty > @n THEN FOCQty - @n ELSE 0 END, " +
+                                    "LastModified=GETDATE() WHERE ItemMeterKey=@imk", cn, tx);
+                                decUsed.Parameters.AddWithValue("@n", ln.RentalFreeUsed);
+                                decUsed.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
+                                decUsed.ExecuteNonQuery();
+                            }
+
                             // Immutable audit trail: the billed reading is appended to the log with its
                             // invoice number, baseline, usage AND the pricing as billed — the complete
                             // historical meter record behind the amount (incl. the strategy in force).
@@ -315,12 +326,14 @@ namespace ServiceContractPhotocopier.Classes
                             cmd.Parameters.AddWithValue("@rmk", noChargeRemark);
                             cmd.ExecuteNonQuery();
 
-                            // Consume one free-rental month (countdown model): FOC Qty -= 1, floored at 0.
+                            // Consume the free-rental months used (countdown model): FOC Qty -= 1 -- or 2
+                            // on a prepaid machine's two-month first bill (ATP-10) -- floored at 0.
                             if (freeRental)
                             {
                                 SqlCommand dec = new SqlCommand(
-                                    "UPDATE dbo.zSCP2_ItemMeter SET FOCQty = CASE WHEN FOCQty > 0 THEN FOCQty - 1 ELSE 0 END, " +
+                                    "UPDATE dbo.zSCP2_ItemMeter SET FOCQty = CASE WHEN FOCQty > @n THEN FOCQty - @n ELSE 0 END, " +
                                     "LastModified=GETDATE() WHERE ItemMeterKey=@imk", cn, tx);
+                                dec.Parameters.AddWithValue("@n", ln.RentalFreeUsed > 1 ? ln.RentalFreeUsed : 1);
                                 dec.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
                                 dec.ExecuteNonQuery();
                             }

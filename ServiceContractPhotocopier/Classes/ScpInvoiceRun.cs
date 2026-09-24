@@ -149,7 +149,13 @@ namespace ServiceContractPhotocopier.Classes
                 "                ELSE ISNULL(c.BillingDay,1) END AS D " +
                 "      FROM months mo " +
                 "      JOIN dbo.zSCP2_Contract c ON " + live + " " +
-                "       AND c.ServiceStartDate <= EOMONTH(mo.M) " +
+                "       AND (c.ServiceStartDate <= EOMONTH(mo.M) " +
+                // ATP-10: a contract billing its rental in advance owes its first month's rental in
+                // the month before it starts.
+                "            OR (ISNULL(c.RentalBasis,'A') = 'P' AND c.ServiceStartDate <= EOMONTH(DATEADD(MONTH, 1, mo.M)) " +
+                "                AND EXISTS (SELECT 1 FROM dbo.zSCP2_Item ir JOIN dbo.zSCP2_ItemMeter mr ON mr.ItemKey = ir.ItemKey " +
+                "                             WHERE ir.ContractKey = c.ContractKey AND ISNULL(ir.Inactive,'N') = 'N' " +
+                "                               AND " + ScpStrategy.RentalRoleSql("mr") + "))) " +
                 "       AND (c.ServiceExpiryDate IS NULL OR c.ServiceExpiryDate >= mo.M) " +
                 // The back door for old data: months before where this book starts billing are
                 // somebody else's, and are never late here.
@@ -170,6 +176,15 @@ namespace ServiceContractPhotocopier.Classes
                 "                    WHERE i2.ContractKey = due.ContractKey " +
                 "                      AND e2.PeriodYear = YEAR(due.M) AND e2.PeriodMonth = MONTH(due.M) " +
                 "                      AND ISNULL(e2.InvoicedDocNo,'') <> '') " + skipped +
+                // ATP-10: the last month of a contract that bills nothing but a rental in advance --
+                // that rental went out the month before -- owes nothing.
+                "   AND NOT (EXISTS (SELECT 1 FROM dbo.zSCP2_Contract cx WHERE cx.ContractKey = due.ContractKey " +
+                "                      AND ISNULL(cx.RentalBasis,'A') = 'P' AND cx.ServiceExpiryDate IS NOT NULL " +
+                "                      AND YEAR(cx.ServiceExpiryDate) * 100 + MONTH(cx.ServiceExpiryDate) = YEAR(due.M) * 100 + MONTH(due.M)) " +
+                "            AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_Item ix JOIN dbo.zSCP2_ItemMeter mx ON mx.ItemKey = ix.ItemKey " +
+                "                             WHERE ix.ContractKey = due.ContractKey AND ISNULL(ix.Inactive,'N') = 'N' " +
+                "                               AND NOT " + ScpStrategy.RentalRoleSql("mx") + " " +
+                "                               AND UPPER(ISNULL(mx.MeterRole,'')) <> 'WAIVE')) " +
                 " ORDER BY Y, Mo, D OPTION (MAXRECURSION 200)";
             DataTable t = db.GetDataTable(sql, false);
             Dictionary<string, OverdueMonth> byMonth = new Dictionary<string, OverdueMonth>();

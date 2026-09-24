@@ -260,6 +260,8 @@ namespace ServiceContractPhotocopier.Classes
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v18_BillFrom.sql", asm);
             // ATP-3: how the contract prices its tiers (threshold, or band by band) ...
             RunDDL(dbsetting, "02_Update_zSCP2_Contract_v19_TierMode.sql", asm);
+            // ATP-10: a contract bills its rental with the month's copies (A) or a month ahead (P).
+            RunDDL(dbsetting, "02_Update_zSCP2_Contract_v20_RentalBasis.sql", asm);
             // ... and free copies move out of the ladders into the meters' Free Qty.
             RunDDL(dbsetting, "02_Update_zSCP_MeterMultiPriceItem_v2_FreeBandToFreeQty.sql", asm);
             RunDDL(dbsetting, "02_CreateTable_zSCP2_ContractPeriodSkip.sql", asm);   // guarded throughout; the index is retried if it ever failed

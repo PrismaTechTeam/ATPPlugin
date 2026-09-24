@@ -29,8 +29,20 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>The first month from BillFrom that is neither billed nor skipped.</summary>
         public int Next;
 
-        /// <summary>The first month the sequence counts from: the later of the start and BillFrom.</summary>
-        public int First { get { return StartPeriod > 0 && StartPeriod > BillFrom ? StartPeriod : BillFrom; } }
+        /// <summary>The contract bills its rental in advance (ATP-10) and has a rental to bill: its first
+        /// bill is the first month's rental, in the month BEFORE the start.</summary>
+        public bool RentalInAdvance;
+
+        /// <summary>The first month the sequence counts from: the later of the start and BillFrom -- a
+        /// month before the start for a contract that bills its rental in advance.</summary>
+        public int First
+        {
+            get
+            {
+                int start = StartPeriod > 0 && RentalInAdvance ? ScpBillingSequence.AddMonths(StartPeriod, -1) : StartPeriod;
+                return start > 0 && start > BillFrom ? start : BillFrom;
+            }
+        }
 
         /// <summary>Months in the contract; 0 = open-ended or no start date.</summary>
         public int Total
@@ -38,8 +50,13 @@ namespace ServiceContractPhotocopier.Classes
             get { return StartPeriod > 0 && EndPeriod >= StartPeriod ? ScpBillingSequence.Index(StartPeriod, EndPeriod) : 0; }
         }
 
+        /// <summary>The last month with anything to bill, when it is not the end: a contract that bills
+        /// nothing but a rental in advance paid its last month's rent the month before (ATP-10). 0 = the end.</summary>
+        public int LastBillPeriod;
+        private int LastDue { get { return LastBillPeriod > 0 ? LastBillPeriod : EndPeriod; } }
+
         /// <summary>Every month of the contract is billed or skipped.</summary>
-        public bool Complete { get { return EndPeriod > 0 && Next > EndPeriod; } }
+        public bool Complete { get { return EndPeriod > 0 && Next > LastDue; } }
 
         public bool IsHandled(int period) { return Billed.Contains(period) || Skipped.ContainsKey(period); }
 
@@ -67,7 +84,7 @@ namespace ServiceContractPhotocopier.Classes
         public int DueFrom(int open, int upTo)
         {
             if (open <= 0) return 0;
-            int last = EndPeriod > 0 && EndPeriod < upTo ? EndPeriod : upTo;
+            int last = LastDue > 0 && LastDue < upTo ? LastDue : upTo;
             int n = 0;
             for (int p = open, guard = 0; p <= last && guard < 1200; p = ScpBillingSequence.AddMonths(p, 1), guard++)
                 if (!IsHandled(p)) n++;
@@ -142,6 +159,13 @@ namespace ServiceContractPhotocopier.Classes
                 // with no end of its own ends with the contract.
                 DataTable c = db.GetDataTable(
                     "SELECT c.ContractKey, c.ServiceStartDate, c.ServiceExpiryDate, c.BillFromPeriod, " +
+                    "       ISNULL(c.RentalBasis,'A') AS RentalBasis, " +
+                    "       (SELECT COUNT(*) FROM dbo.zSCP2_Item ir JOIN dbo.zSCP2_ItemMeter mr ON mr.ItemKey = ir.ItemKey " +
+                    "         WHERE ir.ContractKey = c.ContractKey AND ISNULL(ir.Inactive,'N') = 'N' " +
+                    "           AND " + ScpStrategy.RentalRoleSql("mr") + ") AS RentalMeters, " +
+                    "       (SELECT COUNT(*) FROM dbo.zSCP2_Item io JOIN dbo.zSCP2_ItemMeter mo ON mo.ItemKey = io.ItemKey " +
+                    "         WHERE io.ContractKey = c.ContractKey AND ISNULL(io.Inactive,'N') = 'N' " +
+                    "           AND NOT " + ScpStrategy.RentalRoleSql("mo") + " AND UPPER(ISNULL(mo.MeterRole,'')) <> 'WAIVE') AS OtherMeters, " +
                     "       (SELECT MAX(i.ServiceExpiryDate) FROM dbo.zSCP2_Item i " +
                     "         WHERE i.ContractKey = c.ContractKey AND ISNULL(i.Inactive,'N') = 'N') AS LastItemEnd, " +
                     "       (SELECT COUNT(*) FROM dbo.zSCP2_Item i " +
@@ -160,8 +184,13 @@ namespace ServiceContractPhotocopier.Classes
                     int itemsNoEnd = Convert.ToInt32(r["ItemsNoEnd"]);
                     if (contractEnd > 0) s.EndPeriod = itemEnd > contractEnd ? itemEnd : contractEnd;
                     else s.EndPeriod = activeItems > 0 && itemsNoEnd == 0 ? itemEnd : 0;
+                    s.RentalInAdvance = Convert.ToString(r["RentalBasis"]).Trim().ToUpperInvariant() == "P"
+                                        && Convert.ToInt32(r["RentalMeters"]) > 0;
                     s.BillFrom = r["BillFromPeriod"] != DBNull.Value && Convert.ToInt32(r["BillFromPeriod"]) > 0
-                        ? Convert.ToInt32(r["BillFromPeriod"]) : s.StartPeriod;
+                        ? Convert.ToInt32(r["BillFromPeriod"])
+                        : (s.RentalInAdvance && s.StartPeriod > 0 ? AddMonths(s.StartPeriod, -1) : s.StartPeriod);
+                    if (s.RentalInAdvance && Convert.ToInt32(r["OtherMeters"]) == 0 && s.EndPeriod > 0)
+                        s.LastBillPeriod = AddMonths(s.EndPeriod, -1);
                     map[s.ContractKey] = s;
                 }
 
@@ -208,6 +237,15 @@ namespace ServiceContractPhotocopier.Classes
                     "            OR UPPER(ISNULL(m.MeterTypeCode,'')) LIKE 'MIN%')) " +
                     "   AND (ISNULL(mt.IsFlatCharge,'N') = 'Y' OR UPPER(ISNULL(m.MeterRole,'')) NOT IN ('RENTAL','COMMIT')) " +
                     expiry +
+                    // ATP-10, rental in advance: before the start only the rental is due, and in the
+                    // rental's last month it is not (it was paid the month before).
+                    "   AND NOT (ISNULL(c.RentalBasis,'A') = 'P' AND c.ServiceStartDate IS NOT NULL " +
+                    "            AND s.Y * 100 + s.M < YEAR(c.ServiceStartDate) * 100 + MONTH(c.ServiceStartDate) " +
+                    "            AND NOT " + ScpStrategy.RentalRoleSql("m") + ") " +
+                    "   AND NOT (ISNULL(c.RentalBasis,'A') = 'P' AND " + ScpStrategy.RentalRoleSql("m") + " " +
+                    "            AND COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate) IS NOT NULL " +
+                    "            AND s.Y * 100 + s.M >= YEAR(COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate)) * 100 " +
+                    "                                  + MONTH(COALESCE(i.ServiceExpiryDate, c.ServiceExpiryDate))) " +
                     "   AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry x WHERE x.ItemMeterKey = m.ItemMeterKey " +
                     "                      AND x.PeriodYear = s.Y AND x.PeriodMonth = s.M AND ISNULL(x.InvoicedDocNo,'') <> '')", false);
                 foreach (DataRow r in u.Rows)

@@ -171,8 +171,12 @@ namespace ServiceContractPhotocopier.Classes
                 ln.NewMoneyRules = r["NewMoneyRules"] != DBNull.Value && Convert.ToBoolean(r["NewMoneyRules"]);
                 ln.TierIncremental = r.Table.Columns.Contains("TierIncremental") && r["TierIncremental"] != DBNull.Value
                                      && Convert.ToBoolean(r["TierIncremental"]);
+                // ATP-10: the rental months this bill carries -- 1, or 2 for a machine that joined a
+                // prepaid contract after the bill that should have carried its first month.
+                ln.RentalMonthsBilled = r.Table.Columns.Contains("RentalMonthsDue") && r["RentalMonthsDue"] != DBNull.Value
+                    ? Math.Max(1, Convert.ToInt32(r["RentalMonthsDue"])) : 1;
                 ServiceContractPhotocopier.Classes.ScpInvoiceBuilder.ComputeCharge(ln, ladders);
-                if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"])) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
+                if (r["UseMin"] != DBNull.Value && Convert.ToBoolean(r["UseMin"]) && ln.RentalMonthsBilled <= 1) { ln.Charge = ln.MinCharges; ln.UseMin = true; }
                 ln.IsRental = ln.IsFlat && ServiceContractPhotocopier.Classes.ScpStrategy.IsRentalRole(
                     S(r["Role"]), S(r["MeterType"]));
                 // The machine's DEFINED mode beats the live fetch status (deterministic numbering).
@@ -233,6 +237,11 @@ namespace ServiceContractPhotocopier.Classes
                 if (r["RentalStartDate"] != DBNull.Value) ln.RentalStartDate = Convert.ToDateTime(r["RentalStartDate"]);
                 ln.RentalMonths = r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]);
                 ln.RentalBasis = S(r["RentalBasis"]) == "P" ? 'P' : 'A';
+                if (r.Table.Columns.Contains("RentalToN") && r["RentalToN"] != DBNull.Value)
+                {
+                    ln.RentalFromN = Convert.ToInt32(r["RentalFromN"]);
+                    ln.RentalToN = Convert.ToInt32(r["RentalToN"]);
+                }
                 if (r["EffStart"] != DBNull.Value) ln.EffStartDate = Convert.ToDateTime(r["EffStart"]);
                 if (S(r["EntrySource"]) == "RENTAL FREE") { ln.StrategyNote = "RENTAL FREE - FOC month"; ln.AlwaysBill = true; }
                 if (r["LastReadDate"] != DBNull.Value) ln.LastDate = Convert.ToDateTime(r["LastReadDate"]);
@@ -513,6 +522,23 @@ private static void ApplyRentalFreeN(Dictionary<string, MeterInvoiceGenerator.In
                             continue;
                         }
                         int monthNo = (genYear * 12 + genMonth) - (anchor.Value.Year * 12 + anchor.Value.Month) + 1;
+                        if (l.RentalBasis == 'P') monthNo++;   // ATP-10: this bill pays for next month's rental
+                        if (l.RentalMonthsBilled > 1)
+                        {
+                            // ATP-10: a two-month line (a machine that joined late) is free for the
+                            // months of it inside the free window, and pays for the rest.
+                            int firstNo = monthNo - l.RentalMonthsBilled + 1;
+                            int freeIn = Math.Min(monthNo, rule.FreeMonths) - Math.Max(firstNo, 1) + 1;
+                            if (freeIn > 0)
+                            {
+                                decimal left = l.EffUnitPrice * (l.RentalMonthsBilled - freeIn);
+                                if (left < l.Charge) l.Charge = left;
+                                l.UseMin = false;
+                                l.StrategyNote = "RENTAL FREE " + freeIn + " of " + l.RentalMonthsBilled + " months (strategy)";
+                                l.AlwaysBill = true;
+                            }
+                            break;
+                        }
                         if (monthNo >= 1 && monthNo <= rule.FreeMonths)
                         {
                             l.Charge = 0m;

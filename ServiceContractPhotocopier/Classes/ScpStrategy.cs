@@ -225,6 +225,59 @@ namespace ServiceContractPhotocopier.Classes
             return name + " (" + frac + ")";
         }
 
+        /// <summary>
+        /// Feedback ATP-10: the counter a rental billed IN ADVANCE prints -- which of its months the
+        /// bill pays for, and which calendar months those are: "(2/36) NOV 2026". A machine that joined
+        /// after the bill that should have carried its first month pays two on its first bill:
+        /// "(1-2/36) DEC 2026 - JAN 2027". An open-ended rental has no N and prints only the month.
+        /// </summary>
+        public static string PrepaidRentalCounter(DateTime rentalStart, int rentalMonths, int fromN, int toN)
+        {
+            if (fromN < 1) fromN = 1;
+            if (toN < fromN) toN = fromN;
+            // A term extended past the rental's N keeps billing, and reads N/N, as it does with the
+            // month's copies; the calendar month named is always the true one.
+            int a = rentalMonths > 0 && fromN > rentalMonths ? rentalMonths : fromN;
+            int b = rentalMonths > 0 && toN > rentalMonths ? rentalMonths : toN;
+            string frac = a == b ? a.ToString(System.Globalization.CultureInfo.InvariantCulture) : a + "-" + b;
+            string first = RentalMonthLabel(rentalStart, fromN);
+            string months = fromN == toN ? first : first + " - " + RentalMonthLabel(rentalStart, toN);
+            return rentalMonths > 0 ? "(" + frac + "/" + rentalMonths + ") " + months : months;
+        }
+
+        /// <summary>The calendar month of rental month n: month 1 is the rental's start month.</summary>
+        public static string RentalMonthLabel(DateTime rentalStart, int n)
+        {
+            DateTime m = new DateTime(rentalStart.Year, rentalStart.Month, 1).AddMonths(n - 1);
+            return m.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant();
+        }
+
+        /// <summary>The meter type's name with the prepaid counter in its blank slot, the way
+        /// <see cref="ComposeRentalPeriodText"/> puts "(n/N)" there: "MONTHLY RENTAL ( /60)" becomes
+        /// "MONTHLY RENTAL (2/60) NOV 2026".</summary>
+        public static string ComposePrepaidRentalText(string meterTypeName, DateTime rentalStart,
+            int rentalMonths, int fromN, int toN)
+        {
+            string name = meterTypeName ?? "";
+            string counter = PrepaidRentalCounter(rentalStart, rentalMonths, fromN, toN);
+            Match m = SlotParen.Match(name);
+            if (m.Success) return name.Substring(0, m.Index) + counter + name.Substring(m.Index + m.Length);
+            m = SlotXx.Match(name);
+            if (m.Success) return name.Substring(0, m.Index) + counter + name.Substring(m.Index + m.Length);
+            return name + " " + counter;
+        }
+
+        /// <summary><see cref="IsRentalRole"/> as SQL over a zSCP2_ItemMeter alias -- for the queries
+        /// that have to ask it of every meter at once.</summary>
+        public static string RentalRoleSql(string alias)
+        {
+            string role = "UPPER(LTRIM(RTRIM(ISNULL(" + alias + ".MeterRole,''))))";
+            string code = "UPPER(LTRIM(RTRIM(ISNULL(" + alias + ".MeterTypeCode,''))))";
+            return "(" + role + " = 'RENTAL' OR (" + role + " IN ('','NA') AND " + code + " <> '' AND (" +
+                   code + " LIKE 'RA%' OR " + code + " LIKE '%.RA%' OR " + code + " LIKE '%-RA%' OR " +
+                   code + " LIKE '% RA%' OR " + code + " LIKE '%RENTAL%')))";
+        }
+
         private static decimal AsDec(object v) { return v == null || v == DBNull.Value ? 0m : Convert.ToDecimal(v); }
 
         /// <summary>Is this meter a RENTAL? The role answers it; the code convention is the fallback

@@ -45,6 +45,22 @@ Does Calculation Test give the amount you would work out by hand for the same re
 
 Save the contract with Each tier at its own rate and generate its invoice: the same rows as the sample.
 
+**Rental in advance.** Take (or make) a contract that has a rental and has not been billed yet -- say from
+1 October, billing day 30.
+
+1. **Billing -> 1. The invoice -> Rental billed** -> **In advance - one month ahead**, then **Save**.
+   **View Sample Invoice**: the rental line pays for next month, e.g. `MONTHLY RENTAL (2/36) NOV 2026`.
+2. **Meter Invoice Run** in **September** (the month before the start), day 30: the contract is there, Ready,
+   with its rental only -- `MONTHLY RENTAL (1/36) OCT 2026` -- and none of its counters. **Generate Invoice**.
+3. Back on the contract, **Rental billed** is now grey: hover over it and it names the invoice that locked it.
+4. **October**, day 30: key October's readings. The invoice carries October's copies and
+   `MONTHLY RENTAL (2/36) NOV 2026`.
+5. The contract's **last month** bills its copies only -- no rental line (it was paid the month before).
+
+A machine added to such a contract after the bill that should have carried its first month pays that month and
+the next on its next bill: `MONTHLY RENTAL (1-2/36) DEC 2026 - JAN 2027`, twice its rental. A contract billed
+with the month's copies -- every contract today -- bills exactly as before.
+
 ---
 
 ## 2. A reading
