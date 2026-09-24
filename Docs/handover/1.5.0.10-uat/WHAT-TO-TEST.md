@@ -23,6 +23,11 @@ Everything is under **Service & Contract**.
    Min. Charge, so To Pay shows what they really do. It uses the prices as they are on the contract screen,
    saved or not, so a deal can be checked before it is saved. Nothing is saved.
 
+**The invoice split sticks.** On a contract that bills one invoice per machine, open **Meters Pricing**, choose
+**a rental invoice and a meter invoice**, press OK and Save; open Meters Pricing again -- it still says so (it used
+to come back as "per machine, rental apart"). Choose a split, set a waive there, then press **Cancel** and discard:
+the contract is exactly as it was before Meters Pricing was opened.
+
 **Look for:** does the sample match what you agreed with this customer — one invoice or several,
 the rental together or apart, black and colour on one line or two?
 Does Calculation Test give the amount you would work out by hand for the same readings?

@@ -1916,3 +1916,13 @@ Found first: `zSCP2_ItemMeter.RentalBasis` ('A'/'P', v4) already existed with ha
 Re-verified after the fixes: PrepayTest ALL OK (13 checks), PrepayShow ALL OK.
 - Accrual unchanged: every row Meter Invoice Run loads for every contract of AED_ATPTEST, Jan-Dec 2026 (94,164 rows: meter, text, charge, not-started), before vs after ATP-10 -- 0 different. Tier charges vs before the ATP-3 conversion (98,005) -- 0 different.
 - Re-cut into **1.5.0.10**: 2893021 bytes, SHA256 `500BE130…AD53`.
+
+### 24/9 — feedback ATP-14: Meters / Pricing's invoice split came back as something else (1.5.0.10 re-cut)
+
+Ticket (Dhai): "有时候 save Invoice meter pricing 时候选 a invoice rental and a invoice meter，但是 save 了后变成是别的". Explained to the user first ("你明白？"), then fixed ("okey 好的").
+
+- Cause: the split lives in the contract's hidden ChkBillSeparate / ChkBillGroup / ChkRentalSeparate. Meters Pricing's OK set them one at a time: `ChkBillSeparate = false` fired OnBillSeparateChanged, whose "keep one of the two ticked" guard saw ChkBillGroup still unticked and ticked ChkBillSeparate straight back -- so leaving a per-machine split never took. PM -> RS came back PMS, PM -> ONE stayed PM, PMS -> RS stayed PMS; saving wrote it. "Sometimes" = only contracts that were per machine. (First suspect, the Billing Format picker overwriting on load, ruled out: the picker is disabled -- `BuildBillingFormatPicker` returns first -- so its handler is never wired.)
+- Fix: the OK path (and the dead ApplyFormatToControls) set the pair with `SetBillingMode`, which holds the guard, as a load does.
+- Found alongside: Meters Pricing edits the machines' meter tables live (a waive or minimum set there, and `DropWaives` when a rental-apart split is confirmed), so its Cancel -- "You have unsaved changes. Discard them and close?" -- discarded none of that. The contract form now copies every machine's meter table before opening it and puts the copies back on Cancel (then rebinds the meter panel).
+- SplitShow probe on the real screens (AED_ATPTEST, nothing saved): HQ-2026-001 PM -> RS = RS, PM -> ONE = ONE; DEMO-TGK PMS -> RS = RS; SC 000000010 (RS, one waive): pick PMS, Yes to losing the waive, Cancel + discard -> still RS with its waive. Before the fix the three OK cases came back PMS / PM / PMS. contract-columns, PrepayShow, CalcTier re-run: ALL OK.
+- Re-cut into **1.5.0.10**: 2893951 bytes, SHA256 `87D97024…821C`.

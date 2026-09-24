@@ -6132,8 +6132,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 _billingFormatCode = code.Trim();
                 if (SluBillingFormat != null) SluBillingFormat.EditValue = _billingFormatCode;
-                ChkBillGroup.Checked = f.BillingMode == 'G';
-                ChkBillSeparate.Checked = f.BillingMode == 'S';
+                SetBillingMode(f.BillingMode == 'S' ? "S" : "G");
                 ChkRentalSeparate.Checked = f.RentalSeparateInvoice;
                 _rentalLineMode = f.RentalLineMode;
                 _meterLineMode = f.MeterLineMode;
@@ -6222,6 +6221,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? (ChkRentalSeparate.Checked ? "PMS" : "PM")
                 : (ChkRentalSeparate.Checked ? "RS" : "ONE");
 
+            // Meters Pricing edits the machines' own meter tables as it goes -- a waive or a minimum
+            // set there, the waives a "rental apart" split removes. Its Cancel ("Discard them and
+            // close?") has to put them back, or it discards nothing (feedback ATP-14).
+            System.Collections.Generic.Dictionary<ItemEditData, DataTable> metersBefore =
+                new System.Collections.Generic.Dictionary<ItemEditData, DataTable>();
+            foreach (ItemEditData d in _items)
+                if (d != null && d.Meters != null) metersBefore[d] = d.Meters.Copy();
+
             using (ServiceContractPhotocopier.RentalGroupPrice_Form f =
                 new ServiceContractPhotocopier.RentalGroupPrice_Form(_items, _lineTerms, split))
             {
@@ -6251,7 +6258,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         _sampleShowModel = null; _sampleShowSerial = null; _sampleShowUnits = null;
                     }
                 };
-                if (f.ShowDialog(this) != DialogResult.OK) return;
+                if (f.ShowDialog(this) != DialogResult.OK)
+                {
+                    foreach (System.Collections.Generic.KeyValuePair<ItemEditData, DataTable> kv in metersBefore)
+                        kv.Key.Meters = kv.Value;
+                    BindItemMeterPanel();
+                    return;
+                }
                 _showModel = f.ResultShowModel;
                 _showSerial = f.ResultShowSerial;
                 _showUnits = f.ResultShowUnits;
@@ -6259,8 +6272,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 _formatApplying = true;
                 try
                 {
-                    ChkBillSeparate.Checked = f.ResultSplit == "PM" || f.ResultSplit == "PMS";
-                    ChkBillGroup.Checked = !ChkBillSeparate.Checked;
+                    // Both "per machine" boxes in one go, the way a load sets them (feedback ATP-14).
+                    // Set one at a time, the "keep one ticked" guard re-ticked "one invoice per machine"
+                    // before "one invoice" was ticked -- so leaving a per-machine split never took:
+                    // "a rental invoice and a meter invoice" came back "per machine, rental apart".
+                    SetBillingMode(f.ResultSplit == "PM" || f.ResultSplit == "PMS" ? "S" : "G");
                     ChkRentalSeparate.Checked = f.ResultSplit == "RS" || f.ResultSplit == "PMS";
                 }
                 finally { _formatApplying = false; }
