@@ -3244,7 +3244,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DevExpress.XtraGrid.Columns.GridColumn brAddr = vBr.Columns.AddVisible("Address1");
             brAddr.Caption = "Address"; brAddr.Width = 200;
             _inlineBranchRepo.DataSource = _inlineBranchLookup;
-            _inlineBranchRepo.DisplayMember = "BranchCode";
+            // The cell reads as the branch's NAME (user, 25/9); the code is what is stored. A branch
+            // with no name, or one since removed in AutoCount, shows its code (ShowCodeWhenNotListed).
+            _inlineBranchRepo.DisplayMember = "BranchName";
             _inlineBranchRepo.ValueMember = "BranchCode";
             _inlineBranchRepo.NullText = "";
             // A clear button: taking the branch off hands the machine back to the contract's.
@@ -3257,7 +3259,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             GridViewItems.ShownEditor += new EventHandler(GridViewItems_ShownEditorBranch);
             DevExpress.XtraGrid.Columns.GridColumn colBranch = GridViewItems.Columns.AddVisible("BranchCode");
             colBranch.Caption = "Branch";
-            colBranch.Width = 80;
+            colBranch.Width = 140;
             colBranch.OptionsColumn.AllowEdit = true;
             colBranch.ColumnEdit = _inlineBranchRepo;
             colBranch.ToolTip = "This machine's own branch of the customer (registered in AutoCount: A/R > " +
