@@ -1946,3 +1946,6 @@ User: "我帮 debtor 创建了 branch code 但是在 contract dropdown 开不到
 - Re-cut into **1.5.0.10**: 2893638 bytes, SHA256 `0A8B14F7…FB40`.
 - 25/9, user: "display name please use branch name not branch code" -- the Branch cell shows the branch's NAME (DisplayMember BranchName), the code is still what is stored; a nameless or removed branch shows its code. Column widened 80 -> 140. BranchDrop: pick 001 -> the cell reads UAE, stores 001.
 - Re-cut into **1.5.0.10**: 2893945 bytes, SHA256 `8297662D…5AC4`.
+- 25/9, test data for the user's ATP-13 test (asked for): Stock Receive **SR-000001** on AED_ATPTEST through AutoCount's own API (StockReceiveCommand, harness SrCreate) -- 1 x IR ADV DX C3935I, serial `ATP13TEST01`, unit cost 1.00, default location. AutoCount's evaluation limit did not refuse the SR (it refused DOs on 23/9). Not on any machine yet.
+- 25/9, user on the ribbon: no picture, and "Create DO" over "Delivery" read awkwardly. The button is now **Transfer Machine to DO** (AutoCount's own "transfer to" wording), its messages say the same, and it has a delivery-truck SVG (`svgimages/icon%20builder/shopping_delivery.svg`, set in ApplyToolbarIcons -- the designer's `PackageProduct;Size32x32` gallery name does not resolve in DevExpress 22.2). Seen on screen.
+- Re-cut into **1.5.0.10**: 2894330 bytes, SHA256 `B66541D2…2088`.

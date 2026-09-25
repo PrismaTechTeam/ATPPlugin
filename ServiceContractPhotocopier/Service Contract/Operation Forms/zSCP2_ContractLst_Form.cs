@@ -160,7 +160,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 c.Width = 150;
                 c.OptionsColumn.AllowEdit = false;
                 c.ToolTip = "The delivery order(s) this contract's machines came from or went out on. " +
-                    "No DO yet = open the contract, select the machines and press Create DO.";
+                    "No DO yet = open the contract, select the machines and press Transfer Machine to DO.";
                 DevExpress.XtraGrid.Columns.GridColumn refCol = GridView.Columns.ColumnByFieldName("ReferenceNo");
                 if (refCol != null && refCol.Visible) c.VisibleIndex = refCol.VisibleIndex + 1;
                 GridView.CustomColumnDisplayText +=

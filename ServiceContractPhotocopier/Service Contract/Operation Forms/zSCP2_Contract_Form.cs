@@ -1395,6 +1395,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 DevExpress.Utils.Svg.SvgImage calc =
                     DevExpress.Images.ImageResourceCache.Default.GetSvgImage("svgimages/icon%20builder/business_calculator.svg");
                 if (calc != null) barCalcTest.ImageOptions.SvgImage = calc;
+                // ATP-13: a delivery truck. The designer's "PackageProduct" gallery name does not resolve
+                // in this DevExpress, which left the button with no picture (UAT 25/9).
+                DevExpress.Utils.Svg.SvgImage truck =
+                    DevExpress.Images.ImageResourceCache.Default.GetSvgImage("svgimages/icon%20builder/shopping_delivery.svg");
+                if (truck != null) barCreateDO.ImageOptions.SvgImage = truck;
             }
             catch { }   // icons are cosmetic — never block the form
         }
@@ -3275,7 +3280,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             colDO.OptionsColumn.AllowEdit = false;
             colDO.OptionsColumn.ReadOnly = true;
             colDO.ToolTip = "The delivery order this machine came from, or went out on (matched by its serial number). " +
-                "No DO yet = select the machine and press Create DO.";
+                "No DO yet = select the machine and press Transfer Machine to DO.";
             GridViewItems.CustomColumnDisplayText +=
                 new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewItems_DODisplayText);
             GridViewItems.RowCellStyle +=
@@ -3424,10 +3429,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void barCreateDO_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
             if (_isNew || _contractKey <= 0)
-            { XtraMessageBox.Show("Save the contract first -- the DO is made from the saved contract.", "Create DO"); return; }
+            { XtraMessageBox.Show("Save the contract first -- the DO is made from the saved contract.", "Transfer Machine to DO"); return; }
             if (_dirty)
             { XtraMessageBox.Show("Save your changes first -- the DO is made from the saved contract, and " +
-                "the machines on screen have changed since.", "Create DO"); return; }
+                "the machines on screen have changed since.", "Transfer Machine to DO"); return; }
 
             // The selected machines, in grid order; the invisible group "machine" is never delivered.
             System.Collections.Generic.List<ItemEditData> picked = new System.Collections.Generic.List<ItemEditData>();
@@ -3442,21 +3447,21 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             if (picked.Count == 0)
             { XtraMessageBox.Show("Select the machine(s) to deliver in the Service Item grid first " +
-                "(Ctrl+click or Shift+click to select several).", "Create DO"); return; }
+                "(Ctrl+click or Shift+click to select several).", "Transfer Machine to DO"); return; }
 
             string debtor = "", contractNo = "", deptNo = "", projNo = "";
             try
             {
                 DataTable hdr = _db.GetDataTable("SELECT DebtorCode, ContractNo, ISNULL(DeptNo,'') AS DeptNo, ISNULL(ProjNo,'') AS ProjNo " +
                     "FROM dbo.zSCP2_Contract WHERE ContractKey=" + _contractKey, false);
-                if (hdr.Rows.Count == 0) { XtraMessageBox.Show("The contract is not in the database any more.", "Create DO"); return; }
+                if (hdr.Rows.Count == 0) { XtraMessageBox.Show("The contract is not in the database any more.", "Transfer Machine to DO"); return; }
                 debtor = AsStr(hdr.Rows[0]["DebtorCode"]).Trim();
                 contractNo = AsStr(hdr.Rows[0]["ContractNo"]).Trim();
                 deptNo = AsStr(hdr.Rows[0]["DeptNo"]).Trim();
                 projNo = AsStr(hdr.Rows[0]["ProjNo"]).Trim();
             }
-            catch (Exception ex) { XtraMessageBox.Show("The contract could not be read:\r\n" + ex.Message, "Create DO"); return; }
-            if (debtor.Length == 0) { XtraMessageBox.Show("The contract has no customer.", "Create DO"); return; }
+            catch (Exception ex) { XtraMessageBox.Show("The contract could not be read:\r\n" + ex.Message, "Transfer Machine to DO"); return; }
+            if (debtor.Length == 0) { XtraMessageBox.Show("The contract has no customer.", "Transfer Machine to DO"); return; }
 
             System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> cands =
                 new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
@@ -3473,7 +3478,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Check> checks;
             try { checks = ServiceContractPhotocopier.Classes.ScpContractDO.CheckAvailable(_db, cands); }
-            catch (Exception ex) { XtraMessageBox.Show("The stock could not be checked:\r\n" + ex.Message, "Create DO"); return; }
+            catch (Exception ex) { XtraMessageBox.Show("The stock could not be checked:\r\n" + ex.Message, "Transfer Machine to DO"); return; }
 
             System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> ok =
                 new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
@@ -3493,14 +3498,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (ok.Count == 0)
             {
                 XtraMessageBox.Show("None of the selected machines can go out on a DO:\r\n\r\n" + noText,
-                    "Create DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "Transfer Machine to DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             string ask = "Create a Delivery Order to " + debtor + ", dated " + DateTime.Today.ToString("dd/MM/yyyy") +
                 ", for " + ok.Count + " machine(s)?\r\n\r\n" + okText +
                 "\r\nEach goes out at no price -- the machine is billed through this contract, not sold on the DO." +
                 (noText.Length > 0 ? "\r\n\r\nLEFT OUT:\r\n" + noText : "");
-            if (XtraMessageBox.Show(ask, "Create DO", MessageBoxButtons.YesNo,
+            if (XtraMessageBox.Show(ask, "Transfer Machine to DO", MessageBoxButtons.YesNo,
                     noText.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question) != DialogResult.Yes) return;
 
             string docNo;
@@ -3514,7 +3519,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             catch (Exception ex)
             {
                 Cursor = Cursors.Default;
-                XtraMessageBox.Show("The DO was not made:\r\n\r\n" + ex.Message, "Create DO",
+                XtraMessageBox.Show("The DO was not made:\r\n\r\n" + ex.Message, "Transfer Machine to DO",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -3524,7 +3529,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             RebuildItemsView();
             XtraMessageBox.Show(docNo + " created for " + ok.Count + " machine(s).\r\n\r\n" +
                 "It is an ordinary AutoCount delivery order: open it from Sales > Delivery Order to print it, " +
-                "or to cancel it if it was made by mistake.", "Create DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "or to cancel it if it was made by mistake.", "Transfer Machine to DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>The paragraph that opens every warning about deleting or detaching a machine that

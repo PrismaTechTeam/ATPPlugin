@@ -744,7 +744,7 @@
             //
             // barCreateDO
             //
-            this.barCreateDO.Caption = "Create DO";
+            this.barCreateDO.Caption = "Transfer Machine to DO";
             this.barCreateDO.Id = 17;
             this.barCreateDO.ImageOptions.ImageUri.Uri = "PackageProduct;Size32x32";
             this.barCreateDO.Name = "barCreateDO";
