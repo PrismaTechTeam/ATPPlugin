@@ -1258,6 +1258,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (found.Length == 0) return;
             DataRow d = found[0];
 
+            // ATP-7: the machines' Branch column lists THIS customer's branches.
+            if (_inlineBranchRepo != null)
+            {
+                _inlineBranchLookup = LoadInlineBranchLookup();
+                _inlineBranchRepo.DataSource = _inlineBranchLookup;
+            }
+
             string addr = string.Join("\r\n", new string[] {
                 AsStr(d["Address1"]), AsStr(d["Address2"]), AsStr(d["Address3"]), AsStr(d["Address4"]) })
                 .Trim('\r', '\n');
@@ -3570,8 +3577,11 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             DevExpress.XtraEditors.SearchLookUpEdit ed = GridViewItems.ActiveEditor as DevExpress.XtraEditors.SearchLookUpEdit;
             if (ed == null) return;
             _inlineBranchLookup = LoadInlineBranchLookup();
+            // Only the editor that is open gets the fresh list. Changing the column's repository item
+            // here made the grid rebuild -- and close -- the editor that had just opened, so the
+            // drop-down never showed the branches (ATP-7, found in UAT 25/9). The column's own list
+            // follows the customer in OnDebtorChanged.
             ed.Properties.DataSource = _inlineBranchLookup;
-            _inlineBranchRepo.DataSource = _inlineBranchLookup;
             string debtor = LkDebtorCode.EditValue == null ? "" : LkDebtorCode.EditValue.ToString().Trim();
             ed.Properties.NullValuePrompt = debtor.Length == 0
                 ? "Pick the customer first"

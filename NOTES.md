@@ -1926,3 +1926,21 @@ Ticket (Dhai): "有时候 save Invoice meter pricing 时候选 a invoice rental 
 - Found alongside: Meters Pricing edits the machines' meter tables live (a waive or minimum set there, and `DropWaives` when a rental-apart split is confirmed), so its Cancel -- "You have unsaved changes. Discard them and close?" -- discarded none of that. The contract form now copies every machine's meter table before opening it and puts the copies back on Cancel (then rebinds the meter panel).
 - SplitShow probe on the real screens (AED_ATPTEST, nothing saved): HQ-2026-001 PM -> RS = RS, PM -> ONE = ONE; DEMO-TGK PMS -> RS = RS; SC 000000010 (RS, one waive): pick PMS, Yes to losing the waive, Cancel + discard -> still RS with its waive. Before the fix the three OK cases came back PMS / PM / PMS. contract-columns, PrepayShow, CalcTier re-run: ALL OK.
 - Re-cut into **1.5.0.10**: 2893951 bytes, SHA256 `87D97024…821C`.
+
+## PENDING after 1.5.0.10 (25/9) -- the user tests these one by one on AED_ATPTEST first
+
+Marked pending at the user's request ("mark as this 8 point pending first, I want to test one by one"). Tick each off only when the user says so.
+
+- [ ] 1. ATP-9, the money part: does a machine that broke down keep billing after the breakdown, and is that month's rental in full or by the day? The date part (invoice date moveable, "Use last reading date") is in 1.5.0.10. Waiting on the customer.
+- [ ] 2. Not installed on the client's book AED_ATPCHECK yet -- only on "run shadowmain" (Debug-ATPCHECK installs the dev .app there). First load there turns meter 9's 0.00 first tier into Free Qty 100 (ATP-3).
+- [ ] 3. To test on a LICENSED AutoCount (this PC is an evaluation copy and refuses new documents): ATP-13 the real Create DO save; the real Generate, above all ATP-10's first rental-only invoice before a contract starts.
+- [ ] 4. To confirm with the customer: ATP-10's defaults (accrual lines keep their text; no copy-target waive on the first bill; a rental apart dated in the month it pays for; a late machine pays two months on its next bill); ATP-7 whether the invoice carries the machine's branch; ATP-8 whether a separate description field is wanted.
+- [ ] 5. Portal replies not posted -- every ticket still shows Pending on the portal.
+- [ ] 6. Git not pushed (blocked: credentials in appsettings.json). Commits and the v1.0.10-uat tag are local only.
+- [ ] 7. Optional bug (task chip raised): a free rental month printed on the invoice (AlwaysBill "RENTAL FREE") may never count down FOCQty -- only the no-charge route decrements it.
+- [ ] 8. tests/invoice-run fails one check ("DEMO-PG rental invoice is Invoiced"): AED_ATPTEST has no September invoice for DEMO-PG -- test data, not code.
+
+### 25/9 — UAT on AED_ATPTEST: ATP-7's Branch drop-down was empty (1.5.0.10 re-cut)
+
+User: "我帮 debtor 创建了 branch code 但是在 contract dropdown 开不到东西" (branches 001 UAE / 002 AGN on 3000-A0087, contract DEMO-3G). The list itself loaded (2 rows), and ShowingEditor did not cancel -- but the cell's editor closed the moment it opened: `GridViewItems_ShownEditorBranch` set `_inlineBranchRepo.DataSource`, the COLUMN's repository item, while its in-place editor was open, and the grid rebuilds (closes) an editor whose repository item changes. The 23/9 BranchProbe set the value by code and never opened the drop-down, so it did not see this. Fix: only the open editor's `Properties.DataSource` is refreshed there; the column's list follows the customer in `OnDebtorChanged`. BranchDrop probe (DEMO-3G, nothing saved): editor stays open, drop-down lists 001 UAE, 002 AGN.
+- Re-cut into **1.5.0.10**: 2893638 bytes, SHA256 `0A8B14F7…FB40`.
