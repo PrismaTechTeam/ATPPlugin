@@ -68,6 +68,40 @@ namespace ServiceContractPhotocopier.Classes
             "  WHERE ISNULL(i.SerialNumber,'') <> '' {0}" +
             ") x WHERE x.rn = 1";
 
+        /// <summary>
+        /// Opens one delivery order in AutoCount's own DO entry screen -- the same window the
+        /// Sales menu opens, so what is shown, edited and printed is AutoCount's own, not a copy
+        /// of it that would have to be kept in step.
+        ///
+        /// Returns false when the document is no longer there (deleted, or renumbered), which is
+        /// the one case worth telling the user about: the grid was read a moment ago and a stale
+        /// DO number in front of them is otherwise indistinguishable from a live one.
+        /// </summary>
+        public static bool Open(DBSetting db, System.Windows.Forms.IWin32Window owner, string docNo)
+        {
+            if (db == null || string.IsNullOrEmpty(docNo)) return false;
+            docNo = docNo.Trim();
+            if (docNo.Length == 0) return false;
+
+            object k = db.ExecuteScalar("SELECT DocKey FROM dbo.DO WHERE DocNo = N'" + docNo.Replace("'", "''") + "'");
+            if (k == null || k == DBNull.Value) return false;
+            long docKey = Convert.ToInt64(k);
+
+            AutoCount.Invoicing.Sales.DeliveryOrder.DeliveryOrderCommand cmd =
+                AutoCount.Invoicing.Sales.DeliveryOrder.DeliveryOrderCommand.Create(UserSession.CurrentUserSession, db);
+            // View, the way AutoCount opens a document from a list: the user asked to see it, and a
+            // stray keystroke should not change it. Its own Edit button unlocks it for changing.
+            AutoCount.Invoicing.Sales.DeliveryOrder.DeliveryOrder doc = cmd.View(docKey);
+            if (doc == null) return false;
+
+            using (AutoCount.Invoicing.Sales.DeliveryOrder.FormDeliveryOrderEntry f =
+                new AutoCount.Invoicing.Sales.DeliveryOrder.FormDeliveryOrderEntry(doc))
+            {
+                f.ShowDialog(owner);
+            }
+            return true;
+        }
+
         /// <summary>Each machine of one contract that is on a live DO, keyed by ItemKey.</summary>
         public static Dictionary<long, MachineDO> ForContract(DBSetting db, long contractKey)
         {

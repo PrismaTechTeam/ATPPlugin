@@ -60,7 +60,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             if (_dbSetting == null) return;
             LoadGrid();
-            GridView.DoubleClick += delegate { OnEdit(null, null); };
+            GridView.DoubleClick += new EventHandler(GridView_DoubleClick);
         }
 
         // Virtual so the "Maintain Service Item" alias can present the SAME data at service-item
@@ -160,13 +160,78 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 c.Width = 150;
                 c.OptionsColumn.AllowEdit = false;
                 c.ToolTip = "The delivery order(s) this contract's machines came from or went out on. " +
-                    "No DO yet = open the contract, select the machines and press Transfer Machine to DO.";
+                    "Double-click to open it. No DO yet = open the contract and press Transfer Machine to DO.";
                 DevExpress.XtraGrid.Columns.GridColumn refCol = GridView.Columns.ColumnByFieldName("ReferenceNo");
                 if (refCol != null && refCol.Visible) c.VisibleIndex = refCol.VisibleIndex + 1;
                 GridView.CustomColumnDisplayText +=
                     new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(ContractList_DODisplayText);
                 GridView.RowCellStyle +=
                     new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(ContractList_DOCellStyle);
+            }
+        }
+
+        /// <summary>
+        /// Double-click opens the contract, as it always has -- except on the DO column, where the
+        /// delivery order itself opens in AutoCount's own screen. The cell can list more than one,
+        /// so more than one puts up the numbers and opens the one picked: opening "the first" would
+        /// be a guess the user cannot see being made.
+        /// </summary>
+        private void GridView_DoubleClick(object sender, EventArgs e)
+        {
+            DevExpress.XtraGrid.Views.Grid.GridView v = sender as DevExpress.XtraGrid.Views.Grid.GridView;
+            if (v == null) { OnEdit(null, null); return; }
+
+            DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit =
+                v.CalcHitInfo(v.GridControl.PointToClient(System.Windows.Forms.Control.MousePosition));
+            if (hit == null || !hit.InRowCell || hit.Column == null || hit.Column.FieldName != "DONo")
+            {
+                OnEdit(null, null);
+                return;
+            }
+            if (hit.RowHandle < 0) return;
+
+            string cell = Convert.ToString(v.GetRowCellValue(hit.RowHandle, "DONo")).Trim();
+            if (cell.Length == 0)
+            {
+                DevExpress.XtraEditors.XtraMessageBox.Show(this,
+                    "None of this contract's machines is on a delivery order yet.\r\n\r\n" +
+                    "Open the contract and press Transfer Machine to DO.",
+                    "Open DO", System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Information);
+                return;
+            }
+
+            string[] numbers = cell.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < numbers.Length; i++) numbers[i] = numbers[i].Trim();
+
+            if (numbers.Length == 1) { OpenDeliveryOrder(numbers[0]); return; }
+
+            DevExpress.Utils.Menu.DXPopupMenu menu = new DevExpress.Utils.Menu.DXPopupMenu();
+            foreach (string no in numbers)
+            {
+                string pick = no;   // captured per item, not the loop variable
+                menu.Items.Add(new DevExpress.Utils.Menu.DXMenuItem(pick,
+                    delegate(object s2, EventArgs e2) { OpenDeliveryOrder(pick); }));
+            }
+            menu.ShowPopup(v.GridControl, System.Windows.Forms.Control.MousePosition);
+        }
+
+        private void OpenDeliveryOrder(string docNo)
+        {
+            try
+            {
+                if (!ServiceContractPhotocopier.Classes.ScpContractDO.Open(_dbSetting, this, docNo))
+                    DevExpress.XtraEditors.XtraMessageBox.Show(this,
+                        docNo + " is no longer in the account book - it may have been deleted.",
+                        "Open DO", System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                DevExpress.XtraEditors.XtraMessageBox.Show(this,
+                    "Could not open " + docNo + ":\r\n" + ex.GetBaseException().Message,
+                    "Open DO", System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Warning);
             }
         }
 

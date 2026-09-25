@@ -3013,9 +3013,51 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // the dialog. The full editor still opens from the No / Service Item No cells or Edit button.
             DevExpress.XtraGrid.Views.Grid.ViewInfo.GridHitInfo hit =
                 GridViewItems.CalcHitInfo(GridItems.PointToClient(System.Windows.Forms.Cursor.Position));
+
+            // Feedback (user, 25/9): the DO column is the delivery order itself. Double-click it and
+            // AutoCount's own DO screen opens on that document -- not this machine's editor, which is
+            // what a read-only column would otherwise fall through to.
+            if (hit.InRowCell && hit.Column != null && hit.Column.FieldName == "DONo")
+            {
+                OpenDoFromRow(hit.RowHandle);
+                return;
+            }
+
             if (hit.InRowCell && hit.Column != null &&
                 hit.Column.OptionsColumn.AllowEdit && hit.Column.FieldName != "ServiceItemNo") return;
             BtnEditItem_Click(null, null);
+        }
+
+        /// <summary>Opens the delivery order named in one machine's DO cell.</summary>
+        private void OpenDoFromRow(int rowHandle)
+        {
+            if (rowHandle < 0) return;   // the new-row line at the bottom is not a machine yet
+
+            string docNo = Convert.ToString(GridViewItems.GetRowCellValue(rowHandle, "DONo")).Trim();
+            if (docNo.Length == 0)
+            {
+                XtraMessageBox.Show("This machine is not on a delivery order yet.\r\n\r\n" +
+                    "Press Transfer Machine to DO and tick it to send it out on one.",
+                    "Open DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            OpenDo(docNo);
+        }
+
+        /// <summary>Opens one delivery order in AutoCount's own DO screen, or says why it cannot.</summary>
+        private void OpenDo(string docNo)
+        {
+            try
+            {
+                if (!ServiceContractPhotocopier.Classes.ScpContractDO.Open(_db, this, docNo))
+                    XtraMessageBox.Show(docNo + " is no longer in the account book - it may have been deleted.",
+                        "Open DO", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception ex)
+            {
+                XtraMessageBox.Show("Could not open " + docNo + ":\r\n" + ex.GetBaseException().Message,
+                    "Open DO", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         // #5: the Service Item No column is an inline SearchLookUpEdit of ORPHAN items (contract-less +
@@ -3273,14 +3315,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
             // Feedback ATP-13: the DO this machine came from, or went out on -- read from its serial
             // number on AutoCount's delivery orders to this customer. Amber "No DO yet" when there is
-            // none: Create DO (ribbon) sends the selected machines out on one.
+            // none: Transfer Machine to DO (ribbon) picks machines and sends them out on one;
+            // double-clicking the cell opens the DO itself.
             DevExpress.XtraGrid.Columns.GridColumn colDO = GridViewItems.Columns.AddVisible("DONo");
             colDO.Caption = "DO";
             colDO.Width = 95;
             colDO.OptionsColumn.AllowEdit = false;
             colDO.OptionsColumn.ReadOnly = true;
             colDO.ToolTip = "The delivery order this machine came from, or went out on (matched by its serial number). " +
-                "No DO yet = select the machine and press Transfer Machine to DO.";
+                "Double-click to open it. No DO yet = press Transfer Machine to DO and tick the machine.";
             GridViewItems.CustomColumnDisplayText +=
                 new DevExpress.XtraGrid.Views.Base.CustomColumnDisplayTextEventHandler(GridViewItems_DODisplayText);
             GridViewItems.RowCellStyle +=
@@ -3420,11 +3463,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         }
 
         /// <summary>
-        /// Create DO (feedback ATP-13): one delivery order for the SELECTED machines of this saved
-        /// contract. Each machine must have its item code and serial, and the serial must still be in
-        /// stock -- checked when the list is shown, and again by ScpContractDO.CreateDO at the moment
-        /// the DO is made. A machine already delivered (the contract came from a DO, or a DO was
-        /// already made) is refused with the DO it is on.
+        /// Transfer Machine to DO (feedback ATP-13): one delivery order for the machines of this
+        /// saved contract that are going out.
+        ///
+        /// The picking is done in the dialog, not here: it lists every machine with whether it can
+        /// go out and why not, so a machine that is refused can be swapped for another without
+        /// closing anything. Each machine must have its item code and serial, and the serial must
+        /// still be in stock -- checked when the list is built, and again by ScpContractDO.CreateDO
+        /// at the moment the DO is written.
         /// </summary>
         private void barCreateDO_ItemClick(object sender, DevExpress.XtraBars.ItemClickEventArgs e)
         {
@@ -3434,28 +3480,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             { XtraMessageBox.Show("Save your changes first -- the DO is made from the saved contract, and " +
                 "the machines on screen have changed since.", "Transfer Machine to DO"); return; }
 
-            // The selected machines, in grid order; the invisible group "machine" is never delivered.
-            System.Collections.Generic.List<ItemEditData> picked = new System.Collections.Generic.List<ItemEditData>();
-            foreach (int rh in GridViewItems.GetSelectedRows())
-            {
-                if (rh < 0) continue;
-                object noVal = GridViewItems.GetRowCellValue(rh, "No");
-                if (noVal == null || noVal == DBNull.Value) continue;
-                int idx = Convert.ToInt32(noVal) - 1;
-                if (idx < 0 || idx >= _items.Count || _items[idx].IsGroupItem) continue;
-                if (!picked.Contains(_items[idx])) picked.Add(_items[idx]);
-            }
-            if (picked.Count == 0)
-            { XtraMessageBox.Show("Select the machine(s) to deliver in the Service Item grid first " +
-                "(Ctrl+click or Shift+click to select several).", "Transfer Machine to DO"); return; }
-
-            string debtor = "", contractNo = "", deptNo = "", projNo = "";
+            string debtor = "", debtorName = "", contractNo = "", deptNo = "", projNo = "";
             try
             {
-                DataTable hdr = _db.GetDataTable("SELECT DebtorCode, ContractNo, ISNULL(DeptNo,'') AS DeptNo, ISNULL(ProjNo,'') AS ProjNo " +
-                    "FROM dbo.zSCP2_Contract WHERE ContractKey=" + _contractKey, false);
+                DataTable hdr = _db.GetDataTable("SELECT c.DebtorCode, c.ContractNo, ISNULL(c.DeptNo,'') AS DeptNo, " +
+                    "ISNULL(c.ProjNo,'') AS ProjNo, ISNULL(d.CompanyName,'') AS CompanyName " +
+                    "FROM dbo.zSCP2_Contract c LEFT JOIN dbo.Debtor d ON d.AccNo = c.DebtorCode " +
+                    "WHERE c.ContractKey=" + _contractKey, false);
                 if (hdr.Rows.Count == 0) { XtraMessageBox.Show("The contract is not in the database any more.", "Transfer Machine to DO"); return; }
                 debtor = AsStr(hdr.Rows[0]["DebtorCode"]).Trim();
+                debtorName = AsStr(hdr.Rows[0]["CompanyName"]).Trim();
                 contractNo = AsStr(hdr.Rows[0]["ContractNo"]).Trim();
                 deptNo = AsStr(hdr.Rows[0]["DeptNo"]).Trim();
                 projNo = AsStr(hdr.Rows[0]["ProjNo"]).Trim();
@@ -3463,11 +3497,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             catch (Exception ex) { XtraMessageBox.Show("The contract could not be read:\r\n" + ex.Message, "Transfer Machine to DO"); return; }
             if (debtor.Length == 0) { XtraMessageBox.Show("The contract has no customer.", "Transfer Machine to DO"); return; }
 
+            // Every real machine of the contract goes to the dialog -- the invisible group "machine"
+            // is not a machine and is never delivered. Which of them go out is decided in there.
             System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> cands =
                 new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
-            foreach (ItemEditData d in picked)
+            foreach (ItemEditData d in _items)
             {
-                ServiceContractPhotocopier.Classes.ScpContractDO.Candidate c = new ServiceContractPhotocopier.Classes.ScpContractDO.Candidate();
+                if (d == null || d.IsGroupItem) continue;
+                ServiceContractPhotocopier.Classes.ScpContractDO.Candidate c =
+                    new ServiceContractPhotocopier.Classes.ScpContractDO.Candidate();
                 c.ItemKey = d.ItemKey;
                 c.ServiceItemNo = string.IsNullOrEmpty(d.ServiceItemNo) ? "<NEW>" : d.ServiceItemNo;
                 c.ItemCode = d.ItemCode ?? "";
@@ -3475,61 +3513,25 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 c.Location = d.StockLocationCode ?? "";
                 cands.Add(c);
             }
+            if (cands.Count == 0)
+            { XtraMessageBox.Show("This contract has no machines to deliver.", "Transfer Machine to DO"); return; }
 
-            System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Check> checks;
-            try { checks = ServiceContractPhotocopier.Classes.ScpContractDO.CheckAvailable(_db, cands); }
-            catch (Exception ex) { XtraMessageBox.Show("The stock could not be checked:\r\n" + ex.Message, "Transfer Machine to DO"); return; }
+            string createdDocNo;
+            bool openCreated;
+            using (zSCP2_TransferToDO_Form f = new zSCP2_TransferToDO_Form(_db, debtor, debtorName,
+                contractNo, deptNo, projNo, cands))
+            {
+                f.ShowDialog(this);
+                createdDocNo = f.CreatedDocNo;
+                openCreated = f.OpenCreated;
+            }
+            if (createdDocNo.Length == 0) return;   // cancelled, or nothing created
 
-            System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate> ok =
-                new System.Collections.Generic.List<ServiceContractPhotocopier.Classes.ScpContractDO.Candidate>();
-            System.Text.StringBuilder okText = new System.Text.StringBuilder();
-            System.Text.StringBuilder noText = new System.Text.StringBuilder();
-            foreach (ServiceContractPhotocopier.Classes.ScpContractDO.Check c in checks)
-            {
-                if (c.Ok)
-                {
-                    ok.Add(c.Machine);
-                    okText.Append("   ").Append(c.Machine.ServiceItemNo).Append("   ").Append(c.Machine.ItemCode)
-                          .Append("   S/N ").Append(c.Machine.SerialNo).Append("\r\n");
-                }
-                else
-                    noText.Append("   ").Append(c.Machine.ServiceItemNo).Append(" -- ").Append(c.Reason).Append("\r\n");
-            }
-            if (ok.Count == 0)
-            {
-                XtraMessageBox.Show("None of the selected machines can go out on a DO:\r\n\r\n" + noText,
-                    "Transfer Machine to DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            string ask = "Create a Delivery Order to " + debtor + ", dated " + DateTime.Today.ToString("dd/MM/yyyy") +
-                ", for " + ok.Count + " machine(s)?\r\n\r\n" + okText +
-                "\r\nEach goes out at no price -- the machine is billed through this contract, not sold on the DO." +
-                (noText.Length > 0 ? "\r\n\r\nLEFT OUT:\r\n" + noText : "");
-            if (XtraMessageBox.Show(ask, "Transfer Machine to DO", MessageBoxButtons.YesNo,
-                    noText.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Question) != DialogResult.Yes) return;
-
-            string docNo;
-            long docKey;
-            try
-            {
-                Cursor = Cursors.WaitCursor;
-                docNo = ServiceContractPhotocopier.Classes.ScpContractDO.CreateDO(_db, debtor, contractNo, deptNo, projNo,
-                    DateTime.Today, ok, out docKey);
-            }
-            catch (Exception ex)
-            {
-                Cursor = Cursors.Default;
-                XtraMessageBox.Show("The DO was not made:\r\n\r\n" + ex.Message, "Transfer Machine to DO",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            finally { Cursor = Cursors.Default; }
-
+            // A DO was made: the machines' DO column is read again so it shows on the grid at once,
+            // then the DO itself opens if the user said Yes to "Open it now?".
             LoadMachineDOs();
             RebuildItemsView();
-            XtraMessageBox.Show(docNo + " created for " + ok.Count + " machine(s).\r\n\r\n" +
-                "It is an ordinary AutoCount delivery order: open it from Sales > Delivery Order to print it, " +
-                "or to cancel it if it was made by mistake.", "Transfer Machine to DO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (openCreated) OpenDo(createdDocNo);
         }
 
         /// <summary>The paragraph that opens every warning about deleting or detaching a machine that

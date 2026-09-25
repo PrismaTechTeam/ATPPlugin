@@ -305,6 +305,12 @@
     <Compile Include="Service Contract\Operation Forms\zSCP2_ChangeOwnership_Form.Designer.cs">
       <DependentUpon>zSCP2_ChangeOwnership_Form.cs</DependentUpon>
     </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_TransferToDO_Form.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Service Contract\Operation Forms\zSCP2_TransferToDO_Form.Designer.cs">
+      <DependentUpon>zSCP2_TransferToDO_Form.cs</DependentUpon>
+    </Compile>
     <Compile Include="Service Contract\Operation Forms\zSCP2_GenerateFromSerial_Form.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -1279,6 +1285,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_Item_Form.resx">
       <DependentUpon>zSCP2_Item_Form.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_TransferToDO_Form.resx">
+      <DependentUpon>zSCP2_TransferToDO_Form.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Service Contract\Operation Forms\zSCP2_GenerateFromSerial_Form.resx">
       <DependentUpon>zSCP2_GenerateFromSerial_Form.cs</DependentUpon>

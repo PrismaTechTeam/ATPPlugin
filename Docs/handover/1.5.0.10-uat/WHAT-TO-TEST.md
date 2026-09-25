@@ -102,16 +102,18 @@ branches as registered in AutoCount (A/R > Debtor > Branch tab) -- a customer wi
 empty list that says so. Pick one for a machine and Save: the machine's delivery address follows the
 branch, and the Service Item screen shows the same branch. The invoice does not change.
 
-**Transfer Machine to DO.** On a saved contract, select one or more machines in the Service Item grid (Ctrl+click for
-several) and press **Delivery > Transfer Machine to DO**. It lists each machine with its model and serial and asks; a
-machine whose serial is not in stock, or that is already on a DO, is left out with the reason. Say Yes and
-check, in AutoCount's Delivery Order:
+**Transfer Machine to DO.** On a saved contract with five machines whose serials are in stock, press
+**Delivery > Transfer Machine to DO**. A list opens with every machine of the contract: model, serial, stock location
+and a Status. The five are ticked and read Ready; a machine with no serial, not in stock, or already on a DO reads why
+in amber and cannot be ticked. Untick one, leave the DO date on today and press **Create DO** (4 machines). Answer
+**Yes** to "DO-000002 created for 4 machine(s). Open it now?" -- AutoCount's Delivery Order screen opens on it. Check:
 
-- one DO to the contract's customer, dated today, Ref = the contract no;
+- one DO to the contract's customer, dated as picked, Ref = the contract no;
 - one line per machine: its item code, qty 1, price 0, and its serial number;
-- the serial is now out of stock -- press Transfer Machine to DO for the same machine again and it is refused, naming the DO;
-- the contract's **DO** column shows the DO on those machines, and **Maintain Service Contract** shows it in its
-  **DO** column (a contract with none shows an amber **No DO yet**).
+- the contract's **DO** column shows DO-000002 on the four machines and an amber **No DO yet** on the fifth;
+- press Transfer Machine to DO again: the four read "already delivered on DO-000002" and only the fifth can be ticked;
+- double-click a **DO** cell: the DO opens. In **Maintain Service Contract**, double-click the contract's **DO** cell:
+  the DO opens too (with two DOs on one contract, it asks which).
 
 Delete that test DO in AutoCount afterwards; the serial goes back into stock and the machine back to No DO yet.
 The DO is saved by AutoCount itself, so it needs a licensed AutoCount: an evaluation copy past 500 transactions
