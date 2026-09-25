@@ -28,6 +28,14 @@ Everything is under **Service & Contract**.
 to come back as "per machine, rental apart"). Choose a split, set a waive there, then press **Cancel** and discard:
 the contract is exactly as it was before Meters Pricing was opened.
 
+**A black minimum and a colour minimum.** On a contract with a colour machine, open **Meters Pricing**. On the
+**Black copies** row press the **...** under Minimum / waive, tick **Charge a minimum**, key **200.00**, leave Count
+only on **black only**, OK: the Black row reads "bill at least 200.00" and the Colour row stays empty. On the
+**Colour copies** row press **...** -- it opens empty, on **colour only** -- key **100.00**, OK: each row shows its
+own. Save, key a month where black comes to 150.00 and colour to 20.00, and the invoice tops black up by 50.00
+and colour by 80.00, on two lines that say "black" and "colour". Choosing **black and colour** instead sets one
+minimum for the two copies together, shown on both rows as "(black + colour)".
+
 **Look for:** does the sample match what you agreed with this customer — one invoice or several,
 the rental together or apart, black and colour on one line or two?
 Does Calculation Test give the amount you would work out by hand for the same readings?

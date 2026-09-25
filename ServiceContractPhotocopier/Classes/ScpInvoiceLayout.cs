@@ -580,7 +580,10 @@ namespace ServiceContractPhotocopier.Classes
                 if (!lay.HasFormat) return null;
                 string cg = (ln.MergeGroupCodeMeter ?? "").Trim();
                 if (cg.Length == 0) return null;
-                return "MIN|" + ln.ContractKey + "|" + cg.ToUpperInvariant();
+                // ...per colour: a group's black minimums and its colour minimums are two floors and
+                // print as two rows (feedback ATP-4). "Both" keeps its old key.
+                string cs = ScpCommittedMin.NormScope(ln.WaiveScope);
+                return "MIN|" + ln.ContractKey + "|" + cg.ToUpperInvariant() + (cs == "BKCL" ? "" : "|" + cs);
             }
 
             if (ln.IsRental || ln.IsFlat)

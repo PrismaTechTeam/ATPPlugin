@@ -455,7 +455,7 @@ namespace ServiceContractPhotocopier
             r["OnMachines"] = ((rates.Count == 1) ? rates[0].ToString((dp == 4) ? "n4" : "n2") : (rates.Count + " prices -> " + rates.Count + " lines"));
             r["UnitPrice"] = agreed;
             r["Monthly"] = ((!(field == "OwnRate")) ? "by usage" : ((agreed > 0m) ? (agreed * (decimal)part.Rows.Count).ToString("n2") : (SumOf(part, field).ToString("n2") + "  own")));
-            r["Terms"] = DescribeTerms(L);
+            r["Terms"] = DescribeTerms(L, field);
             string lad = (string)(r["LadderText"] = ((t == null || field == "OwnRate") ? "" : ((field == "OwnBk") ? (t.LadderBk ?? "") : (t.LadderCl ?? ""))));
             r["Tiers"] = ((field == "OwnRate") ? "" : ((L.Rows.Count == 1) ? MachineLadderWords(L, field) : DescribeLadder(lad, L, field)));
             r["Pad"] = "";
@@ -718,19 +718,23 @@ namespace ServiceContractPhotocopier
             return b.ToString();
         }
 
-        private string DescribeTerms(Line L)
+        private string DescribeTerms(Line L, string field)
         {
+            // The Black row shows the minimum that counts black copies, the Colour row the one that
+            // counts colour, and a "black and colour" minimum shows on both (feedback ATP-4: a black
+            // minimum used to show on the Colour row too, reading as if colour was held to it).
+            string colour = ColourOfField(field);
             decimal min = default(decimal);
             decimal at = default(decimal);
             decimal amt = default(decimal);
-            ReadTerms(L, out min, out at, out amt);
-            int nMin = CountTermMeters(L, "COMMIT");
+            ReadTerms(L, colour, out min, out at, out amt);
+            int nMin = CountTermMeters(L, "COMMIT", colour);
             int nWaive = CountTermMeters(L, "WAIVE");
             if (L.Side == "R")
             {
                 if (nWaive > 1)
                 {
-                    return "own waive each — " + nWaive + " of " + L.Rows.Count + " machines, up to " + SumTermMeters(L, "WAIVE").ToString("n2") + " off";
+                    return "own waive each — " + nWaive + " of " + L.Rows.Count + " machines, up to " + SumTermMeters(L, "WAIVE", "").ToString("n2") + " off";
                 }
                 if (at <= 0m && amt <= 0m)
                 {
@@ -746,16 +750,92 @@ namespace ServiceContractPhotocopier
             }
             if (nMin > 1)
             {
-                return "own minimum each — " + nMin + " of " + L.Rows.Count + " machines, " + SumTermMeters(L, "COMMIT").ToString("n2") + " in total";
+                return "own minimum each — " + nMin + " of " + L.Rows.Count + " machines, " + SumTermMeters(L, "COMMIT", colour).ToString("n2") + " in total" + BothWords(L, colour);
             }
             if (min <= 0m)
             {
                 return "";
             }
-            return (nMin == 1 && L.Rows.Count > 1 && !IsGroupScoped(L, "COMMIT")) ? ("one machine's own minimum " + min.ToString("n2")) : ("bill at least " + min.ToString("n2"));
+            return ((nMin == 1 && L.Rows.Count > 1 && !IsGroupScoped(L, "COMMIT", colour)) ? ("one machine's own minimum " + min.ToString("n2")) : ("bill at least " + min.ToString("n2"))) + BothWords(L, colour);
+        }
+
+        /// <summary>" (black + colour)" after a minimum that counts both, on a line that prints
+        /// both -- it shows on both rows, and says it is one floor, not two.</summary>
+        private string BothWords(Line L, string colour)
+        {
+            if (colour.Length == 0 || !AnyOn(L, "HasBk") || !AnyOn(L, "HasCl")) return "";
+            DataRow m = FindTermMeter(L, "COMMIT", colour);
+            return m != null && MinScopeOf(m) == "BKCL" ? " (black + colour)" : "";
+        }
+
+        /// <summary>"BK" for the Black copies row, "CL" for Colour copies, "" for the rental.</summary>
+        private static string ColourOfField(string field)
+        {
+            return field == "OwnBk" ? "BK" : (field == "OwnCl" ? "CL" : "");
+        }
+
+        /// <summary>Which copies a minimum meter counts: "BK", "CL" or "BKCL".</summary>
+        private static string MinScopeOf(DataRow mr)
+        {
+            return ScpCommittedMin.NormScope(Str(mr, "WaiveScope"));
+        }
+
+        /// <summary>Is this the minimum a row of this colour holds? A "both" minimum is held by
+        /// both rows; colour "" asks for any.</summary>
+        private static bool CountsColour(DataRow mr, string colour)
+        {
+            if (string.IsNullOrEmpty(colour)) return true;
+            string s = MinScopeOf(mr);
+            return s == "BKCL" || s == colour;
+        }
+
+        /// <summary>The meter type a minimum is kept under. One machine may carry a black minimum
+        /// and a colour minimum at once, and zSCP2_ItemMeter holds one meter per type per machine,
+        /// so the colour one is COMMIT-CL; black and "both" stay COMMIT (never together -- setting
+        /// one replaces the other).</summary>
+        private static string MinTypeFor(string scope)
+        {
+            return ScpCommittedMin.NormScope(scope) == "CL" ? "COMMIT-CL" : "COMMIT";
+        }
+
+        private static string MinDescriptionFor(string scope)
+        {
+            string s = ScpCommittedMin.NormScope(scope);
+            return s == "BK" ? "MINIMUM COMMITTED BLACK PRINT CHARGES"
+                 : (s == "CL" ? "MINIMUM COMMITTED COLOUR PRINT CHARGES" : "MINIMUM COMMITTED PRINT CHARGES");
+        }
+
+        /// <summary>
+        /// Puts each of this screen's minimums under the type its colour needs. A colour minimum
+        /// set before 1.5.0.10's split still sits under COMMIT; adding a black one beside it would
+        /// give the machine two COMMIT meters, which the save refuses. Legacy "MIN ..." types are
+        /// left as they are.
+        /// </summary>
+        private void RetypeMinimums()
+        {
+            foreach (ItemEditData d in _items)
+            {
+                if (d == null || d.Meters == null) continue;
+                foreach (DataRow mr in d.Meters.Rows)
+                {
+                    if (mr.RowState == DataRowState.Deleted) continue;
+                    if (Str(mr, "MeterRole").Trim().ToUpperInvariant() != "COMMIT") continue;
+                    string type = Str(mr, "MeterTypeCode").Trim().ToUpperInvariant();
+                    if (type != "COMMIT" && type != "COMMIT-CL") continue;
+                    string want = MinTypeFor(Str(mr, "WaiveScope"));
+                    if (type == want) continue;
+                    mr["MeterTypeCode"] = want;
+                    SetIfCol(mr, "Description", MinDescriptionFor(Str(mr, "WaiveScope")));
+                }
+            }
         }
 
         private int CountTermMeters(Line L, string role)
+        {
+            return CountTermMeters(L, role, "");
+        }
+
+        private int CountTermMeters(Line L, string role, string colour)
         {
             int n = 0;
             foreach (int i in L.Rows)
@@ -767,7 +847,8 @@ namespace ServiceContractPhotocopier
                 }
                 foreach (DataRow mr in d.Meters.Rows)
                 {
-                    if (mr.RowState != DataRowState.Deleted && !(Str(mr, "MeterRole").Trim().ToUpperInvariant() != role))
+                    if (mr.RowState != DataRowState.Deleted && !(Str(mr, "MeterRole").Trim().ToUpperInvariant() != role)
+                        && (role != "COMMIT" || CountsColour(mr, colour)))
                     {
                         decimal v = Math.Abs(Dec(mr, "MinimumCharges"));
                         if (v <= 0m)
@@ -784,7 +865,7 @@ namespace ServiceContractPhotocopier
             return n;
         }
 
-        private decimal MinOfMachine(int machineIndex)
+        private decimal MinOfMachine(int machineIndex, string colour)
         {
             ItemEditData d = ItemAt(machineIndex);
             if (d == null || d.Meters == null)
@@ -793,7 +874,8 @@ namespace ServiceContractPhotocopier
             }
             foreach (DataRow mr in d.Meters.Rows)
             {
-                if (mr.RowState == DataRowState.Deleted || Str(mr, "MeterRole").Trim().ToUpperInvariant() != "COMMIT")
+                if (mr.RowState == DataRowState.Deleted || Str(mr, "MeterRole").Trim().ToUpperInvariant() != "COMMIT"
+                    || !CountsColour(mr, colour))
                 {
                     continue;
                 }
@@ -836,6 +918,13 @@ namespace ServiceContractPhotocopier
 
         private void ClearTermMeters(Line L, string role)
         {
+            ClearTermMeters(L, role, "");
+        }
+
+        /// <summary>Takes this line's term meters off. For a minimum, colour "" takes them all and
+        /// "BK" / "CL" only the ones that colour's row holds -- the other colour's minimum stays.</summary>
+        private void ClearTermMeters(Line L, string role, string colour)
+        {
             foreach (int i in L.Rows)
             {
                 ItemEditData d = ItemAt(i);
@@ -846,7 +935,8 @@ namespace ServiceContractPhotocopier
                 for (int k = d.Meters.Rows.Count - 1; k >= 0; k--)
                 {
                     DataRow mr = d.Meters.Rows[k];
-                    if (mr.RowState != DataRowState.Deleted && Str(mr, "MeterRole").Trim().ToUpperInvariant() == role)
+                    if (mr.RowState != DataRowState.Deleted && Str(mr, "MeterRole").Trim().ToUpperInvariant() == role
+                        && (role != "COMMIT" || CountsColour(mr, colour)))
                     {
                         mr.Delete();
                     }
@@ -854,7 +944,7 @@ namespace ServiceContractPhotocopier
             }
         }
 
-        private void ClearAllMinimums()
+        private void ClearAllMinimums(string colour)
         {
             foreach (ItemEditData d in _items)
             {
@@ -865,7 +955,8 @@ namespace ServiceContractPhotocopier
                 for (int k = d.Meters.Rows.Count - 1; k >= 0; k--)
                 {
                     DataRow mr = d.Meters.Rows[k];
-                    if (mr.RowState != DataRowState.Deleted && ScpStrategy.IsCommittedMinRole(Str(mr, "MeterRole"), Str(mr, "MeterTypeCode"), Math.Abs(Dec(mr, "MinimumCharges"))))
+                    if (mr.RowState != DataRowState.Deleted && ScpStrategy.IsCommittedMinRole(Str(mr, "MeterRole"), Str(mr, "MeterTypeCode"), Math.Abs(Dec(mr, "MinimumCharges")))
+                        && CountsColour(mr, colour))
                     {
                         mr.Delete();
                     }
@@ -873,9 +964,9 @@ namespace ServiceContractPhotocopier
             }
         }
 
-        private void WriteMinPerMachine(Line L, DataTable machines, string countOnly)
+        private void WriteMinPerMachine(Line L, DataTable machines, string countOnly, string drop)
         {
-            ClearTermMeters(L, "COMMIT");
+            ClearTermMeters(L, "COMMIT", drop);
             for (int i = 0; i < L.Rows.Count && i < machines.Rows.Count; i++)
             {
                 DataRow src = machines.Rows[i];
@@ -891,7 +982,7 @@ namespace ServiceContractPhotocopier
                 ItemEditData d = ItemAt(L.Rows[i]);
                 if (d != null && d.Meters != null)
                 {
-                    DataRow m = NewTermMeter(d, "COMMIT");
+                    DataRow m = NewTermMeter(d, "COMMIT", countOnly);
                     if (m != null)
                     {
                         SetIfCol(m, "CommitScope", "S");
@@ -948,7 +1039,7 @@ namespace ServiceContractPhotocopier
             _changed = true;
         }
 
-        private decimal SumTermMeters(Line L, string role)
+        private decimal SumTermMeters(Line L, string role, string colour)
         {
             decimal sum = default(decimal);
             foreach (int i in L.Rows)
@@ -960,7 +1051,8 @@ namespace ServiceContractPhotocopier
                 }
                 foreach (DataRow mr in d.Meters.Rows)
                 {
-                    if (mr.RowState != DataRowState.Deleted && !(Str(mr, "MeterRole").Trim().ToUpperInvariant() != role))
+                    if (mr.RowState != DataRowState.Deleted && !(Str(mr, "MeterRole").Trim().ToUpperInvariant() != role)
+                        && (role != "COMMIT" || CountsColour(mr, colour)))
                     {
                         sum += Math.Abs(Dec(mr, "MinimumCharges"));
                     }
@@ -971,16 +1063,21 @@ namespace ServiceContractPhotocopier
 
         private bool IsGroupScoped(Line L, string role)
         {
-            DataRow m = FindTermMeter(L, role);
+            return IsGroupScoped(L, role, "");
+        }
+
+        private bool IsGroupScoped(Line L, string role, string colour)
+        {
+            DataRow m = FindTermMeter(L, role, colour);
             return m != null && Str(m, "CommitScope").Trim().ToUpperInvariant() == "G";
         }
 
-        private void ReadTerms(Line L, out decimal min, out decimal at, out decimal amt)
+        private void ReadTerms(Line L, string colour, out decimal min, out decimal at, out decimal amt)
         {
             min = default(decimal);
             at = default(decimal);
             amt = default(decimal);
-            DataRow c = FindTermMeter(L, "COMMIT");
+            DataRow c = FindTermMeter(L, "COMMIT", colour);
             if (c != null)
             {
                 min = Dec(c, "MinimumCharges");
@@ -1255,10 +1352,14 @@ namespace ServiceContractPhotocopier
                 XtraMessageBox.Show("Click the row you want to set terms for first.", "Billing Setup", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
                 return;
             }
+            // The row that was clicked says which minimum is being set: the Black row's or the
+            // Colour row's (feedback ATP-4). The rental row sets the waive.
+            DataRow focusedRow = GridViewLines.GetDataRow(GridViewLines.FocusedRowHandle);
+            string colour = L.Side == "R" || focusedRow == null ? "" : ColourOfField(Convert.ToString(focusedRow["Field"]));
             decimal min;
             decimal at;
             decimal amt;
-            ReadTerms(L, out min, out at, out amt);
+            ReadTerms(L, colour, out min, out at, out amt);
             int firstN = 0;
             decimal partAt = default(decimal);
             decimal partOff = default(decimal);
@@ -1273,12 +1374,12 @@ namespace ServiceContractPhotocopier
                 countOnly = ((sc == "BK" || sc == "CL") ? sc : "BKCL");
             }
             // Which copies this line's minimum counts, off the COMMIT meter that carries it.
-            string minCountOnly = "BKCL";
-            DataRow cmm = FindTermMeter(L, "COMMIT");
+            // A row with no minimum yet starts on its own colour.
+            string minCountOnly = colour.Length > 0 ? colour : "BKCL";
+            DataRow cmm = FindTermMeter(L, "COMMIT", colour);
             if (cmm != null)
             {
-                string ms = Str(cmm, "WaiveScope").Trim().ToUpperInvariant();
-                minCountOnly = ((ms == "BK" || ms == "CL") ? ms : "BKCL");
+                minCountOnly = MinScopeOf(cmm);
             }
             bool rentalSide = L.Side == "R";
             bool oneInvoice = WaiveFits;
@@ -1289,7 +1390,7 @@ namespace ServiceContractPhotocopier
                 LineTerms_Form.MachineMin mm = new LineTerms_Form.MachineMin();
                 mm.Name = Convert.ToString(mr["ServiceItemNo"]);
                 mm.Model = Convert.ToString(mr["ItemCode"]);
-                mm.Min = MinOfMachine(i);
+                mm.Min = MinOfMachine(i, colour);
                 decimal wAt;
                 decimal wAmt;
                 int wFree;
@@ -1299,38 +1400,50 @@ namespace ServiceContractPhotocopier
                 mm.WaiveFreeMonths = wFree;
                 onLine.Add(mm);
             }
-            bool perMachine = !rentalSide && L.Rows.Count > 1 && CountTermMeters(L, "COMMIT") > 0 && !IsGroupScoped(L, "COMMIT");
+            bool perMachine = !rentalSide && L.Rows.Count > 1 && CountTermMeters(L, "COMMIT", colour) > 0 && !IsGroupScoped(L, "COMMIT", colour);
             bool waivePerMachine = rentalSide && L.Rows.Count > 1 && CountTermMeters(L, "WAIVE") > 0 && !IsGroupScoped(L, "WAIVE");
             using (LineTerms_Form f = new LineTerms_Form(L.Name, L.Rows.Count, min, at, amt, !rentalSide, rentalSide, (!rentalSide || oneInvoice) ? "" : "The rental is on an invoice of its own, so a waive cannot be judged by what the copies came to -- they are on the other paper. Free months still work: they read a calendar, not a meter.", perMachine, onLine, waivePerMachine, firstN, partAt, partOff, countOnly, rentalSide && oneInvoice, RentalOfLine(L), minCountOnly))
             {
+                if (!rentalSide)
+                {
+                    f.LimitMinCount(colour);
+                }
                 if (f.ShowDialog(this) != DialogResult.OK)
                 {
                     return;
                 }
                 if (!rentalSide)
                 {
+                    // What this row's OK replaces: the minimums this row holds -- its colour's and a
+                    // "both" one. Setting "black and colour" replaces the other row's too, since it
+                    // is one floor for both. Unticking takes off only what this row showed.
+                    string drop = f.MinOn && f.MinCount == "BKCL" ? "" : colour;
                     if (f.MinPerMachine)
                     {
-                        WriteMinPerMachine(L, f.Machines, f.MinCount);
+                        WriteMinPerMachine(L, f.Machines, f.MinCount, drop);
                     }
                     else
                     {
                         if (f.MinScope == "C")
                         {
-                            ClearAllMinimums();
+                            ClearAllMinimums(drop);
                         }
                         else
                         {
-                            ClearTermMeters(L, "COMMIT");
+                            ClearTermMeters(L, "COMMIT", drop);
                         }
-                        WriteTermFor(L, "COMMIT", f.MinCharge, 0m);
-                        DataRow w = FindTermMeter(L, "COMMIT");
-                        if (w != null)
+                        if (f.MinOn && f.MinCharge > 0m && L.Rows.Count > 0)
                         {
-                            SetIfCol(w, "CommitScope", f.MinScope);
-                            SetIfCol(w, "WaiveScope", f.MinCount);
+                            DataRow w = NewTermMeter(ItemAt(L.Rows[0]), "COMMIT", f.MinCount);
+                            if (w != null)
+                            {
+                                w["MinimumCharges"] = f.MinCharge;
+                                SetIfCol(w, "CommitScope", f.MinScope);
+                                SetIfCol(w, "WaiveScope", f.MinCount);
+                            }
                         }
                     }
+                    RetypeMinimums();
                 }
                 else if (f.WaiveScopeMode == "S")
                 {
@@ -1353,6 +1466,12 @@ namespace ServiceContractPhotocopier
         /// </summary>
         private DataRow FindTermMeter(Line L, string role)
         {
+            return FindTermMeter(L, role, "");
+        }
+
+        /// <summary>...for a minimum, the one the row of this colour holds ("" = any).</summary>
+        private DataRow FindTermMeter(Line L, string role, string colour)
+        {
             foreach (int i in L.Rows)
             {
                 ItemEditData d = ItemAt(i);
@@ -1363,6 +1482,10 @@ namespace ServiceContractPhotocopier
                 foreach (DataRow mr in d.Meters.Rows)
                 {
                     if (mr.RowState == DataRowState.Deleted || !(Str(mr, "MeterRole").Trim().ToUpperInvariant() == role))
+                    {
+                        continue;
+                    }
+                    if (role == "COMMIT" && !CountsColour(mr, colour))
                     {
                         continue;
                     }
@@ -2094,14 +2217,19 @@ namespace ServiceContractPhotocopier
 
         private DataRow NewTermMeter(ItemEditData d, string role)
         {
+            return NewTermMeter(d, role, "BKCL");
+        }
+
+        private DataRow NewTermMeter(ItemEditData d, string role, string minCount)
+        {
             if (d == null || d.Meters == null)
             {
                 return null;
             }
             DataRow m = d.Meters.NewRow();
             m["MeterRole"] = role;
-            m["MeterTypeCode"] = ((role == "WAIVE") ? "WAIVE" : "COMMIT");
-            m["Description"] = ((role == "WAIVE") ? "RENTAL WAIVE" : "MINIMUM COMMITTED PRINT CHARGES");
+            m["MeterTypeCode"] = ((role == "WAIVE") ? "WAIVE" : MinTypeFor(minCount));
+            m["Description"] = ((role == "WAIVE") ? "RENTAL WAIVE" : MinDescriptionFor(minCount));
             SetIfCol(m, "MachineSerialNo", "");
             SetIfCol(m, "ChargesRate", 0m);
             SetIfCol(m, "MinimumCharges", 0m);
@@ -2114,7 +2242,7 @@ namespace ServiceContractPhotocopier
             SetIfCol(m, "WaiveTargetAmount", 0m);
             SetIfCol(m, "WaivePartialThreshold", 0m);
             SetIfCol(m, "WaivePartialAmount", 0m);
-            SetIfCol(m, "WaiveScope", "BKCL");
+            SetIfCol(m, "WaiveScope", role == "WAIVE" ? "BKCL" : ScpCommittedMin.NormScope(minCount));
             d.Meters.Rows.Add(m);
             return m;
         }

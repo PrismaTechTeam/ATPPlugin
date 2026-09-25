@@ -648,7 +648,8 @@ namespace ServiceContractPhotocopier.Classes
             }
             // Written short on purpose: this lands in a 100-character column, and the machine count
             // and every figure have to survive.
-            return "MIN per machine · floors " + floors.ToString("n2") +
+            string colourWord = row.Leader == null ? "" : ScpCommittedMin.ScopeWord(row.Leader.WaiveScope);
+            return "MIN " + (colourWord.Length > 0 ? colourWord + " " : "") + "per machine · floors " + floors.ToString("n2") +
                    " · copies " + printed.ToString("n2") +
                    (shortfall > 0m
                         ? " · " + shortCount + " of " + row.Units.ToString("0") + " short " + shortfall.ToString("n2")

@@ -297,6 +297,8 @@ namespace ServiceContractPhotocopier.Classes
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard.sql", asm));
                 // ...and point them at the five charge items, so an invoice line has an Item Code.
                 dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard_v2_ACItem.sql", asm));
+                // ...and COMMIT-CL, so a machine can carry a colour minimum beside a black one (ATP-4).
+                dbu.ExecuteDDLText(ReadEmbeddedSql("04_Seed_zSCP_MeterType_Standard_v3_CommitColour.sql", asm));
             }
             catch (Exception ex)
             {

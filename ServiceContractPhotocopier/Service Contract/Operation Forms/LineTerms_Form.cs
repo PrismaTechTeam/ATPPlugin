@@ -58,6 +58,15 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         /// screen that sets it.</summary>
         public string MinCount = "BKCL";
 
+        /// <summary>"Charge a minimum" was ticked when OK was pressed.</summary>
+        public bool MinOn;
+
+        // The Count only choices, by their words: a row of Meters / Pricing offers only its own
+        // colour and "black and colour" (see LimitMinCount), so the list is not always all three.
+        private const string MIN_BOTH = "black and colour";
+        private const string MIN_BK = "black only";
+        private const string MIN_CL = "colour only";
+
         /// <summary>Whose copies decide the waive: <c>G</c> this line's machines added up, <c>S</c>
         /// each machine against its own. A waive credits the RENTAL, so the set is the machines that
         /// share the rental — unlike a minimum, which floors the copies and follows the copies.</summary>
@@ -205,7 +214,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             }
             SpnMin.Value = minCharge;
             MinCount = (minCount ?? "BKCL").Trim().ToUpperInvariant();
-            CmbMinCount.SelectedIndex = MinCount == "BK" ? 1 : (MinCount == "CL" ? 2 : 0);
+            SelectMinCount(MinCount);
             CmbMinCount.SelectedIndexChanged += new EventHandler(Gate);
             SpnWaiveAt.Value = waiveAt;
             SpnWaiveAmount.Value = waiveAmount;
@@ -366,9 +375,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // machine's floor is measured over the copies chosen here.
             LblMinCount.Visible = CmbMinCount.Visible = on;
             CmbMinCount.Enabled = on;
-            LblMinA.Text = CmbMinCount.SelectedIndex == 1
+            LblMinA.Text = SelectedMinCount() == "BK"
                 ? "Their black copies must come to at least   RM"
-                : (CmbMinCount.SelectedIndex == 2
+                : (SelectedMinCount() == "CL"
                     ? "Their colour copies must come to at least   RM"
                     : "Their black and colour must come to at least   RM");
             // The sentence sits UNDER whatever is on screen. It used to be pinned where the single
@@ -494,15 +503,44 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return sum;
         }
 
+        /// <summary>
+        /// The minimum is set from the Black or the Colour row of Meters / Pricing, and each row
+        /// holds its own (feedback ATP-4: "I only set it for black, then it applies to colour as
+        /// well"). So the row's colour is the only one-colour choice it offers, beside "black and
+        /// colour" -- a colour minimum is set on the Colour row, where it shows.
+        /// </summary>
+        public void LimitMinCount(string rowColour)
+        {
+            string c = (rowColour ?? "").Trim().ToUpperInvariant();
+            if (c != "BK" && c != "CL") return;
+            string keep = SelectedMinCount();
+            CmbMinCount.SelectedIndexChanged -= new EventHandler(Gate);
+            CmbMinCount.Properties.Items.Clear();
+            CmbMinCount.Properties.Items.Add(c == "BK" ? MIN_BK : MIN_CL);
+            CmbMinCount.Properties.Items.Add(MIN_BOTH);
+            SelectMinCount(keep == "BKCL" ? "BKCL" : c);
+            CmbMinCount.SelectedIndexChanged += new EventHandler(Gate);
+        }
+
+        private string SelectedMinCount()
+        {
+            string t = Convert.ToString(CmbMinCount.EditValue);
+            return t == MIN_BK ? "BK" : (t == MIN_CL ? "CL" : "BKCL");
+        }
+
+        private void SelectMinCount(string code)
+        {
+            CmbMinCount.EditValue = code == "BK" ? MIN_BK : (code == "CL" ? MIN_CL : MIN_BOTH);
+        }
+
         private void BtnOK_Click(object sender, EventArgs e)
         {
             ViewMin.PostEditor();
             ViewMin.UpdateCurrentRow();
             MinScope = _allowMin && ChkMin.Checked ? Convert.ToString(RgMinMode.EditValue) : "G";
             MinCharge = _allowMin && ChkMin.Checked && !MinPerMachine ? SpnMin.Value : 0m;
-            MinCount = !(_allowMin && ChkMin.Checked) ? "BKCL"
-                     : (CmbMinCount.SelectedIndex == 1 ? "BK"
-                     : (CmbMinCount.SelectedIndex == 2 ? "CL" : "BKCL"));
+            MinOn = _allowMin && ChkMin.Checked;
+            MinCount = !MinOn ? "BKCL" : SelectedMinCount();
             ViewWaive.PostEditor();
             ViewWaive.UpdateCurrentRow();
             WaiveScopeMode = _allowWaive && ChkWaive.Checked

@@ -37,6 +37,30 @@ namespace ServiceContractPhotocopier.Classes
                 : l.ContractKey + "|@" + l.ItemKey;
         }
 
+        /// <summary>Which copies a minimum counts: "BK", "CL", or "BKCL" for both (anything else).</summary>
+        public static string NormScope(string waiveScope)
+        {
+            string s = (waiveScope ?? "").Trim().ToUpperInvariant();
+            return s == "BK" || s == "CL" ? s : "BKCL";
+        }
+
+        /// <summary>"black" / "colour" for a minimum that counts one colour, "" for both. A contract
+        /// can carry a black minimum AND a colour minimum on one machine (feedback ATP-4), and two
+        /// rows both reading "MINIMUM 200.00" would not say which is which.</summary>
+        public static string ScopeWord(string waiveScope)
+        {
+            string s = NormScope(waiveScope);
+            return s == "BK" ? "black" : (s == "CL" ? "colour" : "");
+        }
+
+        /// <summary>Do two minimums measure any of the same copies? Black and colour do not; either
+        /// of them and a "both" minimum do.</summary>
+        public static bool ScopesOverlap(string a, string b)
+        {
+            string x = NormScope(a), y = NormScope(b);
+            return x == y || x == "BKCL" || y == "BKCL";
+        }
+
         /// <summary>What the invoice calls the set a minimum is measured over.</summary>
         public static string GroupWords(MeterBillLine l)
         {
@@ -150,7 +174,7 @@ namespace ServiceContractPhotocopier.Classes
                     clByItem.TryGetValue(l.ItemKey, out pCl);
                 }
 
-                string cscope = (l.WaiveScope ?? "BKCL").Trim().ToUpperInvariant();
+                string cscope = NormScope(l.WaiveScope);
                 decimal charged = cscope == "BK" ? pBk : (cscope == "CL" ? pCl : pBk + pCl);
                 decimal topUp = l.CommittedAmount - charged;
                 if (topUp < 0m) topUp = 0m;
@@ -168,7 +192,9 @@ namespace ServiceContractPhotocopier.Classes
                 // one that charges.
                 // Kept inside 100 characters: IVDTL.Description rejects anything longer and takes
                 // the whole billing run down with it, and a group name can be long on its own.
-                l.StrategyNote = "MINIMUM " + l.CommittedAmount.ToString("0.00") + whoWords +
+                string colourWord = ScopeWord(cscope);
+                l.StrategyNote = "MINIMUM " + l.CommittedAmount.ToString("0.00") +
+                                 (colourWord.Length > 0 ? " " + colourWord : "") + whoWords +
                                  " · copies " + charged.ToString("0.00") +
                                  (topUp > 0m
                                     ? " · short " + topUp.ToString("0.00")
@@ -198,11 +224,15 @@ namespace ServiceContractPhotocopier.Classes
             // person setting the deal in Billing Setup and another adding a figure in Machine Meters,
             // which is two ordinary actions that were never told about each other. Only the first
             // shape was checked, so the realistic accident went straight through.
-            Dictionary<string, int> seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            // A black minimum and a colour minimum over the same set are two floors under two
+            // different sums, not the same floor twice (feedback ATP-4) -- so a set is judged per
+            // colour: two floors that both count black copies clash, a black and a colour do not,
+            // and a "both" floor clashes with either.
+            Dictionary<string, List<string>> seen = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, string> words = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             Dictionary<string, string> groupOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             List<MeterBillLine> perMachine = new List<MeterBillLine>();
-            bool contractWide = false;
+            List<string> contractScopes = new List<string>();
             string contractWords = "the whole contract";
 
             foreach (MeterBillLine l in allLines)
@@ -210,40 +240,61 @@ namespace ServiceContractPhotocopier.Classes
                 if (!l.IsCommittedMin) continue;
                 string who = (l.CommitScope ?? "S").Trim().ToUpperInvariant();
                 if (l.IsGroupItem) who = "C";
-                if (who == "C") contractWide = true;
+                if (who == "C") contractScopes.Add(NormScope(l.WaiveScope));
                 if (who != "G" && who != "C")
                 {
                     perMachine.Add(l);                       // may sit inside a wider floor -- checked below
                     continue;
                 }
                 string key = who == "C" ? "C|" + l.ContractKey : "G|" + GroupKey(l);
-                int n;
-                seen.TryGetValue(key, out n);
-                seen[key] = n + 1;
+                List<string> scopes;
+                if (!seen.TryGetValue(key, out scopes)) { scopes = new List<string>(); seen[key] = scopes; }
+                scopes.Add(NormScope(l.WaiveScope));
                 words[key] = who == "C" ? "the whole contract" : GroupWords(l);
                 if (who == "G") groupOf[GroupKey(l)] = GroupWords(l);
             }
 
-            foreach (KeyValuePair<string, int> kv in seen)
-                if (kv.Value > 1)
-                    problems.Add(kv.Value + " committed minimums are measured against " + words[kv.Key] +
+            foreach (KeyValuePair<string, List<string>> kv in seen)
+            {
+                int n = Math.Max(CountingColour(kv.Value, "BK"), CountingColour(kv.Value, "CL"));
+                if (n > 1)
+                    problems.Add(n + " committed minimums are measured against " + words[kv.Key] +
                                  " — each would top it up, so the shortfall would be billed " +
-                                 kv.Value + " times. Keep one.");
+                                 n + " times. Keep one.");
+            }
 
             // A machine floor inside a wider floor: the machine's own shortfall is counted once on its
             // own and again inside the wider sum.
             foreach (MeterBillLine l in perMachine)
             {
                 string gk = GroupKey(l);
+                string mine = NormScope(l.WaiveScope);
                 string inside = null;
-                if (groupOf.ContainsKey(gk)) inside = groupOf[gk];
-                else if (contractWide) inside = contractWords;
+                List<string> groupScopes;
+                if (groupOf.ContainsKey(gk) && seen.TryGetValue("G|" + gk, out groupScopes) && AnyOverlap(groupScopes, mine))
+                    inside = groupOf[gk];
+                else if (AnyOverlap(contractScopes, mine)) inside = contractWords;
                 if (inside == null) continue;
                 problems.Add((string.IsNullOrEmpty(l.ItemName) ? "A machine" : l.ItemName) +
                              " has its own committed minimum AND is inside a minimum measured over " +
                              inside + " — its shortfall would be billed twice. Keep one of them.");
             }
             return problems;
+        }
+
+        private static int CountingColour(List<string> scopes, string colour)
+        {
+            int n = 0;
+            foreach (string s in scopes)
+                if (s == colour || s == "BKCL") n++;
+            return n;
+        }
+
+        private static bool AnyOverlap(List<string> scopes, string scope)
+        {
+            foreach (string s in scopes)
+                if (ScopesOverlap(s, scope)) return true;
+            return false;
         }
     }
 }

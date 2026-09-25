@@ -5413,6 +5413,10 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     l.MergeGroupCodeMeter = d.MergeGroupCodeMeter ?? "";
                     l.CommitScope = mr.Table.Columns.Contains("CommitScope")
                         ? AsStr(mr["CommitScope"]) : "S";
+                    // Which copies it counts: a black and a colour minimum over one set are two
+                    // floors, not one floor twice (feedback ATP-4).
+                    l.WaiveScope = mr.Table.Columns.Contains("WaiveScope")
+                        ? AsStr(mr["WaiveScope"]) : "BKCL";
                     lines.Add(l);
                 }
             }
