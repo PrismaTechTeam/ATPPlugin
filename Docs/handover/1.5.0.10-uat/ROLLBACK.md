@@ -46,7 +46,7 @@ Source is at git tag **`v1.0.10-uat`** on `main`. The file you were given is:
 
 ```
 ATP-ServiceContract-1.5.0.10-uat.app
-SHA256  D23CD99F981B565C00E57D5DDE5F89AB4C95101928FD5AC5332C4746D1553367
+SHA256  56586D37115599876742D93934348364482D9C4F4D0FFA8A404EE7C6F9D361E7
 ```
 
 Check it with `Get-FileHash <file> -Algorithm SHA256` before installing if it reached you by e-mail

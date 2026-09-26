@@ -883,16 +883,37 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         /// <summary>Band by band, in words: "1,000 x 0.0240 = 24.00 + 548 x 0.0200 = 10.96 -> 34.96" --
         /// one term per invoice row (ATP-3).</summary>
+        /// <summary>
+        /// Split price by tier: one line per tier, then the total, in columns under the step's own
+        /// column (user, 26/9: "show one by tier -- first tier how much, second tier how much"). The
+        /// invoice prints the same rows, "(Tier 1)", "(Tier 2)".
+        /// </summary>
         private static string BandAmountWords(List<decimal[]> tierBands)
         {
-            List<string> parts = new List<string>();
+            string indent = new string(' ', 16);   // Step() pads its label to 16
+            int wCopies = 0, wRate = 0, wAmount = 0;
             decimal sum = 0m;
             foreach (decimal[] tb in tierBands)
             {
-                parts.Add(N0(tb[0]) + " x " + P(tb[1]) + " = " + tb[2].ToString("n2"));
+                wCopies = Math.Max(wCopies, N0(tb[0]).Length);
+                wRate = Math.Max(wRate, P(tb[1]).Length);
+                wAmount = Math.Max(wAmount, tb[2].ToString("n2").Length);
                 sum += tb[2];
             }
-            return string.Join(" + ", parts.ToArray()) + " -> " + sum.ToString("n2");
+            wAmount = Math.Max(wAmount, sum.ToString("n2").Length);
+
+            StringBuilder b = new StringBuilder();
+            string head = "";
+            for (int i = 0; i < tierBands.Count; i++)
+            {
+                decimal[] tb = tierBands[i];
+                head = "Tier " + (i + 1) + ":  " + N0(tb[0]).PadLeft(wCopies) + " x " + P(tb[1]).PadRight(wRate);
+                if (i > 0) b.Append(Environment.NewLine).Append(indent);
+                b.Append(head).Append(" = ").Append(tb[2].ToString("n2").PadLeft(wAmount));
+            }
+            b.Append(Environment.NewLine).Append(indent)
+             .Append("Total".PadRight(head.Length)).Append(" = ").Append(sum.ToString("n2").PadLeft(wAmount));
+            return b.ToString();
         }
 
         /// <summary>Which band the copies reached, in words: "2,500 copies reach the band up to 5,000".</summary>
