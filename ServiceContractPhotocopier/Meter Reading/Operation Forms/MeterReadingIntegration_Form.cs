@@ -2471,9 +2471,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // Editable for a KEYED reading only -- the day the counter was actually read
             // (feedback ATP-5). Every row that may not be touched is vetoed in ShowingEditor.
             SetCol("LastAuditDate", "Last Audit Date", 110, true);
-            // The reading's reference (feedback ATP-8): PUMS's report id arrives with a fetched
-            // reading; a keyed reading takes one typed here. Either becomes the invoice's Ref.
-            SetCol("TrackingId", "Reference No", 120, true);
+            // PUMS's report no. for a fetched reading, shown and never typed: the Reference No is the
+            // invoice's, typed once in Meter Invoice Run under Invoice date (feedback ATP-8, 26/9).
+            SetCol("TrackingId", "PUMS Report No", 120, false);
             SetCol("LastFetchDate", "Last Fetch Date", 115, false);
             GridColumn cFd = ActiveView.Columns["LastFetchDate"];
             if (cFd != null)

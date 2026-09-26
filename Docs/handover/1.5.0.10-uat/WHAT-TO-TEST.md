@@ -102,10 +102,11 @@ stale counter -- pick its row and press **Key in myself**. The number and its da
 are; what changes is that the reading is yours, so its date can be corrected, and the next
 Fetch raises a conflict instead of overwriting it.
 
-A reading keyed by hand can carry a **Reference No** (the column after Source): type the slip or
-report number once and both counters of the machine take it. Generate the invoice and its **Ref**
-shows it -- the same place a PUMS reading's report id appears. Leave it empty and the Ref is the
-usual contract or machine number.
+**Reference No for the invoice.** Pick an invoice in Meter Invoice Run and type its **Reference No** once, in the
+box under **Invoice date** (the slip or report number, up to 30 characters). Refresh keeps it; Generate prints it as
+the invoice's **Ref**. Leave it empty and the Ref is the usual one -- PUMS's report no. for a fetched reading, else
+the machine or contract no. The readings grid shows PUMS's report no. per meter as **PUMS Report No**; it is not
+typed there.
 
 On a contract, the machine grid has a **Branch** column beside Bill Group. It lists the customer's
 branches as registered in AutoCount (A/R > Debtor > Branch tab) -- a customer with none shows an

@@ -176,6 +176,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnTakeOver.Click += new EventHandler(BtnTakeOver_Click);
             // Feedback ATP-6 / ATP-9: the invoice date is the due date only by default.
             this.DtInvDate.EditValueChanged += new EventHandler(DtInvDate_EditValueChanged);
+            this.TxtInvRef.EditValueChanged += new EventHandler(TxtInvRef_EditValueChanged);
             this.BtnInvDateFromReading.Click += new EventHandler(BtnInvDateFromReading_Click);
             this.GridViewInvoices.RowCellStyle +=
                 new DevExpress.XtraGrid.Views.Grid.RowCellStyleEventHandler(GridViewInvoices_InvDateCellStyle);
@@ -453,6 +454,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         // The invoice dates the operator moved (feedback ATP-6 / ATP-9), by period + invoice. Kept for
         // as long as the screen is open, so a Refresh or a Fetch does not quietly put them back.
         private readonly Dictionary<string, DateTime> _docDates = new Dictionary<string, DateTime>();
+        private readonly Dictionary<string, string> _invRefs = new Dictionary<string, string>();   // ATP-8
 
         private static string DocDateKey(InvoiceRunItem it)
         {
@@ -465,6 +467,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 DateTime moved;
                 it0.DocDateOverride = _docDates.TryGetValue(DocDateKey(it0), out moved) ? (DateTime?)moved : null;
+                string typedRef;
+                it0.RefOverride = _invRefs.TryGetValue(DocDateKey(it0), out typedRef) ? typedRef : "";
             }
             DataTable t = new DataTable();
             t.Columns.Add("Sel", typeof(bool));
@@ -659,9 +663,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 this.BtnTakeOver.Enabled = false;
                 _suppress = true;
                 this.DtInvDate.EditValue = null;
+                this.TxtInvRef.EditValue = null;
                 _suppress = false;
                 this.DtInvDate.Enabled = false;
                 this.BtnInvDateFromReading.Enabled = false;
+                this.TxtInvRef.Enabled = false;
                 return;
             }
             this.LblDetailTitle.Text = it.ContractNo + "  ·  " + it.Kind + " invoice" +
@@ -681,9 +687,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // The date this invoice will carry; an invoice already made keeps the date it was made with.
             _suppress = true;
             this.DtInvDate.EditValue = it.Status == InvoiceRunItem.INVOICED ? null : (object)ScpInvoiceRun.EffectiveDocDate(it);
+            this.TxtInvRef.EditValue = it.Status == InvoiceRunItem.INVOICED ? null : (object)(it.RefOverride ?? "");
             _suppress = false;
             this.DtInvDate.Enabled = it.Status != InvoiceRunItem.INVOICED;
             this.BtnInvDateFromReading.Enabled = it.Status != InvoiceRunItem.INVOICED;
+            this.TxtInvRef.Enabled = it.Status != InvoiceRunItem.INVOICED;
 
             // The other half of a contract that bills its rent apart, so the clerk sees both.
             string foot = "";
@@ -1408,11 +1416,11 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 if (r == null || ScpInvoiceRun.WhyDateFixed(r).Length > 0) e.Cancel = true;
                 return;
             }
-            // The reading's reference (feedback ATP-8): PUMS brings its own report id and the
-            // invoice prints it as Ref; a keyed reading brings nothing, so the operator types one.
+            // PUMS's report no. is shown, never typed: the Reference No is the invoice's, typed once
+            // under Invoice date (feedback ATP-8, 26/9).
             if (this.GridViewReadings.FocusedColumn == this.ColRRef)
             {
-                if (r == null || ScpInvoiceRun.WhyRefFixed(r).Length > 0) e.Cancel = true;
+                e.Cancel = true;
                 return;
             }
             if (this.GridViewReadings.FocusedColumn != this.ColRCurrent) { e.Cancel = true; return; }
@@ -1686,6 +1694,21 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 : "This invoice is dated its due date, " + ScpInvoiceRun.DefaultDocDate(it).ToString("dd/MM/yyyy") + ".";
         }
 
+        // ─────────────────────── the invoice's Reference No (feedback ATP-8) ───────────────────────
+
+        // One Reference No for the whole invoice, typed where its date is (user, 26/9: "reference no
+        // is not one per meter, it is for the invoice"). Generate writes it to the invoice's Ref; left
+        // empty, the Ref is what it always was -- PUMS's report no., else the machine or contract no.
+        private void TxtInvRef_EditValueChanged(object sender, EventArgs e)
+        {
+            if (_suppress || _current == null) return;
+            string typed = Convert.ToString(this.TxtInvRef.EditValue ?? "").Trim();
+            if (typed.Length > ScpInvoiceRun.REF_MAX) typed = typed.Substring(0, ScpInvoiceRun.REF_MAX);
+            _current.RefOverride = typed;
+            string key = DocDateKey(_current);
+            if (typed.Length > 0) _invRefs[key] = typed; else _invRefs.Remove(key);
+        }
+
         private void BtnInvDateFromReading_Click(object sender, EventArgs e)
         {
             if (_current == null) return;
@@ -1846,6 +1869,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 MeterInvoiceGenerator.InvoiceJob job;
                 if (jobs.TryGetValue(it.JobKey, out job)) job.DocDate = it.DocDateOverride.Value;
                 else unplaced.Add(it.ContractNo + " (" + it.DocDateOverride.Value.ToString("dd/MM/yyyy") + ")");
+            }
+            // Feedback ATP-8: the Reference No typed for an invoice is its Ref, whatever PUMS's report
+            // numbers would have made it. One that cannot find its invoice stops the run, as a date does.
+            foreach (InvoiceRunItem it in chosen)
+            {
+                if (string.IsNullOrEmpty(it.RefOverride)) continue;
+                MeterInvoiceGenerator.InvoiceJob job;
+                if (jobs.TryGetValue(it.JobKey, out job)) job.RefDocNo = it.RefOverride;
+                else unplaced.Add(it.ContractNo + " (Reference No " + it.RefOverride + ")");
             }
             if (unplaced.Count > 0)
             {

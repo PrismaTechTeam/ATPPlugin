@@ -41,6 +41,11 @@ namespace ServiceContractPhotocopier.Classes
         /// ATP-9); null = the default. Kept by the run screen for the session.</summary>
         public DateTime? DocDateOverride;
 
+        /// <summary>The invoice's Reference No, typed once for the whole invoice (feedback ATP-8,
+        /// user 26/9: "reference no is for the invoice, not one per meter"); "" = the usual Ref --
+        /// PUMS's report no., else the machine or contract no. Kept by the run screen for the session.</summary>
+        public string RefOverride = "";
+
         public DateTime Due
         {
             get

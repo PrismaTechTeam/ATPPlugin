@@ -91,6 +91,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.LblInvDate = new DevExpress.XtraEditors.LabelControl();
             this.DtInvDate = new DevExpress.XtraEditors.DateEdit();
             this.BtnInvDateFromReading = new DevExpress.XtraEditors.SimpleButton();
+            this.LblInvRef = new DevExpress.XtraEditors.LabelControl();
+            this.TxtInvRef = new DevExpress.XtraEditors.TextEdit();
             this.BtnOverdue = new DevExpress.XtraEditors.CheckButton();
             this.GridReadings = new DevExpress.XtraGrid.GridControl();
             this.GridViewReadings = new DevExpress.XtraGrid.Views.Grid.GridView();
@@ -149,6 +151,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkMissingOnly.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties.CalendarTimeProperties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtInvRef.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridReadings)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewReadings)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoNum)).BeginInit();
@@ -805,10 +808,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.PanelDetailHead.Controls.Add(this.LblInvDate);
             this.PanelDetailHead.Controls.Add(this.DtInvDate);
             this.PanelDetailHead.Controls.Add(this.BtnInvDateFromReading);
+            this.PanelDetailHead.Controls.Add(this.LblInvRef);
+            this.PanelDetailHead.Controls.Add(this.TxtInvRef);
             this.PanelDetailHead.Dock = System.Windows.Forms.DockStyle.Top;
             this.PanelDetailHead.Location = new System.Drawing.Point(0, 0);
             this.PanelDetailHead.Name = "PanelDetailHead";
-            this.PanelDetailHead.Size = new System.Drawing.Size(510, 182);
+            this.PanelDetailHead.Size = new System.Drawing.Size(510, 208);
             this.PanelDetailHead.TabIndex = 0;
             //
             // LblDetailTitle
@@ -977,10 +982,30 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.BtnInvDateFromReading.TabIndex = 13;
             this.BtnInvDateFromReading.Text = "Use last reading date";
             //
+            // LblInvRef  (feedback ATP-8: the invoice's Reference No, typed once for the whole invoice)
+            //
+            this.LblInvRef.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.LblInvRef.Appearance.Options.UseFont = true;
+            this.LblInvRef.Location = new System.Drawing.Point(12, 182);
+            this.LblInvRef.Name = "LblInvRef";
+            this.LblInvRef.Size = new System.Drawing.Size(71, 15);
+            this.LblInvRef.TabIndex = 14;
+            this.LblInvRef.Text = "Reference No";
+            //
+            // TxtInvRef
+            //
+            this.TxtInvRef.Location = new System.Drawing.Point(86, 179);
+            this.TxtInvRef.Name = "TxtInvRef";
+            this.TxtInvRef.Properties.MaxLength = 30;
+            this.TxtInvRef.Properties.NullValuePrompt = "empty = PUMS report no. or contract no.";
+            this.TxtInvRef.Properties.NullValuePromptShowForEmptyValue = true;
+            this.TxtInvRef.Size = new System.Drawing.Size(266, 20);
+            this.TxtInvRef.TabIndex = 15;
+            //
             // GridReadings
             //
             this.GridReadings.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.GridReadings.Location = new System.Drawing.Point(0, 182);
+            this.GridReadings.Location = new System.Drawing.Point(0, 208);
             this.GridReadings.MainView = this.GridViewReadings;
             this.GridReadings.Name = "GridReadings";
             this.GridReadings.RepositoryItems.AddRange(new DevExpress.XtraEditors.Repository.RepositoryItem[] {
@@ -1156,11 +1181,12 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             //
             // ColRRef  (the reading's reference: PUMS's report id, or the one keyed with a manual reading)
             //
-            this.ColRRef.Caption = "Reference No";
+            this.ColRRef.Caption = "PUMS Report No";
             this.ColRRef.ColumnEdit = this.RepoRef;
             this.ColRRef.FieldName = "TrackingId";
             this.ColRRef.Name = "ColRRef";
-            this.ColRRef.OptionsColumn.AllowEdit = true;
+            this.ColRRef.OptionsColumn.AllowEdit = false;
+            this.ColRRef.OptionsColumn.ReadOnly = true;
             this.ColRRef.Visible = true;
             this.ColRRef.VisibleIndex = 7;
             this.ColRRef.Width = 130;
@@ -1440,6 +1466,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             ((System.ComponentModel.ISupportInitialize)(this.ChkMissingOnly.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties.CalendarTimeProperties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.DtInvDate.Properties)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.TxtInvRef.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridReadings)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridViewReadings)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.RepoNum)).EndInit();
@@ -1526,6 +1553,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraEditors.LabelControl LblInvDate;
         private DevExpress.XtraEditors.DateEdit DtInvDate;
         private DevExpress.XtraEditors.SimpleButton BtnInvDateFromReading;
+        private DevExpress.XtraEditors.LabelControl LblInvRef;
+        private DevExpress.XtraEditors.TextEdit TxtInvRef;
         private DevExpress.XtraEditors.CheckButton BtnOverdue;
         private DevExpress.XtraGrid.GridControl GridReadings;
         private DevExpress.XtraGrid.Views.Grid.GridView GridViewReadings;
