@@ -235,8 +235,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.CmbTierMode.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
             new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
             this.CmbTierMode.Properties.Items.AddRange(new object[] {
-            "Whole month at the tier reached",
-            "Each tier at its own rate"});
+            "One price for all copies",
+            "Split price by tier"});
             this.CmbTierMode.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
             this.CmbTierMode.Size = new System.Drawing.Size(260, 20);
             this.CmbTierMode.TabIndex = 8;

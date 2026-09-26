@@ -721,7 +721,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 else e.DisplayText = code;
                 if ((code.Length > 0 || custom.Length > 0) && r.Table.Columns.Contains("TierMode")
                     && Convert.ToString(r["TierMode"]).Trim().ToUpperInvariant() == "I")
-                    e.DisplayText += " · each tier";   // ATP-3: priced tier by tier
+                    e.DisplayText += " · split by tier";   // ATP-3: priced tier by tier
                 return;
             }
             if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty

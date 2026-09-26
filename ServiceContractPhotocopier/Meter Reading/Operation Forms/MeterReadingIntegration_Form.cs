@@ -3624,7 +3624,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     deal = "MULTI-PRICE " + (mpc.StartsWith("#") ? "(custom)" : mpc) +
                            (ladderFoc + Dec(r["FOCQty"]) > 0m ? ": first " + (ladderFoc + Dec(r["FOCQty"])).ToString("#,##0") + " FREE" : "") +
                            (ladderNext.Length > 0 ? ", then " + ladderNext + "/copy" : "") +
-                           (Convert.ToBoolean(d["TierIncremental"]) ? " - each tier at its own rate" : "");
+                           (Convert.ToBoolean(d["TierIncremental"]) ? " - split price by tier" : "");
                 }
                 d["Deal"] = deal;
                 dt.Rows.Add(d);

@@ -772,7 +772,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ScpMultiPrice.LadderCharge(_calcLadders, code, usage, resetN, out inLadder, out rate);
                 bool byBand = r.Table.Columns.Contains("TierIncremental") && Bool(r["TierIncremental"]);
                 sb.AppendLine(Step("Tier price", ScpMultiPrice.Describe(bands) +
-                    (byBand ? "   (each tier at its own rate)" : "   (whole month at the tier reached)")));
+                    (byBand ? "   (split price by tier)" : "   (one price for all copies)")));
                 // The ladder replaces the Unit Price. The meter's FOC still counts (ATP-3).
                 if (Dec(r["UnitPrice"]) != 0m)
                     sb.AppendLine(Step("", "(the tier price replaces Price " + P(Dec(r["UnitPrice"])) + ")"));

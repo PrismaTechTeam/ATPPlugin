@@ -458,7 +458,7 @@ namespace ServiceContractPhotocopier
             r["Terms"] = DescribeTerms(L, field);
             string lad = (string)(r["LadderText"] = ((t == null || field == "OwnRate") ? "" : ((field == "OwnBk") ? (t.LadderBk ?? "") : (t.LadderCl ?? ""))));
             r["Tiers"] = ((field == "OwnRate") ? "" : ((L.Rows.Count == 1) ? MachineLadderWords(L, field)
-                : DescribeLadder(lad, L, field) + (lad.Length > 0 && GroupEachTier(L, field == "OwnBk" ? "BK" : "CL") ? " · each tier at its own rate" : "")));
+                : DescribeLadder(lad, L, field) + (lad.Length > 0 && GroupEachTier(L, field == "OwnBk" ? "BK" : "CL") ? " · split price by tier" : "")));
             r["Pad"] = "";
             string key = LineKeyOf(L) + "|" + bg.ToUpperInvariant();
             r["LineKey"] = key;
@@ -1192,7 +1192,7 @@ namespace ServiceContractPhotocopier
                         DataRow gm = MeterOf(ItemAt(gi), groupRole);
                         if (gm != null && !HasOwnLadder(gm)) SetIfCol(gm, "TierMode", dlg.ResultTierMode);
                     }
-                    row["Tiers"] = DescribeLadder(chosen, L, field) + (chosen.Length > 0 && GroupEachTier(L, groupRole) ? " · each tier at its own rate" : "");
+                    row["Tiers"] = DescribeLadder(chosen, L, field) + (chosen.Length > 0 && GroupEachTier(L, groupRole) ? " · split price by tier" : "");
                     if (chosen.Length > 0)
                     {
                         row["UnitPrice"] = 0m;
@@ -1347,11 +1347,11 @@ namespace ServiceContractPhotocopier
             return false;
         }
 
-        /// <summary>" · each tier at its own rate" after a ladder its meter prices tier by tier
+        /// <summary>" · split price by tier" after a ladder its meter prices tier by tier
         /// (ATP-3). The whole-month rule, every meter's before, says nothing.</summary>
         private static string ModeWords(DataRow m)
         {
-            return m != null && Str(m, "TierMode").Trim().ToUpperInvariant() == "I" ? " · each tier at its own rate" : "";
+            return m != null && Str(m, "TierMode").Trim().ToUpperInvariant() == "I" ? " · split price by tier" : "";
         }
 
         private List<string> MachinesWithOwnLadder(Line L, string field)
