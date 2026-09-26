@@ -45,12 +45,14 @@ Does Calculation Test give the amount you would work out by hand for the same re
 1. In the meter grid under the machines, that meter's **Free Qty** is white and takes a number; its
    Unit Price stays grey (the tier price sets it). A tier price that used to start with free copies
    now shows them here -- "first 100 at 0.00" reads as Free Qty 100.
-2. **Billing → 1. The invoice → Tier pricing** reads **Whole month at the tier reached**. Run
+2. Press the meter's price button: the tier price window has **Tier pricing** under the tiers, on
+   **Whole month at the tier reached**. It belongs to this machine's meter -- the contract header no
+   longer has it -- so two machines on one contract can each price their tiers their own way. Run
    **Calculation Test** on that meter: key 0 and 1,648 on a meter with 100 free and tiers "up to
-   1,000 at 0.024, then 0.020" (Tier Price below the list sets them for the test) -- it bills
-   1,548 x 0.020 = **30.96**.
-3. Change Tier pricing to **Each tier at its own rate** and run Calculation Test again, without
-   saving: 1,000 x 0.024 + 548 x 0.020 = **34.96**, with the working showing each tier.
+   1,000 at 0.024, then 0.020" -- it bills 1,548 x 0.020 = **30.96**.
+3. Set Tier pricing to **Each tier at its own rate** (the meter's price cell adds "· each tier") and run
+   Calculation Test again, without saving: 1,000 x 0.024 + 548 x 0.020 = **34.96**, with the working
+   showing each tier. Meters / Pricing's Tier pricing column says "each tier at its own rate" too.
 4. **View Sample Invoice**: the meter prints one row per tier, "(Tier 1)", "(Tier 2)", each row's
    Qty x Unit Price = its Amount, and the rows add up to 34.96.
 5. Try to give a tier price a first tier of 0.00 -- on the meter's price button, or in

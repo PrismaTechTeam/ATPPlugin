@@ -1033,6 +1033,7 @@
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v6_WideRole.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v7_WaivePartialRM.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v8_CommitScope.sql" />
+    <EmbeddedResource Include="SQL\02_Update_zSCP2_ItemMeter_v9_TierMode.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v9_RentalBillingDay.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v10_ReportTemplates.sql" />
     <EmbeddedResource Include="SQL\02_Update_zSCP2_Contract_v11_PeriodMode.sql" />

@@ -210,6 +210,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Whose print charges a committed minimum is measured against: S machine / G merge
             // group / C whole contract. WaiveScope answers the other half -- black / colour / both.
             dt.Columns.Add("CommitScope", typeof(string));
+            // How the meter prices its tier ladder: T whole month at the tier reached, I each tier at
+            // its own rate. Set in the tier window beside the tiers (ATP-3; was one contract setting).
+            dt.Columns.Add("TierMode", typeof(string));
             return dt;
         }
 
@@ -628,11 +631,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? Convert.ToString(r["CustomTiers"]) : "";
             decimal foc = r["FOCQty"] == DBNull.Value ? 0m : Convert.ToDecimal(r["FOCQty"]);
             using (ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form dlg =
-                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc))
+                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc,
+                    r.Table.Columns.Contains("TierMode") && r["TierMode"] != DBNull.Value ? Convert.ToString(r["TierMode"]) : "T"))
             {
                 if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
                 r["MeterMultiPriceCode"] = dlg.SelectedCode;
                 r["CustomTiers"] = dlg.CustomCsv;
+                if (r.Table.Columns.Contains("TierMode")) r["TierMode"] = dlg.ResultTierMode;   // ATP-3: per meter
                 _ladderFocCache.Clear();   // scheme tiers may have changed elsewhere — recompute displays
                 GridViewMeters.RefreshData();
             }
@@ -714,6 +719,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 if (custom.Length > 0) e.DisplayText = code.Length == 0 ? "(Custom)" : code + " (Modified)";
                 else e.DisplayText = code;
+                if ((code.Length > 0 || custom.Length > 0) && r.Table.Columns.Contains("TierMode")
+                    && Convert.ToString(r["TierMode"]).Trim().ToUpperInvariant() == "I")
+                    e.DisplayText += " · each tier";   // ATP-3: priced tier by tier
                 return;
             }
             if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty
@@ -1830,7 +1838,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 _meters.Rows.Clear();
                 DataTable mt = _db.GetDataTable(
                     "SELECT ItemMeterKey, MeterTypeCode, MeterRole, [Description], MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                    "RebateQtyInPercent, FOCQty, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope " +
+                    "RebateQtyInPercent, FOCQty, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, TierMode " +
                     "FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + key + " ORDER BY ItemMeterKey", false);
                 foreach (DataRow s in mt.Rows)
                 {
@@ -1850,6 +1858,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     nr["WaivePartialThreshold"] = s["WaivePartialThreshold"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaivePartialThreshold"]);
                     nr["WaivePartialAmount"] = s["WaivePartialAmount"] == DBNull.Value ? 0m : Convert.ToDecimal(s["WaivePartialAmount"]);
                     nr["WaiveScope"] = s["WaiveScope"] == DBNull.Value ? "BKCL" : Convert.ToString(s["WaiveScope"]);
+                    nr["TierMode"] = Convert.ToString(s["TierMode"]).Trim().ToUpperInvariant() == "I" ? "I" : "T";   // the deal's tier rule copies too
                     _meters.Rows.Add(nr);
                 }
 
@@ -2674,7 +2683,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand up = new System.Data.SqlClient.SqlCommand(
                             "UPDATE [dbo].[zSCP2_ItemMeter] SET MeterRole=@role, [Description]=@desc, MinimumCharges=@min, ChargesRate=@rate, " +
                             "MeterMultiPriceCode=@mp, RebateQtyInPercent=@reb, FOCQty=@foc, InitialReading=@init, " +
-                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialThreshold=@wpt, WaivePartialAmount=@wpa, WaiveScope=@ws, CommitScope=@cs, " +
+                            "WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialThreshold=@wpt, WaivePartialAmount=@wpa, WaiveScope=@ws, CommitScope=@cs, TierMode=@tm, " +
                             "LastModified=GETDATE() WHERE ItemMeterKey=@mk", conn, tx))
                         {
                             up.Parameters.AddWithValue("@role", role);
@@ -2690,8 +2699,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         using (System.Data.SqlClient.SqlCommand ins = new System.Data.SqlClient.SqlCommand(
                             "INSERT INTO [dbo].[zSCP2_ItemMeter] (ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, " +
                             "ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, InitialReading, " +
-                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, LastModified) " +
-                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
+                            "WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, TierMode, LastModified) " +
+                            "VALUES (@ik,@type,@desc,@role,@mser,@min,@rate,@mp,@reb,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,@tm,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", conn, tx))
                         {
                             ins.Parameters.AddWithValue("@ik", itemKey);
                             ins.Parameters.AddWithValue("@type", type);
@@ -2839,6 +2848,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             string csv = r.Table.Columns.Contains("CommitScope") && r["CommitScope"] != DBNull.Value
                 ? Convert.ToString(r["CommitScope"]).Trim().ToUpperInvariant() : "";
             cmd.Parameters.AddWithValue("@cs", csv == "G" || csv == "C" ? (object)csv : (object)"S");
+            string tmv = r.Table.Columns.Contains("TierMode") && r["TierMode"] != DBNull.Value
+                ? Convert.ToString(r["TierMode"]).Trim().ToUpperInvariant() : "";
+            cmd.Parameters.AddWithValue("@tm", tmv == "I" ? "I" : "T");
         }
 
         // Decide what a context column actually stores. Unbound item: the value as typed. Bound item:

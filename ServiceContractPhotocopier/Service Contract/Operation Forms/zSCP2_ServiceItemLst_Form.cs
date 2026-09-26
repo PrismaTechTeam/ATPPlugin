@@ -325,7 +325,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             d.Meters = zSCP2_Item_Form.CreateMetersTable();
             DataTable mt = _dbSetting.GetDataTable(
                 "SELECT ItemMeterKey, MeterTypeCode, MeterRole, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                "RebateQtyInPercent, FOCQty FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + itemKey + " ORDER BY ItemMeterKey", false);
+                "RebateQtyInPercent, FOCQty, TierMode FROM [dbo].[zSCP2_ItemMeter] WHERE ItemKey=" + itemKey + " ORDER BY ItemMeterKey", false);
             foreach (DataRow s in mt.Rows)
             {
                 DataRow nr = d.Meters.NewRow();
@@ -338,6 +338,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 nr["FOCQty"] = s["FOCQty"];
                 nr["InitialReading"] = 0m;
                 nr["CustomTiers"] = zSCP2_Item_Form.LoadCustomTiersCsv(_dbSetting, Convert.ToInt64(s["ItemMeterKey"]));
+                nr["TierMode"] = Convert.ToString(s["TierMode"]).Trim().ToUpperInvariant() == "I" ? "I" : "T";
                 d.Meters.Rows.Add(nr);
             }
             d.Meters.AcceptChanges();
@@ -432,8 +433,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     using (SqlCommand cmd = new SqlCommand(
                         "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
                         "(ItemKey, MeterTypeCode, MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                        " RebateQtyInPercent, FOCQty, InitialReading, LastModified) " +
-                        "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
+                        " RebateQtyInPercent, FOCQty, InitialReading, TierMode, LastModified) " +
+                        "VALUES (@ik,@code,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,@tm,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
                     {
                         cmd.Parameters.AddWithValue("@ik", itemKey);
                         cmd.Parameters.AddWithValue("@code", code);
@@ -446,6 +447,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                         cmd.Parameters.AddWithValue("@rebate", Dec(r["RebateQtyInPercent"]));
                         cmd.Parameters.AddWithValue("@foc", Dec(r["FOCQty"]));
                         cmd.Parameters.AddWithValue("@init", Dec(r["InitialReading"]));
+                        // ATP-3: the meter's tier rule (Copy to New and the tier window both set it).
+                        cmd.Parameters.AddWithValue("@tm", r.Table.Columns.Contains("TierMode") && r["TierMode"] != DBNull.Value
+                            && Convert.ToString(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? "I" : "T");
                         long newMeterKey = Convert.ToInt64(cmd.ExecuteScalar());
                         string tiersCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
                             ? Convert.ToString(r["CustomTiers"]) : "";

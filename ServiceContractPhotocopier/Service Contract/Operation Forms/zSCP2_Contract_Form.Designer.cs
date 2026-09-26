@@ -241,7 +241,6 @@
             this.SluEmailTemplate = new DevExpress.XtraEditors.SearchLookUpEdit();
             this.SluEmailTemplateView = new DevExpress.XtraGrid.Views.Grid.GridView();
             this.ChkPeriodByContract = new DevExpress.XtraEditors.CheckEdit();
-            this.CmbTierMode = new DevExpress.XtraEditors.ComboBoxEdit();
             this.CmbRentalBasis = new DevExpress.XtraEditors.ComboBoxEdit();
             this.layoutControlGroup1 = new DevExpress.XtraLayout.LayoutControlGroup();
             this.GrpInvoiceSettings = new DevExpress.XtraLayout.LayoutControlGroup();
@@ -254,7 +253,6 @@
             this.layoutControlItem21 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem25 = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItem29 = new DevExpress.XtraLayout.LayoutControlItem();
-            this.layoutControlItemTierMode = new DevExpress.XtraLayout.LayoutControlItem();
             this.layoutControlItemRentalBasis = new DevExpress.XtraLayout.LayoutControlItem();
             this.GrpDocGeneration = new DevExpress.XtraLayout.LayoutControlGroup();
             this.layoutControlItem26 = new DevExpress.XtraLayout.LayoutControlItem();
@@ -442,7 +440,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplate.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplateView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkPeriodByContract.Properties)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.CmbTierMode.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbRentalBasis.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlGroup1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpInvoiceSettings)).BeginInit();
@@ -455,7 +452,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem21)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem25)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem29)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItemTierMode)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItemRentalBasis)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpDocGeneration)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem26)).BeginInit();
@@ -906,7 +902,6 @@
             this.layoutControl2.Controls.Add(this.SluMeterListingTemplate);
             this.layoutControl2.Controls.Add(this.SluEmailTemplate);
             this.layoutControl2.Controls.Add(this.ChkPeriodByContract);
-            this.layoutControl2.Controls.Add(this.CmbTierMode);
             this.layoutControl2.Controls.Add(this.CmbRentalBasis);
             this.layoutControl2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.layoutControl2.Location = new System.Drawing.Point(2, 23);
@@ -1120,23 +1115,9 @@
             this.ChkPeriodByContract.StyleController = this.layoutControl2;
             this.ChkPeriodByContract.TabIndex = 50;
             //
-            // CmbTierMode  (feedback ATP-3: how this contract prices its tier ladders)
-            //
-            this.CmbTierMode.Location = new System.Drawing.Point(116, 275);
-            this.CmbTierMode.Name = "CmbTierMode";
-            this.CmbTierMode.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
-            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
-            this.CmbTierMode.Properties.Items.AddRange(new object[] {
-            "Whole month at the tier reached",
-            "Each tier at its own rate"});
-            this.CmbTierMode.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
-            this.CmbTierMode.Size = new System.Drawing.Size(411, 20);
-            this.CmbTierMode.StyleController = this.layoutControl2;
-            this.CmbTierMode.TabIndex = 54;
-            //
             // CmbRentalBasis  (feedback ATP-10: the rental with the month's copies, or a month ahead)
             //
-            this.CmbRentalBasis.Location = new System.Drawing.Point(116, 299);
+            this.CmbRentalBasis.Location = new System.Drawing.Point(116, 275);
             this.CmbRentalBasis.Name = "CmbRentalBasis";
             this.CmbRentalBasis.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
             new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
@@ -1226,7 +1207,6 @@
             this.layoutControlItem29,
             this.layoutControlItem26,
             this.layoutControlItem32,
-            this.layoutControlItemTierMode,
             this.layoutControlItemRentalBasis});
             this.GrpBillingSchedule.Location = new System.Drawing.Point(0, 110);
             this.GrpBillingSchedule.Name = "GrpBillingSchedule";
@@ -1291,19 +1271,10 @@
             this.layoutControlItem32.Text = "Email template";
             this.layoutControlItem32.TextSize = new System.Drawing.Size(88, 13);
             //
-            // layoutControlItemTierMode
-            //
-            this.layoutControlItemTierMode.Control = this.CmbTierMode;
-            this.layoutControlItemTierMode.Location = new System.Drawing.Point(0, 96);
-            this.layoutControlItemTierMode.Name = "layoutControlItemTierMode";
-            this.layoutControlItemTierMode.Size = new System.Drawing.Size(507, 24);
-            this.layoutControlItemTierMode.Text = "Tier pricing";
-            this.layoutControlItemTierMode.TextSize = new System.Drawing.Size(88, 13);
-            //
             // layoutControlItemRentalBasis
             //
             this.layoutControlItemRentalBasis.Control = this.CmbRentalBasis;
-            this.layoutControlItemRentalBasis.Location = new System.Drawing.Point(0, 120);
+            this.layoutControlItemRentalBasis.Location = new System.Drawing.Point(0, 96);
             this.layoutControlItemRentalBasis.Name = "layoutControlItemRentalBasis";
             this.layoutControlItemRentalBasis.Size = new System.Drawing.Size(507, 24);
             this.layoutControlItemRentalBasis.Text = "Rental billed";
@@ -2816,7 +2787,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplate.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluEmailTemplateView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ChkPeriodByContract.Properties)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.CmbTierMode.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.CmbRentalBasis.Properties)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlGroup1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpInvoiceSettings)).EndInit();
@@ -2829,7 +2799,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem21)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem25)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem29)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.layoutControlItemTierMode)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItemRentalBasis)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GrpDocGeneration)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.layoutControlItem26)).EndInit();
@@ -2987,10 +2956,8 @@
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem21;
         private DevExpress.XtraEditors.CheckEdit ChkPeriodByContract;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem29;
-        private DevExpress.XtraLayout.LayoutControlItem layoutControlItemTierMode;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItemRentalBasis;
         private DevExpress.XtraEditors.ComboBoxEdit CmbRentalBasis;
-        private DevExpress.XtraEditors.ComboBoxEdit CmbTierMode;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem22;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem23;
         private DevExpress.XtraLayout.LayoutControlItem layoutControlItem24;

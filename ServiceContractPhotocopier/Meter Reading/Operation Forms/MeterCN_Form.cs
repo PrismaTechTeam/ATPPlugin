@@ -97,7 +97,7 @@ namespace ServiceContractPhotocopier
                 "ISNULL(lg.FOCQty,0) AS BilledFoc, ISNULL(lg.RebatePct,0) AS BilledRebate, " +
                 "ISNULL(lg.MinCharges,0) AS BilledMin, " +
                 "ISNULL(c.FOCResetUnit,'M') AS FOCResetUnit, ISNULL(c.FOCResetN,0) AS FOCResetN, " +
-                "ISNULL(c.TierMode,'T') AS TierMode, " +
+                "ISNULL(m.TierMode,'T') AS TierMode, " +   // ATP-3: the meter's own tier rule
                 // The ladder key, resolved exactly as ScpBillingRows resolves it: a per-meter
                 // override beats the scheme code and is keyed '#<ItemMeterKey>'.
                 "CASE WHEN pm.ItemMeterKey IS NOT NULL " +

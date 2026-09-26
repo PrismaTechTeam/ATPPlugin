@@ -457,7 +457,8 @@ namespace ServiceContractPhotocopier
             r["Monthly"] = ((!(field == "OwnRate")) ? "by usage" : ((agreed > 0m) ? (agreed * (decimal)part.Rows.Count).ToString("n2") : (SumOf(part, field).ToString("n2") + "  own")));
             r["Terms"] = DescribeTerms(L, field);
             string lad = (string)(r["LadderText"] = ((t == null || field == "OwnRate") ? "" : ((field == "OwnBk") ? (t.LadderBk ?? "") : (t.LadderCl ?? ""))));
-            r["Tiers"] = ((field == "OwnRate") ? "" : ((L.Rows.Count == 1) ? MachineLadderWords(L, field) : DescribeLadder(lad, L, field)));
+            r["Tiers"] = ((field == "OwnRate") ? "" : ((L.Rows.Count == 1) ? MachineLadderWords(L, field)
+                : DescribeLadder(lad, L, field) + (lad.Length > 0 && GroupEachTier(L, field == "OwnBk" ? "BK" : "CL") ? " · each tier at its own rate" : "")));
             r["Pad"] = "";
             string key = LineKeyOf(L) + "|" + bg.ToUpperInvariant();
             r["LineKey"] = key;
@@ -1171,7 +1172,8 @@ namespace ServiceContractPhotocopier
             string current = Convert.ToString(row["LadderText"]).Trim();
             string code = ((current.IndexOf('|') < 0) ? current : "");
             string csv = ((current.IndexOf('|') < 0) ? "" : current);
-            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m))
+            string groupRole = field == "OwnBk" ? "BK" : "CL";
+            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m, GroupEachTier(L, groupRole) ? "I" : "T"))
             {
                 dlg.Text = "Tier pricing for " + L.Name + "  (" + L.Rows.Count + ((L.Rows.Count == 1) ? " machine)" : " machines)");
                 if (dlg.ShowDialog(this) == DialogResult.OK)
@@ -1182,7 +1184,15 @@ namespace ServiceContractPhotocopier
                         chosen = (dlg.SelectedCode ?? "").Trim();
                     }
                     row["LadderText"] = chosen;
-                    row["Tiers"] = DescribeLadder(chosen, L, field);
+                    // The group's machines price their tiers one way: the rule goes on the meters of
+                    // this colour that bill on the group's tiers (ATP-3, per meter since 26/9). A
+                    // machine with tiers of its own keeps its own rule, as it keeps its own line.
+                    foreach (int gi in L.Rows)
+                    {
+                        DataRow gm = MeterOf(ItemAt(gi), groupRole);
+                        if (gm != null && !HasOwnLadder(gm)) SetIfCol(gm, "TierMode", dlg.ResultTierMode);
+                    }
+                    row["Tiers"] = DescribeLadder(chosen, L, field) + (chosen.Length > 0 && GroupEachTier(L, groupRole) ? " · each tier at its own rate" : "");
                     if (chosen.Length > 0)
                     {
                         row["UnitPrice"] = 0m;
@@ -1206,12 +1216,12 @@ namespace ServiceContractPhotocopier
             string csv = Str(m, "CustomTiers").Trim();
             if (csv.Length > 0)
             {
-                return ScpMultiPrice.Describe(ScpMultiPrice.ParseTiers(csv));
+                return ScpMultiPrice.Describe(ScpMultiPrice.ParseTiers(csv)) + ModeWords(m);
             }
             string code = Str(m, "MeterMultiPriceCode").Trim();
             if (code.Length > 0)
             {
-                return code;
+                return code + ModeWords(m);
             }
             string grp = (d.MergeGroupCodeMeter ?? "").Trim();
             if (grp.Length == 0)
@@ -1243,13 +1253,14 @@ namespace ServiceContractPhotocopier
             }
             string code = Str(m, "MeterMultiPriceCode").Trim();
             string csv = Str(m, "CustomTiers").Trim();
-            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m))
+            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m, Str(m, "TierMode")))
             {
                 dlg.Text = "Tier pricing for " + d.ServiceItemNo;
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
                     SetIfCol(m, "MeterMultiPriceCode", dlg.SelectedCode ?? "");
                     SetIfCol(m, "CustomTiers", dlg.CustomCsv ?? "");
+                    SetIfCol(m, "TierMode", dlg.ResultTierMode);   // ATP-3: this machine's own rule
                     if ((dlg.SelectedCode ?? "").Trim().Length > 0 || (dlg.CustomCsv ?? "").Trim().Length > 0)
                     {
                         SetIfCol(m, "ChargesRate", 0m);
@@ -1312,9 +1323,35 @@ namespace ServiceContractPhotocopier
             string csv = Str(m, "CustomTiers").Trim();
             if (csv.Length > 0)
             {
-                return ScpMultiPrice.Describe(ScpMultiPrice.ParseTiers(csv)) + " (this machine)";
+                return ScpMultiPrice.Describe(ScpMultiPrice.ParseTiers(csv)) + " (this machine)" + ModeWords(m);
             }
-            return Str(m, "MeterMultiPriceCode").Trim();
+            string code = Str(m, "MeterMultiPriceCode").Trim();
+            return code.Length > 0 ? code + ModeWords(m) : "";
+        }
+
+        /// <summary>A meter priced on tiers of its own (a code or its own bands), not the group's.</summary>
+        private static bool HasOwnLadder(DataRow m)
+        {
+            return m != null && (Str(m, "MeterMultiPriceCode").Trim().Length > 0 || Str(m, "CustomTiers").Trim().Length > 0);
+        }
+
+        /// <summary>The group's tier rule, read the way billing reads it (ScpGroupLadder): each tier
+        /// at its own rate when any machine on the group's tiers says so.</summary>
+        private bool GroupEachTier(Line L, string role)
+        {
+            foreach (int i in L.Rows)
+            {
+                DataRow m = MeterOf(ItemAt(i), role);
+                if (m != null && !HasOwnLadder(m) && Str(m, "TierMode").Trim().ToUpperInvariant() == "I") return true;
+            }
+            return false;
+        }
+
+        /// <summary>" · each tier at its own rate" after a ladder its meter prices tier by tier
+        /// (ATP-3). The whole-month rule, every meter's before, says nothing.</summary>
+        private static string ModeWords(DataRow m)
+        {
+            return m != null && Str(m, "TierMode").Trim().ToUpperInvariant() == "I" ? " · each tier at its own rate" : "";
         }
 
         private List<string> MachinesWithOwnLadder(Line L, string field)
@@ -1889,6 +1926,7 @@ namespace ServiceContractPhotocopier
             }
             string code = "";
             string csv = "";
+            string mode = "T";
             int withMeter = 0;
             int differ = 0;
             foreach (DataRow r in picked)
@@ -1902,6 +1940,7 @@ namespace ServiceContractPhotocopier
                     {
                         code = c;
                         csv = v;
+                        mode = Str(m, "TierMode");
                     }
                     else if (c != code || v != csv)
                     {
@@ -1915,7 +1954,7 @@ namespace ServiceContractPhotocopier
                 XtraMessageBox.Show("None of the ticked machines has a " + word + " meter, so there are no copies to price.", "Tier pricing", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
                 return;
             }
-            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m))
+            using (MultiPricePicker_Form dlg = new MultiPricePicker_Form(Db, code, csv, 0m, mode))
             {
                 dlg.Text = "Tier pricing for " + withMeter + " machine" + ((withMeter == 1) ? "" : "s") + "  (" + word + ")" + ((differ > 0) ? "  — they do not all agree today" : "");
                 if (dlg.ShowDialog(this) != DialogResult.OK)
@@ -1931,6 +1970,7 @@ namespace ServiceContractPhotocopier
                     {
                         SetIfCol(m2, "MeterMultiPriceCode", chosenCode);
                         SetIfCol(m2, "CustomTiers", chosen);
+                        SetIfCol(m2, "TierMode", dlg.ResultTierMode);   // ATP-3: per machine
                         if (chosenCode.Length > 0 || chosen.Length > 0)
                         {
                             SetIfCol(m2, "ChargesRate", 0m);

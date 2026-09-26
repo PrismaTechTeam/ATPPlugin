@@ -41,7 +41,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             _db = db;
             _isNew = true;
-            CmbTierMode.SelectedIndex = 0;   // ATP-3: a new contract prices tiers the way every contract did
             CmbRentalBasis.SelectedIndex = 0;   // ATP-10: and bills its rental with the month's copies
             this.Load += new EventHandler(OnFormLoad);
         }
@@ -61,7 +60,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _db = db;
             _isNew = true;
             _cloneFromKey = cloneAsNew ? sourceKey : 0;
-            CmbTierMode.SelectedIndex = 0;   // the source's own mode is loaded over this when it is copied
             CmbRentalBasis.SelectedIndex = 0;
             this.Load += new EventHandler(OnFormLoad);
         }
@@ -834,7 +832,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ChkInactive.EditValueChanged += h;
             ChkRentalSeparate.EditValueChanged += h;
             ChkPeriodByContract.EditValueChanged += h;
-            CmbTierMode.EditValueChanged += h;   // ATP-3
             CmbRentalBasis.EditValueChanged += h;   // ATP-10
             CmbRentalBasis.EditValueChanging += CmbRentalBasis_EditValueChanging;
             if (SpnRentalDay != null) SpnRentalDay.EditValueChanged += h;
@@ -1477,9 +1474,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _rentalPricesDirty = false;
             UpdateFormatSummary();   // now that the prices are in, the summary can mention them
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
-            // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
-            // and every contract's rule before) or each tier at its own rate.
-            CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
             // ATP-10: the rental with the month's copies (the default, every contract's rule before)
             // or a month ahead -- and whether that can still change.
             CmbRentalBasis.SelectedIndex = r.Table.Columns.Contains("RentalBasis") && AsStr(r["RentalBasis"]).Trim().ToUpperInvariant() == "P" ? 1 : 0;
@@ -1601,6 +1595,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // group or a whole contract quietly became six per-machine minimums.
                 string csRead = mr.Table.Columns.Contains("CommitScope") ? AsStr(mr["CommitScope"]).Trim().ToUpperInvariant() : "";
                 nr["CommitScope"] = csRead == "G" || csRead == "C" ? csRead : "S";
+                // ATP-3 (26/9): how this meter prices its tiers -- set in the tier window, per meter.
+                nr["TierMode"] = mr.Table.Columns.Contains("TierMode") && AsStr(mr["TierMode"]).Trim().ToUpperInvariant() == "I" ? "I" : "T";
                 d.Meters.Rows.Add(nr);
             }
             d.Meters.AcceptChanges();
@@ -2152,11 +2148,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? Convert.ToString(r["CustomTiers"]) : "";
             decimal foc = r["FOCQty"] == DBNull.Value ? 0m : Convert.ToDecimal(r["FOCQty"]);
             using (ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form dlg =
-                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc))
+                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc,
+                    r.Table.Columns.Contains("TierMode") ? AsStr(r["TierMode"]) : "T"))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 r["MeterMultiPriceCode"] = dlg.SelectedCode;
                 r["CustomTiers"] = dlg.CustomCsv;
+                if (r.Table.Columns.Contains("TierMode")) r["TierMode"] = dlg.ResultTierMode;   // ATP-3: per meter
                 _dirty = true;
                 _ladderFocCache.Clear();   // scheme tiers may have changed elsewhere — recompute displays
                 GridViewMeterCfg.RefreshData();
@@ -2741,6 +2739,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 }
                 if (custom.Length > 0) e.DisplayText = code.Length == 0 ? "(Custom)" : code + " (Modified)";
                 else e.DisplayText = code;
+                if ((code.Length > 0 || custom.Length > 0) && r.Table.Columns.Contains("TierMode")
+                    && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I")
+                    e.DisplayText += " · each tier";   // ATP-3: priced tier by tier
                 return;
             }
             if (code.Length == 0 && custom.Length == 0) return;   // no ladder — show the meter's own Free Qty
@@ -4970,11 +4971,13 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? Convert.ToString(r["CustomTiers"]) : "";
             decimal foc = r["FOCQty"] == DBNull.Value ? 0m : Convert.ToDecimal(r["FOCQty"]);
             using (ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form dlg =
-                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc))
+                new ServiceContractPhotocopier.Classes.CommonForms.MultiPricePicker_Form(_db, cur, curCsv, foc,
+                    r.Table.Columns.Contains("TierMode") ? AsStr(r["TierMode"]) : "T"))
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 r["MeterMultiPriceCode"] = dlg.SelectedCode;
                 r["CustomTiers"] = dlg.CustomCsv;
+                if (r.Table.Columns.Contains("TierMode")) r["TierMode"] = dlg.ResultTierMode;   // ATP-3: per meter
                 _dirty = true;
                 _ladderFocCache.Clear();
                 _viewGroup.RefreshData();
@@ -5035,6 +5038,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ? Convert.ToString(r["CustomTiers"]) : "";
             if (custom.Length > 0) e.DisplayText = code.Length == 0 ? "(Custom)" : code + " (Modified)";
             else e.DisplayText = code;
+            if ((code.Length > 0 || custom.Length > 0) && r.Table.Columns.Contains("TierMode")
+                && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I")
+                e.DisplayText += " · each tier";   // ATP-3: priced tier by tier
         }
 
         // ===================== Strategy tab (this contract's OWN strategy rules) =====================
@@ -5878,9 +5884,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "INSERT INTO [dbo].[zSCP2_Contract] " +
                 "(ContractNo, ContractTypeCode, DebtorCode, ContractDate, ServiceStartDate, ServiceExpiryDate, " +
                 " ContractValue, BillingDay, BillOnMonthEnd, BillingMode, Address1, Attention, Phone, TermCode, AreaCode, StaffCode, " +
-                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, TierMode, RentalBasis, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
+                " ReferenceNo, Description, Remark1, Remark2, Note, DeptNo, ProjNo, StrategyCode, RentalSeparateInvoice, RentalBillingDay, InvoiceReportName, GenerateSOA, SOAReportName, GenerateMeterListing, MeterListingReportName, EmailTemplateKey, PeriodFollowContract, RentalBasis, FOCResetUnit, FOCResetN, BillingFormatCode, RentalLineMode, MeterLineMode, UseNewLayout, ShowModelOnLine, ShowSerialOnLine, ShowUnitsOnLine, Inactive, InactiveDate, InactiveReason, Created, LastModified, CreatedBy, ModifiedBy) " +
                 "VALUES (@no,@type,@debtor,@cdate,@sdate,@edate,@val,@bday,@monthend,@bmode,@addr,@attn,@phone,@term,@area,@staff," +
-                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@tiermode,@rentalbasis,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                "@refno,@desc,@r1,@r2,@note,@dept,@proj,@strategy,@rentsep,@rentday,@invrpt,@gensoa,@soarpt,@genlist,@listrpt,@emailtpl,@pmode,@rentalbasis,@focresetunit,@focresetn,@fmtcode,@rlmode,@mlmode,@newlayout,@showmodel,@showserial,@showunits,@inact,@inactdate,@inactreason,GETDATE(),GETDATE(),@who,@who); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
             using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
             {
                 AddContractParams(cmd, debtor);
@@ -6333,7 +6339,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             screen.Terms = _lineTerms;
             screen.BillSeparate = ChkBillSeparate.Checked;
             screen.RentalSeparate = ChkRentalSeparate.Checked;
-            screen.TierIncremental = CmbTierMode.SelectedIndex == 1;
             screen.RentalInAdvance = CmbRentalBasis.SelectedIndex == 1;
             using (CalculationTest_Form f = new CalculationTest_Form(_db, _contractKey, screen))
                 f.ShowDialog(this);
@@ -6410,7 +6415,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 // Whatever is being edited right now, so a group ladder typed a moment ago is priced
                 // in the preview rather than the one that was last saved.
                 f.LineTerms = _sampleTerms ?? _lineTerms;
-                f.TierIncremental = CmbTierMode.SelectedIndex == 1;
                 f.RentalInAdvance = CmbRentalBasis.SelectedIndex == 1;
                 f.ShowModel = _sampleShowModel ?? _showModel;
                 f.ShowSerial = _sampleShowSerial ?? _showSerial;
@@ -6638,7 +6642,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 "AreaCode=@area, StaffCode=@staff, ReferenceNo=@refno, Description=@desc, Remark1=@r1, Remark2=@r2, Note=@note, " +
                 "DeptNo=@dept, ProjNo=@proj, StrategyCode=@strategy, RentalSeparateInvoice=@rentsep, RentalBillingDay=@rentday, " +
                 "InvoiceReportName=@invrpt, GenerateSOA=@gensoa, SOAReportName=@soarpt, " +
-                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, TierMode=@tiermode, " +
+                "GenerateMeterListing=@genlist, MeterListingReportName=@listrpt, EmailTemplateKey=@emailtpl, PeriodFollowContract=@pmode, " +
                 // ATP-10: once a rental of the contract is billed, the stored basis stands, whatever the
                 // screen held when it was opened -- a rental billed meanwhile locks it here too.
                 "RentalBasis = CASE WHEN EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry xe " +
@@ -6710,7 +6714,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             long emailTpl = EmailTplVal();
             cmd.Parameters.AddWithValue("@emailtpl", emailTpl > 0 ? (object)emailTpl : DBNull.Value);
             cmd.Parameters.AddWithValue("@pmode", ChkPeriodByContract.Checked ? "Y" : "N");
-            cmd.Parameters.AddWithValue("@tiermode", CmbTierMode.SelectedIndex == 1 ? "I" : "T");
             cmd.Parameters.AddWithValue("@rentalbasis", CmbRentalBasis.SelectedIndex == 1 ? "P" : "A");
             string focResetUnit = _cmbFocReset != null && _cmbFocReset.SelectedIndex == 1 ? "W"
                 : (_cmbFocReset != null && _cmbFocReset.SelectedIndex == 2 ? "D" : "M");
@@ -6832,8 +6835,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 string sql =
                     "INSERT INTO [dbo].[zSCP2_ItemMeter] " +
                     "(ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, MinimumCharges, ChargesRate, MeterMultiPriceCode, " +
-                    " RebateQtyInPercent, FOCQty, InitialReading, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, LastModified) " +
-                    "VALUES (@ik,@code,@desc,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+                    " RebateQtyInPercent, FOCQty, InitialReading, WaiveFirstNMonths, WaiveTargetAmount, WaivePartialThreshold, WaivePartialAmount, WaiveScope, CommitScope, TierMode, LastModified) " +
+                    "VALUES (@ik,@code,@desc,@role,@mser,@min,@rate,@multi,@rebate,@foc,@init,@wn,@wt,@wpt,@wpa,@ws,@cs,@tm,GETDATE()); SELECT CAST(SCOPE_IDENTITY() AS bigint);";
                 using (SqlCommand cmd = new SqlCommand(sql, conn, tx))
                 {
                     cmd.Parameters.AddWithValue("@ik", itemKey);
@@ -6862,6 +6865,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 string csv2 = r.Table.Columns.Contains("CommitScope") && r["CommitScope"] != DBNull.Value
                     ? Convert.ToString(r["CommitScope"]).Trim().ToUpperInvariant() : "";
                 cmd.Parameters.AddWithValue("@cs", csv2 == "G" || csv2 == "C" ? (object)csv2 : (object)"S");
+                    cmd.Parameters.AddWithValue("@tm", r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? "I" : "T");
                     long newMeterKey = Convert.ToInt64(cmd.ExecuteScalar());
                     string tiersCsv = r.Table.Columns.Contains("CustomTiers") && r["CustomTiers"] != DBNull.Value
                         ? Convert.ToString(r["CustomTiers"]) : "";
@@ -7098,7 +7102,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                           .Append(MDec(m, "MinimumCharges")).Append('\t').Append(MDec(m, "ChargesRate")).Append('\t')
                           .Append(Tsv(MStr(m, "MeterMultiPriceCode"))).Append('\t')
                           .Append(MDec(m, "RebateQtyInPercent")).Append('\t').Append(MDec(m, "FOCQty")).Append('\t')
-                          .Append(Tsv(MStr(m, "CustomTiers"))).AppendLine();
+                          .Append(Tsv(MStr(m, "CustomTiers"))).Append('\t')
+                          .Append(Tsv(MStr(m, "TierMode"))).AppendLine();   // ATP-3: the meter's tier rule
                     }
             }
             try { System.Windows.Forms.Clipboard.SetText(sb.ToString()); XtraMessageBox.Show("Whole document copied to clipboard (header + items + meters).", "Copied"); }
@@ -7246,7 +7251,8 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 System.Globalization.DateTimeStyles.None, out dt) ? (object)dt : null;
         }
 
-        // M line: MeterTypeCode, Role, Description, Min, Rate, MultiPrice, Rebate%, FOC, CustomTiers.
+        // M line: MeterTypeCode, Role, Description, Min, Rate, MultiPrice, Rebate%, FOC, CustomTiers,
+        // TierMode (absent on a copy made before 26/9: whole month at the tier reached).
         // InitialReading is identity-specific and always starts at 0 on a pasted machine.
         private void AddMeterFromTsv(ItemEditData d, string[] p)
         {
@@ -7263,6 +7269,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             r["FOCQty"] = ClipDec(At(p, 8));
             r["InitialReading"] = 0m;
             r["CustomTiers"] = At(p, 9);
+            r["TierMode"] = At(p, 10).Trim().ToUpperInvariant() == "I" ? "I" : "T";
             d.Meters.Rows.Add(r);
         }
 
@@ -7436,9 +7443,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 ChkRentalSeparate.Checked = r.Table.Columns.Contains("RentalSeparateInvoice") && AsStr(r["RentalSeparateInvoice"]) == "Y";
             LoadBillingFormat(r);
             ChkPeriodByContract.Checked = r.Table.Columns.Contains("PeriodFollowContract") && AsStr(r["PeriodFollowContract"]) == "Y";
-            // ATP-3: how the tiers are priced -- the whole month at the tier reached (the default,
-            // and every contract's rule before) or each tier at its own rate.
-            CmbTierMode.SelectedIndex = r.Table.Columns.Contains("TierMode") && AsStr(r["TierMode"]).Trim().ToUpperInvariant() == "I" ? 1 : 0;
             // ATP-10: the rental with the month's copies (the default, every contract's rule before)
             // or a month ahead -- and whether that can still change.
             CmbRentalBasis.SelectedIndex = r.Table.Columns.Contains("RentalBasis") && AsStr(r["RentalBasis"]).Trim().ToUpperInvariant() == "P" ? 1 : 0;

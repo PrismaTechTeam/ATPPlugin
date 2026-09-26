@@ -99,9 +99,6 @@ namespace ServiceContractPhotocopier
         /// contract has agreed nothing and every machine keeps its own price.</summary>
         public Dictionary<string, ScpLineTerms> LineTerms;
 
-        /// <summary>Tier pricing as the contract screen has it: each tier at its own rate (true) or
-        /// the whole month at the tier reached (false) -- ATP-3. Set by the caller before ShowDialog.</summary>
-        public bool TierIncremental;
 
         /// <summary>The rental billed a month ahead, as the contract screen has it (ATP-10): the sample's
         /// rental line then pays for NEXT month, "(14/36) OCT 2026". Set by the caller.</summary>
@@ -238,7 +235,7 @@ namespace ServiceContractPhotocopier
                     l.MeterTypeName = Str(mr, "Description");
                     l.ACItemCode = ChargeItemOf(type);
                     l.NewMoneyRules = _hasFormat;
-                    l.TierIncremental = TierIncremental;
+                    l.TierIncremental = Str(mr, "TierMode").Trim().ToUpperInvariant() == "I";   // ATP-3: per meter
                     l.MachineLineShows = _machineLineShows;
                     l.ShowModel = ShowModel;
                     l.ShowSerial = ShowSerial;

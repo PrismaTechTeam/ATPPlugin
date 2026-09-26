@@ -37,6 +37,8 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         private DevExpress.XtraEditors.SimpleButton BtnInfinity;
         private DevExpress.XtraEditors.SimpleButton BtnClear;
         private DevExpress.XtraEditors.LabelControl LblHint;
+        private DevExpress.XtraEditors.LabelControl LblTierMode;
+        private DevExpress.XtraEditors.ComboBoxEdit CmbTierMode;
         private DevExpress.XtraEditors.SimpleButton BtnOK;
         private DevExpress.XtraEditors.SimpleButton BtnCancel;
 
@@ -65,12 +67,15 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.BtnInfinity = new DevExpress.XtraEditors.SimpleButton();
             this.BtnClear = new DevExpress.XtraEditors.SimpleButton();
             this.LblHint = new DevExpress.XtraEditors.LabelControl();
+            this.LblTierMode = new DevExpress.XtraEditors.LabelControl();
+            this.CmbTierMode = new DevExpress.XtraEditors.ComboBoxEdit();
             this.BtnOK = new DevExpress.XtraEditors.SimpleButton();
             this.BtnCancel = new DevExpress.XtraEditors.SimpleButton();
             ((System.ComponentModel.ISupportInitialize)(this.SluScheme.Properties)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.SluSchemeView)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridTiers)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ViewTiers)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbTierMode.Properties)).BeginInit();
             this.SuspendLayout();
             //
             // LblScheme
@@ -214,6 +219,28 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.ColPrice.VisibleIndex = 1;
             this.ColPrice.Width = 280;
             //
+            // LblTierMode
+            //
+            this.LblTierMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.LblTierMode.Location = new System.Drawing.Point(12, 381);
+            this.LblTierMode.Name = "LblTierMode";
+            this.LblTierMode.Size = new System.Drawing.Size(56, 13);
+            this.LblTierMode.Text = "Tier pricing";
+            //
+            // CmbTierMode
+            //
+            this.CmbTierMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.CmbTierMode.Location = new System.Drawing.Point(95, 378);
+            this.CmbTierMode.Name = "CmbTierMode";
+            this.CmbTierMode.Properties.Buttons.AddRange(new DevExpress.XtraEditors.Controls.EditorButton[] {
+            new DevExpress.XtraEditors.Controls.EditorButton(DevExpress.XtraEditors.Controls.ButtonPredefines.Combo)});
+            this.CmbTierMode.Properties.Items.AddRange(new object[] {
+            "Whole month at the tier reached",
+            "Each tier at its own rate"});
+            this.CmbTierMode.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
+            this.CmbTierMode.Size = new System.Drawing.Size(260, 20);
+            this.CmbTierMode.TabIndex = 8;
+            //
             // LblHint
             //
             this.LblHint.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
@@ -221,38 +248,38 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.LblHint.Appearance.ForeColor = System.Drawing.Color.DimGray;
             this.LblHint.Appearance.Options.UseForeColor = true;
             this.LblHint.AutoSizeMode = DevExpress.XtraEditors.LabelAutoSizeMode.None;
-            this.LblHint.Location = new System.Drawing.Point(12, 378);
+            this.LblHint.Location = new System.Drawing.Point(12, 406);
             this.LblHint.Name = "LblHint";
             this.LblHint.Size = new System.Drawing.Size(598, 30);
-            this.LblHint.Text = "A 0.00 Unit Price row is the FREE band (FOC). The last row should be unlimited (∞) so heavy usage always finds a bracket.";
+            this.LblHint.Text = "Free copies are the meter's Free Qty, not a 0.00 tier. Make the last row unlimited (∞).";
             //
             // BtnClear
             //
             this.BtnClear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.BtnClear.Location = new System.Drawing.Point(12, 414);
+            this.BtnClear.Location = new System.Drawing.Point(12, 442);
             this.BtnClear.Name = "BtnClear";
             this.BtnClear.Size = new System.Drawing.Size(150, 28);
-            this.BtnClear.TabIndex = 8;
+            this.BtnClear.TabIndex = 9;
             this.BtnClear.Text = "No Multi-Price (clear)";
             this.BtnClear.ToolTip = "Remove the multi-price link from this meter — it bills by its flat Rate again.";
             //
             // BtnOK
             //
             this.BtnOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.BtnOK.Location = new System.Drawing.Point(432, 414);
+            this.BtnOK.Location = new System.Drawing.Point(432, 442);
             this.BtnOK.Name = "BtnOK";
             this.BtnOK.Size = new System.Drawing.Size(85, 28);
-            this.BtnOK.TabIndex = 9;
+            this.BtnOK.TabIndex = 10;
             this.BtnOK.Text = "OK";
             //
             // BtnCancel
             //
             this.BtnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.BtnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.BtnCancel.Location = new System.Drawing.Point(525, 414);
+            this.BtnCancel.Location = new System.Drawing.Point(525, 442);
             this.BtnCancel.Name = "BtnCancel";
             this.BtnCancel.Size = new System.Drawing.Size(85, 28);
-            this.BtnCancel.TabIndex = 10;
+            this.BtnCancel.TabIndex = 11;
             this.BtnCancel.Text = "Cancel";
             //
             // MultiPricePicker_Form
@@ -260,7 +287,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.BtnCancel;
-            this.ClientSize = new System.Drawing.Size(622, 454);
+            this.ClientSize = new System.Drawing.Size(622, 482);
             this.Controls.Add(this.LblScheme);
             this.Controls.Add(this.SluScheme);
             this.Controls.Add(this.LblTiers);
@@ -270,13 +297,15 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             this.Controls.Add(this.BtnRowDown);
             this.Controls.Add(this.BtnInfinity);
             this.Controls.Add(this.GridTiers);
+            this.Controls.Add(this.LblTierMode);
+            this.Controls.Add(this.CmbTierMode);
             this.Controls.Add(this.LblHint);
             this.Controls.Add(this.BtnClear);
             this.Controls.Add(this.BtnOK);
             this.Controls.Add(this.BtnCancel);
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(560, 420);
+            this.MinimumSize = new System.Drawing.Size(560, 448);
             this.Name = "MultiPricePicker_Form";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Multi-Price for this Meter";
@@ -284,6 +313,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
             ((System.ComponentModel.ISupportInitialize)(this.SluSchemeView)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.GridTiers)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ViewTiers)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.CmbTierMode.Properties)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }

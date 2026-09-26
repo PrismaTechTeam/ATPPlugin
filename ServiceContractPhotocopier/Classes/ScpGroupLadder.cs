@@ -200,7 +200,15 @@ namespace ServiceContractPhotocopier.Classes
             // ATP-3, band by band: the group's billable copies over the priced bands as ONE count,
             // and the resulting amount shared back by copies the way the threshold amount is. The
             // bands are the group's -- the same list on every machine -- and print once.
-            if (set[0].TierIncremental)
+            // The group's rule: tier by tier when ANY machine on the group's tiers says so. The rule is
+            // set for the group in one go (Meters / Pricing), and the only way a member drifts from it
+            // is to the default -- a machine joining, or its own tiers cleared -- so "any" keeps the
+            // group's rule where "the first machine's" let the member that sorts first decide it
+            // (review of ATP-3's per-meter move, 26/9). Every member then carries it.
+            bool groupEachTier = false;
+            foreach (MeterBillLine m in set) if (m.TierIncremental) groupEachTier = true;
+            foreach (MeterBillLine m in set) m.TierIncremental = groupEachTier;
+            if (groupEachTier)
             {
                 decimal totalBilled = 0m;
                 foreach (MeterBillLine m in set) totalBilled += m.BillCopies;

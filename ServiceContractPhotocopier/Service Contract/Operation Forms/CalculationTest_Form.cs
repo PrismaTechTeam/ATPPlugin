@@ -394,7 +394,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             {
                 r["RentSep"] = _screen.RentalSeparate;
                 r["BillingMode"] = _screen.BillSeparate ? "S" : "G";
-                if (rows.Columns.Contains("TierIncremental")) r["TierIncremental"] = _screen.TierIncremental;
             }
 
             // Billing Setup's agreed line prices, as the screen has them -- through the same two
@@ -465,6 +464,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             row["WaiveScope"] = ws.Length > 0 ? ws : "BKCL";
             string cs = S(m["CommitScope"]).Trim().ToUpperInvariant();
             row["CommitScope"] = cs == "G" || cs == "C" ? cs : "S";
+            // ATP-3: the meter's own tier rule, as the screen has it.
+            if (row.Table.Columns.Contains("TierIncremental") && m.Table.Columns.Contains("TierMode"))
+                row["TierIncremental"] = S(m["TierMode"]).Trim().ToUpperInvariant() == "I";
 
             row["MergeGroupCode"] = d.MergeGroupCode ?? "";
             row["MergeGroupCodeMeter"] = d.MergeGroupCodeMeter ?? "";
@@ -1109,9 +1111,6 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         public bool BillSeparate;
         /// <summary>The rental on an invoice of its own.</summary>
         public bool RentalSeparate;
-        /// <summary>Tier pricing: each tier at its own rate (true) or the whole month at the tier
-        /// reached (false, the default) -- ATP-3.</summary>
-        public bool TierIncremental;
         /// <summary>Rental billed a month ahead (true) or with the month's copies (false, the default)
         /// -- ATP-10.</summary>
         public bool RentalInAdvance;

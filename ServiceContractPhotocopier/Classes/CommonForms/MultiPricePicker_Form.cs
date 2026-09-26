@@ -22,6 +22,11 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
     ///   * the LAST bracket must be unlimited (otherwise usage beyond it finds no bracket),
     ///   * the FIRST tier may not be 0.00 (feedback ATP-3) — free copies are the meter's own Free
     ///     Qty on the contract's meter grid, the one place they are set.
+    ///
+    /// Tier pricing -- whole month at the tier reached, or each tier at its own rate -- is chosen
+    /// here, beside the tiers it applies to, and belongs to the meter: two machines on one
+    /// contract, or a machine's black and colour, can price their tiers differently. It used to be
+    /// one setting on the contract header (feedback ATP-3, moved at the user's request 26/9).
     /// </summary>
     public partial class MultiPricePicker_Form : XtraForm
     {
@@ -39,10 +44,21 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         public string SelectedCode { get; private set; } = "";
         /// <summary>The per-meter override tiers as "boundary|price;..." CSV ("" = scheme as-is / cleared).</summary>
         public string CustomCsv { get; private set; } = "";
+        /// <summary>How the meter prices its tiers: "T" whole month at the tier reached, "I" each
+        /// tier at its own rate.</summary>
+        public string ResultTierMode { get; private set; } = "T";
 
         public MultiPricePicker_Form(DBSetting db, string currentCode, string currentCustomCsv, decimal meterFocQty)
+            : this(db, currentCode, currentCustomCsv, meterFocQty, "T")
+        {
+        }
+
+        public MultiPricePicker_Form(DBSetting db, string currentCode, string currentCustomCsv, decimal meterFocQty,
+            string currentTierMode)
         {
             InitializeComponent();
+            ResultTierMode = (currentTierMode ?? "").Trim().ToUpperInvariant() == "I" ? "I" : "T";
+            CmbTierMode.SelectedIndex = ResultTierMode == "I" ? 1 : 0;
             _db = db;
             // meterFocQty is no longer needed for a prompt — Free Qty counts beside a ladder (ATP-3).
 
@@ -219,6 +235,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
         {
             SelectedCode = "";
             CustomCsv = "";
+            ResultTierMode = "T";   // no tiers: nothing to price by tier
             this.DialogResult = DialogResult.OK;
             this.Close();
         }
@@ -278,6 +295,7 @@ namespace ServiceContractPhotocopier.Classes.CommonForms
                         + "|" + t[1].ToString("0.######", System.Globalization.CultureInfo.InvariantCulture));
                 CustomCsv = string.Join(";", parts.ToArray());
             }
+            ResultTierMode = CmbTierMode.SelectedIndex == 1 ? "I" : "T";
 
             this.DialogResult = DialogResult.OK;
             this.Close();

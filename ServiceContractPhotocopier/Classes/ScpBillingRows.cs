@@ -207,7 +207,8 @@ namespace ServiceContractPhotocopier.Classes
                 "c.DebtorCode, ISNULL(d.CompanyName,'') AS DebtorName, c.BillingMode, " +
                 "ISNULL(c.StrategyCode,'') AS StrategyCode, ISNULL(c.RentalSeparateInvoice,'N') AS RentSep, " +
                 "ISNULL(c.PeriodFollowContract,'N') AS PeriodByContract, c.ServiceStartDate AS ContractStart, " +
-                "ISNULL(c.TierMode,'T') AS TierMode, " +
+                // ATP-3: the meter's own tier rule (moved off the contract 26/9).
+                "ISNULL(m.TierMode,'T') AS TierMode, " +
                 // What the machine line names -- model, duty label, or both. From the contract's
                 // format; 'B' for a contract that has none, which is what it printed before.
                 // The contract carries its own answer now; the format is only a fallback for
