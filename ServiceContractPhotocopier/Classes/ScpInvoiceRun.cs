@@ -851,7 +851,7 @@ namespace ServiceContractPhotocopier.Classes
                         chk.Parameters.AddWithValue("@mo", month);
                         object lockedAt = chk.ExecuteScalar();
                         if (lockedAt != null && lockedAt != DBNull.Value)
-                            throw new InvalidOperationException("This reading was locked by the billing-day snapshot and cannot be changed here.");
+                            throw new InvalidOperationException("This reading is locked and cannot be changed.");
 
                         if (reading <= 0m)
                         {
@@ -917,7 +917,7 @@ namespace ServiceContractPhotocopier.Classes
             if (IsInvoiced(r))
                 return "This period is already invoiced -- its Ref is on the invoice now.";
             if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
-                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+                return "This reading is locked and cannot be changed.";
             if (!HasReading(r))
                 return "Key the reading in first -- the reference belongs to a reading.";
             if (S(r["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL")
@@ -968,7 +968,7 @@ namespace ServiceContractPhotocopier.Classes
             if (IsInvoiced(r))
                 return "This period is already invoiced. Delete the invoice first.";
             if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
-                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+                return "This reading is locked and cannot be changed.";
             if (!HasReading(r))
                 return "There is no reading to take over -- just key yours in.";
             string src = S(r["EntrySource"]).Trim().ToUpperInvariant();
@@ -1017,7 +1017,7 @@ namespace ServiceContractPhotocopier.Classes
                         if (!found)
                             throw new InvalidOperationException("There is no reading staged for this meter and period -- key yours in instead.");
                         if (locked)
-                            throw new InvalidOperationException("This reading was locked by the billing-day snapshot and cannot be changed here.");
+                            throw new InvalidOperationException("This reading is locked and cannot be changed.");
                         if (invoiced)
                             throw new InvalidOperationException("This period is already invoiced. Delete the invoice first.");
                         if (src == "INTERBILL")
@@ -1088,16 +1088,15 @@ namespace ServiceContractPhotocopier.Classes
         {
             if (r == null) return "There is nothing on this row.";
             if (!IsUsageMeter(r))
-                return "A rental, a minimum and a waive have no counter to read, so they have no reading date.";
+                return "This row has no meter reading, so it has no date.";
             if (IsInvoiced(r))
-                return "This period is already invoiced. Delete the invoice first if its date is wrong.";
+                return "This month is already invoiced. Delete the invoice first to change the date.";
             if (r.Table.Columns.Contains("Locked") && r["Locked"] != DBNull.Value && Convert.ToBoolean(r["Locked"]))
-                return "This reading was locked by the billing-day snapshot and cannot be changed here.";
+                return "This reading is locked and cannot be changed.";
             if (!HasReading(r))
-                return "Key the reading in first -- the date says when THAT reading was taken.";
+                return "Key in the reading first.";
             if (S(r["EntrySource"]).Trim().ToUpperInvariant() != "MANUAL")
-                return "This reading came from the machine, so it carries the machine's own audit date. "
-                     + "Key the reading in by hand if the date has to change.";
+                return "This reading came from the machine. Press Key in myself first to change its date.";
             return "";
         }
 
@@ -1107,13 +1106,12 @@ namespace ServiceContractPhotocopier.Classes
         public static string WhyDateWrong(DataRow r, DateTime when)
         {
             if (when.Date > DateTime.Today)
-                return "A reading cannot be taken in the future.";
+                return "The date cannot be later than today (" + DateTime.Today.ToString("dd/MM/yyyy") + ").";   // user, 26/9: say it plainly
             if (r != null && r.Table.Columns.Contains("LastReadDate") && r["LastReadDate"] != DBNull.Value)
             {
                 DateTime last = Convert.ToDateTime(r["LastReadDate"]).Date;
                 if (when.Date < last)
-                    return "The previous reading was taken on " + last.ToString("dd/MM/yyyy") +
-                           ", so this one cannot be earlier than that.";
+                    return "The date cannot be earlier than the last reading (" + last.ToString("dd/MM/yyyy") + ").";
             }
             return "";
         }
@@ -1154,7 +1152,7 @@ namespace ServiceContractPhotocopier.Classes
                         if (!found)
                             throw new InvalidOperationException("There is no reading staged for this meter and period -- key the reading in first.");
                         if (locked)
-                            throw new InvalidOperationException("This reading was locked by the billing-day snapshot and cannot be changed here.");
+                            throw new InvalidOperationException("This reading is locked and cannot be changed.");
                         if (invoiced)
                             throw new InvalidOperationException("This period is already invoiced. Delete the invoice first if its date is wrong.");
                         if (src != "MANUAL")
