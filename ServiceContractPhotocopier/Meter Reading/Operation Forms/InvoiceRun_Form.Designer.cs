@@ -99,6 +99,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRMachine = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRSerial = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRMeter = new DevExpress.XtraGrid.Columns.GridColumn();
+            this.ColRRentalFor = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRLast = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRCurrent = new DevExpress.XtraGrid.Columns.GridColumn();
             this.ColRUsage = new DevExpress.XtraGrid.Columns.GridColumn();
@@ -1045,6 +1046,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRMachine,
             this.ColRSerial,
             this.ColRMeter,
+            this.ColRRentalFor,
             this.ColRLast,
             this.ColRCurrent,
             this.ColRSource,
@@ -1106,6 +1108,16 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRMeter.VisibleIndex = 2;
             this.ColRMeter.Width = 70;
             //
+            // ColRRentalFor  (which of its months a rental bills: "2/36 · OCT 2026")
+            //
+            this.ColRRentalFor.Caption = "Rental for";
+            this.ColRRentalFor.FieldName = "RentalFor";
+            this.ColRRentalFor.Name = "ColRRentalFor";
+            this.ColRRentalFor.OptionsColumn.AllowEdit = false;
+            this.ColRRentalFor.Visible = true;
+            this.ColRRentalFor.VisibleIndex = 3;
+            this.ColRRentalFor.Width = 150;
+            //
             // ColRLast
             //
             this.ColRLast.AppearanceCell.TextOptions.HAlignment = DevExpress.Utils.HorzAlignment.Far;
@@ -1116,7 +1128,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRLast.Name = "ColRLast";
             this.ColRLast.OptionsColumn.AllowEdit = false;
             this.ColRLast.Visible = true;
-            this.ColRLast.VisibleIndex = 4;
+            this.ColRLast.VisibleIndex = 5;
             this.ColRLast.Width = 90;
             //
             // ColRCurrent
@@ -1134,7 +1146,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRCurrent.FieldName = "CurrentReading";
             this.ColRCurrent.Name = "ColRCurrent";
             this.ColRCurrent.Visible = true;
-            this.ColRCurrent.VisibleIndex = 5;
+            this.ColRCurrent.VisibleIndex = 6;
             this.ColRCurrent.Width = 100;
             //
             // ColRUsage
@@ -1147,7 +1159,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRUsage.Name = "ColRUsage";
             this.ColRUsage.OptionsColumn.AllowEdit = false;
             this.ColRUsage.Visible = true;
-            this.ColRUsage.VisibleIndex = 8;
+            this.ColRUsage.VisibleIndex = 9;
             this.ColRUsage.Width = 80;
             //
             // ColRAmount
@@ -1166,7 +1178,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRAmount.Name = "ColRAmount";
             this.ColRAmount.OptionsColumn.AllowEdit = false;
             this.ColRAmount.Visible = true;
-            this.ColRAmount.VisibleIndex = 9;
+            this.ColRAmount.VisibleIndex = 10;
             this.ColRAmount.Width = 90;
             //
             // ColRSource  (keyed or fetched -- the clerk must know which)
@@ -1176,7 +1188,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRSource.Name = "ColRSource";
             this.ColRSource.OptionsColumn.AllowEdit = false;
             this.ColRSource.Visible = true;
-            this.ColRSource.VisibleIndex = 6;
+            this.ColRSource.VisibleIndex = 7;
             this.ColRSource.Width = 96;
             //
             // ColRRef  (the reading's reference: PUMS's report id, or the one keyed with a manual reading)
@@ -1188,7 +1200,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRRef.OptionsColumn.AllowEdit = false;
             this.ColRRef.OptionsColumn.ReadOnly = true;
             this.ColRRef.Visible = true;
-            this.ColRRef.VisibleIndex = 7;
+            this.ColRRef.VisibleIndex = 8;
             this.ColRRef.Width = 130;
             //
             // ColRMeterName  (the list screen's columns, off by default -- Column Chooser has them)
@@ -1260,7 +1272,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.ColRLastAudit.Name = "ColRLastAudit";
             this.ColRLastAudit.OptionsColumn.AllowEdit = true;
             this.ColRLastAudit.Visible = true;
-            this.ColRLastAudit.VisibleIndex = 3;
+            this.ColRLastAudit.VisibleIndex = 4;
             this.ColRLastAudit.Width = 110;
             //
             // ColRLastFetch
@@ -1561,6 +1573,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private DevExpress.XtraGrid.Columns.GridColumn ColRMachine;
         private DevExpress.XtraGrid.Columns.GridColumn ColRSerial;
         private DevExpress.XtraGrid.Columns.GridColumn ColRMeter;
+        private DevExpress.XtraGrid.Columns.GridColumn ColRRentalFor;
         private DevExpress.XtraGrid.Columns.GridColumn ColRLast;
         private DevExpress.XtraGrid.Columns.GridColumn ColRCurrent;
         private DevExpress.XtraGrid.Columns.GridColumn ColRUsage;

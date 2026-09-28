@@ -62,6 +62,9 @@ Save the contract with Split price by tier and generate its invoice: the same ro
 
 **Rental in advance.** Take (or make) a contract that has a rental and has not been billed yet -- say from
 1 October, billing day 30.
+In Meter Invoice Run each rental row's **Rental for** column says which month it bills: **1/36 · SEP 2026** on
+the bill before the start, **2/36 · OCT 2026** on the next; a contract billed with the month's copies reads
+its own month, e.g. **22/36 · SEP 2026**.
 
 1. **Billing -> 1. The invoice -> Rental billed** -> **In advance - one month ahead**, then **Save**.
    **View Sample Invoice**: the rental line pays for next month, e.g. `MONTHLY RENTAL (2/36) NOV 2026`.

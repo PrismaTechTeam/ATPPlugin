@@ -245,6 +245,36 @@ namespace ServiceContractPhotocopier.Classes
             return rentalMonths > 0 ? "(" + frac + "/" + rentalMonths + ") " + months : months;
         }
 
+        /// <summary>
+        /// Which of its months a rental row bills, and which calendar months they are, for the run's
+        /// screens (user, 28/9: "put which month's rental, so the cycle shows -- 22/36, JUNE RENTAL"):
+        /// "22/36 · SEP 2026" with the month's copies, "2/36 · OCT 2026" billed in advance,
+        /// "1-2/36 · SEP 2026 - OCT 2026" for two months on one bill, "SEP 2026" for an open-ended rental.
+        /// fromN/toN are the prepaid counters (0 = with the month's copies: the billing month's own).
+        /// </summary>
+        public static string RentalForWords(DateTime? rentalStart, int rentalMonths, int fromN, int toN,
+            int periodYear, int periodMonth)
+        {
+            if (!rentalStart.HasValue)
+                return new DateTime(periodYear, periodMonth, 1)
+                    .ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant();
+            if (toN <= 0)
+            {
+                int n = RentalPeriodN(rentalStart.Value, 'A', periodYear, periodMonth);
+                fromN = n;
+                toN = n;
+            }
+            if (fromN < 1) fromN = 1;
+            if (toN < fromN) toN = fromN;
+            int a = rentalMonths > 0 && fromN > rentalMonths ? rentalMonths : fromN;
+            int b = rentalMonths > 0 && toN > rentalMonths ? rentalMonths : toN;
+            string frac = a == b ? a.ToString(System.Globalization.CultureInfo.InvariantCulture) : a + "-" + b;
+            string months = fromN == toN
+                ? RentalMonthLabel(rentalStart.Value, fromN)
+                : RentalMonthLabel(rentalStart.Value, fromN) + " - " + RentalMonthLabel(rentalStart.Value, toN);
+            return rentalMonths > 0 ? frac + "/" + rentalMonths + " · " + months : months;
+        }
+
         /// <summary>The calendar month of rental month n: month 1 is the rental's start month.</summary>
         public static string RentalMonthLabel(DateTime rentalStart, int n)
         {

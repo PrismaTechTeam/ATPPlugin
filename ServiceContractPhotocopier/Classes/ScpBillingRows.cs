@@ -157,6 +157,7 @@ namespace ServiceContractPhotocopier.Classes
         dt.Columns.Add("RentalBasis", typeof(string));     // A accrual / P prepayment -- the CONTRACT's (ATP-10; hidden)
         dt.Columns.Add("RentalFromN", typeof(int));        // ATP-10: first rental month this bill pays for in advance (0 = accrual; hidden)
         dt.Columns.Add("RentalToN", typeof(int));          // ATP-10: last one (hidden)
+        dt.Columns.Add("RentalFor", typeof(string));       // "2/36 · OCT 2026": the rental months this row bills (shown)
         dt.Columns.Add("RentalMonthsDue", typeof(int));    // ATP-10: rental months on this bill -- 1, or 2 for a machine that joined late (hidden)
         dt.Columns.Add("LastRentalPeriod", typeof(int));   // ATP-10: YYYYMM this meter was last billed before this month, 0 = never (hidden)
         dt.Columns.Add("PrevHandled", typeof(bool));       // ATP-10: the contract's previous month is billed or skipped (hidden)
@@ -862,6 +863,29 @@ namespace ServiceContractPhotocopier.Classes
                     r["MeterTypeName"] = ServiceContractPhotocopier.Classes.ScpStrategy.ComposeRentalPeriodText(
                         S(r["MeterTypeName"]), Convert.ToDateTime(r["RentalStartDate"]),
                         Convert.ToInt32(r["RentalMonths"]), 'A', year, month);
+                // The same months in the run's own column, so the cycle shows on the screen and not
+                // only on the invoice line (user, 28/9).
+                if (IsRentRow(r) && r.Table.Columns.Contains("RentalFor"))
+                    r["RentalFor"] = ServiceContractPhotocopier.Classes.ScpStrategy.RentalForWords(
+                        r["RentalStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["RentalStartDate"]),
+                        r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]),
+                        r["RentalFromN"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalFromN"]),
+                        toN, year, month);
+            }
+
+            // A rental already billed this period (or locked) is not recomposed above, but it still
+            // says which of its months it billed -- worked out the same way from its start and its
+            // contract's basis. (An old bill that caught up two months reads as its one month here;
+            // the invoice line has both.)
+            foreach (DataRow r in rows.Rows)
+            {
+                if (!IsRentRow(r) || !r.Table.Columns.Contains("RentalFor") || S(r["RentalFor"]).Length > 0) continue;
+                DateTime? rs = r["RentalStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["RentalStartDate"]);
+                int nn = rs.HasValue
+                    ? ServiceContractPhotocopier.Classes.ScpStrategy.RentalPeriodN(rs.Value, S(r["RentalBasis"]) == "P" ? 'P' : 'A', year, month)
+                    : 0;
+                r["RentalFor"] = ServiceContractPhotocopier.Classes.ScpStrategy.RentalForWords(
+                    rs, r["RentalMonths"] == DBNull.Value ? 0 : Convert.ToInt32(r["RentalMonths"]), nn, nn, year, month);
             }
                 }
 

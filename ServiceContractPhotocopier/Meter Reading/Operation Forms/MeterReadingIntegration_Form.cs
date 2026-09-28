@@ -2474,6 +2474,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             // PUMS's report no. for a fetched reading, shown and never typed: the Reference No is the
             // invoice's, typed once in Meter Invoice Run under Invoice date (feedback ATP-8, 26/9).
             SetCol("TrackingId", "PUMS Report No", 120, false);
+            SetCol("RentalFor", "Rental for", 140, false);   // "2/36 · OCT 2026" on a rental row (28/9)
             SetCol("LastFetchDate", "Last Fetch Date", 115, false);
             GridColumn cFd = ActiveView.Columns["LastFetchDate"];
             if (cFd != null)
