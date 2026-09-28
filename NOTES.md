@@ -2008,3 +2008,10 @@ User on the per-meter column: "可是 reference no 不要给一个一个 meter �
 - Not persisted: closing Meter Invoice Run forgets a typed Reference No (as it forgets a moved invoice date). Say so if it must be kept.
 - InvRefProbe (real run, SC-000153 day 25, staged readings removed, stops at the preview): box open and empty; column read-only; nothing typed -> Ref SC-000153; SLIP-0042 typed -> survives Refresh -> **preview job Ref SLIP-0042**; 30-character cap; cleared -> SC-000153 again. ALL OK. InvDateProbe, ReadDateTest, TakeOverTest ALL OK.
 - Re-cut into **1.5.0.10**: 2916709 bytes, SHA256 `63D1BFC2…9F23`.
+
+### 28/9 — ATP-11 and ATP-14 before the user tests them (1.5.0.10 re-cut)
+
+- Self-tests on today's build: NotStartedTest ALL OK (Meters view tabs), SplitShow 4/4 right (Meters Pricing split + Cancel).
+- **Found and fixed (ATP-11):** the not-started rule lived only in the Meters view's tab filter; Meter Invoice Run's invoice list (`ScpInvoiceRun.BuildItems`, the screen the user bills from) still listed a contract whose start date is ahead. `BuildItems` now leaves out rows flagged `NotStarted` unless already invoiced (`IsNotStarted`); a rent billed in advance before the start (ATP-10) keeps working because ScpBillingRows clears the flag on that row.
+- SetupNext on the real screens: **SC 000000039** (ContractKey 4837, ATP-11 TEST, starts 01/11/2026, day 25, 1 machine NS-T01): not in September's invoice list; start moved to 01/09 -> listed; back to 01/11 -> gone. ALL OK. **SC 000000040** (ContractKey 4838, ATP-14 TEST, from 01/09/2026, day 25, per machine, SPLIT-T01/T02; moved to the new billing rules by answering the "Old billing rules" question): Meters Pricing -> "a rental invoice and a meter invoice" -> OK -> Save -> close -> reopen = RS (DB G/Y); back to "one invoice per machine" the same way = PM (DB S/N). ALL OK. Left on per machine for the user.
+- Re-cut into **1.5.0.10**: 2917595 bytes, SHA256 `FDA1DA46…A3C4`.

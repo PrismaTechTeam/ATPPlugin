@@ -701,6 +701,12 @@ namespace ServiceContractPhotocopier.Classes
             return S(r["InvoicedDocNo"]).Trim().Length > 0;
         }
 
+        /// <summary>The row's contract starts after today (ScpBillingRows' NotStarted).</summary>
+        public static bool IsNotStarted(DataRow r)
+        {
+            return r.Table.Columns.Contains("NotStarted") && r["NotStarted"] != DBNull.Value && Convert.ToBoolean(r["NotStarted"]);
+        }
+
         /// <summary>A row that can be billed on its own. A waive cannot: it is the credit against
         /// a rent, prints with that rent, and is never stamped by itself -- so a rental invoice
         /// whose rent went out must not stay "Ready" on the strength of its waive rows.</summary>
@@ -725,6 +731,17 @@ namespace ServiceContractPhotocopier.Classes
             if (rows == null) return list;
             foreach (DataRow r in rows.Rows)
             {
+                // Feedback ATP-11: a contract whose start date is still ahead has nothing to read and
+                // nothing to bill, so it makes no invoice here until the day it starts. An invoice
+                // already made for it still shows, and a rent billed in advance (ATP-10) is due before
+                // the start -- ScpBillingRows clears the flag on that row. The Meters view hid these
+                // rows from its tabs; this list, built from the same rows, did not (found 28/9).
+                if (IsNotStarted(r) && !IsInvoiced(r))
+                {
+                    r[COL_JOBKEY] = "";
+                    r[COL_NEEDS] = false;
+                    continue;
+                }
                 string key = JobKeyOf(r, grpMode);
                 r[COL_JOBKEY] = key;
                 r[COL_NEEDS] = IsUsageMeter(r) && !HasReading(r) && !IsInvoiced(r);
