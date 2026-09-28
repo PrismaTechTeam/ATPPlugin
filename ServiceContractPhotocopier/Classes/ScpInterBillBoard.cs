@@ -60,6 +60,12 @@ namespace ServiceContractPhotocopier.Classes
         public bool HasReading;
         public bool Invoiced;
         public DataRow Row;              // the billing row it came from
+        /// <summary>A charge with no counter -- the rent, a minimum, a waive -- listed with the readings
+        /// so the board shows everything the invoice will carry. Never keyed, never a reading.</summary>
+        public bool IsCharge;
+        /// <summary>The Amount column means something: false for a minimum or a waive already on an
+        /// invoice, whose billed top-up or credit is on that invoice, not on this row.</summary>
+        public bool AmountShown = true;
     }
 
     /// <summary>One contract on the board. A contract of theirs that this book has not taken is a row
@@ -483,7 +489,28 @@ namespace ServiceContractPhotocopier.Classes
                     string d = S(r["InvoicedDocNo"]).Trim();
                     if (!row.InvoicedDocs.Contains(d)) row.InvoicedDocs.Add(d);
                 }
-                if (!ScpInvoiceRun.IsUsageMeter(r)) { if (!invoiced) row.Amount += Dec(r["TotalCharges"]); continue; }
+                if (!ScpInvoiceRun.IsUsageMeter(r))
+                {
+                    if (!invoiced) row.Amount += Dec(r["TotalCharges"]);
+                    // Listed with the readings (user, 28/9: "I cannot see the rental in the readings,
+                    // so I do not know what will be invoiced"): the rent and which month it pays, a
+                    // minimum, a waive. Never keyed, and not counted among the readings.
+                    IbReadingRow cr = new IbReadingRow();
+                    cr.Row = r;
+                    cr.IsCharge = true;
+                    cr.LocalMeterKey = D64(r["ItemMeterKey"]);
+                    cr.ServiceItemNo = S(r["ServiceItemNo"]);
+                    cr.Serial = S(r["SerialNo"]);
+                    cr.Meter = S(r["MeterType"]);
+                    cr.Invoiced = invoiced;
+                    cr.Amount = Dec(r["TotalCharges"]);
+                    cr.AtHq = ChargeWords(r, invoiced);
+                    bool worksOut = ScpBillingRows.IsCommitRow(r) || (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]));
+                    cr.AmountShown = !(invoiced && worksOut);
+                    cr.Saved = invoiced ? S(r["InvoicedDocNo"]).Trim() : "";
+                    row.Readings.Add(cr);
+                    continue;
+                }
 
                 IbReadingRow rr = new IbReadingRow();
                 rr.Row = r;
@@ -855,6 +882,24 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>As above, for the counters in <paramref name="onlyMeters"/> (null = all). All or
         /// nothing: if any of them has been invoiced or locked in this book since the board loaded,
         /// nothing is written and the reason is thrown, so an invoice is never built on it.</summary>
+        /// <summary>What a charge with no counter is, in the board's At HQ column: "Rental · 2/36 ·
+        /// OCT 2026", "Minimum · worked out at Generate", "Waive · decided at Generate".</summary>
+        private static string ChargeWords(DataRow r, bool invoiced)
+        {
+            if (r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]))
+                return invoiced ? "Waive · see the invoice" : "Waive · decided at Generate";
+            if (ScpBillingRows.IsCommitRow(r))
+                return invoiced ? "Minimum · see the invoice" : "Minimum · worked out at Generate";
+            string role = S(r["Role"]).Trim();
+            if (ScpStrategy.IsRentalRole(role, S(r["MeterType"])))   // the billing rows call the type code MeterType
+            {
+                string rf = r.Table.Columns.Contains("RentalFor") ? S(r["RentalFor"]).Trim() : "";
+                string free = S(r["EntrySource"]).Trim().ToUpperInvariant() == "RENTAL FREE" ? "Rental free" : "Rental";
+                return rf.Length > 0 ? free + " · " + rf : free;
+            }
+            return "Charge";
+        }
+
         public static int SaveHqReadings(DBSetting db, IbContractRow c, int year, int month, HashSet<long> onlyMeters)
         {
             int n = 0;
@@ -868,7 +913,7 @@ namespace ServiceContractPhotocopier.Classes
                     {
                         foreach (IbReadingRow rr in c.Readings)
                         {
-                            if (!rr.FromHq || !rr.HasReading || rr.Invoiced || rr.Current <= 0m) continue;
+                            if (rr.IsCharge || !rr.FromHq || !rr.HasReading || rr.Invoiced || rr.Current <= 0m) continue;
                             if (onlyMeters != null && !onlyMeters.Contains(rr.LocalMeterKey)) continue;
                             DateTime on = rr.HqDate.HasValue ? rr.HqDate.Value : DateTime.Today;
                             using (SqlCommand cmd = new SqlCommand(

@@ -1095,8 +1095,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                     Convert.ToString(x.Row[ScpInvoiceRun.COL_JOBKEY]) != jobKey) continue;
                 DataRow d = rt.NewRow();
                 d["Idx"] = i; d["ServiceItemNo"] = x.ServiceItemNo; d["Serial"] = x.Serial; d["Meter"] = x.Meter;
-                d["Last"] = x.Last;
+                if (!x.IsCharge) d["Last"] = x.Last;
                 if (x.HasReading) { d["Current"] = x.Current; d["Copies"] = x.Copies; d["Amount"] = x.Amount; }
+                else if (x.IsCharge && x.AmountShown) d["Amount"] = x.Amount;   // the rent, a minimum, a waive: no counter, just the money
                 d["AtHq"] = x.AtHq;
                 d["Saved"] = x.Saved.Length > 0 ? x.Saved : "—";
                 rt.Rows.Add(d);
@@ -1267,6 +1268,16 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         {
             IbReadingRow x = ReadingAt(e.RowHandle);
             if (x == null) return;
+            if (x.IsCharge)
+            {
+                // A charge, not a counter: nothing to key, so nothing is marked missing.
+                if (e.Column == this.ColRAtHq)
+                {
+                    e.Appearance.ForeColor = Color.FromArgb(23, 69, 122);
+                    e.Appearance.Options.UseForeColor = true;
+                }
+                return;
+            }
             if (e.Column == this.ColRCurrent)
             {
                 if (!x.HasReading)
@@ -1300,14 +1311,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void GridViewReadings_ShowingEditor(object sender, System.ComponentModel.CancelEventArgs e)
         {
             IbReadingRow x = ReadingAt(this.GridViewReadings.FocusedRowHandle);
-            if (this.GridViewReadings.FocusedColumn != this.ColRCurrent || x == null || x.FromHq || x.Invoiced) e.Cancel = true;
+            if (this.GridViewReadings.FocusedColumn != this.ColRCurrent || x == null || x.IsCharge || x.FromHq || x.Invoiced) e.Cancel = true;
         }
 
         private void GridViewReadings_CellValueChanged(object sender, DevExpress.XtraGrid.Views.Base.CellValueChangedEventArgs e)
         {
             if (e.Column != this.ColRCurrent) return;
             IbReadingRow x = ReadingAt(e.RowHandle);
-            if (x == null || x.FromHq || x.Invoiced || _current == null || _current.Period <= 0) return;
+            if (x == null || x.IsCharge || x.FromHq || x.Invoiced || _current == null || _current.Period <= 0) return;
             decimal v = 0m;
             if (e.Value != null && e.Value != DBNull.Value) decimal.TryParse(Convert.ToString(e.Value), out v);
             try { ScpInvoiceRun.SaveReading(_db, x.LocalMeterKey, ScpBillingSequence.YearOf(_current.Period), ScpBillingSequence.MonthOf(_current.Period), v); }

@@ -212,12 +212,13 @@ internal static class InterBillBoardCheck
             {
                 if (x.AtHq == "PUMS · 13 Sep") pums++;
                 if (x.AtHq == "Keyed · 12 Sep") keyed++;
+                if (x.IsCharge) continue;   // the rent / a minimum, listed with the readings since 28/9: no counter
                 if (x.Last <= 0m || x.Copies <= 0m) lastOk = false;
             }
             Expect("HQ-2026-007 readings say 'PUMS · 13 Sep' (4) and 'Keyed · 12 Sep' (2)", pums == 4 && keyed == 2);
             Expect("HQ-2026-007 every counter has a baseline and copies", lastOk);
             decimal copies = 0m, amount = c1.Amount;
-            foreach (ServiceContractPhotocopier.Classes.IbReadingRow x in c1.Readings) copies += x.Copies;
+            foreach (ServiceContractPhotocopier.Classes.IbReadingRow x in c1.Readings) if (!x.IsCharge) copies += x.Copies;
             Expect("HQ-2026-007 starts from HQ's August reading: copies 11,760 BK + 960 CL = 12,720 (" + copies.ToString("n0") + ")", copies == 12720m);
             Expect("HQ-2026-007 amount 1,140.00 + 211.68 + 192.00 = 1,543.68 (" + amount.ToString("n2") + ")", amount == 1543.68m);
         }
