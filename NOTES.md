@@ -2240,3 +2240,9 @@ CSSI-000005 empty. Decided (AskUserQuestion): required + a list.
   (filter Contract Start on (Blanks) to list them)" -- ATPTEST 3,074. The grid's own column filter is the list.
 - The overdue scan itself is unchanged: with a start it already works.
 - Re-cut into **1.5.0.10**: 2963196 bytes, SHA256 `0DB92115…90AE`.
+- **29/9 16:03 installed on the client's UAT book** (user: "run shadowmain to the ATPCHECK to update to latest version"):
+  fresh-install ALL OK first; `bin\Debug-ATPCHECK` given the fresh DLLs and started -> 192.168.1.92 / AED_ATPCHECK
+  1.5.0.9 -> **1.5.0.10** (package SHA256 0DB92115…90AE). Migrations ran: TierMode on meters and contracts,
+  RentalBasis; CSSI-000003 2MR00551 BK's "100|0.00" band became Free Qty 100 with the 0.023 / 0.021 bands kept (the
+  same reading the Inter-Billing take gives an older HQ). CSSI-000005 still has no Contract Start -- it must be filled
+  before it can be saved again. The client's other PCs take 1.5.0.10 on their next AutoCount start.
