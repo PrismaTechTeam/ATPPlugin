@@ -2150,3 +2150,20 @@ line-price read was swallowed.
   updated since ATP-4). Known and not from this change: invoice-run DEMO-PG (data), meter-listing "charge = NET x
   rate" on the tier test contracts SC 035/036 (the check assumes one rate; those counters are priced by a ladder),
   demo-shapes "7 lines REJECTED" (DEMO serial lists over 100 characters).
+
+### 29/9 — No item code covers the MACHINE too (1.5.0.10 re-cut)
+
+User, after testing the take: "没有 item code 不能 Take ... 我讲的是 machine 吧, meter ok lah 也是可以 check". The machine's
+model (zSCP2_Item.ItemCode) must be a stock item of the subsidiary as well as each meter type's item.
+- `ScpInterBillTake.ItemCodeProblems(db, machines, checkMachines)`: one line per model not in dbo.Item (or a machine with
+  no model), listing its serials, then the meter types as before; group items skipped. `ItemCodeRefusal` says what to do
+  for each kind ("add each machine model as a stock item of this book" / "give each meter type an item code ... in Meter
+  Type Maintenance"). Take and AddMachine check machines; AddMeter (a counter on a machine already here) does not.
+- Board `CountNoItemCode`: the contract's active, non-group machines' models first -> "No item code (1) · model IR ADV
+  DX C3935I", then the meter types. Blocks Generate as before.
+- Checked (no take, nothing written): ASNDUMMY has no stock item IR ADV DX C3935I, so 042 / 043 / 045 / 047 / 050 show
+  "No item code (1) · model IR ADV DX C3935I" and a take of 044 / 046 would be refused naming the model and serial.
+  Left that way for the user's test (they add the stock item in ASNDUMMY and Refresh). The client's HQ machines all
+  carry a model (read only: IR-ADV DX C3835i, iRADV6555, iFORCE C5160 L/AS, ...).
+- tests/interbill-board then failed 2 checks: HQ-2026-006's model iR-ADV C5840i is not an item of AED_ATPTEST (the billing book there) -- the new rule, right. tests/seed-items now also makes the five models the board fixture's HQ contracts use (iR-ADV C3530i, iR-ADV DX 4745i, iR 2645i, iR 2625i, iR-ADV C5840i); run on ATPTEST (5 created) -> interbill-board ALL OK, smoke-forms every screen loads.
+- Re-cut into **1.5.0.10**: 2944539 bytes, SHA256 `7C4597C2…BA4A`.

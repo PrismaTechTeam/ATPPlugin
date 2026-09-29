@@ -544,7 +544,7 @@ namespace ServiceContractPhotocopier.Classes
                 try { CreateMeterTypes(localDb, remoteConnectionString, missing); res.MeterTypesCreated = missing; }
                 catch (Exception ex) { res.Error = ex.Message; return res; }
             }
-            res.Error = ItemCodeRefusal(localDb, one, missing);
+            res.Error = ItemCodeRefusal(localDb, one, missing, false);
             if (res.Error.Length > 0) return res;
 
             using (SqlConnection cn = new SqlConnection(localDb.ConnectionString))
@@ -985,35 +985,70 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>
-        /// Every counter of these machines has to be billable HERE: its meter type must name an item
-        /// of this book (user, 29/9: "没有 itemcode 不 allow take contract"). An invoice line with an
-        /// item this book does not have fails when the invoice is saved, and one with no item at all
-        /// posts to the default sales account and is missing from every report by item. So the take
-        /// is refused, naming each meter type, before anything is written. A counter that is never
-        /// billed (role NA) needs none. Returns the refusal, or "".
+        /// Every machine and every counter has to be an item of THIS book (user, 29/9: "没有 itemcode 不
+        /// allow take contract ... 我讲的是 machine, meter 也是可以 check"):
+        /// <list type="bullet">
+        /// <item>the machine's model (its item code) must be a stock item here -- the machine is on this
+        /// book's contract, its delivery order and its reports by item;</item>
+        /// <item>each counter's meter type must name an item here -- an invoice line with an item this
+        /// book does not have fails when the invoice is saved, and one with no item posts to the default
+        /// sales account, missing from every report by item. A counter never billed (role NA) needs none.</item>
+        /// </list>
+        /// The take is refused, naming each, before anything is written. <paramref name="checkMachines"/>
+        /// is false for a counter added on its own (its machine is already here). Returns the refusal, or "".
         /// </summary>
-        public static string ItemCodeRefusal(DBSetting localDb, List<ScpRemoteMachine> machines, List<string> justCreated)
+        public static string ItemCodeRefusal(DBSetting localDb, List<ScpRemoteMachine> machines, List<string> justCreated,
+                                             bool checkMachines = true)
         {
-            List<string> problems = ItemCodeProblems(localDb, machines);
+            List<string> problems = ItemCodeProblems(localDb, machines, checkMachines);
             if (problems.Count == 0) return "";
-            string made = justCreated != null && justCreated.Count > 0
-                ? Environment.NewLine + "(" + string.Join(", ", justCreated.ToArray()) +
+            bool models = false, types = false;
+            foreach (string p in problems) { if (p.StartsWith("   machine")) models = true; else types = true; }
+            string made = types && justCreated != null && justCreated.Count > 0
+                ? "(" + string.Join(", ", justCreated.ToArray()) +
                   (justCreated.Count == 1 ? " was" : " were") + " not in this book and " +
                   (justCreated.Count == 1 ? "has" : "have") + " just been added to Meter Type Maintenance.)"
                 : "";
-            return "This contract cannot be taken yet. These meter types have no item code in this book, " +
-                   "so their invoice lines could not be posted:" + Environment.NewLine + Environment.NewLine +
-                   string.Join(Environment.NewLine, problems.ToArray()) + Environment.NewLine + made +
+            List<string> todo = new List<string>();
+            if (models) todo.Add("add each machine model as a stock item of this book");
+            if (types) todo.Add("give each meter type an item code of this book in Meter Type Maintenance");
+            return "This contract cannot be taken yet. These have no item code in this book:" +
                    Environment.NewLine + Environment.NewLine +
-                   "Give each one an item code of this book in Meter Type Maintenance, then take it again.";
+                   string.Join(Environment.NewLine, problems.ToArray()) + Environment.NewLine +
+                   (made.Length > 0 ? made + Environment.NewLine : "") + Environment.NewLine +
+                   "First " + string.Join(", and ", todo.ToArray()) + ", then take it again.";
         }
 
-        /// <summary>One line per meter type these machines' counters use that has no usable item code
-        /// in this book. Empty = all can be invoiced.</summary>
-        public static List<string> ItemCodeProblems(DBSetting localDb, List<ScpRemoteMachine> machines)
+        /// <summary>One line per machine model and per meter type that has no usable item code in this
+        /// book. Empty = all can be put on this book's documents.</summary>
+        public static List<string> ItemCodeProblems(DBSetting localDb, List<ScpRemoteMachine> machines, bool checkMachines = true)
         {
             List<string> problems = new List<string>();
             if (localDb == null || machines == null) return problems;
+
+            if (checkMachines)
+            {
+                // By model, so ten machines of one model are one line.
+                List<string> order = new List<string>();
+                Dictionary<string, List<string>> serials = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                foreach (ScpRemoteMachine m in machines)
+                {
+                    if (m.IsGroupItem) continue;   // the contract's group line, not a machine
+                    string code = (m.ItemCode ?? "").Trim();
+                    List<string> l;
+                    if (!serials.TryGetValue(code, out l)) { l = new List<string>(); serials[code] = l; order.Add(code); }
+                    l.Add((m.SerialNumber ?? "").Trim());
+                }
+                foreach (string code in order)
+                {
+                    string who = string.Join(", ", serials[code].ToArray());
+                    if (code.Length == 0) { problems.Add("   machine " + who + "  --  no item code"); continue; }
+                    object n = localDb.ExecuteScalar("SELECT COUNT(*) FROM dbo.Item WHERE ItemCode = N'" + code.Replace("'", "''") + "'");
+                    if (n == null || n == DBNull.Value || Convert.ToInt32(n) == 0)
+                        problems.Add("   machine model " + code + "  (" + who + ")  --  not an item of this book");
+                }
+            }
+
             List<string> wanted = new List<string>();
             foreach (ScpRemoteMachine m in machines)
                 foreach (ScpRemoteMeter t in m.Meters)

@@ -51,6 +51,15 @@ static class SeedItems
         Make(db, ses, "iR-ADV DX 4951i",  "COPIER iR-ADV DX 4951i - MONO A3 HEAVY DUTY");
         Make(db, ses, "iR-ADV DX C3922i", "COPIER iR-ADV DX C3922i - COLOUR A3 LIGHT DUTY");
 
+        // The models on the Inter-Billing board fixture's HQ contracts (tests/interbill-board,
+        // seed-board-hq.sql, in AED_ASNDUMMY). A contract taken into this book must have its machines'
+        // models as items here (29/9: no item code, no take), or the board shows it as No item code.
+        Make(db, ses, "iR-ADV C3530i",    "COPIER iR-ADV C3530i - COLOUR A3 LIGHT DUTY");
+        Make(db, ses, "iR-ADV DX 4745i",  "COPIER iR-ADV DX 4745i - MONO A3 MEDIUM DUTY");
+        Make(db, ses, "iR 2645i",         "COPIER iR 2645i - MONO A3 LIGHT DUTY");
+        Make(db, ses, "iR 2625i",         "COPIER iR 2625i - MONO A3 LIGHT DUTY");
+        Make(db, ses, "iR-ADV C5840i",    "COPIER iR-ADV C5840i - COLOUR A3 MEDIUM DUTY");
+
         // The five charge items an invoice line is posted under. The old book has one per customer
         // per machine (01.MR.BK.2JC10897 and 445 more) because a meter type had to carry its own;
         // under the new rules the rate lives on the machine's meter, so five serve every contract.

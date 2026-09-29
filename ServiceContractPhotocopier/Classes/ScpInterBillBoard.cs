@@ -661,7 +661,8 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>
-        /// Every line this month bills has to be posted under an item of THIS book (user, 29/9: "Inter-
+        /// Every machine on the contract has to be a stock item of THIS book, and every line this month
+        /// bills has to be posted under an item of THIS book (user, 29/9: "Inter-
         /// Billing 画面加一个状态 No item code, 跟 Unpriced 一样, 没设好就挡住"). A code this book does not
         /// have fails the invoice when it is saved; no code at all posts the line to the default sales
         /// account, missing from every report by item. Counted per meter type; a counter that is never
@@ -669,6 +670,20 @@ namespace ServiceContractPhotocopier.Classes
         /// </summary>
         private static void CountNoItemCode(DBSetting db, IbContractRow row, DataTable rows)
         {
+            // The machines first: each model on this contract must be a stock item of this book, the
+            // same rule the take applies (ScpInterBillTake.ItemCodeProblems).
+            DataTable models = db.GetDataTable(
+                "SELECT DISTINCT LTRIM(RTRIM(ISNULL(i.ItemCode,''))) AS Code, CASE WHEN it.ItemCode IS NULL THEN 0 ELSE 1 END AS Found " +
+                "  FROM dbo.zSCP2_Item i LEFT JOIN dbo.Item it ON it.ItemCode = i.ItemCode " +
+                " WHERE i.ContractKey = " + row.LocalKey + " AND ISNULL(i.Inactive,'N') = 'N' AND ISNULL(i.IsGroupItem,'N') = 'N'", false);
+            foreach (DataRow m in models.Rows)
+            {
+                if (Convert.ToInt32(m["Found"]) == 1) continue;
+                string code = S(m["Code"]);
+                row.NoItemCode++;
+                row.NoItemTypes.Add(code.Length > 0 ? "model " + code : "a machine with no model");
+            }
+
             Dictionary<string, string> codeOfType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (DataRow r in rows.Rows)
             {
