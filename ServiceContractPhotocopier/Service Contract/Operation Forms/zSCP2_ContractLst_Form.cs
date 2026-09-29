@@ -114,19 +114,26 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             // Renewal reminder: how many ACTIVE contracts expire within the next 30 days.
             try
             {
-                int soon = 0;
+                int soon = 0, noStart = 0;
                 DataTable src = Grid.DataSource as DataTable;
                 if (src != null && src.Columns.Contains("ServiceExpiryDate"))
                     foreach (DataRow r in src.Rows)
                     {
                         if (Convert.ToString(r["Inactive"]) == "Y") continue;
+                        if (src.Columns.Contains("ServiceStartDate") && r["ServiceStartDate"] == DBNull.Value) noStart++;
                         if (r["ServiceExpiryDate"] == DBNull.Value) continue;
                         DateTime xp = Convert.ToDateTime(r["ServiceExpiryDate"]).Date;
                         if (xp >= DateTime.Today && xp <= DateTime.Today.AddDays(30)) soon++;
                     }
-                PanelHeaderTop.Hint = soon > 0
+                string hint = soon > 0
                     ? "⚠  " + soon + " contract(s) expiring within 30 days — check the amber Contract Expiry dates below."
                     : "In this window, you can create, modify, or delete service contracts and their service items.";
+                // #76 (29/9): a contract with no start is never checked for late or skipped months in the
+                // Meter Invoice Run. The list is this grid: filter Contract Start on (Blanks).
+                if (noStart > 0)
+                    hint += "   ⚠  " + noStart + " without a Contract Start — the Meter Invoice Run cannot tell which of their months are late " +
+                            "(filter Contract Start on (Blanks) to list them).";
+                PanelHeaderTop.Hint = hint;
             }
             catch { }
         }
@@ -282,6 +289,18 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void ContractList_ExpiryCellStyle(object sender, DevExpress.XtraGrid.Views.Grid.RowCellStyleEventArgs e)
         {
+            // No Contract Start: amber, so the ones to fill stand out (#76).
+            if (e.Column != null && e.Column.FieldName == "ServiceStartDate")
+            {
+                object sv = GridView.GetRowCellValue(e.RowHandle, e.Column);
+                if (sv == null || sv == DBNull.Value)
+                {
+                    e.Appearance.BackColor = System.Drawing.Color.FromArgb(255, 224, 178);
+                    e.Appearance.BackColor2 = e.Appearance.BackColor;
+                    e.Appearance.Options.UseBackColor = true;
+                }
+                return;
+            }
             if (e.Column == null || e.Column.FieldName != "ServiceExpiryDate") return;
             object v = GridView.GetRowCellValue(e.RowHandle, e.Column);
             if (v == null || v == DBNull.Value) return;

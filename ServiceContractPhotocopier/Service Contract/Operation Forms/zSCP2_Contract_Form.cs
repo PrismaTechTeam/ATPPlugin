@@ -5541,6 +5541,17 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (string.IsNullOrWhiteSpace(debtor))
             { XtraMessageBox.Show("Customer (Debtor) is required.", "Validation"); return; }
 
+            // #76 (user, 29/9: required): the Meter Invoice Run counts a contract's months -- which are
+            // due, which are late, which may not be skipped -- from its start. A contract saved without
+            // one was never checked for late or skipped months at all.
+            if (DtStartDate.EditValue == null || DtStartDate.EditValue == DBNull.Value)
+            {
+                XtraMessageBox.Show("Contract Start Date is required -- the Meter Invoice Run counts this contract's months, " +
+                    "and which of them are late, from it.", "Validation");
+                DtStartDate.Focus();
+                return;
+            }
+
             // Contract Expiry cannot be earlier than Contract Start.
             if (DtStartDate.EditValue != null && DtStartDate.EditValue != DBNull.Value &&
                 DtExpiryDate.EditValue != null && DtExpiryDate.EditValue != DBNull.Value &&

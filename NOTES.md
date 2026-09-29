@@ -2227,3 +2227,16 @@ Fixed, each reproduced or tested on ATPTEST:
 - Test contracts left on ATPTEST: SC 000000051-053 (PW-01..03, prepaid + free months; MR2609.0843/0844/0845), SC 000000054
   (OD-01, overdue since July; a July reading 1,500 and an August reading 1,600 from the hold test).
 - Re-cut into **1.5.0.10**: 2962440 bytes, SHA256 `35F8C4B2…B653`.
+
+### 29/9 — #76: Contract Start required (1.5.0.10 re-cut)
+
+User, on #76: "不明白我不是有 contract 的 start date 吗" -- the field exists but was never required, and 2,892 of ATPTEST's
+active contracts (V8 imports) left it empty, with no end date and no machine dates either; the client's UAT book has
+CSSI-000005 empty. Decided (AskUserQuestion): required + a list.
+- `zSCP2_Contract_Form.BtnSave_Click`: no Contract Start -> "Contract Start Date is required -- the Meter Invoice Run
+  counts this contract's months, and which of them are late, from it." (after the customer check). StartReq: a clone of
+  SC 000000004 with no start was refused, 3,133 contracts before and after.
+- `zSCP2_ContractLst_Form`: a blank Contract Start cell is amber; the header adds "⚠ N without a Contract Start ...
+  (filter Contract Start on (Blanks) to list them)" -- ATPTEST 3,074. The grid's own column filter is the list.
+- The overdue scan itself is unchanged: with a start it already works.
+- Re-cut into **1.5.0.10**: 2963196 bytes, SHA256 `0DB92115…90AE`.
