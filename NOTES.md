@@ -2167,3 +2167,24 @@ model (zSCP2_Item.ItemCode) must be a stock item of the subsidiary as well as ea
   carry a model (read only: IR-ADV DX C3835i, iRADV6555, iFORCE C5160 L/AS, ...).
 - tests/interbill-board then failed 2 checks: HQ-2026-006's model iR-ADV C5840i is not an item of AED_ATPTEST (the billing book there) -- the new rule, right. tests/seed-items now also makes the five models the board fixture's HQ contracts use (iR-ADV C3530i, iR-ADV DX 4745i, iR 2645i, iR 2625i, iR-ADV C5840i); run on ATPTEST (5 created) -> interbill-board ALL OK, smoke-forms every screen loads.
 - Re-cut into **1.5.0.10**: 2944539 bytes, SHA256 `7C4597C2…BA4A`.
+
+### 29/9 — One-click Create item codes; the month line says Done / Now (1.5.0.10 re-cut)
+
+- User: "你可以做一键创建 itemcode 吗". New `ScpInterBillItems`: `ForTake` (HQ machines) / `ForContract` (a taken contract)
+  list what is missing -- each machine model not in dbo.Item (one line per model with its serials) and each meter type
+  whose item is missing (the item it names, else HQ's item code for that type, else the type's own code, and the type is
+  then pointed at it); `Create` makes them through AutoCount's ItemDataAccess, copied from HQ's item when HQ has it
+  (description, base unit, stock control, serial control; group / type only when this book has those codes), else a
+  machine = serial numbered, a charge = no stock / no serial, unit UNIT.
+- Board: on a contract with No item code the big button reads **Create item codes (n)** (it would be a disabled
+  Generate); it lists what it will make, Yes creates, the board reloads. Take refused only for items
+  (`ScpTakeResult.MissingItems`) asks "Create them in this book now, and take the contract?" -> creates -> takes again.
+  No designer change.
+- Checked read only (IbTerms needs): every IB test contract in ASNDUMMY needs one item, IR ADV DX C3935I "COPIER iR-ADV
+  DX C3935I" from HQ (UNIT, serial, no stock; group C001 / type H001 not in ASNDUMMY -> left blank). The create itself
+  was left for the user's first click (it is their test); the same ItemDataAccess calls make items in tests/seed-items.
+- User on the month line ("写清楚现在要开的和之前是什么，不要长长的"): "Billed 1/36 · Sep 2026" -> **Done 1/36 · Now 2/36
+  Sep 2026** (not open: "Done 9/36 · Next 10/36 Oct 2026"; complete unchanged). The contracts grid's Billed column is
+  unchanged (1/36).
+- smoke-forms: every screen loads.
+- Re-cut into **1.5.0.10**: 2956595 bytes, SHA256 `DBC74E93…7B35`.

@@ -986,11 +986,50 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             return list;
         }
 
-        /// <summary>The big button makes what is picked: one invoice, or a contract's ready ones.</summary>
+        /// <summary>The big button makes what is picked: one invoice, or a contract's ready ones. On a
+        /// contract that has No item code it creates the missing items instead -- nothing can be generated
+        /// until they exist (user, 29/9: "一键创建 itemcode").</summary>
         private void SetGenerateThis(int ready)
         {
+            _createItems = _current != null && _current.Taken && _current.NoItemCode > 0;
+            if (_createItems)
+            {
+                this.BtnGenerateThis.Enabled = true;
+                this.BtnGenerateThis.Text = "Create item codes (" + _current.NoItemCode + ")";
+                return;
+            }
             this.BtnGenerateThis.Enabled = ready > 0;
             this.BtnGenerateThis.Text = ready > 1 ? "Generate " + ready + " invoices" : "Generate this invoice";
+        }
+
+        /// <summary>The big button is "Create item codes" for the contract shown.</summary>
+        private bool _createItems;
+
+        /// <summary>Creates what the contract shown lacks -- its machines' models and its meter types'
+        /// items, copied from HQ where HQ has them -- after showing the list.</summary>
+        private void CreateItemCodes()
+        {
+            if (_current == null || !_current.Taken) return;
+            List<ScpItemNeed> needs;
+            try { needs = ScpInterBillItems.ForContract(_db, _cs, _current.LocalKey); }
+            catch (Exception ex) { XtraMessageBox.Show(ex.Message, "Create item codes", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (needs.Count == 0) { LoadData(); return; }
+            if (!ConfirmCreate(needs, "Create these items in this book?")) return;
+            List<string> made;
+            string err = ScpInterBillItems.Create(_db, needs, _userId, out made);
+            XtraMessageBox.Show((made.Count > 0 ? "Created:\r\n   " + string.Join("\r\n   ", made.ToArray()) : "Nothing created.") +
+                (err.Length > 0 ? "\r\n\r\n" + err : ""), "Create item codes", MessageBoxButtons.OK,
+                err.Length > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            LoadData();
+        }
+
+        private static bool ConfirmCreate(List<ScpItemNeed> needs, string question)
+        {
+            List<string> lines = new List<string>();
+            foreach (ScpItemNeed n in needs) lines.Add(n.Line());
+            return XtraMessageBox.Show(question + "\r\n\r\n" + string.Join("\r\n", lines.ToArray()) +
+                "\r\n\r\nAn item HQ has is copied from HQ (description, unit, stock and serial control).",
+                "Create item codes", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
         }
 
         private void FocusInvoiceContract(string key)
@@ -1132,10 +1171,14 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.BtnUndoSkip.Tag = undo;
             this.BtnUndoSkip.Text = undo > 0 ? "Undo skip " + ScpBillingSequence.Name(undo) : "Undo skip";
             if (!taken) { this.LblSequence.Text = ""; return; }
-            string text = "Billed " + s.ProgressText(open);
-            if (r.Open) text += "  ·  " + ScpBillingSequence.Name(r.Period) + (r.Due > 1 ? "  ·  " + r.Due + " due" : "");
+            // "Done 1/36 · Now 2/36 Sep 2026" (user, 29/9): the months already billed, and the one being
+            // billed now with its number -- "Billed 1/36 · Sep 2026" read as if September were month 1.
+            int done = s.DoneBefore(open);
+            string of = s.Total > 0 ? "/" + s.Total : "";
+            string text = "Done " + done + of;
+            if (r.Open) text += "  ·  Now " + (done + 1) + of + " " + ScpBillingSequence.Name(r.Period) + (r.Due > 1 ? "  ·  " + r.Due + " due" : "");
             else if (s.Complete) text += "  ·  complete";
-            else text += "  ·  next " + ScpBillingSequence.Name(s.Next);
+            else text += "  ·  Next " + (done + 1) + of + " " + ScpBillingSequence.Name(s.Next);
             this.LblSequence.Text = text;
         }
 
@@ -1434,6 +1477,23 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             ScpTakeResult res;
             try { res = ScpInterBillBoard.Take(_db, _book, _cs, _current, debtor, _userId); }
             finally { this.Cursor = old; }
+            if (!res.Ok && res.MissingItems)
+            {
+                // Refused only for items this book lacks: offer to make them, then take again.
+                List<ScpItemNeed> needs = null;
+                try { needs = ScpInterBillItems.ForTake(_db, _cs, _current.HqMachines, true); } catch { }
+                if (needs != null && needs.Count > 0 &&
+                    ConfirmCreate(needs, res.Error + "\r\n\r\nCreate them in this book now, and take the contract?"))
+                {
+                    List<string> made;
+                    string err = ScpInterBillItems.Create(_db, needs, _userId, out made);
+                    if (err.Length > 0) { XtraMessageBox.Show(err, "Create item codes", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                    this.Cursor = Cursors.WaitCursor;
+                    try { res = ScpInterBillBoard.Take(_db, _book, _cs, _current, debtor, _userId); }
+                    finally { this.Cursor = old; }
+                }
+                else return;
+            }
             if (!res.Ok) { XtraMessageBox.Show(res.Error, "Take contract", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if (res.Notes.Count > 0)
                 XtraMessageBox.Show("Taken as " + res.ContractNo + ", except:\r\n\r\n" + string.Join("\r\n", res.Notes.ToArray()),
@@ -1560,6 +1620,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void BtnGenerateThis_Click(object sender, EventArgs e)
         {
+            if (_createItems) { CreateItemCodes(); return; }
             DevExpress.XtraGrid.GridControl g = _invoiceView ? this.GridInvoices : this.GridContracts;
             if (_pickedInvoice != null && g.FocusedView != g.MainView) { GenerateThisInvoice(_pickedInvoice); return; }
             if (_current == null) return;

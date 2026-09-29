@@ -186,6 +186,7 @@
     <Compile Include="Classes\ScpInterBillLink.cs" />
     <Compile Include="Classes\ScpInterBillReader.cs" />
     <Compile Include="Classes\ScpInterBillTake.cs" />
+    <Compile Include="Classes\ScpInterBillItems.cs" />
     <Compile Include="Classes\ScpInterBillGuard.cs" />
     <Compile Include="Classes\ScpBillingRows.cs" />
     <Compile Include="Classes\ScpInvoiceJobs.cs" />

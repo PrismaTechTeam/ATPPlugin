@@ -18,6 +18,9 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>What came across only in part, in words -- a strategy rule whose machines were not
         /// taken. Empty when everything came.</summary>
         public List<string> Notes = new List<string>();
+        /// <summary>Refused only because items are missing here -- the screen offers to create them
+        /// (<see cref="ScpInterBillItems"/>).</summary>
+        public bool MissingItems;
         public string Error = "";
         public bool Ok { get { return Error.Length == 0 && ContractKey > 0; } }
     }
@@ -293,7 +296,7 @@ namespace ServiceContractPhotocopier.Classes
                 }
             }
             res.Error = ItemCodeRefusal(localDb, machines, missing);
-            if (res.Error.Length > 0) return res;
+            if (res.Error.Length > 0) { res.MissingItems = true; return res; }
 
             // THEIR numbers, kept exactly.
             //
@@ -447,7 +450,7 @@ namespace ServiceContractPhotocopier.Classes
                 catch (Exception ex) { res.Error = ex.Message; return res; }
             }
             res.Error = ItemCodeRefusal(localDb, one, missing);
-            if (res.Error.Length > 0) return res;
+            if (res.Error.Length > 0) { res.MissingItems = true; return res; }
 
             string no = "";
             int pos = 1;
@@ -545,7 +548,7 @@ namespace ServiceContractPhotocopier.Classes
                 catch (Exception ex) { res.Error = ex.Message; return res; }
             }
             res.Error = ItemCodeRefusal(localDb, one, missing, false);
-            if (res.Error.Length > 0) return res;
+            if (res.Error.Length > 0) { res.MissingItems = true; return res; }
 
             using (SqlConnection cn = new SqlConnection(localDb.ConnectionString))
             {
