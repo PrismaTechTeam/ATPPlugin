@@ -2029,3 +2029,40 @@ User in AED_ASNDUMMY (the HQ launcher `bin\Debug-HQ`, refreshed to 1.5.0.10; ASN
 - **Caught before it reached the user:** the first build read `MeterTypeCode`, which the billing rows call `MeterType`; every contract with a charge row loaded as ERROR. Found by IbChargeShow (real board, ASNDUMMY, HQ read only), fixed, re-checked: Sep 2026 Waiting, 7 rows as above.
 - tests/interbill-board: its counter checks now skip charge rows (they assumed every row is a counter); the rest ALL OK except "the customer picker searches" (needs 2+ customers, the book has 1 -- data). tests/interbill-check fails at "take": HQ-2026-001's numbers are already used in ASNDUMMY from an earlier take the test's clean-up does not remove -- data, left alone.
 - Re-cut into **1.5.0.10**: 2920141 bytes, SHA256 `6AB429E1…309B`.
+
+### 29/9 — Inter-Billing test data (user: "这个 interbilling 我要再 test 一次 请准备资料") + what my 28/9 test run broke
+
+**What `tests/interbill-check` did when I ran it on 28/9 (my mistake, told the user):**
+- Its `Wipe` cleared EVERY link in AED_ASNDUMMY and deleted every contract a link pointed at: the user's CSSI-000004
+  (ContractKey 55, taken from 192.168.1.92 for their own testing) with its machines, counters and readings. No backup.
+  Left behind: AutoCount invoices I-000009 / I-000010 / I-000011 (22/9) and 3 `zSCP2_ContractSnapshot` rows for key 55.
+- It sent its fixture reset (`DELETE ... WHERE ContractNo = 'HQ-2026-001' AND serial NOT IN HQA-001..003`) to every
+  configured connection, including the client's 192.168.1.92/AED_ATPCHECK. Checked read-only afterwards: ATPCHECK
+  has no HQ-2026-001, so it matched nothing; CSSI-000004 there still has its 2 machines.
+- Its `FindOrMake` added connection 9 "HQ (AED_ATPTEST)" (28/9 18:15), so ASNDUMMY had two active connections and
+  the board's HQ (`HqBook`, none set in Setup) became "Not set".
+- **Fixed:** `Wipe` now removes only contracts whose CONTRACT link has SourceRef = the fixture (HQ-2026-001) AND comes
+  over the run's own connection (BookA), their links, and resets "over there" only on BookA. Compiled; not re-run.
+
+**Test data (local books only, 192.168.1.92 not touched):**
+- HQ = AED_ATPTEST, customer 3000-C0014 CLIOART PRINTING & DESIGN, start 01/08/2026, billing day 7, made through
+  the real contract Save (IbSetup probe); readings through `ScpInvoiceRun.SaveReading` + `SaveReadingDate`
+  (MANUAL, 07/08 and 07/09):
+  - SC 000000042 (4840) one invoice: IBT-A01 rental 300, BK 0.02, CL 0.20; IBT-A02 same + minimum 200.
+  - SC 000000043 (4841) per machine, rental apart: IBT-B01 / IBT-B02 rental 250, BK 0.025, CL 0.25. IBT-B02 has no
+    September reading at HQ.
+  - SC 000000044 (4842) left NOT taken, for the user to take: IBT-C01 rental 200, BK 0.03.
+- AED_ASNDUMMY: connection 9 is now HQ (`INTERBILL_HQ_BOOK` = 9) with margin 10%; ADMIN's board shows HQ customer
+  3000-C0014 only (was 3000-A0004). SC 000000042 and 043 taken (keep HQ's numbers; bill from Sep 2026).
+- Board (real form): 042 Ready 880.00 (Rental · 2/36 · SEP 2026 x2, Minimum · worked out at Generate); 043
+  Waiting HQ reading (2); 044 Not taken. Dry run of `BuildJobs` (nothing saved): 042 = one invoice **1,056.00**
+  (880 + minimum top-up 176: A02's copies 44.00 against 220); 043 = B01 copies 137.50, B01 rental 275.00,
+  B02 rental 275.00, B02 copies waiting.
+- To go back to 192.168.1.92 as HQ: Inter-Billing Setup, tick HQ on that connection.
+
+**Found while doing it (not changed, told the user):**
+- The take copies price + margin and the minimum, but NOT free copies (FOCQty 0), waive conditions (first N months /
+  target -> 0 & 0 = ALWAYS waive), tier prices on the counter (MeterMultiPriceCode ''), CommitScope/WaiveScope
+  ('S'). Belongs with the pending redesign ("free qty / minimum / waive follow HQ").
+- The board's header / Billed column says 1/36 for September (this book's first bill), the rental line says 2/36
+  (month 2 from HQ's start 01/08). Both true, reads as a contradiction.

@@ -40,6 +40,9 @@ internal static class Program
     /// <para>Named on the command line so a different parent book can be pointed at.</para></summary>
     private static string BookA = "AED_ATPTEST";
 
+    /// <summary>The parent book's seeded contract every run takes (seed-parent-book.sql).</summary>
+    private const string FixtureNo = "HQ-2026-001";
+
     private static int _fail;
 
     private const string AC = @"C:\Program Files\AutoCount\Accounting 2.2";
@@ -669,12 +672,32 @@ internal static class Program
         }
     }
 
-    /// <summary>Puts the billing book back as it was, so the run can be repeated from nothing.</summary>
+    /// <summary>Puts the billing book back as it was, so the run can be repeated from nothing --
+    /// removing ONLY what a run makes: the contract taken from the fixture over this run's own
+    /// connection, and the fourth machine it adds to the fixture over there.
+    ///
+    /// <para>It used to clear every link in the book, delete every contract any link pointed at, and
+    /// send its fixture reset to every configured connection. On 28/9 that removed a contract the
+    /// user had taken from another company's book for their own testing (CSSI-000004 in
+    /// AED_ASNDUMMY) and sent a DELETE to that company's book (it matched nothing there). So the
+    /// contracts are found by the fixture's number AND this run's connection, and "over there" is
+    /// only ever <see cref="BookA"/>.</para></summary>
     private static void Wipe(DBSetting db)
     {
         Line("clean");
+        ScpInterBillBook own = null;
+        foreach (ScpInterBillBook b in ScpInterBillBooks.LoadAll(db))
+            if (string.Equals(b.DatabaseName, BookA, StringComparison.OrdinalIgnoreCase)) own = b;
+        if (own == null || own.RemoteBookId == Guid.Empty)
+        {
+            Say("nothing to clean", "no connection to " + BookA + " yet");
+            return;
+        }
+
         DataTable t = db.GetDataTable(
-            "SELECT DISTINCT RootContractKey FROM dbo.zSCP2_InterBillLink WHERE RootContractKey > 0", false);
+            "SELECT DISTINCT RootContractKey FROM dbo.zSCP2_InterBillLink " +
+            " WHERE EntityType = 'CONTRACT' AND RootContractKey > 0 " +
+            "   AND SourceBookId = '" + own.RemoteBookId + "' AND SourceRef = N'" + FixtureNo + "'", false);
         foreach (DataRow r in t.Rows)
         {
             long ck = Convert.ToInt64(r["RootContractKey"]);
@@ -687,45 +710,41 @@ internal static class Program
                 " JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey WHERE i.ContractKey = " + ck);
             db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_Item WHERE ContractKey = " + ck);
             db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_Contract WHERE ContractKey = " + ck);
-            Say("removed", "contract " + ck);
+            db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_InterBillLink WHERE RootContractKey = " + ck);
+            Say("removed", "contract " + ck + " (taken from " + FixtureNo + ") and its links");
         }
+
         // Anything beyond the seeded three goes too -- the fourth machine this run adds over there,
         // and any further one added by hand to demonstrate the "what they changed" list. The counts
         // in this file are written down, so the parent has to start every run at exactly three.
-        foreach (ScpInterBillBook b in ScpInterBillBooks.LoadAll(db))
+        try
         {
-            try
+            using (SqlConnection cn = new SqlConnection(ScpInterBillBooks.ConnectionStringOf(db, own)))
             {
-                using (SqlConnection cn = new SqlConnection(ScpInterBillBooks.ConnectionStringOf(db, b)))
+                cn.Open();
+                using (SqlCommand cmd = new SqlCommand(
+                    // Scoped to the seeded contract by NUMBER, not just by serial, and only ever sent
+                    // to this run's own parent book.
+                    "DELETE m FROM dbo.zSCP2_ItemMeter m " +
+                    "  JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                    "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    " WHERE c.ContractNo = @no " +
+                    "   AND i.SerialNumber NOT IN ('HQA-001','HQA-002','HQA-003'); " +
+                    "DELETE i FROM dbo.zSCP2_Item i " +
+                    "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
+                    " WHERE c.ContractNo = @no " +
+                    "   AND i.SerialNumber NOT IN ('HQA-001','HQA-002','HQA-003');", cn))
                 {
-                    cn.Open();
-                    using (SqlCommand cmd = new SqlCommand(
-                        // Scoped to the seeded contract by NUMBER, not just by serial. This runs
-                        // against whichever book is configured as the parent, and that may be a real
-                        // one with thousands of contracts on it -- a delete loose enough to match
-                        // something there would be a very bad way to find out.
-                        "DELETE m FROM dbo.zSCP2_ItemMeter m " +
-                        "  JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
-                        "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
-                        " WHERE c.ContractNo = 'HQ-2026-001' " +
-                        "   AND i.SerialNumber NOT IN ('HQA-001','HQA-002','HQA-003'); " +
-                        "DELETE i FROM dbo.zSCP2_Item i " +
-                        "  JOIN dbo.zSCP2_Contract c ON c.ContractKey = i.ContractKey " +
-                        " WHERE c.ContractNo = 'HQ-2026-001' " +
-                        "   AND i.SerialNumber NOT IN ('HQA-001','HQA-002','HQA-003');", cn))
-                        cmd.ExecuteNonQuery();
+                    cmd.Parameters.AddWithValue("@no", FixtureNo);
+                    cmd.ExecuteNonQuery();
                 }
-                Say("over there", "reset to the seeded three machines in " + b.Alias);
             }
-            catch (Exception ex) { Say("over there", "left alone: " + ex.Message); }
+            Say("over there", "reset to the seeded three machines in " + own.Alias);
         }
-
-        db.ExecuteNonQuery("DELETE FROM dbo.zSCP2_InterBillLink");
-        // The CONNECTION stays. It is a setting somebody typed -- server, database, password,
-        // margin -- and a test run that quietly wipes it costs them that typing every time, which is
-        // exactly what happened. Links and taken contracts are this run's own mess and go; the
-        // configuration is not this run's to touch.
-        Say("links", "cleared -- the connection is left alone");
+        catch (Exception ex) { Say("over there", "left alone: " + ex.Message); }
+        // The CONNECTION stays, and so does every other link and contract in this book: other
+        // connections, and contracts somebody took by hand, are not this run's to touch.
+        Say("links", "this run's cleared -- everything else is left alone");
     }
 
     // ---------------------------------------------------------------- output
