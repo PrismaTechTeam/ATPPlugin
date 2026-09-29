@@ -2066,3 +2066,87 @@ User in AED_ASNDUMMY (the HQ launcher `bin\Debug-HQ`, refreshed to 1.5.0.10; ASN
   ('S'). Belongs with the pending redesign ("free qty / minimum / waive follow HQ").
 - The board's header / Billed column says 1/36 for September (this book's first bill), the rental line says 2/36
   (month 2 from HQ's start 01/08). Both true, reads as a contradiction.
+
+### 29/9 — Inter-Billing: the take brings the whole deal; no item code, no take (1.5.0.10 re-cut)
+
+User: "Take 只带过来价格和最低消费 ... 这个要解决必须带过来不要懒惰" and "Inter-Billing 画面加一个状态 No item code, 跟
+Unpriced 一样 ... 没有 itemcode 不 allow take contract". Before this, `ScpInterBillTake.InsertMeter` wrote FOC 0, rebate 0,
+waive conditions 0 & 0 (= waive EVERY month), WaiveScope/CommitScope 'S', no ladder; `InsertMachine` wrote the contract's
+dates, MachineMode 'ONLINE', not a group item, no own billing day; the contract lost FOC reset / rental billing day /
+period mode / strategy; line prices lost MinCharge / WaiveAt / WaiveAmt; strategy rules were not read at all; a failed
+line-price read was swallowed.
+
+- **Reader** (`ScpInterBillReader`): every counter term (FOC, rebate, rental start/months, waive N/target/%/threshold/amount,
+  WaiveScope, CommitScope, TierMode -- 'T' when HQ has no column, as on 1.5.0.9), the ladder HQ bills by in the engine's
+  order (own `zSCP2_ItemMeterPrice`, else the counter's scheme, else its meter type's scheme); machine own day / start / end /
+  mode / group item; contract FOC reset, rental billing day, period mode, strategy code; `StrategyRules()`; line prices'
+  minimum and waive. HowTheyBill: a day above 28 is 28 (v8 retired 29-31), it used to become 1. MachineMode '' stays ''
+  (= follow the fetch status); no own billing day stays NULL (billing reads COALESCE(own, contract's) -- 0 would be day 0).
+- **Take**: all of it written; money through the margin (rate, minimum, waive target / threshold / amount, ladder bands,
+  line minimum / waive, rule target / commit), counts and percentages as they are. The ladder lands as the counter's own
+  (`zSCP2_ItemMeterPrice`, scheme code '') -- a scheme is a name in HQ's book. Rules re-bound to this book's machines; one
+  whose machines were not taken is left out and named (`ScpTakeResult.Notes`, shown after Take). Line prices and rules
+  are read before the write, and a failed read refuses the take.
+- **No item code**: `ItemCodeRefusal` refuses a take / add machine / add counter when a meter type (role not NA) has no
+  item code that is an item of this book (AC item code, else stock code), naming each; a meter type HQ uses and this book
+  lacked is still added to Meter Type Maintenance, with HQ's item code only if this book has that item. The board counts
+  the same per contract (`CountNoItemCode`) -> status **No item code (n) · TYPES**, red, blocks Generate like Unpriced,
+  new chip ChipNoItem (designer pair; Not taken / Up to date moved right 120 px).
+- **Follow HQ**: the counter snapshot now carries FOC, REBATE, WAIVE, COLOUR, COUNTS, TIER (mode + ladder), RENTAL (start /
+  months). A change at HQ shows per machine "Changed at HQ · BK free copies" -> **Take HQ's terms** (`ApplyMeterTerms`,
+  prices included) or **Keep mine** (snapshot noted). A contract taken before today (snapshot without FOC) is held against
+  HQ's terms instead (`TermsNotBrought`, rate and minimum excluded) -> "Not brought over at the take · ..." -> **Bring
+  over from HQ**. `Differences` ignores names an older snapshot never had. A rental's FOC is its free months left -- a
+  countdown each book runs -- so it is carried at the take but not compared (it would flag every month HQ bills one).
+  The rental basis is not in the snapshot (the contract's, locked once a rental is invoiced).
+- **Verified** (IbTerms probe, real contract Save at HQ, real take): E refused naming COMMIT, nothing written; D and F
+  every field = HQ's through 10% (FOC 1,000 rebate 5%, CL own ladder 500|0.33,99999999|0.22 split, BK scheme 'testing'
+  1000|0.022,20000|0.033, waive -330 at 275 partial 165 -> 110, COMMIT-CL 55 colour CL, rental 36 months from 01/08,
+  rule WAIVE-TARGET bound to this book's IBT-D02 at 220, line RG-F 440 / 550 / 110, machine day 10 / ends 31/12/2028 /
+  OFFLINE, FOC reset D/30); HQ D01 BK FOC 1,000 -> 1,500 flagged and brought over; D September worked out 734.25 (waive
+  and colour minimum both fire). interbill-board check ALL OK; interbill-check compiles.
+- **Test data left for the user** (HQ = AED_ATPTEST, customer 3000-C0014; subsidiary AED_ASNDUMMY): SC 000000045 (D) and
+  047 (F) taken; 046 (E, a minimum on COMMIT) and 044 (C) not taken; SC 000000042 (taken before) shows "Not brought over
+  · COMMIT black/colour". ASNDUMMY got items COMMIT and WAIVE (ItemDataAccess); meter types WAIVE -> WAIVE, COMMIT-CL ->
+  COMMIT; **COMMIT left without an item code on purpose** so the user sees the refusal and the chip, then sets it.
+- Not done: a taken counter HQ prices flat still takes a default scheme of THIS book's meter type if it has one (no way
+  to store "no ladder"); contract-level terms (FOC reset, rule changes) are carried at the take but a later change at HQ
+  is not flagged.
+- **Free rental months never counted down on the new layout (edge case 56, found by the Meter Invoice Run edge-case
+  sweep, reproduced before fixing).** A rental's FOC Qty is its free months left. `ScpInvoiceBuilder.ComputeCharge`
+  set `RentalFreeUsed` only for a two-month bill; a single free month printed at 0.00 (every contract with
+  UseNewLayout = 'Y' -- all taken Inter-Billing contracts, 36 in ATPTEST) went through the billable path, where only
+  RentalFreeUsed counts down, so the rent stayed free for good. FreeRentCheck (real Save + real Generate, ATPTEST):
+  before, SC 000000048 / MR2609.0841 printed "RENTAL FREE - FOC month" and left 2 at 2; after (`RentalFreeUsed = 1`),
+  SC 000000049 / MR2609.0842 left 2 at 1. SC 000000048's count set to 1 by hand (the month it had used). The old layout
+  (NO CHARGE stamp) still counts one, unchanged. Still open, as for the two-month bill: deleting the invoice does not
+  give the free month back.
+- Re-cut into **1.5.0.10**: 2941834 bytes, SHA256 `A7642E0B…F4E2`.
+- **Business-logic review (Explore agent, standing rule 4) of the above -- 7 findings, and what was done:**
+  1. *Free copies twice from an older HQ* (real): a 1.5.0.9 HQ writes "first 100 free" as a 0.00 first band and
+     ignores a laddered counter's Free Qty; this book counts band AND Free Qty. FIXED: when HQ has no
+     zSCP2_Contract.TierMode, `ScpInterBillReader.AsUpgraded` reads its counters as its own upgrade will leave them
+     (v19 rules 1-2 + FreeBandToFreeQty): paid first band -> FOC 0; group-laddered BK/CL on the new layout -> FOC 0;
+     0.00 first band with a paid band (not a scheme a group names) -> FOC = width, band dropped. Checked READ ONLY on
+     192.168.1.92: CSSI-000003 2MR00551 BK own "100|0.00, 1000|0.023, ...|0.021" -> FOC 100 + two paid bands; flat
+     counters keep their FOC.
+  2. *This book's meter-type default tiers price a counter HQ prices flat*: FIXED -- `WriteLadder` gives such a counter
+     one band at HQ's rate (only when this book's type has tiers and the rate is > 0); `TermsNotBrought` reports both
+     directions (HQ tiers never came / this book's type tiers price it).
+  3. *Contract-level terms, machine settings, line minimum/waive and strategy rules are carried at the take but a later
+     change at HQ is not flagged; AddMachine does not re-bind rules; a take from before today does not get them.*
+     LEFT OPEN (belongs with the Inter-Billing redesign); told the user.
+  4. *Older takes flagged "black/colour" wrongly* ('S' = BKCL to the engine): FIXED -- compared and snapshotted through
+     `ScpCommittedMin.NormScope`. SC 000000042 now shows "No item code (1) · COMMIT" instead.
+  5. *HQ upgrading later would flag every ladder counter*: FIXED by 1 (the snapshot is already the upgraded form).
+  6. *Machine mode blank -> new takes change invoice numbering*: FIXED -- blank stays ONLINE as every take wrote
+     (explicit ONLINE/OFFLINE comes as it is). SC 000000045's machines set to ONLINE by hand (interim build).
+  7. *Take HQ's terms not all-or-nothing; serial shown but not written*: serial now written (`ApplyMeterTerms`);
+     per-counter commits left (re-applying is harmless).
+  - Also from the review: a WAIVE counter's rate went through the margin at 6 places (a fully waived month could leave
+    0.01) -- `IsFlat` now counts WAIVE and flat/waive meter types as sums of money (2 places).
+- Regression after the fixes: interbill-board ALL OK, smoke-forms every screen loads (ASNDUMMY), cn-credit all good,
+  billing-setup-summary all good after passing LineTerms_Form's new `minCount` argument (the harness had not been
+  updated since ATP-4). Known and not from this change: invoice-run DEMO-PG (data), meter-listing "charge = NET x
+  rate" on the tier test contracts SC 035/036 (the check assumes one rate; those counters are priced by a ladder),
+  demo-shapes "7 lines REJECTED" (DEMO serial lists over 100 characters).

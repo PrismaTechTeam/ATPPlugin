@@ -129,7 +129,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             _chipInvoicedLeft = this.ChipInvoiced.Left;
             _chipNotTakenLeft = this.ChipNotTaken.Left;
             _toolbar = new Control[] { this.BtnRefresh, this.BtnGenerateReady, this.BtnSetup, this.LblShow,
-                this.ChipAll, this.ChipReady, this.ChipWaiting, this.ChipChanged, this.ChipUnpriced, this.ChipNotTaken, this.ChipInvoiced };
+                this.ChipAll, this.ChipReady, this.ChipWaiting, this.ChipChanged, this.ChipUnpriced, this.ChipNoItem, this.ChipNotTaken, this.ChipInvoiced };
             _toolbarLefts = new int[_toolbar.Length];
             for (int i = 0; i < _toolbar.Length; i++) _toolbarLefts[i] = _toolbar[i].Left;
             _filterPanelHeight = this.PanelFilter.Height;
@@ -197,7 +197,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private CheckButton[] Chips()
         {
-            return new CheckButton[] { ChipAll, ChipReady, ChipWaiting, ChipChanged, ChipUnpriced, ChipNotTaken, ChipInvoiced };
+            return new CheckButton[] { ChipAll, ChipReady, ChipWaiting, ChipChanged, ChipUnpriced, ChipNoItem, ChipNotTaken, ChipInvoiced };
         }
 
         private void Boot()
@@ -570,7 +570,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private void UpdateChips()
         {
             if (_invoiceView) { UpdateInvoiceChips(); return; }
-            int all = _rows.Count, ready = 0, waiting = 0, changed = 0, unpriced = 0, notTaken = 0, invoiced = 0;
+            int all = _rows.Count, ready = 0, waiting = 0, changed = 0, unpriced = 0, noItem = 0, notTaken = 0, invoiced = 0;
             decimal readyAmt = 0m;
             foreach (IbContractRow r in _rows)
             {
@@ -578,6 +578,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 else if (r.Status == ScpInterBillBoard.WAITING) waiting++;
                 else if (r.Status == ScpInterBillBoard.CHANGED) changed++;
                 else if (r.Status == ScpInterBillBoard.UNPRICED) unpriced++;
+                else if (r.Status == ScpInterBillBoard.NO_ITEM) noItem++;
                 else if (r.Status == ScpInterBillBoard.NOT_TAKEN || r.Status == ScpInterBillBoard.ENDED) notTaken++;
                 else if (r.Status == ScpInterBillBoard.INVOICED) invoiced++;
             }
@@ -586,6 +587,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChipWaiting.Text = "Waiting HQ reading (" + waiting + ")";
             this.ChipChanged.Text = "Changed at HQ (" + changed + ")";
             this.ChipUnpriced.Text = "Unpriced (" + unpriced + ")";
+            this.ChipNoItem.Text = "No item code (" + noItem + ")";
             this.ChipNotTaken.Text = "Not taken (" + notTaken + ")";
             this.ChipInvoiced.Text = "Up to date (" + invoiced + ")";
             this.BtnGenerateReady.Text = "Generate all ready (" + ready + ")";
@@ -601,6 +603,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             else if (this.ChipWaiting.Checked) f = "[Status] = " + ScpInterBillBoard.WAITING;
             else if (this.ChipChanged.Checked) f = "[Status] = " + ScpInterBillBoard.CHANGED;
             else if (this.ChipUnpriced.Checked) f = "[Status] = " + ScpInterBillBoard.UNPRICED;
+            else if (this.ChipNoItem.Checked) f = "[Status] = " + ScpInterBillBoard.NO_ITEM;
             else if (this.ChipNotTaken.Checked) f = "[Status] = " + ScpInterBillBoard.NOT_TAKEN + " OR [Status] = " + ScpInterBillBoard.ENDED;
             else if (this.ChipInvoiced.Checked) f = "[Status] = " + ScpInterBillBoard.INVOICED;
             this.GridViewContracts.ActiveFilterString = f;
@@ -801,6 +804,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             if (this.ChipWaiting.Checked) return ScpInterBillBoard.WAITING;
             if (this.ChipChanged.Checked) return ScpInterBillBoard.CHANGED;
             if (this.ChipUnpriced.Checked) return ScpInterBillBoard.UNPRICED;
+            if (this.ChipNoItem.Checked) return ScpInterBillBoard.NO_ITEM;
             if (this.ChipInvoiced.Checked) return ScpInterBillBoard.INVOICED;
             return -1;
         }
@@ -920,7 +924,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
 
         private void UpdateInvoiceChips()
         {
-            int all = _invoices.Count, ready = 0, waiting = 0, changed = 0, unpriced = 0, invoiced = 0;
+            int all = _invoices.Count, ready = 0, waiting = 0, changed = 0, unpriced = 0, noItem = 0, invoiced = 0;
             decimal readyAmt = 0m;
             foreach (IbInvoiceRow v in _invoices)
             {
@@ -928,6 +932,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
                 else if (v.Status == ScpInterBillBoard.WAITING) waiting++;
                 else if (v.Status == ScpInterBillBoard.CHANGED) changed++;
                 else if (v.Status == ScpInterBillBoard.UNPRICED) unpriced++;
+                else if (v.Status == ScpInterBillBoard.NO_ITEM) noItem++;
                 else if (v.Status == ScpInterBillBoard.INVOICED) invoiced++;
             }
             this.ChipAll.Text = "All (" + all + ")";
@@ -935,6 +940,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChipWaiting.Text = "Waiting HQ reading (" + waiting + ")";
             this.ChipChanged.Text = "Changed at HQ (" + changed + ")";
             this.ChipUnpriced.Text = "Unpriced (" + unpriced + ")";
+            this.ChipNoItem.Text = "No item code (" + noItem + ")";
             this.ChipInvoiced.Text = "Invoiced (" + invoiced + ")";
             this.BtnGenerateReady.Text = "Generate all ready (" + ready + ")";
             this.BtnGenerateReady.Enabled = ready > 0;
@@ -1222,7 +1228,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             Color back = Color.Empty;
             if (status == ScpInterBillBoard.READY) back = READY_BACK;
             else if (status == ScpInterBillBoard.WAITING || status == ScpInterBillBoard.CHANGED) back = WAIT_BACK;
-            else if (status == ScpInterBillBoard.UNPRICED || status == ScpInterBillBoard.ERROR) back = BAD_BACK;
+            else if (status == ScpInterBillBoard.UNPRICED || status == ScpInterBillBoard.NO_ITEM || status == ScpInterBillBoard.ERROR) back = BAD_BACK;
             if (back != Color.Empty)
             {
                 e.Appearance.BackColor = back; e.Appearance.BackColor2 = back;
@@ -1429,6 +1435,9 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             try { res = ScpInterBillBoard.Take(_db, _book, _cs, _current, debtor, _userId); }
             finally { this.Cursor = old; }
             if (!res.Ok) { XtraMessageBox.Show(res.Error, "Take contract", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (res.Notes.Count > 0)
+                XtraMessageBox.Show("Taken as " + res.ContractNo + ", except:\r\n\r\n" + string.Join("\r\n", res.Notes.ToArray()),
+                    "Take contract", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _current = null;
             this.SlkCustomer.EditValue = null;
             LoadData();

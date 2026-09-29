@@ -104,7 +104,10 @@ namespace ServiceContractPhotocopier.Classes
         }
 
         /// <summary>The names present in either snapshot whose values differ, in the order they
-        /// appear. This IS the "changed since you took it" list, for one row.</summary>
+        /// appear. This IS the "changed since you took it" list, for one row.
+        /// <para>A name the taken snapshot never had is not a difference: it was added to the snapshot
+        /// by a later version (a counter's free copies, waive and ladder, 29/9), and a contract taken
+        /// before that would otherwise show as changed at HQ the day the new version is installed.</para></summary>
         public static List<string> Differences(string taken, string now)
         {
             List<string> diff = new List<string>();
@@ -112,6 +115,7 @@ namespace ServiceContractPhotocopier.Classes
             Dictionary<string, string> b = Parse(now);
             foreach (KeyValuePair<string, string> kv in b)
             {
+                if (a.Count > 0 && !a.ContainsKey(kv.Key)) continue;
                 string was = Get(a, kv.Key);
                 if (!string.Equals(was, kv.Value, StringComparison.OrdinalIgnoreCase)) diff.Add(kv.Key);
             }

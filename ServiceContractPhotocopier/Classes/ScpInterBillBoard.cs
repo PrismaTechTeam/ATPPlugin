@@ -28,6 +28,10 @@ namespace ServiceContractPhotocopier.Classes
         public const string METER_GONE = "METER_GONE";
         public const string DETAIL = "DETAIL";
         public const string CONTRACT_GONE = "CONTRACT_GONE";
+        /// <summary>A machine's counters whose terms at HQ are not this book's: changed at HQ since the
+        /// take, or never brought over by a take from before 29/9. One change per machine; each
+        /// counter is one of its <see cref="Parts"/>.</summary>
+        public const string METER_TERMS = "METER_TERMS";
 
         public string Kind = "";
         public string Which = "";
@@ -39,6 +43,12 @@ namespace ServiceContractPhotocopier.Classes
         public ScpRemoteMeter Meter;
         public string ApplyCaption = "";
         public string IgnoreCaption = "Ignore";
+        /// <summary>METER_TERMS: bring HQ's rate, minimum and ladder too (a change since the take), or
+        /// only what an older take left out.</summary>
+        public bool PricesToo;
+        /// <summary>METER_TERMS: one part per counter -- LinkKey, LocalParentKey (this book's counter),
+        /// Meter (HQ's) and NewSnapshot.</summary>
+        public List<IbChange> Parts = new List<IbChange>();
     }
 
     /// <summary>One counter's reading for the period, as the board shows it.</summary>
@@ -85,6 +95,10 @@ namespace ServiceContractPhotocopier.Classes
         public int Status;
         public string StatusText = "";
         public int Unpriced;
+        /// <summary>Meter types on this month's rows with no item of this book to post them under
+        /// (user, 29/9). Blocks Generate like Unpriced.</summary>
+        public int NoItemCode;
+        public List<string> NoItemTypes = new List<string>();
         public int Backwards;            // HQ's reading is below the last one billed here
         public bool CorrectedAfterInvoice;
         public List<string> InvoicedDocs = new List<string>();
@@ -149,6 +163,7 @@ namespace ServiceContractPhotocopier.Classes
         public const int INVOICED = 5;
         public const int ENDED = 6;
         public const int ERROR = 7;
+        public const int NO_ITEM = 8;
 
         // ───────────────────────────── load ─────────────────────────────
 
@@ -289,7 +304,7 @@ namespace ServiceContractPhotocopier.Classes
                     row.MachineRows.Add(mr);
                 }
 
-                CompareMachines(db, row, cl, mine);
+                CompareMachines(db, row, cl, mine, book.MarginPercent);
                 LoadSequenceMonth(db, cs, row, mine, upTo);
                 if (row.Rows == null) row.Machines = row.HqMachines.Count;
                 Decide(row, upTo);
@@ -306,8 +321,9 @@ namespace ServiceContractPhotocopier.Classes
         /// <summary>HQ's machines against this contract's, machine by machine and counter by counter.
         /// The same comparison the old "What they changed" tab made, now producing board lines.</summary>
         private static void CompareMachines(DBSetting db, IbContractRow row, ScpInterBillLink contractLink,
-                                            List<ScpInterBillLink> mine)
+                                            List<ScpInterBillLink> mine, decimal marginPercent)
         {
+            Dictionary<long, DataRow> localTerms = LocalMeterTerms(db, row.LocalKey);
             Dictionary<long, ScpInterBillLink> itemBySource = new Dictionary<long, ScpInterBillLink>();
             Dictionary<long, ScpInterBillLink> meterBySource = new Dictionary<long, ScpInterBillLink>();
             HashSet<long> linkedItems = new HashSet<long>();
@@ -376,6 +392,8 @@ namespace ServiceContractPhotocopier.Classes
                     else mr.StatusText = "Same";
                 }
 
+                IbChange terms = null;
+                List<string> termWords = new List<string>();
                 foreach (ScpRemoteMeter mt in m.Meters)
                 {
                     seenMeters.Add(mt.ItemMeterKey);
@@ -388,6 +406,50 @@ namespace ServiceContractPhotocopier.Classes
                         ch.ApplyCaption = "Add " + mt.MeterTypeCode + " to " + m.SerialNumber;
                         row.Changes.Add(ch);
                         if (mr.Change == null) { mr.Change = ch; mr.StatusText = mt.MeterTypeCode + " added at HQ"; }
+                        continue;
+                    }
+                    if (ml.Status != ScpInterBillLink.LIVE || ml.LocalKey <= 0) continue;
+
+                    // Its terms (29/9, user: "必须带过来"). Taken since then: what HQ changed since the
+                    // take, prices included. Taken before: the snapshot has no terms in it, so this
+                    // book's counter is held against HQ's instead, for what that take left out.
+                    bool olderTake = !ScpInterBillSnapshot.Parse(ml.TakenSnapshot).ContainsKey("FOC");
+                    List<string> diff;
+                    if (olderTake)
+                    {
+                        DataRow lt;
+                        diff = localTerms.TryGetValue(ml.LocalKey, out lt) ? TermsNotBrought(lt, mt, marginPercent) : new List<string>();
+                    }
+                    else diff = ScpInterBillSnapshot.Differences(ml.TakenSnapshot, mt.Snapshot());
+                    if (diff.Count == 0) continue;
+                    if (terms == null)
+                    {
+                        terms = new IbChange();
+                        terms.Kind = IbChange.METER_TERMS; terms.Which = m.SerialNumber; terms.LocalParentKey = link.LocalKey;
+                        terms.Machine = m;
+                    }
+                    IbChange part = new IbChange();
+                    part.Kind = IbChange.METER_TERMS; part.Which = m.SerialNumber + " " + mt.MeterTypeCode;
+                    part.LinkKey = ml.LinkKey; part.LocalParentKey = ml.LocalKey; part.Meter = mt;
+                    part.NewSnapshot = mt.Snapshot(); part.PricesToo = !olderTake;
+                    terms.Parts.Add(part);
+                    string words = DescribeFields(diff);
+                    // On a rental the FOC is its free months, not copies.
+                    if (ScpStrategy.IsRentalRole(mt.MeterRole, mt.MeterTypeCode)) words = words.Replace("free copies", "free months");
+                    termWords.Add(mt.MeterTypeCode + " " + words);
+                }
+                if (terms != null)
+                {
+                    bool before = false;
+                    foreach (IbChange p in terms.Parts) if (!p.PricesToo) before = true;
+                    terms.ApplyCaption = before ? "Bring over from HQ" : "Take HQ's terms";
+                    terms.IgnoreCaption = "Keep mine";
+                    row.Changes.Add(terms);
+                    if (mr.Change == null)
+                    {
+                        mr.Change = terms;
+                        mr.StatusText = (before ? "Not brought over at the take · " : "Changed at HQ · ") +
+                                        string.Join("; ", termWords.ToArray());
                     }
                 }
                 row.MachineRows.Add(mr);
@@ -595,6 +657,102 @@ namespace ServiceContractPhotocopier.Classes
                 if ((role == "BK" || role == "CL") && grp.Length > 0 && groupLadders.Contains(role + "|" + grp)) continue;
                 row.Unpriced++;
             }
+            CountNoItemCode(db, row, rows);
+        }
+
+        /// <summary>
+        /// Every line this month bills has to be posted under an item of THIS book (user, 29/9: "Inter-
+        /// Billing 画面加一个状态 No item code, 跟 Unpriced 一样, 没设好就挡住"). A code this book does not
+        /// have fails the invoice when it is saved; no code at all posts the line to the default sales
+        /// account, missing from every report by item. Counted per meter type; a counter that is never
+        /// billed (role NA) needs none.
+        /// </summary>
+        private static void CountNoItemCode(DBSetting db, IbContractRow row, DataTable rows)
+        {
+            Dictionary<string, string> codeOfType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow r in rows.Rows)
+            {
+                if (S(r["InvoicedDocNo"]).Trim().Length > 0) continue;
+                if (S(r["Role"]).Trim().ToUpperInvariant() == "NA") continue;
+                string type = S(r["MeterType"]).Trim();
+                if (type.Length == 0 || codeOfType.ContainsKey(type)) continue;
+                codeOfType[type] = S(r["ACItemCode"]).Trim();
+            }
+            List<string> codes = new List<string>();
+            foreach (string c in codeOfType.Values) if (c.Length > 0 && !codes.Contains(c)) codes.Add(c);
+            HashSet<string> found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (codes.Count > 0)
+            {
+                List<string> quoted = new List<string>();
+                foreach (string c in codes) quoted.Add("N'" + c.Replace("'", "''") + "'");
+                DataTable t = db.GetDataTable("SELECT ItemCode FROM dbo.Item WHERE ItemCode IN (" + string.Join(",", quoted.ToArray()) + ")", false);
+                foreach (DataRow r in t.Rows) found.Add(S(r["ItemCode"]).Trim());
+            }
+            foreach (KeyValuePair<string, string> kv in codeOfType)
+            {
+                if (kv.Value.Length > 0 && found.Contains(kv.Value)) continue;
+                row.NoItemCode++;
+                row.NoItemTypes.Add(kv.Key);
+            }
+        }
+
+        /// <summary>This book's counters on one contract, with the terms an older take did not bring:
+        /// held against HQ's by <see cref="TermsNotBrought"/>.</summary>
+        private static Dictionary<long, DataRow> LocalMeterTerms(DBSetting db, long contractKey)
+        {
+            Dictionary<long, DataRow> map = new Dictionary<long, DataRow>();
+            if (contractKey <= 0) return map;
+            DataTable t = db.GetDataTable(
+                "SELECT m.ItemMeterKey, ISNULL(m.MeterRole,'') AS MeterRole, ISNULL(m.MeterTypeCode,'') AS MeterTypeCode, ISNULL(m.FOCQty,0) AS FOCQty, " +
+                "       ISNULL(m.RebateQtyInPercent,0) AS RebatePct, m.RentalStartDate, ISNULL(m.RentalMonths,0) AS RentalMonths, " +
+                "       ISNULL(m.WaiveFirstNMonths,0) AS WaiveFirstNMonths, ISNULL(m.WaiveTargetAmount,0) AS WaiveTargetAmount, " +
+                "       ISNULL(m.WaivePartialPct,100) AS WaivePartialPct, ISNULL(NULLIF(m.WaiveScope,''),'BKCL') AS WaiveScope, " +
+                "       ISNULL(m.WaivePartialThreshold,0) AS WaivePartialThreshold, ISNULL(m.WaivePartialAmount,0) AS WaivePartialAmount, " +
+                "       ISNULL(NULLIF(m.CommitScope,''),'S') AS CommitScope, ISNULL(m.TierMode,'T') AS TierMode, " +
+                "       CASE WHEN EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeterPrice p WHERE p.ItemMeterKey = m.ItemMeterKey) " +
+                "              OR ISNULL(m.MeterMultiPriceCode,'') <> '' THEN 1 ELSE 0 END AS HasLadder, " +
+                // This book's meter type's default tiers: what prices a counter with no ladder of its own.
+                "       CASE WHEN ISNULL(mt.MeterMultiPriceCode,'') <> '' AND EXISTS (SELECT 1 FROM dbo.zSCP_MeterMultiPriceItem x " +
+                "            WHERE x.MeterMultiPriceCode = mt.MeterMultiPriceCode) THEN 1 ELSE 0 END AS TypeLadder " +
+                "  FROM dbo.zSCP2_ItemMeter m JOIN dbo.zSCP2_Item i ON i.ItemKey = m.ItemKey " +
+                "  LEFT JOIN dbo.zSCP_MeterType mt ON mt.MeterTypeCode = m.MeterTypeCode " +
+                " WHERE i.ContractKey = " + contractKey, false);
+            foreach (DataRow r in t.Rows) map[Convert.ToInt64(r["ItemMeterKey"])] = r;
+            return map;
+        }
+
+        /// <summary>What a take from before 29/9 left out of one counter, held against HQ's terms as they
+        /// would have arrived (sums of money through the margin). The rate and the minimum did come
+        /// across then and are not compared: they may have been re-agreed here since.</summary>
+        private static List<string> TermsNotBrought(DataRow l, ScpRemoteMeter t, decimal marginPercent)
+        {
+            List<string> d = new List<string>();
+            string role = S(l["MeterRole"]).Trim().ToUpperInvariant();
+            bool rideOn = role == "WAIVE" || role == "COMMIT";
+            // A rental's FOC is its free months left -- each book counts its own down -- so it is only
+            // "not brought over" when HQ still has free months and this book has none at all.
+            if (ScpStrategy.IsRentalRole(role, S(l["MeterTypeCode"])) ? Dec(l["FOCQty"]) == 0m && t.FocQty > 0m : Dec(l["FOCQty"]) != t.FocQty)
+                d.Add("FOC");
+            if (Dec(l["RebatePct"]) != t.RebatePct) d.Add("REBATE");
+            if (Convert.ToInt32(l["WaiveFirstNMonths"]) != t.WaiveFirstNMonths
+                || Dec(l["WaiveTargetAmount"]) != ScpInterBillTake.WithMargin(t.WaiveTargetAmount, marginPercent, true)
+                || Dec(l["WaivePartialPct"]) != t.WaivePartialPct
+                || Dec(l["WaivePartialThreshold"]) != ScpInterBillTake.WithMargin(t.WaivePartialThreshold, marginPercent, true)
+                || Dec(l["WaivePartialAmount"]) != ScpInterBillTake.WithMargin(t.WaivePartialAmount, marginPercent, true))
+                d.Add("WAIVE");
+            // As the engine reads it: an older take's 'S' is both colours, the same as HQ's BKCL.
+            if (rideOn && ScpCommittedMin.NormScope(S(l["WaiveScope"])) != ScpCommittedMin.NormScope(t.WaiveScope)) d.Add("COLOUR");
+            if (rideOn && !string.Equals(S(l["CommitScope"]).Trim(), t.CommitScope, StringComparison.OrdinalIgnoreCase)) d.Add("COUNTS");
+            bool own = Convert.ToInt32(l["HasLadder"]) == 1, typeLadder = Convert.ToInt32(l["TypeLadder"]) == 1;
+            bool flat = ScpStrategy.IsRentalRole(role, S(l["MeterTypeCode"])) || rideOn;
+            if (!string.Equals(S(l["TierMode"]).Trim(), t.TierMode, StringComparison.OrdinalIgnoreCase)
+                || (t.Ladder.Count > 0 && !own)                                     // HQ's tiers never came
+                || (!flat && t.Ladder.Count == 0 && t.ChargesRate > 0m && !own && typeLadder))   // this book's type tiers price it
+                d.Add("TIER");
+            DateTime? ls = l["RentalStartDate"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(l["RentalStartDate"]).Date;
+            DateTime? hs = t.RentalStartDate.HasValue ? t.RentalStartDate.Value.Date : (DateTime?)null;
+            if (ls != hs || Convert.ToInt32(l["RentalMonths"]) != t.RentalMonths) d.Add("RENTAL");
+            return d;
         }
 
         /// <summary>Picks the month a contract is at, and loads it.
@@ -656,6 +814,8 @@ namespace ServiceContractPhotocopier.Classes
             row.MetersTotal = 0;
             row.MetersRead = 0;
             row.Unpriced = 0;
+            row.NoItemCode = 0;
+            row.NoItemTypes.Clear();
             row.Backwards = 0;
             row.CorrectedAfterInvoice = false;
             row.Machines = 0;
@@ -715,6 +875,7 @@ namespace ServiceContractPhotocopier.Classes
             }
             if (row.Backwards > 0) { row.Status = CHANGED; row.StatusText = "HQ reading below last (" + row.Backwards + ")"; }
             else if (row.Unpriced > 0) { row.Status = UNPRICED; row.StatusText = "Unpriced (" + row.Unpriced + ")"; }
+            else if (row.NoItemCode > 0) { row.Status = NO_ITEM; row.StatusText = NoItemText(row); }
             else if (row.Missing > 0) { row.Status = WAITING; row.StatusText = "Waiting HQ reading (" + row.Missing + ")"; }
             else if (!pending) { row.Status = WAITING; row.StatusText = "Nothing to bill"; }
             else { row.Status = READY; row.StatusText = "Ready"; }
@@ -790,6 +951,7 @@ namespace ServiceContractPhotocopier.Classes
                         else if (c.Changes.Count > 0) { v.Status = CHANGED; v.StatusText = "Changed at HQ"; }
                         else if (c.Backwards > 0) { v.Status = CHANGED; v.StatusText = "HQ reading below last (" + c.Backwards + ")"; }
                         else if (c.Unpriced > 0) { v.Status = UNPRICED; v.StatusText = "Unpriced (" + c.Unpriced + ")"; }
+                        else if (c.NoItemCode > 0) { v.Status = NO_ITEM; v.StatusText = NoItemText(c); }
                         else if (it.Missing > 0) { v.Status = WAITING; v.StatusText = "Waiting HQ reading (" + it.Missing + ")"; }
                         else { v.Status = READY; v.StatusText = "Ready"; }
                         list.Add(v);
@@ -842,7 +1004,8 @@ namespace ServiceContractPhotocopier.Classes
                     string block = c.Rows == null ? c.StatusText
                                  : c.Changes.Count > 0 ? "Changed at HQ"
                                  : c.Backwards > 0 ? "HQ reading below last"
-                                 : c.Unpriced > 0 ? "Unpriced" : "";
+                                 : c.Unpriced > 0 ? "Unpriced"
+                                 : c.NoItemCode > 0 ? NoItemText(c) : "";
                     if (block.Length > 0) { skipped.Add(c.LocalNo + ": " + block); continue; }
                 }
                 if (c.Period != ScpBillingSequence.Period(year, month))
@@ -982,6 +1145,18 @@ namespace ServiceContractPhotocopier.Classes
                     ScpInterBillLinks.Notice(db, ch.LinkKey, ScpInterBillLink.GONE, "no longer in " + book.Alias);
                     return "";
                 }
+                if (ch.Kind == IbChange.METER_TERMS)
+                {
+                    // HQ's terms onto this book's counters, through this book's margin; the snapshot
+                    // moves on so the same change is not offered again.
+                    foreach (IbChange p in ch.Parts)
+                    {
+                        string err = ScpInterBillTake.ApplyMeterTerms(db, p.LocalParentKey, p.Meter, book.MarginPercent, p.PricesToo);
+                        if (err.Length > 0) return p.Which + ": " + err;
+                        ScpInterBillLinks.Accept(db, p.LinkKey, p.NewSnapshot);
+                    }
+                    return "";
+                }
                 ScpInterBillLinks.Accept(db, ch.LinkKey, ch.NewSnapshot);
                 return "";
             }
@@ -1028,6 +1203,13 @@ namespace ServiceContractPhotocopier.Classes
                 if (ch.Kind == IbChange.MACHINE_GONE)
                 {
                     ScpInterBillLinks.Notice(db, ch.LinkKey, ScpInterBillLink.GONE, "kept on " + row.LocalNo);
+                    return "";
+                }
+                if (ch.Kind == IbChange.METER_TERMS)
+                {
+                    // "Keep mine": this book's terms stay; HQ's as they are now are noted, so only a
+                    // later change at HQ is offered again.
+                    foreach (IbChange p in ch.Parts) ScpInterBillLinks.Accept(db, p.LinkKey, p.NewSnapshot);
                     return "";
                 }
                 ScpInterBillLinks.Accept(db, ch.LinkKey, ch.NewSnapshot);
@@ -1087,8 +1269,17 @@ namespace ServiceContractPhotocopier.Classes
             foreach (string f in fields)
                 w.Add(f == "SERIAL" ? "serial" : f == "MODEL" ? "model" : f == "DESC" ? "description" : f == "ACTIVE" ? "active"
                     : f == "EXPIRY" ? "end date" : f == "NO" ? "number" : f == "DEBTOR" ? "customer" : f == "RATE" ? "HQ price"
-                    : f == "MIN" ? "HQ minimum" : f.ToLowerInvariant());
+                    : f == "MIN" ? "HQ minimum" : f == "FOC" ? "free copies" : f == "REBATE" ? "rebate"
+                    : f == "WAIVE" ? "waive" : f == "COLOUR" ? "black/colour" : f == "COUNTS" ? "whose charges count" : f == "TIER" ? "tier price"
+                    : f == "RENTAL" ? "rental months" : f.ToLowerInvariant());
             return string.Join(", ", w.ToArray());
+        }
+
+        /// <summary>"No item code (2) · COMMIT, WAIVE".</summary>
+        private static string NoItemText(IbContractRow r)
+        {
+            return "No item code (" + r.NoItemCode + ")" +
+                   (r.NoItemTypes.Count > 0 ? " · " + string.Join(", ", r.NoItemTypes.ToArray()) : "");
         }
 
         private static string DescribeNow(List<string> fields, string snapshot)

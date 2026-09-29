@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
+using System.Globalization;
 using AutoCount.Data;
 
 namespace ServiceContractPhotocopier.Classes
@@ -13,6 +15,9 @@ namespace ServiceContractPhotocopier.Classes
         public int Machines;
         public int Meters;
         public List<string> MeterTypesCreated = new List<string>();
+        /// <summary>What came across only in part, in words -- a strategy rule whose machines were not
+        /// taken. Empty when everything came.</summary>
+        public List<string> Notes = new List<string>();
         public string Error = "";
         public bool Ok { get { return Error.Length == 0 && ContractKey > 0; } }
     }
@@ -135,8 +140,9 @@ namespace ServiceContractPhotocopier.Classes
                     "IF NOT EXISTS (SELECT 1 FROM dbo.zSCP2_ContractRentalPrice " +
                     "                WHERE ContractKey = @ck AND Side = @side AND GroupCode = @grp) " +
                     "INSERT INTO dbo.zSCP2_ContractRentalPrice " +
-                    "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, LadderBk, LadderCl, LastModified) " +
-                    "VALUES (@ck, @side, @grp, @up, @bk, @cl, @lbk, @lcl, GETDATE());", cn, tx))
+                    "(ContractKey, Side, GroupCode, UnitPrice, BkPrice, ClPrice, LadderBk, LadderCl, " +
+                    " MinCharge, WaiveAt, WaiveAmt, LastModified) " +
+                    "VALUES (@ck, @side, @grp, @up, @bk, @cl, @lbk, @lcl, @min, @wat, @wamt, GETDATE());", cn, tx))
                 {
                     cmd.Parameters.AddWithValue("@ck", ck);
                     cmd.Parameters.AddWithValue("@side", (p.Side ?? "R").Trim());
@@ -147,6 +153,11 @@ namespace ServiceContractPhotocopier.Classes
                     cmd.Parameters.AddWithValue("@cl", WithMargin(p.ClPrice, marginPercent, false));
                     cmd.Parameters.AddWithValue("@lbk", LadderWithMargin(p.LadderBk, marginPercent));
                     cmd.Parameters.AddWithValue("@lcl", LadderWithMargin(p.LadderCl, marginPercent));
+                    // The line's minimum and its waive are sums of money like the rent, so they go
+                    // through the margin the same way -- the same copies reach the same waive here.
+                    cmd.Parameters.AddWithValue("@min", WithMargin(p.MinCharge, marginPercent, true));
+                    cmd.Parameters.AddWithValue("@wat", WithMargin(p.WaiveAt, marginPercent, true));
+                    cmd.Parameters.AddWithValue("@wamt", WithMargin(p.WaiveAmt, marginPercent, true));
                     if (cmd.ExecuteNonQuery() > 0) n++;
                 }
             }
@@ -158,7 +169,11 @@ namespace ServiceContractPhotocopier.Classes
         /// is recognised by its item code.</summary>
         private static bool IsFlat(ScpRemoteMeter t)
         {
-            return ScpStrategy.IsRentalRole(t.MeterRole, t.MeterTypeCode);
+            // A waive gives a rent back, so it rounds like the rent: at 6 places a 100.15 waive at 10%
+            // left 110.165, the engine rounded it to 110.16 against a 110.17 rent, and a fully waived
+            // month billed 0.01.
+            return ScpStrategy.IsRentalRole(t.MeterRole, t.MeterTypeCode) || t.TypeFlatOrWaive
+                || (t.MeterRole ?? "").Trim().ToUpperInvariant() == "WAIVE";
         }
 
         /// <summary>Their service item number, kept as it is. Falls back to a number built from the
@@ -277,6 +292,8 @@ namespace ServiceContractPhotocopier.Classes
                     return res;
                 }
             }
+            res.Error = ItemCodeRefusal(localDb, machines, missing);
+            if (res.Error.Length > 0) return res;
 
             // THEIR numbers, kept exactly.
             //
@@ -312,9 +329,22 @@ namespace ServiceContractPhotocopier.Classes
 
             // Read across BEFORE the transaction opens -- a network round trip does not belong
             // inside a write that is holding locks on this book.
+            //
+            // A failed read refuses the take. It used to be swallowed, and the contract then arrived
+            // without its line prices -- billing, but not the deal HQ agreed.
             List<ScpRemoteLinePrice> linePrices;
-            try { linePrices = ScpInterBillReader.LinePrices(remoteConnectionString, src.ContractKey); }
-            catch { linePrices = new List<ScpRemoteLinePrice>(); }
+            List<ScpRemoteRule> rules;
+            try
+            {
+                linePrices = ScpInterBillReader.LinePrices(remoteConnectionString, src.ContractKey);
+                rules = ScpInterBillReader.StrategyRules(remoteConnectionString, src.ContractKey);
+            }
+            catch (Exception ex)
+            {
+                res.Error = "Could not read the contract's line prices and rules from " + book.Alias + ":" +
+                            Environment.NewLine + ex.Message;
+                return res;
+            }
 
             using (SqlConnection cn = new SqlConnection(localDb.ConnectionString))
             {
@@ -330,11 +360,13 @@ namespace ServiceContractPhotocopier.Classes
                              src.ContractKey, src.ContractNo, ContractSnapshot(src));
 
                         int pos = 0;
+                        Dictionary<long, long> itemMap = new Dictionary<long, long>();
                         foreach (ScpRemoteMachine m in machines)
                         {
                             pos++;
                             long ik = InsertMachine(cn, tx, ck, ServiceItemNoFor(m, no, pos), m, pos,
                                                     startDate, expiryDate);
+                            itemMap[m.ItemKey] = ik;
                             res.Machines++;
 
                             Link(cn, tx, book, ScpInterBillLink.ITEM, ik, ck,
@@ -350,6 +382,7 @@ namespace ServiceContractPhotocopier.Classes
                         }
 
                         InsertLinePrices(cn, tx, ck, linePrices, machines, marginPercent);
+                        InsertRules(cn, tx, ck, rules, itemMap, marginPercent, res.Notes);
 
                         // This book bills the contract from the month it was taken. Stored, because the
                         // link's TakenAt moves whenever a change from the other book is accepted.
@@ -413,6 +446,8 @@ namespace ServiceContractPhotocopier.Classes
                 try { CreateMeterTypes(localDb, remoteConnectionString, missing); res.MeterTypesCreated = missing; }
                 catch (Exception ex) { res.Error = ex.Message; return res; }
             }
+            res.Error = ItemCodeRefusal(localDb, one, missing);
+            if (res.Error.Length > 0) return res;
 
             string no = "";
             int pos = 1;
@@ -509,6 +544,8 @@ namespace ServiceContractPhotocopier.Classes
                 try { CreateMeterTypes(localDb, remoteConnectionString, missing); res.MeterTypesCreated = missing; }
                 catch (Exception ex) { res.Error = ex.Message; return res; }
             }
+            res.Error = ItemCodeRefusal(localDb, one, missing);
+            if (res.Error.Length > 0) return res;
 
             using (SqlConnection cn = new SqlConnection(localDb.ConnectionString))
             {
@@ -555,6 +592,11 @@ namespace ServiceContractPhotocopier.Classes
             // The type's NAME and what it means come across; its rates do not. A meter type carries a
             // default charge, and a default charge copied from the other company is exactly the kind
             // of price nobody in this book ever agreed.
+            //
+            // Its item code comes across only when it is an item of THIS book too (their AC item code,
+            // else their stock code -- the order their invoice line uses). A code this book does not
+            // have would fail the invoice; left empty, the take refuses until somebody sets one here
+            // (ItemCodeRefusal).
             Dictionary<string, string[]> defs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
             using (SqlConnection rc = new SqlConnection(remoteConnectionString))
             {
@@ -562,7 +604,7 @@ namespace ServiceContractPhotocopier.Classes
                 foreach (string code in codes)
                 {
                     using (SqlCommand cmd = new SqlCommand(
-                        "SELECT TOP 1 ISNULL([Description],''), ISNULL(ACItemCode,''), " +
+                        "SELECT TOP 1 ISNULL([Description],''), ISNULL(NULLIF(ACItemCode,''), ISNULL(StockCode,'')), " +
                         "       ISNULL(IsFlatCharge,'N'), ISNULL(IsRentalWaive,'N'), ISNULL(DefaultRole,'') " +
                         "  FROM dbo.zSCP_MeterType WHERE MeterTypeCode = @c", rc))
                     {
@@ -585,6 +627,14 @@ namespace ServiceContractPhotocopier.Classes
                     string[] d = defs.ContainsKey(code)
                         ? defs[code]
                         : new string[] { code, "", "N", "N", "" };
+                    if (d[1].Length > 0)
+                    {
+                        using (SqlCommand ic = new SqlCommand("SELECT COUNT(*) FROM dbo.Item WHERE ItemCode = @i", cn))
+                        {
+                            ic.Parameters.AddWithValue("@i", d[1]);
+                            if (Convert.ToInt32(ic.ExecuteScalar()) == 0) d[1] = "";
+                        }
+                    }
                     using (SqlCommand cmd = new SqlCommand(
                         "IF NOT EXISTS (SELECT 1 FROM dbo.zSCP_MeterType WHERE MeterTypeCode=@c) " +
                         "INSERT INTO dbo.zSCP_MeterType " +
@@ -615,6 +665,7 @@ namespace ServiceContractPhotocopier.Classes
                 "(ContractNo, DebtorCode, [Description], BillingFormatCode, UseNewLayout, " +
                 " MachineLineShows, RentalLineMode, MeterLineMode, BillingMode, BillingDay, " +
                 " ContractDate, ServiceStartDate, ServiceExpiryDate, RentalSeparateInvoice, Inactive, " +
+                " FOCResetUnit, FOCResetN, BillOnMonthEnd, RentalBillingDay, PeriodFollowContract, StrategyCode, " +
                 " CreatedBy, ModifiedBy, Created, Modified, LastModified) " +
                 // How they bill it, as the starting point.
                 //
@@ -628,6 +679,7 @@ namespace ServiceContractPhotocopier.Classes
                 // The named Billing Format is NOT taken: a format is a name in their book. What a
                 // format SETS comes across instead, so the shape matches without borrowing the name.
                 "VALUES (@no, @deb, @desc, '', 'Y', @shows, @rlm, @mlm, @bm, @bday, GETDATE(), @sd, @ed, @rsep, 'N', " +
+                " @focu, @focn, @eom, @rday, @pfc, @strat, " +
                 " @who, @who, GETDATE(), GETDATE(), GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
             {
@@ -643,6 +695,14 @@ namespace ServiceContractPhotocopier.Classes
                 cmd.Parameters.AddWithValue("@rsep", src == null ? "N" : src.RentalSeparateInvoice);
                 cmd.Parameters.AddWithValue("@shows", src == null ? "L" : src.MachineLineShows);
                 cmd.Parameters.AddWithValue("@bday", src == null ? 1 : src.BillingDay);
+                // When their free copies start again, month-end billing, the rental's own day, and the
+                // period following the start (29/9: everything of the deal comes across).
+                cmd.Parameters.AddWithValue("@focu", src == null ? "M" : src.FocResetUnit);
+                cmd.Parameters.AddWithValue("@focn", src == null ? 0 : src.FocResetN);
+                cmd.Parameters.AddWithValue("@eom", src == null ? "N" : src.BillOnMonthEnd);
+                cmd.Parameters.AddWithValue("@rday", src == null ? 0 : src.RentalBillingDay);
+                cmd.Parameters.AddWithValue("@pfc", src == null ? "N" : src.PeriodFollowContract);
+                cmd.Parameters.AddWithValue("@strat", src == null ? "" : src.StrategyCode);
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -664,9 +724,12 @@ namespace ServiceContractPhotocopier.Classes
                 // So it lands the same way the prices do: their arrangement as the starting point,
                 // ordinary and editable from the moment it arrives.
                 " MergeGroupCode, MergeGroupCodeMeter, BillGroupCode, LineGroupCode, Inactive, " +
-                " IsGroupItem, MachineMode, ServiceStartDate, ServiceExpiryDate, LastModified) " +
-                "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @mg, @mgm, @bg, @lg, @inact, 'N', 'ONLINE', " +
-                " @sd, @ed, GETDATE()); " +
+                " IsGroupItem, MachineMode, ServiceStartDate, ServiceExpiryDate, BillingDayOverride, LastModified) " +
+                // Its own billing day, its own dates, how its readings arrive and whether it is the
+                // group machine come as they are over there (29/9) -- they were written as the
+                // contract's dates, 'ONLINE' and not a group machine, whatever HQ had.
+                "VALUES (@ck, @sino, @code, @sn, @desc, @pos, @mg, @mgm, @bg, @lg, @inact, @grp, @mode, " +
+                " @sd, @ed, @bday, GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
             {
                 cmd.Parameters.AddWithValue("@ck", ck);
@@ -682,8 +745,17 @@ namespace ServiceContractPhotocopier.Classes
                 cmd.Parameters.AddWithValue("@mgm", (m.MergeGroupCodeMeter ?? "").Trim());
                 cmd.Parameters.AddWithValue("@bg", (m.BillGroupCode ?? "").Trim());
                 cmd.Parameters.AddWithValue("@lg", (m.LineGroupCode ?? "").Trim());
-                cmd.Parameters.AddWithValue("@sd", start.HasValue ? (object)start.Value : DBNull.Value);
-                cmd.Parameters.AddWithValue("@ed", expiry.HasValue ? (object)expiry.Value : DBNull.Value);
+                DateTime? sd = m.StartDate.HasValue ? m.StartDate : start;
+                DateTime? ed = m.ExpiryDate.HasValue ? m.ExpiryDate : expiry;
+                cmd.Parameters.AddWithValue("@sd", sd.HasValue ? (object)sd.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@ed", ed.HasValue ? (object)ed.Value : DBNull.Value);
+                cmd.Parameters.AddWithValue("@grp", m.IsGroupItem ? "Y" : "N");
+                // An explicit ONLINE / OFFLINE comes as it is. Blank (follow the fetch status) has no
+                // fetch status here -- the readings come from HQ -- so it stays ONLINE, what every take
+                // has written, and the invoice numbering of taken contracts does not change.
+                cmd.Parameters.AddWithValue("@mode", m.MachineMode.Length > 0 ? m.MachineMode : "ONLINE");
+                // No day of its own is NULL, not 0: billing reads COALESCE(own day, contract's day).
+                cmd.Parameters.AddWithValue("@bday", m.BillingDayOverride > 0 ? (object)m.BillingDayOverride : DBNull.Value);
                 return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
@@ -691,7 +763,7 @@ namespace ServiceContractPhotocopier.Classes
         private static long InsertMeter(SqlConnection cn, SqlTransaction tx, long ik, ScpRemoteMeter t,
                                         decimal marginPercent)
         {
-            bool flat = IsFlat(t);
+            long imk;
             using (SqlCommand cmd = new SqlCommand(
                 "INSERT INTO dbo.zSCP2_ItemMeter " +
                 "(ItemKey, MeterTypeCode, [Description], MeterRole, MachineSerialNo, " +
@@ -703,11 +775,16 @@ namespace ServiceContractPhotocopier.Classes
                 " MinimumCharges, ChargesRate, MeterMultiPriceCode, RebateQtyInPercent, FOCQty, " +
                 // The opening reading DOES come across: it is a fact about the machine, and without
                 // it the first month bills the meter's whole life.
-                " InitialReading, RentalMonths, RentalBasis, WaiveFirstNMonths, WaiveTargetAmount, " +
+                " InitialReading, RentalStartDate, RentalMonths, RentalBasis, WaiveFirstNMonths, WaiveTargetAmount, " +
                 " WaivePartialPct, WaiveScope, WaivePartialThreshold, WaivePartialAmount, " +
-                " CommitScope, LastModified) " +
-                "VALUES (@ik, @type, @desc, @role, @msn, @min, @rate, '', 0, 0, @init, 0, @rb, 0, 0, 100, 'S', " +
-                " 0, 0, 'S', GETDATE()); " +
+                " CommitScope, TierMode, LastModified) " +
+                // The rest of the deal comes too (29/9, user: "必须带过来不要懒惰"). It used to be written
+                // as zeros -- free copies 0, the waive's conditions 0 & 0, which the engine reads as
+                // "waive every month", and no ladder -- so the same machine billed differently here.
+                // The ladder travels as this counter's own (zSCP2_ItemMeterPrice), not by scheme name:
+                // a scheme is a name in their book and the same name here could price something else.
+                "VALUES (@ik, @type, @desc, @role, @msn, @min, @rate, '', @rebate, @foc, @init, @rstart, @rmonths, @rb, " +
+                " @wn, @wt, @wpct, @wscope, @wthr, @wamt, @cscope, @tier, GETDATE()); " +
                 "SELECT CAST(SCOPE_IDENTITY() AS bigint);", cn, tx))
             {
                 cmd.Parameters.AddWithValue("@ik", ik);
@@ -717,11 +794,253 @@ namespace ServiceContractPhotocopier.Classes
                 cmd.Parameters.AddWithValue("@role", t.MeterRole);
                 cmd.Parameters.AddWithValue("@msn", t.MachineSerialNo);
                 cmd.Parameters.AddWithValue("@init", t.InitialReading);
-                cmd.Parameters.AddWithValue("@rate", WithMargin(t.ChargesRate, marginPercent, flat));
+                BindTerms(cmd, t, marginPercent, true);
+                imk = Convert.ToInt64(cmd.ExecuteScalar());
+            }
+            WriteLadder(cn, tx, imk, t, marginPercent);
+            return imk;
+        }
+
+        /// <summary>A counter's terms as this book keeps them: counts and percentages as they are, sums
+        /// of money through the margin -- a waive's target and its partial band are measured against
+        /// this book's charges, which carry the margin, so the same copies reach the same waive.
+        /// <paramref name="prices"/> adds the rate and the minimum.</summary>
+        private static void BindTerms(SqlCommand cmd, ScpRemoteMeter t, decimal marginPercent, bool prices)
+        {
+            if (prices)
+            {
+                cmd.Parameters.AddWithValue("@rate", WithMargin(t.ChargesRate, marginPercent, IsFlat(t)));
                 // A minimum is a flat sum of money whatever counter it sits on, so it rounds like one.
                 cmd.Parameters.AddWithValue("@min", WithMargin(t.MinimumCharges, marginPercent, true));
-                return Convert.ToInt64(cmd.ExecuteScalar());
             }
+            cmd.Parameters.AddWithValue("@rebate", t.RebatePct);
+            cmd.Parameters.AddWithValue("@foc", t.FocQty);
+            cmd.Parameters.AddWithValue("@rstart", t.RentalStartDate.HasValue ? (object)t.RentalStartDate.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@rmonths", t.RentalMonths);
+            cmd.Parameters.AddWithValue("@wn", t.WaiveFirstNMonths);
+            cmd.Parameters.AddWithValue("@wt", WithMargin(t.WaiveTargetAmount, marginPercent, true));
+            cmd.Parameters.AddWithValue("@wpct", t.WaivePartialPct);
+            cmd.Parameters.AddWithValue("@wscope", t.WaiveScope.Length > 0 ? t.WaiveScope : "BKCL");
+            cmd.Parameters.AddWithValue("@wthr", WithMargin(t.WaivePartialThreshold, marginPercent, true));
+            cmd.Parameters.AddWithValue("@wamt", WithMargin(t.WaivePartialAmount, marginPercent, true));
+            cmd.Parameters.AddWithValue("@cscope", t.CommitScope.Length > 0 ? t.CommitScope : "S");
+            cmd.Parameters.AddWithValue("@tier", t.TierMode == "I" ? "I" : "T");
+        }
+
+        /// <summary>Their ladder as this counter's own, every band's price through the margin; the
+        /// boundaries are counts of copies, which no margin changes.</summary>
+        private static void WriteLadder(SqlConnection cn, SqlTransaction tx, long imk, ScpRemoteMeter t, decimal marginPercent)
+        {
+            if (t.Ladder.Count == 0)
+            {
+                // HQ prices it at one rate. A counter with no ladder of its own falls back to its
+                // meter type's default tiers -- this book's -- which would price it by a deal HQ never
+                // made. One band at HQ's rate keeps it at that rate, and only when this book's type
+                // has such tiers.
+                if (IsFlat(t) || t.ChargesRate <= 0m) return;
+                using (SqlCommand q = new SqlCommand(
+                    "SELECT COUNT(*) FROM dbo.zSCP_MeterType mt JOIN dbo.zSCP_MeterMultiPriceItem i " +
+                    "  ON i.MeterMultiPriceCode = mt.MeterMultiPriceCode WHERE mt.MeterTypeCode = @c " +
+                    "   AND ISNULL(mt.MeterMultiPriceCode,'') <> ''", cn, tx))
+                {
+                    q.Parameters.AddWithValue("@c", t.MeterTypeCode);
+                    if (Convert.ToInt32(q.ExecuteScalar()) == 0) return;
+                }
+                using (SqlCommand one = new SqlCommand(
+                    "INSERT INTO dbo.zSCP2_ItemMeterPrice (ItemMeterKey, MeterReading, UnitPrice) VALUES (@k, 99999999, @p)", cn, tx))
+                {
+                    one.Parameters.AddWithValue("@k", imk);
+                    one.Parameters.AddWithValue("@p", WithMargin(t.ChargesRate, marginPercent, false));
+                    one.ExecuteNonQuery();
+                }
+                return;
+            }
+            foreach (decimal[] b in t.Ladder)
+            {
+                using (SqlCommand cmd = new SqlCommand(
+                    "INSERT INTO dbo.zSCP2_ItemMeterPrice (ItemMeterKey, MeterReading, UnitPrice) VALUES (@k, @q, @p)", cn, tx))
+                {
+                    cmd.Parameters.AddWithValue("@k", imk);
+                    cmd.Parameters.AddWithValue("@q", b[0]);
+                    cmd.Parameters.AddWithValue("@p", WithMargin(b[1], marginPercent, false));
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Brings HQ's terms for one counter over a counter already taken -- the answer to "they
+        /// changed this" on the board, or to a contract taken before the terms came across.
+        /// <para>With <paramref name="prices"/> the rate, the minimum and the ladder are replaced too
+        /// (HQ's, through the margin). Without it only what an older take left out is brought: the
+        /// terms, and the ladder when the counter has none of its own.</para>
+        /// Returns an error, or "".
+        /// </summary>
+        public static string ApplyMeterTerms(DBSetting localDb, long localMeterKey, ScpRemoteMeter t,
+                                             decimal marginPercent, bool prices)
+        {
+            if (localDb == null || localMeterKey <= 0 || t == null) return "Nothing to bring over.";
+            using (SqlConnection cn = new SqlConnection(localDb.ConnectionString))
+            {
+                cn.Open();
+                using (SqlTransaction tx = cn.BeginTransaction("ScpInterBillTerms"))
+                {
+                    try
+                    {
+                        bool hasLadder;
+                        using (SqlCommand q = new SqlCommand(
+                            "SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeterPrice WHERE ItemMeterKey = @k) " +
+                            "  OR EXISTS (SELECT 1 FROM dbo.zSCP2_ItemMeter WHERE ItemMeterKey = @k AND ISNULL(MeterMultiPriceCode,'') <> '') " +
+                            "THEN 1 ELSE 0 END", cn, tx))
+                        {
+                            q.Parameters.AddWithValue("@k", localMeterKey);
+                            hasLadder = Convert.ToInt32(q.ExecuteScalar()) == 1;
+                        }
+                        using (SqlCommand cmd = new SqlCommand(
+                            "UPDATE dbo.zSCP2_ItemMeter SET MachineSerialNo=@msn, RebateQtyInPercent=@rebate, FOCQty=@foc, RentalStartDate=@rstart, " +
+                            " RentalMonths=@rmonths, WaiveFirstNMonths=@wn, WaiveTargetAmount=@wt, WaivePartialPct=@wpct, " +
+                            " WaiveScope=@wscope, WaivePartialThreshold=@wthr, WaivePartialAmount=@wamt, CommitScope=@cscope, " +
+                            " TierMode=@tier, " +
+                            (prices ? "ChargesRate=@rate, MinimumCharges=@min, MeterMultiPriceCode='', " : "") +
+                            " LastModified=GETDATE() WHERE ItemMeterKey=@k", cn, tx))
+                        {
+                            cmd.Parameters.AddWithValue("@k", localMeterKey);
+                            cmd.Parameters.AddWithValue("@msn", t.MachineSerialNo ?? "");
+                            BindTerms(cmd, t, marginPercent, prices);
+                            cmd.ExecuteNonQuery();
+                        }
+                        if (prices || !hasLadder)
+                        {
+                            using (SqlCommand del = new SqlCommand("DELETE FROM dbo.zSCP2_ItemMeterPrice WHERE ItemMeterKey = @k", cn, tx))
+                            {
+                                del.Parameters.AddWithValue("@k", localMeterKey);
+                                del.ExecuteNonQuery();
+                            }
+                            WriteLadder(cn, tx, localMeterKey, t, marginPercent);
+                        }
+                        tx.Commit();
+                        return "";
+                    }
+                    catch (Exception ex)
+                    {
+                        try { tx.Rollback(); } catch { }
+                        return ex.Message;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Their strategy rules (the contract's Strategy tab) as this contract's own. A rule bound to
+        /// certain machines is bound to the same machines here; one whose machines were not taken is
+        /// left out and named in <paramref name="notes"/> -- written with no machines it would apply to
+        /// the whole contract. Money through the margin; copies, months and percentages as they are.
+        /// </summary>
+        private static void InsertRules(SqlConnection cn, SqlTransaction tx, long ck, List<ScpRemoteRule> rules,
+                                        Dictionary<long, long> itemMap, decimal marginPercent, List<string> notes)
+        {
+            if (rules == null) return;
+            foreach (ScpRemoteRule x in rules)
+            {
+                List<long> theirs = new List<long>();
+                ScpStrategy.ParseItemKeys(x.ServiceItemKeys, theirs);
+                List<long> mine = new List<long>();
+                foreach (long k in theirs)
+                {
+                    long lk;
+                    if (itemMap.TryGetValue(k, out lk)) mine.Add(lk);
+                }
+                if (theirs.Count > 0 && mine.Count == 0)
+                {
+                    notes.Add("Strategy rule " + x.Seq.ToString(CultureInfo.InvariantCulture) + " (" + x.RuleKind +
+                              ") was left out: none of its machines were taken.");
+                    continue;
+                }
+                using (SqlCommand cmd = new SqlCommand(
+                    "INSERT INTO dbo.zSCP2_ContractStrategyRule (ContractKey, ServiceItemKeys, Seq, RuleKind, Scope, " +
+                    " TargetAmount, PartialPct, FreeMonths, CommitAmount, FocCopies, RebatePct, NetBilling, LimitScope, " +
+                    " LimitQty, Remark, SeededFromCode, LastModified) " +
+                    "VALUES (@ck, @keys, @seq, @kind, @scope, @target, @pct, @free, @commit, @foc, @rebate, @net, @ls, " +
+                    " @lq, @remark, @seed, GETDATE())", cn, tx))
+                {
+                    cmd.Parameters.AddWithValue("@ck", ck);
+                    cmd.Parameters.AddWithValue("@keys", ScpStrategy.JoinItemKeys(mine));
+                    cmd.Parameters.AddWithValue("@seq", x.Seq);
+                    cmd.Parameters.AddWithValue("@kind", x.RuleKind);
+                    cmd.Parameters.AddWithValue("@scope", x.Scope);
+                    cmd.Parameters.AddWithValue("@target", WithMargin(x.TargetAmount, marginPercent, true));
+                    cmd.Parameters.AddWithValue("@pct", x.PartialPct);
+                    cmd.Parameters.AddWithValue("@free", x.FreeMonths);
+                    cmd.Parameters.AddWithValue("@commit", WithMargin(x.CommitAmount, marginPercent, true));
+                    cmd.Parameters.AddWithValue("@foc", x.FocCopies);
+                    cmd.Parameters.AddWithValue("@rebate", x.RebatePct);
+                    cmd.Parameters.AddWithValue("@net", x.NetBilling);
+                    cmd.Parameters.AddWithValue("@ls", x.LimitScope);
+                    cmd.Parameters.AddWithValue("@lq", x.LimitQty);
+                    cmd.Parameters.AddWithValue("@remark", x.Remark);
+                    cmd.Parameters.AddWithValue("@seed", x.SeededFromCode);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Every counter of these machines has to be billable HERE: its meter type must name an item
+        /// of this book (user, 29/9: "没有 itemcode 不 allow take contract"). An invoice line with an
+        /// item this book does not have fails when the invoice is saved, and one with no item at all
+        /// posts to the default sales account and is missing from every report by item. So the take
+        /// is refused, naming each meter type, before anything is written. A counter that is never
+        /// billed (role NA) needs none. Returns the refusal, or "".
+        /// </summary>
+        public static string ItemCodeRefusal(DBSetting localDb, List<ScpRemoteMachine> machines, List<string> justCreated)
+        {
+            List<string> problems = ItemCodeProblems(localDb, machines);
+            if (problems.Count == 0) return "";
+            string made = justCreated != null && justCreated.Count > 0
+                ? Environment.NewLine + "(" + string.Join(", ", justCreated.ToArray()) +
+                  (justCreated.Count == 1 ? " was" : " were") + " not in this book and " +
+                  (justCreated.Count == 1 ? "has" : "have") + " just been added to Meter Type Maintenance.)"
+                : "";
+            return "This contract cannot be taken yet. These meter types have no item code in this book, " +
+                   "so their invoice lines could not be posted:" + Environment.NewLine + Environment.NewLine +
+                   string.Join(Environment.NewLine, problems.ToArray()) + Environment.NewLine + made +
+                   Environment.NewLine + Environment.NewLine +
+                   "Give each one an item code of this book in Meter Type Maintenance, then take it again.";
+        }
+
+        /// <summary>One line per meter type these machines' counters use that has no usable item code
+        /// in this book. Empty = all can be invoiced.</summary>
+        public static List<string> ItemCodeProblems(DBSetting localDb, List<ScpRemoteMachine> machines)
+        {
+            List<string> problems = new List<string>();
+            if (localDb == null || machines == null) return problems;
+            List<string> wanted = new List<string>();
+            foreach (ScpRemoteMachine m in machines)
+                foreach (ScpRemoteMeter t in m.Meters)
+                {
+                    string code = (t.MeterTypeCode ?? "").Trim();
+                    if (code.Length == 0 || (t.MeterRole ?? "").Trim().ToUpperInvariant() == "NA") continue;
+                    bool seen = false;
+                    foreach (string w in wanted) if (string.Equals(w, code, StringComparison.OrdinalIgnoreCase)) seen = true;
+                    if (!seen) wanted.Add(code);
+                }
+            foreach (string code in wanted)
+            {
+                DataTable d = localDb.GetDataTable(
+                    "SELECT ISNULL(mt.[Description],'') AS Descr, " +
+                    "       ISNULL(NULLIF(mt.ACItemCode,''), ISNULL(mt.StockCode,'')) AS Code, " +
+                    "       CASE WHEN i.ItemCode IS NULL THEN 0 ELSE 1 END AS Found " +
+                    "  FROM dbo.zSCP_MeterType mt " +
+                    "  LEFT JOIN dbo.Item i ON i.ItemCode = ISNULL(NULLIF(mt.ACItemCode,''), ISNULL(mt.StockCode,'')) " +
+                    " WHERE mt.MeterTypeCode = N'" + code.Replace("'", "''") + "'", false);
+                if (d.Rows.Count == 0) { problems.Add("   " + code + "  --  not a meter type of this book"); continue; }
+                string descr = Convert.ToString(d.Rows[0]["Descr"]).Trim();
+                string item = Convert.ToString(d.Rows[0]["Code"]).Trim();
+                string name = "   " + code + (descr.Length > 0 && !string.Equals(descr, code, StringComparison.OrdinalIgnoreCase) ? "  (" + descr + ")" : "");
+                if (item.Length == 0) problems.Add(name + "  --  no item code");
+                else if (Convert.ToInt32(d.Rows[0]["Found"]) == 0) problems.Add(name + "  --  item " + item + " is not an item of this book");
+            }
+            return problems;
         }
 
         private static void Link(SqlConnection cn, SqlTransaction tx, ScpInterBillBook book,

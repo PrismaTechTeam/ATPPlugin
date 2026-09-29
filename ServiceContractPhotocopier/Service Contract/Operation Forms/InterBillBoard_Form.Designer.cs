@@ -67,6 +67,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChipWaiting = new DevExpress.XtraEditors.CheckButton();
             this.ChipChanged = new DevExpress.XtraEditors.CheckButton();
             this.ChipUnpriced = new DevExpress.XtraEditors.CheckButton();
+            this.ChipNoItem = new DevExpress.XtraEditors.CheckButton();
             this.ChipNotTaken = new DevExpress.XtraEditors.CheckButton();
             this.ChipInvoiced = new DevExpress.XtraEditors.CheckButton();
             this.SplitMain = new DevExpress.XtraEditors.SplitContainerControl();
@@ -264,6 +265,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.PanelFilter.Controls.Add(this.ChipWaiting);
             this.PanelFilter.Controls.Add(this.ChipChanged);
             this.PanelFilter.Controls.Add(this.ChipUnpriced);
+            this.PanelFilter.Controls.Add(this.ChipNoItem);
             this.PanelFilter.Controls.Add(this.ChipNotTaken);
             this.PanelFilter.Controls.Add(this.ChipInvoiced);
             this.PanelFilter.Dock = System.Windows.Forms.DockStyle.Top;
@@ -640,12 +642,24 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChipUnpriced.TabStop = false;
             this.ChipUnpriced.Text = "Unpriced";
             //
+            // ChipNoItem
+            //
+            this.ChipNoItem.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.ChipNoItem.Appearance.Options.UseFont = true;
+            this.ChipNoItem.GroupIndex = 1;
+            this.ChipNoItem.Location = new System.Drawing.Point(1088, 70);
+            this.ChipNoItem.Name = "ChipNoItem";
+            this.ChipNoItem.Size = new System.Drawing.Size(116, 28);
+            this.ChipNoItem.TabIndex = 12;
+            this.ChipNoItem.TabStop = false;
+            this.ChipNoItem.Text = "No item code";
+            //
             // ChipNotTaken
             //
             this.ChipNotTaken.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.ChipNotTaken.Appearance.Options.UseFont = true;
             this.ChipNotTaken.GroupIndex = 1;
-            this.ChipNotTaken.Location = new System.Drawing.Point(1088, 70);
+            this.ChipNotTaken.Location = new System.Drawing.Point(1208, 70);
             this.ChipNotTaken.Name = "ChipNotTaken";
             this.ChipNotTaken.Size = new System.Drawing.Size(84, 28);
             this.ChipNotTaken.TabIndex = 10;
@@ -657,7 +671,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
             this.ChipInvoiced.Appearance.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.ChipInvoiced.Appearance.Options.UseFont = true;
             this.ChipInvoiced.GroupIndex = 1;
-            this.ChipInvoiced.Location = new System.Drawing.Point(1176, 70);
+            this.ChipInvoiced.Location = new System.Drawing.Point(1296, 70);
             this.ChipInvoiced.Name = "ChipInvoiced";
             this.ChipInvoiced.Size = new System.Drawing.Size(100, 28);
             this.ChipInvoiced.TabIndex = 11;
@@ -1773,6 +1787,7 @@ namespace ServiceContractPhotocopier.ServiceContract.OperationForms
         private DevExpress.XtraEditors.CheckButton ChipWaiting;
         private DevExpress.XtraEditors.CheckButton ChipChanged;
         private DevExpress.XtraEditors.CheckButton ChipUnpriced;
+        private DevExpress.XtraEditors.CheckButton ChipNoItem;
         private DevExpress.XtraEditors.CheckButton ChipNotTaken;
         private DevExpress.XtraEditors.CheckButton ChipInvoiced;
         private DevExpress.XtraEditors.SplitContainerControl SplitMain;

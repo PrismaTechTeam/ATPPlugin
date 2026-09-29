@@ -207,7 +207,16 @@ namespace ServiceContractPhotocopier.Classes
                     ln.Charge = one * (months - free);
                     return;
                 }
-                if (ln.Foc > 0m) { ln.Charge = 0m; ln.UseMin = false; ln.EffUnitPrice = 0m; return; }
+                if (ln.Foc > 0m)
+                {
+                    // One free month used. On a contract that prints its 0.00 rent (the new layout) the
+                    // line is saved on the invoice, and only RentalFreeUsed counts the months down there
+                    // (MeterInvoiceGenerator) -- without it the rent stayed free for good (29/9: MR2609.0841
+                    // printed "RENTAL FREE - FOC month" and left 2 free months at 2).
+                    ln.RentalFreeUsed = 1;
+                    ln.Charge = 0m; ln.UseMin = false; ln.EffUnitPrice = 0m;
+                    return;
+                }
                 decimal flat = ln.Rate;
                 if (flat < ln.MinCharges) flat = ln.MinCharges;
                 ln.UseMin = (ln.Rate == 0m && ln.MinCharges > 0m);

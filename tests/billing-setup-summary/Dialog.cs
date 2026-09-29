@@ -79,7 +79,8 @@ internal static class DialogFit
         {
             "RA3", machines, 0m, 0m, firstN > 0 ? 900m : 0m,
             allowMin, allowWaive, "", false, onLine, false, firstN,
-            0m, 0m, "BKCL", allowUsageWaive, 300m
+            0m, 0m, "BKCL", allowUsageWaive, 300m,
+            "BKCL"   // minCount: the minimum counts black and colour (ATP-4 added the argument)
         });
         try
         {
