@@ -556,7 +556,13 @@ namespace ServiceContractPhotocopier.Classes
                 if (r["BilledNow"] != DBNull.Value && Convert.ToBoolean(r["BilledNow"])) continue;
                 if (IsWaiveRow(r))
                 {
+                    // The waive goes with its rent -- and, like the rent, it is due before the contract
+                    // starts. It kept NotStarted, so the Meter Invoice Run left it off the invoice and
+                    // a "first 2 months free" machine was billed its first month (29/9, #55: MR2609.0844
+                    // charged 300.00 for 1/36 OCT 2026). A waive by target has no copies to reach yet
+                    // and still does not fire.
                     if (!rentDue.Contains(D64(r["ItemKey"]))) drop.Add(r);
+                    else r["NotStarted"] = false;
                     continue;
                 }
                 if (r["ContractStart"] == DBNull.Value) continue;

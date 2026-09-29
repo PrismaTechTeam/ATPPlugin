@@ -540,7 +540,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         {
             List<string> parts = new List<string>();
             if (this.ChipReady.Checked) parts.Add("[Status] = 0");
-            else if (this.ChipWaiting.Checked) parts.Add("[Status] = 1");
+            else if (this.ChipWaiting.Checked) parts.Add("[Status] IN (1, 3, 4, 5)");   // waiting, unpriced, no item code, below last
             else if (this.ChipInvoiced.Checked) parts.Add("[Status] = 2");
             if (this.ChipKindRental.Checked) parts.Add("[Kind] = 'Rental'");
             else if (this.ChipKindMeter.Checked) parts.Add("[Kind] <> 'Rental'");
@@ -556,8 +556,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             {
                 total++;
                 if (it.Status == InvoiceRunItem.READY) { ready++; readyAmt += it.Amount; }
-                else if (it.Status == InvoiceRunItem.WAITING) waiting++;
-                else invoiced++;
+                else if (it.Status == InvoiceRunItem.INVOICED) invoiced++;
+                else waiting++;   // waiting on readings, a price or an item code
                 if (it.Overdue) { late++; lateAmt += it.Amount; }
             }
             // The overdue view counts them properly; the day view can only see its own day, so it
@@ -702,6 +702,13 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                        (other.Status == InvoiceRunItem.WAITING ? "" : " · " + other.Amount.ToString("n2")) + "  (listed above)";
             else if (it.Status == InvoiceRunItem.INVOICED) foot = "Already on " + it.InvoicedDocNo + ". Nothing left to do here.";
             else if (it.Status == InvoiceRunItem.WAITING) foot = "Key the missing readings below; when the last one is in, this invoice turns Ready.";
+            else if (it.Status == InvoiceRunItem.UNPRICED) foot = it.Unpriced + (it.Unpriced == 1 ? " line has" : " lines have") +
+                " to bill with no price -- no rate, minimum or tier. Set it on the contract (Meters & Pricing), then Refresh.";
+            else if (it.Status == InvoiceRunItem.NO_ITEM) foot = "No item code for " + string.Join(", ", it.NoItemTypes.ToArray()) +
+                ": give the meter type an item code in Meter Type Maintenance, then Refresh.";
+            else if (it.Status == InvoiceRunItem.BACKWARD) foot = it.Backwards + (it.Backwards == 1 ? " reading is" : " readings are") +
+                " below the last one -- a replaced or reset meter, or a typing slip. Correct it below; it cannot be billed as it is.";
+            if (it.SameSerial > 0) foot += (foot.Length > 0 ? "  " : "") + "Another active machine has the same serial, so a fetch gives both the same readings -- check it is not billed twice.";
             else foot = "Everything this invoice needs is here. It goes out with Generate all ready.";
             this.LblDetailFoot.Text = foot;
         }
@@ -765,6 +772,9 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 return;
             }
             if (!this.BtnViewInvoices.Checked || e.KeyCode != Keys.Delete) return;
+            // Only from the invoice list itself (#77, 29/9): Del in the search box, the Reference No or
+            // a reading cell is that box's own key -- it opened the delete prompt and was lost.
+            if (!this.GridInvoices.ContainsFocus) return;
             if (e.Control && e.Shift) { e.Handled = true; DeleteAllListedInvoices(); return; }
             if (!e.Control && !e.Shift && !e.Alt) { e.Handled = true; DeleteSelectedInvoice(); }
         }
@@ -804,7 +814,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                     "Key in myself", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
-            int y = SelectedYear(), m = SelectedMonth();
+            int y, m;
+            WorkPeriod(out y, out m);
             long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
             try
             {
@@ -1390,7 +1401,7 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
                 e.Appearance.BackColor = READY_BACK; e.Appearance.BackColor2 = READY_BACK;
                 e.Appearance.Options.UseBackColor = true;
             }
-            else if (st == InvoiceRunItem.WAITING)
+            else if (st == InvoiceRunItem.WAITING || st == InvoiceRunItem.UNPRICED || st == InvoiceRunItem.NO_ITEM || st == InvoiceRunItem.BACKWARD)
             {
                 e.Appearance.BackColor = WAIT_BACK; e.Appearance.BackColor2 = WAIT_BACK;
                 e.Appearance.Options.UseBackColor = true;
@@ -1490,7 +1501,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             if (r == null) return;
             decimal v = 0m;
             if (e.Value != null && e.Value != DBNull.Value) decimal.TryParse(Convert.ToString(e.Value), out v);
-            int y = SelectedYear(), m = SelectedMonth();
+            int y, m;
+            WorkPeriod(out y, out m);
             long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
             try
             {
@@ -1535,6 +1547,15 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
             this.GridViewInvoices.LayoutChanged();
         }
 
+        /// <summary>The month a reading, its date or its reference belongs to: the month of the invoice
+        /// shown, which in the overdue view is not the month the pickers show (#41, 29/9: an April
+        /// reading keyed there was saved under the pickers' month while its row turned Ready).</summary>
+        private void WorkPeriod(out int year, out int month)
+        {
+            year = _current != null && _current.Year > 0 ? _current.Year : SelectedYear();
+            month = _current != null && _current.Month > 0 ? _current.Month : SelectedMonth();
+        }
+
         /// <summary>Put the staged reading date (and whether a person set it) back on the row.</summary>
         private void ShowStagedDate(DataRow r, long itemMeterKey, int year, int month)
         {
@@ -1556,7 +1577,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void ReadingDateChanged(DataRow r, object value, int rowHandle)
         {
             if (r == null || _db == null) return;
-            int y = SelectedYear(), m = SelectedMonth();
+            int y, m;
+            WorkPeriod(out y, out m);
             long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
             string no = ScpInvoiceRun.WhyDateFixed(r);
             if (no.Length > 0)
@@ -1611,7 +1633,8 @@ namespace ServiceContractPhotocopier.MeterReading.OperationForms
         private void ReadingRefChanged(DataRow r, object value)
         {
             if (r == null || _db == null) return;
-            int y = SelectedYear(), m = SelectedMonth();
+            int y, m;
+            WorkPeriod(out y, out m);
             long imk = r["ItemMeterKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemMeterKey"]);
             long ik = r["ItemKey"] == DBNull.Value ? 0L : Convert.ToInt64(r["ItemKey"]);
             string refNo = value == null || value == DBNull.Value ? "" : Convert.ToString(value).Trim();

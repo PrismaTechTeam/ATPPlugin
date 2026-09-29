@@ -2188,3 +2188,42 @@ model (zSCP2_Item.ItemCode) must be a stock item of the subsidiary as well as ea
   unchanged (1/36).
 - smoke-forms: every screen loads.
 - Re-cut into **1.5.0.10**: 2956595 bytes, SHA256 `DBC74E93…7B35`.
+
+### 29/9 — Meter Invoice Run edge cases: the list checked, ten fixed (1.5.0.10 re-cut)
+
+User asked for the run's edge cases ("越多越好"), then to confirm every one, then "修吧". The catalogue is
+`Docs/meter-invoice-run-edge-cases.md` (80 items after the confirmation pass: 4 read-only agents, code + AED_ATPTEST data).
+Fixed, each reproduced or tested on ATPTEST:
+- **#55** prepaid rent + "first N months free": `ScpBillingRows.ApplyRentalBasis` cleared NotStarted on the rent row only,
+  so the Meter Invoice Run left the waive off. Reproduced: SC 000000052 / MR2609.0844 billed 300.00 for 1/36 OCT 2026
+  (the Meters view's MR2609.0843 was right). Fixed (the waive that rides on a due rent is due too): SC 000000053 /
+  MR2609.0845 0.00 "FOC - free month 1 of 2". A waive by target is unaffected (no copies to reach before the start).
+- **#41** overdue view: reading / date / reference / take-over used the pickers' month. `WorkPeriod` = the shown invoice's
+  own month. OverdueKey: pickers 9/2026, July invoice of SC 000000054 keyed -> saved under 7/2026.
+- **#65** no price / **#66** no item code: `ScpInvoiceRun.MarkPricesAndItems` (LoadRows) marks rows; `Refresh` gives
+  UNPRICED "Unpriced (n)" / NO_ITEM "No item code · TYPE", neither Ready, so none can be generated. A missing price
+  counts only for a rental or a counter WITH copies this month: the first cut made 23 September invoices Unpriced, mostly
+  colour counters that never print (SC-000107, SC-002066: 0 copies in 10-19 readings) -- rate 0 bills those rightly.
+  Now September 0, August 1 (SC 000000036, rent at 0); SC-002599's black counter (no rate, 62,162 copies in V8) keyed
+  +1,000 in memory -> Unpriced (1).
+- **#71** stamp failed + auto-delete failed: `MeterInvoiceGenerator.HoldUnderInvoice` stamps the period with the saved
+  invoice's key/no, so the run shows Invoiced instead of Ready; the reconcile step releases it once the invoice is gone.
+  HoldCheck on SC 000000054 Aug: "Invoiced · TEST-HOLD", after reconcile released, 0 stamps left.
+- **#16** reading below last -> BACKWARD "Reading below last (n)" (not Ready); **#27** a serial another active machine has
+  -> "same serial as another machine" (warning only: 104 such serials in ATPTEST). CSSI 00001502 Aug: "Reading below
+  last (2) · same serial as another machine".
+- **#29 / #33** an invoiced row's amount = its own invoice's net total (COL_DOCTOTAL by DocNo; NO CHARGE 0.00), not the
+  meter's latest invoice: SC 000000032 Sep MR2609.0835 1,101.11 (read 1,824.39), MR2609.0836 622.20.
+- **#77** Del deletes only with the focus in the invoice list (the form's KeyPreview took it from the search box,
+  Reference No and reading cells).
+- Waiting chip and summary count the new states; rows in the waiting colour; footer says what to fix.
+- Regression: interbill-board ALL OK, cn-credit / billing-setup-summary / pricing-billgroup / invoice-delete-guard all
+  good; invoice-run only the known DEMO-PG data failure.
+- **#76 not done -- needs the user.** 2,892 of 2,942 active contracts have no ServiceStartDate, so the overdue scan and
+  the earlier-month guard never cover them. Neither fallback in the data works: only 1 has a plugin stamp; V8 history
+  (zSCP_MeterTrans, 145,899 rows) carries an invoice key on 67 rows and dates back to year 222; "first reading month"
+  would raise 614 overdue for September and 136-355 a month for April-July, mostly months V8 billed. Proposed: a book-wide
+  "billing in this book starts from <month>" setting.
+- Test contracts left on ATPTEST: SC 000000051-053 (PW-01..03, prepaid + free months; MR2609.0843/0844/0845), SC 000000054
+  (OD-01, overdue since July; a July reading 1,500 and an August reading 1,600 from the hold test).
+- Re-cut into **1.5.0.10**: 2962440 bytes, SHA256 `35F8C4B2…B653`.

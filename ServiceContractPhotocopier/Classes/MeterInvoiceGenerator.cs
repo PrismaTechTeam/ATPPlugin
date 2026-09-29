@@ -129,9 +129,19 @@ namespace ServiceContractPhotocopier.Classes
                                 // Compensation failed too: the invoice EXISTS but the period is NOT
                                 // stamped. Re-generating would double-bill — tell the operator exactly
                                 // what to do instead of hiding it.
+                                // Hold the rows under the invoice that exists (#71, 29/9): the Meter Invoice
+                                // Run showed them Ready again and one more Generate billed them twice. With
+                                // the invoice's number and key on them they read "Invoiced · <no>"; deleting
+                                // that invoice in AutoCount and Refresh releases them (the reconcile step
+                                // clears a stamp whose invoice is gone).
+                                string held = HoldUnderInvoice(docKey, docNo, billable);
                                 ErrorLog.Add("[" + j.Label + "]  CRITICAL: invoice " + docNo + " was saved but the " +
                                     "meter/period stamp FAILED and the invoice could not be auto-deleted. DO NOT " +
                                     "re-generate this row - delete invoice " + docNo + " manually first. " +
+                                    (held.Length == 0
+                                        ? "Its rows now show Invoiced · " + docNo + " so they are not billed again; delete " + docNo +
+                                          " in AutoCount and Refresh to bill them. "
+                                        : "Its rows could not be held either (" + held + ") -- they may show Ready: do not generate them. ") +
                                     "Stamp error: " + ShortError(stampEx) + "  Delete error: " + ShortError(delEx));
                             }
                             throw stampEx;   // count the job as Failed either way
@@ -158,6 +168,48 @@ namespace ServiceContractPhotocopier.Classes
 
         private void WriteMeterTrans(long invoiceDocKey, string docNo, List<MeterBillLine> lines)
         { WriteMeterTrans(invoiceDocKey, docNo, lines, null); }
+
+        /// <summary>
+        /// The last safety net when an invoice was saved, its stamp failed and it could not be deleted:
+        /// only the billing-period stamp -- the invoice's key and number on each meter's period -- so the
+        /// period reads as invoiced by the invoice that really exists. Nothing else (no meter
+        /// transaction, no free month used): those belong to a stamp that succeeded. A period another
+        /// run stamped keeps its stamp. Returns "" or the reason it could not be done.
+        /// </summary>
+        private string HoldUnderInvoice(long docKey, string docNo, List<MeterBillLine> lines)
+        {
+            try
+            {
+                using (SqlConnection cn = new SqlConnection(_db.ConnectionString))
+                {
+                    cn.Open();
+                    foreach (MeterBillLine ln in lines)
+                    {
+                        if (ln.ItemMeterKey <= 0) continue;
+                        using (SqlCommand cmd = new SqlCommand(
+                            "UPDATE dbo.zSCP2_MeterEntry SET InvoicedDocKey=@dk, InvoicedDocNo=@dn, InvoicedAt=GETDATE() " +
+                            " WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo " +
+                            "   AND InvoicedDocKey IS NULL AND ISNULL(InvoicedDocNo,'') = ''; " +
+                            "IF @@ROWCOUNT = 0 AND NOT EXISTS (SELECT 1 FROM dbo.zSCP2_MeterEntry " +
+                            "     WHERE ItemMeterKey=@imk AND PeriodYear=@yr AND PeriodMonth=@mo) " +
+                            "  INSERT INTO dbo.zSCP2_MeterEntry (ItemMeterKey, PeriodYear, PeriodMonth, CurrentReading, ReadingDate, " +
+                            "   Source, InvoicedDocKey, InvoicedDocNo, InvoicedAt) " +
+                            "  VALUES (@imk, @yr, @mo, @rd, GETDATE(), 'INVOICE', @dk, @dn, GETDATE())", cn))
+                        {
+                            cmd.Parameters.AddWithValue("@dk", docKey);
+                            cmd.Parameters.AddWithValue("@dn", docNo ?? "");
+                            cmd.Parameters.AddWithValue("@imk", ln.ItemMeterKey);
+                            cmd.Parameters.AddWithValue("@yr", _periodYear);
+                            cmd.Parameters.AddWithValue("@mo", _periodMonth);
+                            cmd.Parameters.AddWithValue("@rd", ln.Current);
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+                return "";
+            }
+            catch (Exception ex) { return ShortError(ex); }
+        }
 
         private void WriteMeterTrans(long invoiceDocKey, string docNo, List<MeterBillLine> lines, DateTime? periodDate)
         {

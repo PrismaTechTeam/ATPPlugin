@@ -29,8 +29,20 @@ namespace ServiceContractPhotocopier.Classes
         public string InvoicedDocNo = "";      // when every row is already on an invoice this period
         public List<DataRow> Rows = new List<DataRow>();
 
-        public const int READY = 0, WAITING = 1, INVOICED = 2;
+        public const int READY = 0, WAITING = 1, INVOICED = 2, UNPRICED = 3, NO_ITEM = 4, BACKWARD = 5;
         public int Status;
+
+        /// <summary>Rows that would bill with no price at all -- a rental or a counter with no rate,
+        /// no minimum and no ladder (#65, 29/9). The invoice cannot go until each has one.</summary>
+        public int Unpriced;
+        /// <summary>Meter types whose invoice line would have no item of this book (#66, 29/9).</summary>
+        public List<string> NoItemTypes = new List<string>();
+        /// <summary>Counters read BELOW their last reading -- replaced, reset or mistyped (#16, 29/9). The
+        /// preview refused them; the list said Ready until then.</summary>
+        public int Backwards;
+        /// <summary>Machines whose serial another active machine also has, so a fetch gives both the same
+        /// readings (#27, 29/9). A warning -- the invoice can still go.</summary>
+        public int SameSerial;
 
         /// <summary>The billing date this invoice is for: the period it was loaded for, on the
         /// rows' own billing day. Left at 0 by a caller that does not say which period this is,
@@ -77,12 +89,20 @@ namespace ServiceContractPhotocopier.Classes
             {
                 if (Status == INVOICED) return "Invoiced · " + InvoicedDocNo;
                 string late = Overdue ? "Overdue " + DaysLate + "d" : "";
+                string warn = SameSerial > 0 ? " · same serial as another machine" : "";
+                if (Status == UNPRICED || Status == NO_ITEM || Status == BACKWARD)
+                {
+                    string why = Status == UNPRICED ? "Unpriced (" + Unpriced + ")"
+                               : Status == NO_ITEM ? "No item code · " + string.Join(", ", NoItemTypes.ToArray())
+                               : "Reading below last (" + Backwards + ")";
+                    return (late.Length > 0 ? late + " · " + why : why) + warn;
+                }
                 if (Status == WAITING)
                 {
                     string miss = Missing + (Missing == 1 ? " reading missing" : " readings missing");
-                    return late.Length > 0 ? late + " · " + miss : miss;
+                    return (late.Length > 0 ? late + " · " + miss : miss) + warn;
                 }
-                return late.Length > 0 ? late : "Ready";
+                return (late.Length > 0 ? late : "Ready") + warn;
             }
         }
     }
@@ -100,6 +120,14 @@ namespace ServiceContractPhotocopier.Classes
     {
         /// <summary>Column added to the billing rows: the invoice a row belongs to.</summary>
         public const string COL_JOBKEY = "RunJobKey";
+        /// <summary>The row would bill with no price (see <see cref="MarkPricesAndItems"/>).</summary>
+        public const string COL_UNPRICED = "RunUnpriced";
+        /// <summary>The row's meter type, when its invoice line would have no item of this book; "" otherwise.</summary>
+        public const string COL_NOITEM = "RunNoItem";
+        /// <summary>Another active machine has this row's serial.</summary>
+        public const string COL_SAMESERIAL = "RunSameSerial";
+        /// <summary>The net total of the invoice this row is on THIS period (0 for a NO CHARGE stamp).</summary>
+        public const string COL_DOCTOTAL = "RunDocTotal";
         /// <summary>Column added to the billing rows: a usage meter with nothing keyed yet.</summary>
         public const string COL_NEEDS = "RunNeedsReading";
 
@@ -380,7 +408,133 @@ namespace ServiceContractPhotocopier.Classes
 
             if (!t.Columns.Contains(COL_JOBKEY)) t.Columns.Add(COL_JOBKEY, typeof(string));
             if (!t.Columns.Contains(COL_NEEDS)) t.Columns.Add(COL_NEEDS, typeof(bool));
+            MarkPricesAndItems(db, t);
             return t;
+        }
+
+        /// <summary>
+        /// Two things an invoice cannot go without, marked on each row still to bill so the list
+        /// stops them before Generate does not (29/9):
+        /// <list type="bullet">
+        /// <item><b>a price</b> (#65): a rental, or a black or colour counter WITH copies this month
+        /// (counted in <see cref="Refresh"/>), with no rate, no minimum and no ladder -- its own, a
+        /// scheme, or its copy group's -- bills nothing. It showed green Ready
+        /// and went out at 0.00, or on the old layout was stamped NO CHARGE and could never be
+        /// billed again. The same test as the Inter-Billing board's Unpriced.</item>
+        /// <item><b>an item of this book</b> (#66): a line with an item code AutoCount does not have
+        /// fails when the invoice is saved, and one with none posts to the default sales account.
+        /// A counter never billed (role NA) needs none. The same test as the board's No item code.</item>
+        /// </list>
+        /// </summary>
+        public static void MarkPricesAndItems(DBSetting db, DataTable t)
+        {
+            if (t == null) return;
+            if (!t.Columns.Contains(COL_UNPRICED)) t.Columns.Add(COL_UNPRICED, typeof(bool));
+            if (!t.Columns.Contains(COL_NOITEM)) t.Columns.Add(COL_NOITEM, typeof(string));
+            if (!t.Columns.Contains(COL_SAMESERIAL)) t.Columns.Add(COL_SAMESERIAL, typeof(bool));
+            if (!t.Columns.Contains(COL_DOCTOTAL)) t.Columns.Add(COL_DOCTOTAL, typeof(decimal));
+            if (t.Rows.Count == 0 || db == null) return;
+
+            // Serials more than one active machine carries (#27).
+            HashSet<string> shared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                DataTable dup = db.GetDataTable(
+                    "SELECT LTRIM(RTRIM(SerialNumber)) AS Serial FROM dbo.zSCP2_Item " +
+                    " WHERE ISNULL(Inactive,'N') = 'N' AND ISNULL(IsGroupItem,'N') = 'N' AND LTRIM(RTRIM(ISNULL(SerialNumber,''))) <> '' " +
+                    " GROUP BY LTRIM(RTRIM(SerialNumber)) HAVING COUNT(DISTINCT ItemKey) > 1", false);
+                foreach (DataRow r in dup.Rows) shared.Add(S(r["Serial"]));
+            }
+            catch { }
+
+            // The invoice each billed row is on this period, by number: the row said the total of the
+            // meter's LATEST invoice of any month (#29 / #33 -- SC 000000032's September MR2609.0835,
+            // 1,101.11, read 1,824.39, November's).
+            Dictionary<string, decimal> docTotal = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            List<string> docs = new List<string>();
+            foreach (DataRow r in t.Rows)
+            {
+                string no = S(r["InvoicedDocNo"]).Trim();
+                if (no.Length > 0 && !docs.Contains(no)) docs.Add(no);
+            }
+            if (docs.Count > 0)
+            {
+                List<string> quoted = new List<string>();
+                foreach (string d in docs) quoted.Add("N'" + d.Replace("'", "''") + "'");
+                try
+                {
+                    DataTable iv = db.GetDataTable("SELECT DocNo, ISNULL(NetTotal,0) AS NetTotal FROM dbo.IV WHERE DocNo IN (" +
+                                                   string.Join(",", quoted.ToArray()) + ")", false);
+                    foreach (DataRow r in iv.Rows) docTotal[S(r["DocNo"]).Trim()] = Dec(r["NetTotal"]);
+                }
+                catch { }
+            }
+
+            // Copy groups that agreed a ladder, per colour: "contract|BK|GROUP".
+            HashSet<string> groupLadders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                DataTable g = db.GetDataTable(
+                    "SELECT ContractKey, UPPER(LTRIM(RTRIM(ISNULL(GroupCode,'')))) AS GroupCode, " +
+                    "       ISNULL(LadderBk,'') AS LadderBk, ISNULL(LadderCl,'') AS LadderCl " +
+                    "  FROM dbo.zSCP2_ContractRentalPrice WHERE Side = 'M' " +
+                    "   AND (ISNULL(LadderBk,'') <> '' OR ISNULL(LadderCl,'') <> '')", false);
+                foreach (DataRow r in g.Rows)
+                {
+                    string k = S(r["ContractKey"]) + "|";
+                    if (S(r["LadderBk"]).Trim().Length > 0) groupLadders.Add(k + "BK|" + S(r["GroupCode"]));
+                    if (S(r["LadderCl"]).Trim().Length > 0) groupLadders.Add(k + "CL|" + S(r["GroupCode"]));
+                }
+            }
+            catch { }
+
+            // Which of the rows' item codes this book has, in one query.
+            HashSet<string> codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow r in t.Rows)
+            {
+                string c = t.Columns.Contains("ACItemCode") ? S(r["ACItemCode"]).Trim() : "";
+                if (c.Length > 0) codes.Add(c);
+            }
+            HashSet<string> items = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (codes.Count > 0)
+            {
+                List<string> quoted = new List<string>();
+                foreach (string c in codes) quoted.Add("N'" + c.Replace("'", "''") + "'");
+                try
+                {
+                    DataTable it = db.GetDataTable("SELECT ItemCode FROM dbo.Item WHERE ItemCode IN (" + string.Join(",", quoted.ToArray()) + ")", false);
+                    foreach (DataRow r in it.Rows) items.Add(S(r["ItemCode"]).Trim());
+                }
+                catch { items = null; }   // not asked -- nothing is marked rather than everything
+            }
+
+            foreach (DataRow r in t.Rows)
+            {
+                r[COL_UNPRICED] = false;
+                r[COL_NOITEM] = "";
+                r[COL_SAMESERIAL] = shared.Contains(S(r["SerialNo"]).Trim());
+                decimal dt;
+                r[COL_DOCTOTAL] = docTotal.TryGetValue(S(r["InvoicedDocNo"]).Trim(), out dt) ? dt : 0m;
+                if (IsInvoiced(r)) continue;
+                string role = S(r["Role"]).Trim().ToUpperInvariant();
+                if (role == "NA") continue;
+                bool waive = r["IsWaive"] != DBNull.Value && Convert.ToBoolean(r["IsWaive"]);
+
+                if (!waive && !ScpBillingRows.IsCommitRow(r) && (role == "RENTAL" || role == "BK" || role == "CL")
+                    && Dec(r["UnitPrice"]) == 0m && Dec(r["MinCharges"]) == 0m && S(r["MultiPriceCode"]).Trim().Length == 0)
+                {
+                    string grp = S(r["MergeGroupCodeMeter"]).Trim().ToUpperInvariant();
+                    bool byGroup = (role == "BK" || role == "CL") && grp.Length > 0 &&
+                                   groupLadders.Contains(S(r["ContractKey"]) + "|" + role + "|" + grp);
+                    if (!byGroup) r[COL_UNPRICED] = true;
+                }
+
+                if (items != null)
+                {
+                    string code = t.Columns.Contains("ACItemCode") ? S(r["ACItemCode"]).Trim() : "";
+                    if (code.Length == 0 || !items.Contains(code)) r[COL_NOITEM] = S(r["MeterType"]).Trim();
+                }
+            }
         }
 
         /// <summary>
@@ -795,6 +949,11 @@ namespace ServiceContractPhotocopier.Classes
         {
             it.Machines.Clear();
             it.MetersTotal = 0; it.MetersRead = 0; it.Amount = 0m; it.InvoicedDocNo = "";
+            it.Unpriced = 0;
+            it.NoItemTypes.Clear();
+            it.Backwards = 0;
+            HashSet<long> sameSerial = new HashSet<long>();
+            bool ownTotals = it.Rows.Count > 0 && it.Rows[0].Table.Columns.Contains(COL_DOCTOTAL);
             int pending = 0, invoiced = 0;
             bool anyRent = false, anyUsage = false;
             decimal invTotal = 0m;
@@ -806,8 +965,13 @@ namespace ServiceContractPhotocopier.Classes
                 {
                     invoiced++;
                     if (invDoc.Length == 0) invDoc = S(r["InvoicedDocNo"]).Trim();
-                    // The billed rows carry their invoice's total when it is the latest one they saw.
-                    if (S(r["LastInvNo"]).Trim() == S(r["InvoicedDocNo"]).Trim())
+                    if (ownTotals)
+                    {
+                        // Its own invoice's total (#29 / #33); a NO CHARGE stamp is 0.00.
+                        if (S(r["InvoicedDocNo"]).Trim() == invDoc) invTotal = Dec(r[COL_DOCTOTAL]);
+                    }
+                    // Rows loaded elsewhere carry the meter's latest invoice total only.
+                    else if (S(r["LastInvNo"]).Trim() == S(r["InvoicedDocNo"]).Trim())
                     {
                         decimal t = Dec(r["InvTotal"]);
                         if (t > invTotal) invTotal = t;
@@ -815,10 +979,25 @@ namespace ServiceContractPhotocopier.Classes
                     continue;
                 }
                 if (StandsAlone(r)) pending++;
+                // No price only matters when there is something to price: a rental, or a counter with
+                // copies this month. A colour counter that never prints (a mono machine's) bills 0.00
+                // rightly and must not hold up the rent -- in the test book most rate-0 counters are
+                // those; SC-002599's black counter, 62,162 copies at no rate, is the kind this stops.
+                if (r.Table.Columns.Contains(COL_UNPRICED) && r[COL_UNPRICED] != DBNull.Value && Convert.ToBoolean(r[COL_UNPRICED])
+                    && (!IsUsageMeter(r) || Dec(r["MeterUsage"]) > 0m)) it.Unpriced++;
+                if (r.Table.Columns.Contains(COL_NOITEM))
+                {
+                    string noItem = S(r[COL_NOITEM]).Trim();
+                    if (noItem.Length > 0 && !it.NoItemTypes.Contains(noItem)) it.NoItemTypes.Add(noItem);
+                }
                 bool needs = r[COL_NEEDS] != DBNull.Value && Convert.ToBoolean(r[COL_NEEDS]);
+                if (r.Table.Columns.Contains(COL_SAMESERIAL) && r[COL_SAMESERIAL] != DBNull.Value && Convert.ToBoolean(r[COL_SAMESERIAL]))
+                    sameSerial.Add(D64(r["ItemKey"]));
                 if (IsUsageMeter(r))
                 {
                     anyUsage = true;
+                    // Below the last reading: the engine bills 0 copies and the preview refuses it (#16).
+                    if (HasReading(r) && Dec(r["CurrentReading"]) > 0m && Dec(r["CurrentReading"]) < Dec(r["LastReading"])) it.Backwards++;
                     it.MetersTotal++;
                     if (!needs) it.MetersRead++;
                 }
@@ -838,8 +1017,14 @@ namespace ServiceContractPhotocopier.Classes
             }
             else
             {
-                it.Status = it.Missing > 0 ? InvoiceRunItem.WAITING : InvoiceRunItem.READY;
+                // A price and an item first: keying the readings of an invoice that cannot go
+                // anyway is work before its time.
+                it.Status = it.Unpriced > 0 ? InvoiceRunItem.UNPRICED
+                          : it.NoItemTypes.Count > 0 ? InvoiceRunItem.NO_ITEM
+                          : it.Backwards > 0 ? InvoiceRunItem.BACKWARD
+                          : it.Missing > 0 ? InvoiceRunItem.WAITING : InvoiceRunItem.READY;
             }
+            it.SameSerial = sameSerial.Count;
             if (it.RentalSide) it.Kind = "Rental";
             else if (anyRent && anyUsage) it.Kind = "Rental + Meter";
             else if (anyRent) it.Kind = "Rental";
