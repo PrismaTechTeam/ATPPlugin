@@ -1931,10 +1931,10 @@ Ticket (Dhai): "有时候 save Invoice meter pricing 时候选 a invoice rental 
 
 Marked pending at the user's request ("mark as this 8 point pending first, I want to test one by one"). Tick each off only when the user says so.
 
-- [ ] 1. ATP-9, the money part: does a machine that broke down keep billing after the breakdown, and is that month's rental in full or by the day? The date part (invoice date moveable, "Use last reading date") is in 1.5.0.10. Waiting on the customer.
+- [x] 1. (30/9, user: "no need first" -- rental stays a full month, copies by the reading; nothing built) ATP-9, the money part: does a machine that broke down keep billing after the breakdown, and is that month's rental in full or by the day? The date part (invoice date moveable, "Use last reading date") is in 1.5.0.10. Waiting on the customer.
 - [ ] 2. Not installed on the client's book AED_ATPCHECK yet -- only on "run shadowmain" (Debug-ATPCHECK installs the dev .app there). First load there turns meter 9's 0.00 first tier into Free Qty 100 (ATP-3).
 - [ ] 3. To test on a LICENSED AutoCount (this PC is an evaluation copy and refuses new documents): ATP-13 the real Create DO save; the real Generate, above all ATP-10's first rental-only invoice before a contract starts.
-- [ ] 4. To confirm with the customer: ATP-10's defaults (accrual lines keep their text; no copy-target waive on the first bill; a rental apart dated in the month it pays for; a late machine pays two months on its next bill); ATP-7 whether the invoice carries the machine's branch; ATP-8 whether a separate description field is wanted.
+- [x] 4. (30/9, user: ATP-10 "after a contract is running we will not add more machine inside the contract"; ATP-7 "so far no need first"; ATP-8 "so far no need first" -- nothing built; ATP-10's other three defaults stand as built) To confirm with the customer: ATP-10's defaults (accrual lines keep their text; no copy-target waive on the first bill; a rental apart dated in the month it pays for; a late machine pays two months on its next bill); ATP-7 whether the invoice carries the machine's branch; ATP-8 whether a separate description field is wanted.
 - [ ] 5. Portal replies not posted -- every ticket still shows Pending on the portal.
 - [ ] 6. Git not pushed (blocked: credentials in appsettings.json). Commits and the v1.0.10-uat tag are local only.
 - [ ] 7. Optional bug (task chip raised): a free rental month printed on the invoice (AlwaysBill "RENTAL FREE") may never count down FOCQty -- only the no-charge route decrements it.
